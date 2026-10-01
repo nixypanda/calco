@@ -367,11 +367,11 @@ latestSlotSources response =
     response.slots
         |> List.filterMap
             (\slot ->
-                MealSlot.fromString slot.mealSlot
-                    |> Maybe.map
-                        (\parsed ->
-                            { slot = parsed, sourceDate = slot.sourceDate, logs = slot.items }
-                        )
+                Maybe.map
+                    (\parsed ->
+                        { slot = parsed, sourceDate = slot.sourceDate, logs = slot.items }
+                    )
+                    slot.mealSlot
             )
 
 

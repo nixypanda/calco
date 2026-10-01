@@ -68,7 +68,7 @@ type alias UpdateLogRequest =
 
 
 type alias LatestSlotResponse =
-    { sourceDate : LocalDate, mealSlot : String, items : List FoodLog }
+    { sourceDate : LocalDate, mealSlot : Maybe MealSlot, items : List FoodLog }
 
 
 type alias LatestSlotsResponse =
@@ -78,7 +78,7 @@ type alias LatestSlotsResponse =
 type alias RecentItem =
     { item : FoodLog.LogItem
     , lastUsedDate : LocalDate
-    , mealSlot : Maybe String
+    , mealSlot : Maybe MealSlot
     , quantity : Nutrition.Quantity
     , nutritionSummary : Nutrition.NutritionSummary
     , topQuantities : List QuantityUsage
@@ -308,7 +308,7 @@ latestSlotResponseDecoder : Decode.Decoder LatestSlotResponse
 latestSlotResponseDecoder =
     Decode.map3 LatestSlotResponse
         (Decode.field "source_date" LocalDate.decoder)
-        (Decode.field "meal_slot" Decode.string)
+        (Decode.field "meal_slot" Decode.string |> Decode.map MealSlot.fromString)
         (Decode.field "items" (Decode.list FoodLog.decoder))
 
 
@@ -327,7 +327,9 @@ recentItemDecoder =
     Decode.map6 RecentItem
         (Decode.field "item" FoodLog.logItemDecoder)
         (Decode.field "last_used_date" LocalDate.decoder)
-        (Decode.field "meal_slot" (Decode.nullable Decode.string))
+        (Decode.field "meal_slot" (Decode.nullable Decode.string)
+            |> Decode.map (Maybe.andThen MealSlot.fromString)
+        )
         (Decode.field "quantity" Nutrition.quantityDecoder)
         (Decode.field "nutrition_summary" Nutrition.summaryDecoder)
         (Decode.field "top_quantities" (Decode.list quantityUsageDecoder))

@@ -205,8 +205,8 @@ tests =
                         )
                     |> Expect.equal
                         (Ok
-                            [ ( "2026-06-03", "breakfast", [ "log-1" ] )
-                            , ( "2026-06-01", "late_night_snack", [ "log-1" ] )
+                            [ ( "2026-06-03", Just Breakfast, [ "log-1" ] )
+                            , ( "2026-06-01", Just LateNightSnack, [ "log-1" ] )
                             ]
                         )
         , test "decodes empty latest slots response" <|
@@ -214,6 +214,11 @@ tests =
                 Decode.decodeString Logs.latestSlotsResponseDecoder """{ "slots": [] }"""
                     |> Result.map .slots
                     |> Expect.equal (Ok [])
+        , test "drops an unknown meal slot string when decoding latest slots" <|
+            \_ ->
+                Decode.decodeString Logs.latestSlotsResponseDecoder unknownMealSlotJson
+                    |> Result.map (.slots >> List.map .mealSlot)
+                    |> Expect.equal (Ok [ Nothing ])
         , test "decodes admin user list" <|
             \_ ->
                 Decode.decodeString User.listUsersDecoder userListJson
@@ -430,6 +435,21 @@ latestSlotsJson =
           }
         , { "source_date": "2026-06-01"
           , "meal_slot": "late_night_snack"
+          , "items": [ """
+        ++ foodLogJson
+        ++ """ ]
+          }
+        ]
+    }
+    """
+
+
+unknownMealSlotJson : String
+unknownMealSlotJson =
+    """
+    { "slots":
+        [ { "source_date": "2026-06-03"
+          , "meal_slot": "brunch"
           , "items": [ """
         ++ foodLogJson
         ++ """ ]

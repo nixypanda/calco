@@ -365,7 +365,7 @@ recentItem =
         FoodLog.ProductLogItem
             { id = "food-1", name = "Apple", brand = Nothing }
     , lastUsedDate = sampleDate
-    , mealSlot = Just "lunch"
+    , mealSlot = Just Lunch
     , quantity = { amount = "5", unit = "g" }
     , nutritionSummary = Nutrition.emptySummary
     , topQuantities = [ { quantity = { amount = "5", unit = "g" }, logCount = 2 } ]

@@ -931,7 +931,7 @@ recentProduct =
         FoodLog.ProductLogItem
             { id = "food-1", name = "Apple", brand = Just "Local" }
     , lastUsedDate = date "2026-05-28"
-    , mealSlot = Just "lunch"
+    , mealSlot = Just Lunch
     , quantity = { amount = "2", unit = "serving" }
     , nutritionSummary = Nutrition.emptySummary
     , topQuantities =

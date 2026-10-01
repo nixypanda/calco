@@ -210,7 +210,7 @@ tests =
                             (DiaryDay.LatestSlotsReceived today
                                 (Ok
                                     { slots =
-                                        [ { dinnerSlotResponse | mealSlot = "brunch" }
+                                        [ { dinnerSlotResponse | mealSlot = Nothing }
                                         , lunchSlotResponse
                                         ]
                                     }
@@ -685,7 +685,7 @@ dinnerLog =
 dinnerSlotResponse : Api.Logs.LatestSlotResponse
 dinnerSlotResponse =
     { sourceDate = yesterday
-    , mealSlot = "dinner"
+    , mealSlot = Just Dinner
     , items = [ yesterdayDinnerLog ]
     }
 
@@ -693,7 +693,7 @@ dinnerSlotResponse =
 lunchSlotResponse : Api.Logs.LatestSlotResponse
 lunchSlotResponse =
     { sourceDate = yesterday
-    , mealSlot = "lunch"
+    , mealSlot = Just Lunch
     , items = [ yesterdayLunchLog ]
     }
 
