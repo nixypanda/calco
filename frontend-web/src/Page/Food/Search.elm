@@ -608,7 +608,18 @@ update msg model =
                     let
                         key : Maybe String
                         key =
-                            quickAddTarget model.quickAdd |> Maybe.map quickAddTargetKey
+                            case model.quickAdd of
+                                QuickAddRequestingContext target ->
+                                    Just (quickAddTargetKey target)
+
+                                QuickAddSubmitting target ->
+                                    Just (quickAddTargetKey target)
+
+                                QuickAddIdle ->
+                                    Nothing
+
+                                QuickAddFailed _ ->
+                                    Nothing
 
                         nextToken : Ticket
                         nextToken =
@@ -751,35 +762,20 @@ quickAddTargetKey target =
     recentItemKey target.item target.quantity
 
 
-quickAddTarget : QuickAddState -> Maybe QuickAddTarget
-quickAddTarget quickAdd =
+quickAddIsAdding : String -> QuickAddState -> Bool
+quickAddIsAdding key quickAdd =
     case quickAdd of
-        QuickAddIdle ->
-            Nothing
-
         QuickAddRequestingContext target ->
-            Just target
+            quickAddTargetKey target == key
 
         QuickAddSubmitting target ->
-            Just target
+            quickAddTargetKey target == key
+
+        QuickAddIdle ->
+            False
 
         QuickAddFailed _ ->
-            Nothing
-
-
-quickAddAddingKey : QuickAddState -> Maybe String
-quickAddAddingKey quickAdd =
-    quickAdd |> quickAddTarget |> Maybe.map quickAddTargetKey
-
-
-quickAddError : QuickAddState -> Maybe String
-quickAddError quickAdd =
-    case quickAdd of
-        QuickAddFailed error ->
-            Just error
-
-        _ ->
-            Nothing
+            False
 
 
 canStartQuickAdd : QuickAddState -> Bool
@@ -1403,7 +1399,18 @@ recentsView env model =
         , Element.height Element.fill
         , Element.spacing DesignTokens.space8
         ]
-        [ Feedback.maybeErrorBanner env.theme (quickAddError model.quickAdd)
+        [ case model.quickAdd of
+            QuickAddFailed message ->
+                Feedback.errorBanner env.theme message
+
+            QuickAddIdle ->
+                Element.none
+
+            QuickAddRequestingContext _ ->
+                Element.none
+
+            QuickAddSubmitting _ ->
+                Element.none
         , case model.recentItems of
             NotAsked ->
                 noRecentsState env
@@ -1496,7 +1503,7 @@ quickAddChipState model item quantity =
         key =
             recentItemKey item quantity
     in
-    if quickAddAddingKey model.quickAdd == Just key then
+    if quickAddIsAdding key model.quickAdd then
         QuickAddAdding
 
     else if not (canStartQuickAdd model.quickAdd) then
