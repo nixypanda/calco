@@ -467,16 +467,6 @@ productStateItem state =
             item
 
 
-productDetail : LoadedItem -> Maybe ProductDetail
-productDetail item =
-    case item of
-        ProductItem (DetailLoaded food) ->
-            Just food
-
-        _ ->
-            Nothing
-
-
 applyLoadedError : String -> Model -> Model
 applyLoadedError message model =
     case model of
@@ -589,13 +579,31 @@ bodyView env model =
 loadedView : Env -> LoadedModel -> Element Msg
 loadedView env model =
     let
+        maybeFood : Maybe ProductDetail
+        maybeFood =
+            case model.item of
+                ProductItem (DetailLoaded food) ->
+                    Just food
+
+                ProductItem (DetailLoading _) ->
+                    Nothing
+
+                ProductItem (DetailUnavailable _) ->
+                    Nothing
+
+                MealItem _ ->
+                    Nothing
+
+                AdHocItem _ ->
+                    Nothing
+
         nutrients : List Nutrition.NutrientAmount
         nutrients =
-            nutrientsForDisplay (productDetail model.item) model.log model.form
+            nutrientsForDisplay model.item model.log model.form
 
         categories : List (Element Msg)
         categories =
-            itemCategories env.theme (productDetail model.item)
+            itemCategories env.theme model.item
     in
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
@@ -618,7 +626,7 @@ loadedView env model =
                             List.map (Element.map FormMsg)
                                 (FoodLogForm.fields
                                     env
-                                    (productDetail model.item)
+                                    maybeFood
                                     (unitsForItem model)
                                     model.form
                                 )
@@ -656,11 +664,11 @@ formHasChanges log form =
 
 
 nutrientsForDisplay :
-    Maybe ProductDetail
+    LoadedItem
     -> FoodLog
     -> FoodLogForm.Model
     -> List Nutrition.NutrientAmount
-nutrientsForDisplay maybeFood log form =
+nutrientsForDisplay item log form =
     let
         currentQuantity : { amount : String, unit : String }
         currentQuantity =
@@ -674,15 +682,24 @@ nutrientsForDisplay maybeFood log form =
                 log.nutrients
                 |> Maybe.withDefault log.nutrients
     in
-    case maybeFood of
-        Just food ->
+    case item of
+        ProductItem (DetailLoaded food) ->
             Nutrition.nutrientsForQuantity
                 currentQuantity
                 food.servings
                 food.nutrients
                 |> Maybe.withDefault savedSnapshot
 
-        Nothing ->
+        ProductItem (DetailLoading _) ->
+            savedSnapshot
+
+        ProductItem (DetailUnavailable _) ->
+            savedSnapshot
+
+        MealItem _ ->
+            savedSnapshot
+
+        AdHocItem _ ->
             savedSnapshot
 
 
@@ -691,16 +708,15 @@ itemHeaderElement env model =
     UiPage.pageHeader env.theme
         { leading = Just (View.Nutrients.macroDot env model.log.nutrients)
         , title = itemTitle env.theme model.item
-        , subtitle =
-            Just (metaSubtitle env (productDetail model.item) model.log)
+        , subtitle = Just (metaSubtitle env model.item model.log)
         , actions = []
         }
 
 
-itemCategories : Theme -> Maybe ProductDetail -> List (Element Msg)
-itemCategories theme maybeFood =
-    case maybeFood of
-        Just food ->
+itemCategories : Theme -> LoadedItem -> List (Element Msg)
+itemCategories theme item =
+    case item of
+        ProductItem (DetailLoaded food) ->
             if List.isEmpty food.categories then
                 []
 
@@ -710,7 +726,16 @@ itemCategories theme maybeFood =
                     [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
                 ]
 
-        Nothing ->
+        ProductItem (DetailLoading _) ->
+            []
+
+        ProductItem (DetailUnavailable _) ->
+            []
+
+        MealItem _ ->
+            []
+
+        AdHocItem _ ->
             []
 
 
@@ -735,10 +760,23 @@ itemTitle theme item =
             Typography.truncatedHeader theme (FoodLog.itemName adHoc)
 
 
-metaSubtitle : Env -> Maybe ProductDetail -> FoodLog -> UiPage.PageHeaderSubtitle
-metaSubtitle env maybeFood log =
-    case maybeFood of
-        Just food ->
+metaSubtitle : Env -> LoadedItem -> FoodLog -> UiPage.PageHeaderSubtitle
+metaSubtitle env item log =
+    let
+        fallback : UiPage.PageHeaderSubtitle
+        fallback =
+            UiPage.SubtitleText
+                (Text.dotSeparated
+                    [ FoodLog.itemBrand log.item
+                    , Just
+                        (I18n.t env.language
+                            (TidFoodLogLogged (LocalDate.display env.language log.logDate))
+                        )
+                    ]
+                )
+    in
+    case item of
+        ProductItem (DetailLoaded food) ->
             let
                 productMeta : List String
                 productMeta =
@@ -759,16 +797,17 @@ metaSubtitle env maybeFood log =
             else
                 UiPage.SubtitleMeta { items = productMeta ++ [ loggedMeta ], separator = " ⋅ " }
 
-        Nothing ->
-            UiPage.SubtitleText
-                (Text.dotSeparated
-                    [ FoodLog.itemBrand log.item
-                    , Just
-                        (I18n.t env.language
-                            (TidFoodLogLogged (LocalDate.display env.language log.logDate))
-                        )
-                    ]
-                )
+        ProductItem (DetailLoading _) ->
+            fallback
+
+        ProductItem (DetailUnavailable _) ->
+            fallback
+
+        MealItem _ ->
+            fallback
+
+        AdHocItem _ ->
+            fallback
 
 
 unitsForItem : LoadedModel -> List UnitItem

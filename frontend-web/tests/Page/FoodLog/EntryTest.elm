@@ -74,7 +74,10 @@ tests =
                         }
         , test "product nutrients follow the edit form quantity" <|
             \_ ->
-                FoodLogEntry.nutrientsForDisplay (Just foodWithNutrition) productLog form
+                FoodLogEntry.nutrientsForDisplay
+                    (FoodLogEntry.ProductItem (FoodLogEntry.DetailLoaded foodWithNutrition))
+                    productLog
+                    form
                     |> Expect.equal
                         [ { code = "ENERGY_KCAL"
                           , amount = "120"
@@ -93,9 +96,15 @@ tests =
                         { form | amount = "3", unit = "g" }
                 in
                 { scaled =
-                    FoodLogEntry.nutrientsForDisplay Nothing logWithNutrients scaled
+                    FoodLogEntry.nutrientsForDisplay
+                        (FoodLogEntry.MealItem logWithNutrients.item)
+                        logWithNutrients
+                        scaled
                 , heldWhenUnitChanges =
-                    FoodLogEntry.nutrientsForDisplay Nothing logWithNutrients scaledInGrams
+                    FoodLogEntry.nutrientsForDisplay
+                        (FoodLogEntry.MealItem logWithNutrients.item)
+                        logWithNutrients
+                        scaledInGrams
                 }
                     |> Expect.equal
                         { scaled =
