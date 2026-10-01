@@ -80,7 +80,6 @@ type SubmitState
 
 type SubmitFailure
     = AmountRequiredMessage
-    | InvalidDateMessage
     | RequestFailed String
 
 
@@ -241,9 +240,6 @@ submitFailureMessage failure =
     case failure of
         AmountRequiredMessage ->
             I18n.en TidFoodLogAmountRequired
-
-        InvalidDateMessage ->
-            I18n.en TidFoodLogInvalidDeviceDate
 
         RequestFailed message ->
             message

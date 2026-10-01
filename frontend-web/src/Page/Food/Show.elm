@@ -276,57 +276,34 @@ update msg model =
 
 createLogFromLocalContext : LocalContext -> LoadedModel -> ( Model, Cmd Msg, OutMsg )
 createLogFromLocalContext context loaded =
-    let
-        maybeLogDate : Maybe LocalDate
-        maybeLogDate =
-            case loaded.logDate of
-                Just date ->
-                    Just date
+    case
+        FoodLogForm.createProductLogRequest
+            (Maybe.withDefault context.date loaded.logDate)
+            (Just context.timezone)
+            loaded.productId
+            loaded.form
+    of
+        Ok request ->
+            ( Loaded
+                { loaded
+                    | form =
+                        FoodLogForm.setSubmitState FoodLogForm.SubmitSubmitting loaded.form
+                }
+            , Cmd.none
+            , RequestCreateLog request
+            )
 
-                Nothing ->
-                    Just context.date
-    in
-    case maybeLogDate of
-        Nothing ->
+        Err FoodLogForm.AmountRequired ->
             ( Loaded
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed FoodLogForm.InvalidDateMessage)
+                            (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
                             loaded.form
                 }
             , Cmd.none
             , NoOp
             )
-
-        Just logDate ->
-            case
-                FoodLogForm.createProductLogRequest logDate
-                    (Just context.timezone)
-                    loaded.productId
-                    loaded.form
-            of
-                Ok request ->
-                    ( Loaded
-                        { loaded
-                            | form =
-                                FoodLogForm.setSubmitState FoodLogForm.SubmitSubmitting loaded.form
-                        }
-                    , Cmd.none
-                    , RequestCreateLog request
-                    )
-
-                Err FoodLogForm.AmountRequired ->
-                    ( Loaded
-                        { loaded
-                            | form =
-                                FoodLogForm.setSubmitState
-                                    (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
-                                    loaded.form
-                        }
-                    , Cmd.none
-                    , NoOp
-                    )
 
 
 setLoadedFood : ProductDetail -> Model -> Model
