@@ -21,6 +21,16 @@ unauthorized =
     Client.BadStatus 401 "unauthorized" "Sign in again"
 
 
+submitErrorMessage : Common.SubmitState -> Maybe String
+submitErrorMessage state =
+    case state of
+        Common.SubmitFailed message ->
+            Just message
+
+        _ ->
+            Nothing
+
+
 tests : Test
 tests =
     describe "Page.Meal.Edit"
@@ -168,7 +178,7 @@ toScreen model =
                         (\row -> ( row.productId, row.quantity, row.unit ))
                         loaded.fields.components
                     )
-            , submitError = Common.submitErrorMessage loaded.fields.submit
+            , submitError = submitErrorMessage loaded.fields.submit
             , error = Nothing
             }
 

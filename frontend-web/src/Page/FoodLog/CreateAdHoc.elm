@@ -330,7 +330,27 @@ viewForAi env showOptional model =
                 Editor.CoreNutrientsOnly
     in
     UiPage.pageContainer
-        [ Feedback.maybeErrorBanner env.theme (submitError model.submit)
+        [ case model.submit of
+            SubmitFailed message ->
+                Feedback.errorBanner env.theme message
+
+            LogFailedAfterFoodSaved saved ->
+                Feedback.errorBanner env.theme saved.message
+
+            SubmitIdle ->
+                Element.none
+
+            AwaitingLocalContext ->
+                Element.none
+
+            LoggingAdHoc ->
+                Element.none
+
+            SavingCustomFood ->
+                Element.none
+
+            LoggingSavedFood _ ->
+                Element.none
         , Element.map FormMsg
             (Editor.viewForLog env visibility model.nutrients model.units model.form)
         , Button.textButton env.device
@@ -350,19 +370,6 @@ viewForAi env showOptional model =
             , trailing = Nothing
             }
         ]
-
-
-submitError : SubmitState -> Maybe String
-submitError state =
-    case state of
-        SubmitFailed message ->
-            Just message
-
-        LogFailedAfterFoodSaved saved ->
-            Just saved.message
-
-        _ ->
-            Nothing
 
 
 isSubmitting : SubmitState -> Bool

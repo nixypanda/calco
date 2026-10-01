@@ -533,16 +533,27 @@ contentView env model =
         logs : List FoodLog
         logs =
             diaryLogs model.currentDate model.diary
+
+        fallbackViews : List (Element Msg)
+        fallbackViews =
+            copyErrorView env.theme model.copyState ++ [ logGroupsView env model logs ]
     in
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         (dateCard env model
-            :: (case activeDiaryError model.currentDate model.diary of
-                    Just message ->
-                        [ Feedback.errorBanner env.theme message ]
+            :: (case model.diary of
+                    Failed date message ->
+                        if LocalDate.equals date model.currentDate then
+                            [ Feedback.errorBanner env.theme message ]
 
-                    Nothing ->
-                        copyErrorView env.theme model.copyState ++ [ logGroupsView env model logs ]
+                        else
+                            fallbackViews
+
+                    Loading _ ->
+                        fallbackViews
+
+                    Loaded _ ->
+                        fallbackViews
                )
         )
 
@@ -959,20 +970,6 @@ loadedGoalTargets currentDate diary =
 loadingGoalTargets : GoalTargets
 loadingGoalTargets =
     { calorieTarget = 0, proteinTargetG = 0, carbsTargetG = 0, fatTargetG = 0 }
-
-
-activeDiaryError : LocalDate -> DiaryState -> Maybe String
-activeDiaryError currentDate diary =
-    case diary of
-        Failed date message ->
-            if LocalDate.equals date currentDate then
-                Just message
-
-            else
-                Nothing
-
-        _ ->
-            Nothing
 
 
 copyErrorView : Theme -> CopyState -> List (Element Msg)

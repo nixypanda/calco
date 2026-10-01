@@ -11,7 +11,7 @@ module Component.Meal.Form exposing
     , emptyComponentRow
     , emptyFormFields
     , isSubmitting
-    , submitErrorMessage
+    , submitErrorBanner
     , toMealRequest
     , updateFormField
     , viewFormFields
@@ -46,6 +46,7 @@ import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Input as UiInput
 import Ui.Surface as Surface
+import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.QuantityInput as QuantityInput
 import View.Search as SearchView
@@ -115,14 +116,17 @@ isSubmitting state =
             False
 
 
-submitErrorMessage : SubmitState -> Maybe String
-submitErrorMessage state =
+submitErrorBanner : Theme -> SubmitState -> Element msg
+submitErrorBanner theme state =
     case state of
         SubmitFailed message ->
-            Just message
+            Feedback.errorBanner theme message
 
-        _ ->
-            Nothing
+        Idle ->
+            Element.none
+
+        Submitting ->
+            Element.none
 
 
 type ValidationError

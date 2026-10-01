@@ -148,7 +148,18 @@ view env config model =
                         , value = form.password
                         , onChange = PasswordChanged
                         }
-                    , Feedback.maybeErrorBanner env.theme (errorMessage model)
+                    , case model of
+                        Invalid _ message ->
+                            Feedback.errorBanner env.theme message
+
+                        Failed _ message ->
+                            Feedback.errorBanner env.theme message
+
+                        Editing _ ->
+                            Element.none
+
+                        Submitting _ ->
+                            Element.none
                     ]
                 , footer = Nothing
                 }
@@ -174,16 +185,3 @@ isSubmitting model =
 
         _ ->
             False
-
-
-errorMessage : Model -> Maybe String
-errorMessage model =
-    case model of
-        Invalid _ message ->
-            Just message
-
-        Failed _ message ->
-            Just message
-
-        _ ->
-            Nothing

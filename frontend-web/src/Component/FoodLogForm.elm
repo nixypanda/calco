@@ -269,11 +269,14 @@ panel section instead of a standalone card.
 -}
 fields : Env -> Maybe ProductDetail -> List UnitItem -> Model -> List (Element Msg)
 fields env food units model =
-    (case submitError model.submitState of
-        Just message ->
-            [ Feedback.errorBanner env.theme message ]
+    (case model.submitState of
+        SubmitFailed failure ->
+            [ Feedback.errorBanner env.theme (submitFailureMessage failure) ]
 
-        Nothing ->
+        SubmitIdle ->
+            []
+
+        SubmitSubmitting ->
             []
     )
         ++ [ mealSlotDropdown env model
@@ -294,16 +297,6 @@ fields env food units model =
                 , onChange = NotesChanged
                 }
            ]
-
-
-submitError : SubmitState -> Maybe String
-submitError submitState =
-    case submitState of
-        SubmitFailed failure ->
-            Just (submitFailureMessage failure)
-
-        _ ->
-            Nothing
 
 
 mealSlotDropdown : Env -> Model -> Element Msg

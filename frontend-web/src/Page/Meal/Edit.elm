@@ -482,8 +482,7 @@ view env model =
 
         Editing loaded ->
             UiPage.pageContainer
-                [ Feedback.maybeErrorBanner env.theme
-                    (Common.submitErrorMessage loaded.fields.submit)
+                [ Common.submitErrorBanner env.theme loaded.fields.submit
                 , Common.viewFormFields env FormMsg loaded.fields
                 , nutritionView env loaded
                 , Button.textButton env.device

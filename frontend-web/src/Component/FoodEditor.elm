@@ -75,6 +75,7 @@ import Ui.Feedback as Feedback
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Input as UiInput
 import Ui.Surface as Surface
+import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
 import View.QuantityInput
@@ -150,14 +151,17 @@ isSubmitting state =
             False
 
 
-submitErrorMessage : SubmitState -> Maybe String
-submitErrorMessage state =
+submitErrorBanner : Theme -> SubmitState -> Element Msg
+submitErrorBanner theme state =
     case state of
         SubmitFailed message ->
-            Just message
+            Feedback.errorBanner theme message
 
-        _ ->
-            Nothing
+        Idle ->
+            Element.none
+
+        Submitting ->
+            Element.none
 
 
 type alias CategoryInput =
@@ -1587,7 +1591,7 @@ validationErrorMessage error =
 view : Env -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
 view env nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Feedback.maybeErrorBanner env.theme (submitErrorMessage form.submit)
+        [ submitErrorBanner env.theme form.submit
         , basicInfoCard env True form
         , nutrientsCard env Per100Grams AllNutrients form nutrients
         , servingsCard env form units
@@ -1598,7 +1602,7 @@ view env nutrients units form =
 viewForCreate : Env -> List NutrientItem -> FormModel -> Element Msg
 viewForCreate env nutrients form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Feedback.maybeErrorBanner env.theme (submitErrorMessage form.submit)
+        [ submitErrorBanner env.theme form.submit
         , basicInfoCard env True form
         , nutrientsCard env Per100Grams AllNutrients form nutrients
         ]

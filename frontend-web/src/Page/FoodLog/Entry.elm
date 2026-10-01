@@ -550,11 +550,14 @@ contentView : Env -> Model -> Element Msg
 contentView env model =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ case pageError model of
-            Just message ->
-                Feedback.errorBanner env.theme message
+        [ case model of
+            LoadFailed failed ->
+                Feedback.errorBanner env.theme failed.error
 
-            Nothing ->
+            Loading _ ->
+                Element.none
+
+            Loaded _ ->
                 Element.none
         , bodyView env model
         ]
@@ -568,19 +571,6 @@ modalView env model =
 
         _ ->
             Nothing
-
-
-pageError : Model -> Maybe String
-pageError model =
-    case model of
-        Loading _ ->
-            Nothing
-
-        Loaded _ ->
-            Nothing
-
-        LoadFailed failed ->
-            Just failed.error
 
 
 bodyView : Env -> Model -> Element Msg
