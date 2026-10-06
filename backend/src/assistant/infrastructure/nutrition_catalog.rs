@@ -99,9 +99,16 @@ impl FoodDraftAcceptancePort for NutritionCatalogVocabularyAdapter {
         self.catalog
             .validate_custom_food_draft(input)
             .await
-            .map_err(|error| match error {
-                NutritionError::Validation(_) => AssistantError::InvalidModelResponse,
-                _ => AssistantError::Internal,
+            .map_err(|error| {
+                tracing::error!(
+                    draft = ?draft,
+                    error = %error,
+                    "assistant response failed catalog validation"
+                );
+                match error {
+                    NutritionError::Validation(_) => AssistantError::InvalidModelResponse,
+                    _ => AssistantError::Internal,
+                }
             })
     }
 }

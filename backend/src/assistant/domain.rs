@@ -101,7 +101,7 @@ pub enum FoodDraftPurpose {
     AdHocLog,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FoodDraftTurn {
     NeedsClarification {
         assistant_message: String,
@@ -250,7 +250,7 @@ impl FoodDraftPolicy {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SuggestedLog {
     amount: Decimal,
     unit: String,
@@ -291,7 +291,7 @@ impl SuggestedLog {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoodDraft {
     name: String,
     brand: Option<String>,
@@ -466,7 +466,7 @@ impl FoodDraft {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftNutrient {
     code: String,
     amount_per_100g: Decimal,
@@ -493,7 +493,7 @@ impl DraftNutrient {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftServing {
     unit: String,
     grams_per_unit: Decimal,
