@@ -166,7 +166,7 @@ mod tests {
         assert_eq!(request.messages[1].content, "one bowl of dal");
         let ResponseFormat::JsonSchema { schema, .. } = request.response_format;
         assert_eq!(
-            schema["properties"]["draft"]["oneOf"][1]["properties"]["default_unit"]["enum"],
+            schema["oneOf"][1]["properties"]["draft"]["properties"]["default_unit"]["enum"],
             serde_json::json!(["g", null])
         );
     }

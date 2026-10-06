@@ -203,10 +203,18 @@ impl FoodDraftService {
         let vocabulary = self.vocabulary.supported_vocabulary().await?;
         let request = prepare_model_request(request)?;
         let result = self.model.generate(&request, &vocabulary).await?;
-        vocabulary
+        if let Err(error) = vocabulary
             .draft_policy()
             .validate(request.purpose, &result.turn)
-            .map_err(|_| AssistantError::InvalidModelResponse)?;
+        {
+            tracing::error!(
+                purpose = ?request.purpose,
+                turn = ?result.turn,
+                error = %error,
+                "assistant response failed vocabulary validation"
+            );
+            return Err(AssistantError::InvalidModelResponse);
+        }
         if let FoodDraftTurn::DraftReady { draft, .. } = &result.turn {
             self.acceptance.validate_draft(draft).await?;
         }
