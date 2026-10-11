@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, QueryBuilder};
 use uuid::Uuid;
 
 use crate::auth::domain::*;
@@ -43,13 +43,22 @@ impl IdentityRepository for PostgresIdentityRepository {
 
     async fn find_by_ids(&self, ids: &[IdentityId]) -> Result<Vec<Identity>, AuthError> {
         let ids: Vec<Uuid> = ids.iter().map(|id| id.0).collect();
-        let rows = sqlx::query_as::<_, IdentityRow>(
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut query = QueryBuilder::<Postgres>::new(
             "SELECT id, username, password_hash, role, status, session_security_stamp, created_at, updated_at \
-             FROM identities WHERE id = ANY($1)",
-        )
-        .bind(ids)
-        .fetch_all(&self.pool)
-        .await?;
+             FROM identities WHERE id IN (",
+        );
+        let mut separated = query.separated(", ");
+        for id in &ids {
+            separated.push_bind(*id);
+        }
+        separated.push_unseparated(")");
+        let rows = query
+            .build_query_as::<IdentityRow>()
+            .fetch_all(&self.pool)
+            .await?;
 
         rows.into_iter().map(identity_row_to_identity).collect()
     }

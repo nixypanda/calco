@@ -55,17 +55,23 @@ impl PostgresFoodLogRepository {
         }
 
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-        let snapshot_rows = sqlx::query_as::<_, FoodLogSnapshotJoinRow>(
+        let mut query = QueryBuilder::<Postgres>::new(
             r#"
             SELECT fln.food_log_id, fln.amount, fln.unit, n.code
             FROM food_log_nutrients fln
             JOIN nutrients n ON n.id = fln.nutrient_id
-            WHERE fln.food_log_id = ANY($1)
+            WHERE fln.food_log_id IN (
             "#,
-        )
-        .bind(&ids)
-        .fetch_all(&self.pool)
-        .await?;
+        );
+        let mut separated = query.separated(", ");
+        for id in &ids {
+            separated.push_bind(*id);
+        }
+        separated.push_unseparated(")");
+        let snapshot_rows = query
+            .build_query_as::<FoodLogSnapshotJoinRow>()
+            .fetch_all(&self.pool)
+            .await?;
 
         let mut snapshots_by_log: std::collections::HashMap<Uuid, Vec<FoodLogNutrientSnapshot>> =
             std::collections::HashMap::new();
@@ -136,9 +142,12 @@ fn food_log_filter_query(filter: FoodLogListFilter) -> QueryBuilder<'static, Pos
         let mut has_previous_item_predicate = false;
 
         if !product_ids.is_empty() {
-            query.push("item_product_id = ANY(");
-            query.push_bind(product_ids);
-            query.push(")");
+            query.push("item_product_id IN (");
+            let mut separated = query.separated(", ");
+            for product_id in &product_ids {
+                separated.push_bind(*product_id);
+            }
+            separated.push_unseparated(")");
             has_previous_item_predicate = true;
         }
 
@@ -146,9 +155,12 @@ fn food_log_filter_query(filter: FoodLogListFilter) -> QueryBuilder<'static, Pos
             if has_previous_item_predicate {
                 query.push(" OR ");
             }
-            query.push("item_meal_id = ANY(");
-            query.push_bind(meal_ids);
-            query.push(")");
+            query.push("item_meal_id IN (");
+            let mut separated = query.separated(", ");
+            for meal_id in &meal_ids {
+                separated.push_bind(*meal_id);
+            }
+            separated.push_unseparated(")");
         }
 
         query.push(")");
@@ -336,7 +348,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
             UPDATE food_logs SET log_date=$2, meal_slot=$3, device_timezone=$4,
                                  item_product_id=$5, item_meal_id=$6,
                                  item_name=$7, item_brand=$8, quantity=$9, unit=$10, notes=$11,
-                                 updated_at=now()
+                                 updated_at=CURRENT_TIMESTAMP
             WHERE id=$1
             "#,
         )
@@ -430,35 +442,43 @@ async fn insert_food_log_nutrients(
         .iter()
         .map(|s| s.nutrient_code.0.clone())
         .collect();
-    let amounts: Vec<Decimal> = snapshots.iter().map(|s| s.amount).collect();
-    let units: Vec<String> = snapshots.iter().map(|s| s.unit.0.clone()).collect();
-
-    let inserted: i64 = sqlx::query_scalar(
-        r#"
-        WITH ins AS (
-            INSERT INTO food_log_nutrients (food_log_id, nutrient_id, amount, unit)
-            SELECT $1, n.id, v.amount, v.unit
-            FROM UNNEST($2::text[], $3::numeric[], $4::text[]) AS v(code, amount, unit)
-            JOIN nutrients n ON n.code = v.code
-            RETURNING 1
-        )
-        SELECT COUNT(*) FROM ins
-        "#,
-    )
-    .bind(food_log_id)
-    .bind(&codes)
-    .bind(&amounts)
-    .bind(&units)
-    .fetch_one(&mut **tx)
-    .await?;
-
-    if (inserted as usize) != snapshots.len() {
-        return Err(NutritionError::Validation(format!(
-            "unknown nutrient code in food log snapshot (expected {} rows, inserted {})",
-            snapshots.len(),
-            inserted
-        )));
+    let mut query = QueryBuilder::<Postgres>::new("SELECT code, id FROM nutrients WHERE code IN (");
+    let mut separated = query.separated(", ");
+    for code in &codes {
+        separated.push_bind(code);
     }
+    separated.push_unseparated(")");
+    let nutrient_ids: std::collections::HashMap<String, Uuid> = query
+        .build_query_as::<(String, Uuid)>()
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .collect();
+
+    let mut rows = Vec::with_capacity(snapshots.len());
+    for snapshot in snapshots {
+        let nutrient_id = nutrient_ids
+            .get(&snapshot.nutrient_code.0)
+            .copied()
+            .ok_or_else(|| {
+                NutritionError::Validation(format!(
+                    "unknown nutrient code in food log snapshot: {}",
+                    snapshot.nutrient_code.0
+                ))
+            })?;
+        rows.push((nutrient_id, snapshot.amount, snapshot.unit.0.clone()));
+    }
+
+    let mut query = QueryBuilder::<Postgres>::new(
+        "INSERT INTO food_log_nutrients (food_log_id, nutrient_id, amount, unit) ",
+    );
+    query.push_values(rows, |mut row, (nutrient_id, amount, unit)| {
+        row.push_bind(food_log_id)
+            .push_bind(nutrient_id)
+            .push_bind(amount)
+            .push_bind(unit);
+    });
+    query.build().execute(&mut **tx).await?;
     Ok(())
 }
 
@@ -549,7 +569,7 @@ mod tests {
         assert_eq!(
             sql,
             expected_filter_sql(
-                "AND log_date >= $2 AND log_date <= $3 AND (item_product_id = ANY($4))"
+                "AND log_date >= $2 AND log_date <= $3 AND (item_product_id IN ($4))"
             )
         );
     }
@@ -564,9 +584,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            expected_filter_sql(
-                "AND log_date >= $2 AND log_date <= $3 AND (item_meal_id = ANY($4))"
-            )
+            expected_filter_sql("AND log_date >= $2 AND log_date <= $3 AND (item_meal_id IN ($4))")
         );
     }
 
@@ -585,7 +603,7 @@ mod tests {
             sql,
             expected_filter_sql(
                 "AND log_date >= $2 AND log_date <= $3 AND \
-                 (item_product_id = ANY($4) OR item_meal_id = ANY($5))"
+                 (item_product_id IN ($4) OR item_meal_id IN ($5))"
             )
         );
     }

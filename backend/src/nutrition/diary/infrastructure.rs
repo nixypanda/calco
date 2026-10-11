@@ -49,7 +49,7 @@ impl DiaryPreferencesRepository for PostgresDiaryPreferencesRepository {
             VALUES ($1, $2)
             ON CONFLICT (user_id) DO UPDATE
             SET enabled_meal_slots = EXCLUDED.enabled_meal_slots,
-                updated_at = NOW()
+                updated_at = CURRENT_TIMESTAMP
             "#,
         )
         .bind(preferences.user_id)

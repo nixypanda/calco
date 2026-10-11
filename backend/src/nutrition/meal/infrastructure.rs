@@ -163,7 +163,7 @@ impl MealRepository for PostgresMealRepository {
         sqlx::query(
             r#"
             UPDATE meals SET name=$2, notes=$3, total_quantity_amount=$4, total_quantity_unit=$5,
-                             updated_at=now()
+                             updated_at=CURRENT_TIMESTAMP
             WHERE id=$1
             "#,
         )

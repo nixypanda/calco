@@ -246,7 +246,7 @@ impl ImportRepository for PostgresImportRepository {
                 }
                 sqlx::query(
                     r#"UPDATE imports
-                       SET status = 'committed', committed_at = NOW(),
+                       SET status = 'committed', committed_at = CURRENT_TIMESTAMP,
                            products_created = $2, products_updated = $3,
                            nutrients_written = $4, servings_written = $5,
                            errors_logged = $6
@@ -263,7 +263,7 @@ impl ImportRepository for PostgresImportRepository {
             }
             ImportCommitOutcome::Failed => {
                 sqlx::query(
-                    "UPDATE imports SET status = 'failed', failed_at = NOW() WHERE id = $1",
+                    "UPDATE imports SET status = 'failed', failed_at = CURRENT_TIMESTAMP WHERE id = $1",
                 )
                 .bind(import_id.0)
                 .execute(&mut *tx)
@@ -333,9 +333,9 @@ impl PostgresImportRepository {
                WHERE NOT EXISTS (
                    SELECT 1 FROM import_errors
                    WHERE import_id = $2
-                     AND row_number IS NOT DISTINCT FROM $3
+                     AND (row_number = $3 OR (row_number IS NULL AND $3 IS NULL))
                      AND error = $4
-                     AND raw_payload IS NOT DISTINCT FROM $5
+                     AND (raw_payload = $5 OR (raw_payload IS NULL AND $5 IS NULL))
                )"#,
         )
         .bind(Uuid::new_v4())

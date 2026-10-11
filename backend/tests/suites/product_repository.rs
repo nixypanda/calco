@@ -286,45 +286,45 @@ async fn external_upsert_rolls_back_all_parent_writes_on_persistence_errors(pool
 }
 
 #[sqlx::test]
-async fn external_upsert_table_locks_block_writers_but_allow_reads(pool: PgPool) {
-    for (index, table) in ["products", "product_nutrients", "product_servings"]
-        .into_iter()
-        .enumerate()
-    {
-        let mut blocker = pool.begin().await.unwrap();
-        sqlx::query(&format!("LOCK TABLE {table} IN ROW EXCLUSIVE MODE"))
-            .execute(&mut *blocker)
-            .await
-            .unwrap();
+async fn concurrent_writers_serialize_on_the_product_row_and_reads_proceed(pool: PgPool) {
+    let repository = PostgresProductRepository::new(pool.clone());
+    let product = external_product("row-lock-probe", None, "Lock probe", &[], &[]);
+    let batch = external_batch(vec![product]);
+    repository.upsert_external_many(&batch).await.unwrap();
 
-        let repository = PostgresProductRepository::new(pool.clone());
-        let product =
-            external_product(&format!("blocked-by-{table}"), None, "Lock probe", &[], &[]);
-        let batch = external_batch(vec![product]);
-        let write = tokio::spawn(async move { repository.upsert_external_many(&batch).await });
+    let mut blocker = pool.begin().await.unwrap();
+    sqlx::query(
+        "SELECT id FROM products WHERE source = 'OFF' AND source_id = 'row-lock-probe' FOR UPDATE",
+    )
+    .execute(&mut *blocker)
+    .await
+    .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        assert!(
-            !write.is_finished(),
-            "upsert should wait for a writer lock held on {table}"
-        );
+    let blocked_product = external_product("row-lock-probe", None, "Lock probe updated", &[], &[]);
+    let blocked_batch = external_batch(vec![blocked_product]);
+    let write = tokio::spawn(async move { repository.upsert_external_many(&blocked_batch).await });
 
-        let read = tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM products").fetch_one(&pool),
-        )
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert!(
+        !write.is_finished(),
+        "upsert should wait for the product row lock held by a competing writer"
+    );
+
+    let read = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM products").fetch_one(&pool),
+    )
+    .await
+    .expect("reads should not be blocked by a competing writer")
+    .unwrap();
+    assert_eq!(read, 1);
+
+    blocker.rollback().await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), write)
         .await
-        .expect("ordinary reads should not be blocked by the chosen table lock")
+        .expect("upsert should continue once the competing writer releases its lock")
+        .unwrap()
         .unwrap();
-        assert!(read >= index as i64);
-
-        blocker.rollback().await.unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(5), write)
-            .await
-            .expect("upsert should continue once the competing writer releases its lock")
-            .unwrap()
-            .unwrap();
-    }
 }
 
 #[sqlx::test]
