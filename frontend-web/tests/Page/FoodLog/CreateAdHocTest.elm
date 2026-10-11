@@ -3,6 +3,7 @@ module Page.FoodLog.CreateAdHocTest exposing (tests)
 import Api.Client as Client
 import Component.FoodEditor as Editor
 import Expect
+import Lib.Date as LocalDate exposing (LocalDate)
 import Page.FoodLog.CreateAdHoc as CreateAdHoc
 import Test exposing (Test, describe, test)
 
@@ -158,7 +159,7 @@ validModel =
     let
         model : CreateAdHoc.Model
         model =
-            CreateAdHoc.init (Just "2026-09-14") Nothing
+            CreateAdHoc.init (Just (date "2026-09-14")) Nothing
 
         form : Editor.FormModel
         form =
@@ -193,3 +194,18 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+date : String -> LocalDate
+date raw =
+    case LocalDate.fromString raw of
+        Just value ->
+            value
+
+        Nothing ->
+            case LocalDate.fromParts 1970 1 1 of
+                Just fallback ->
+                    fallback
+
+                Nothing ->
+                    date raw

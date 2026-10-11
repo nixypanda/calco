@@ -84,17 +84,17 @@ routePaneCases =
       , DiaryDay (Just date) (Just month)
       , [ "calendar:" ++ month, diaryKey date (Just month) ]
       )
-    , ( "an unparseable diary date falls back to today"
-      , DiaryDay (Just "not-a-date") Nothing
-      , [ diaryKey (LocalDate.format today) Nothing ]
+    , ( "an absent or unparseable diary date falls back to today"
+      , DiaryDay Nothing Nothing
+      , [ diaryKey today Nothing ]
       )
     , ( "a missing diary date falls back to today"
       , DiaryDay Nothing Nothing
-      , [ diaryKey (LocalDate.format today) Nothing ]
+      , [ diaryKey today Nothing ]
       )
     , ( "a future diary date is clamped to today"
-      , DiaryDay (Just "2027-01-01") Nothing
-      , [ diaryKey (LocalDate.format today) Nothing ]
+      , DiaryDay (Just (dateValue "2027-01-01")) Nothing
+      , [ diaryKey today Nothing ]
       )
     , ( "dated search opens diary and search panes"
       , FoodSearch (Just date) (Just Lunch)
@@ -102,7 +102,7 @@ routePaneCases =
       )
     , ( "dated food opens diary and food detail panes"
       , FoodShow "food-1" (Just date) (Just Lunch) Nothing
-      , [ diaryKey date Nothing, "food-detail:food-1:" ++ date ++ ":lunch" ]
+      , [ diaryKey date Nothing, "food-detail:food-1:" ++ LocalDate.format date ++ ":lunch" ]
       )
     , ( "dated log editing is standalone"
       , FoodLogEntry "log-1" (Just date) Nothing
@@ -110,7 +110,7 @@ routePaneCases =
       )
     , ( "nutrition details retain the diary pane"
       , NutritionDetails (Just date)
-      , [ diaryKey date Nothing, "nutrition-details:" ++ date ]
+      , [ diaryKey date Nothing, "nutrition-details:" ++ LocalDate.format date ]
       )
     , ( "custom food detail retains its list pane"
       , CustomFoodShow "food-1"
@@ -144,8 +144,8 @@ routePaneCases =
       , FoodSearch Nothing Nothing
       , [ "food-search" ]
       )
-    , ( "invalid dated search degrades to standalone search"
-      , FoodSearch (Just "not-a-date") (Just Lunch)
+    , ( "undated search degrades to standalone search"
+      , FoodSearch Nothing (Just Lunch)
       , [ "food-search" ]
       )
     , ( "undated food degrades to standalone detail on direct entry"
@@ -267,7 +267,7 @@ routeFlowTests =
                     |> Page.paneKeys
                     |> Expect.equal
                         [ diaryKey date Nothing
-                        , "food-detail:food-1:" ++ date ++ ":lunch"
+                        , "food-detail:food-1:" ++ LocalDate.format date ++ ":lunch"
                         ]
         , test "meal detail replaces search without replacing the diary" <|
             \_ ->
@@ -316,7 +316,7 @@ routeFlowTests =
                     |> Page.paneKeys
                     |> Expect.equal
                         [ "calendar:" ++ month
-                        , "food-detail:food-1:" ++ date ++ ":lunch"
+                        , "food-detail:food-1:" ++ LocalDate.format date ++ ":lunch"
                         ]
         , test "using a contextual diary promotes it to the main pane" <|
             \_ ->
@@ -414,7 +414,7 @@ routeFlowTests =
                 , afterRollover (DiaryDay (Just date) Nothing)
                 )
                     |> Expect.equal
-                        ( [ diaryKey "2026-07-30" Nothing ]
+                        ( [ diaryKey (dateValue "2026-07-30") Nothing ]
                         , [ diaryKey date Nothing ]
                         )
         , test "a rolled-over day reaches the diary pane already open on it" <|
@@ -438,13 +438,13 @@ routeFlowTests =
                 ( nextDay mounted
                 , mounted
                     |> Page.localContextReceived context
-                        { date = "2026-07-30", timezone = "Asia/Kolkata" }
+                        { date = dateValue "2026-07-30", timezone = "Asia/Kolkata" }
                     |> Maybe.map first
                     |> Maybe.andThen nextDay
                 )
                     |> Expect.equal
                         ( Just Page.NoOutMsg
-                        , Just (Page.Navigate (DiaryDay (Just "2026-07-30") Nothing))
+                        , Just (Page.Navigate (DiaryDay (Just (dateValue "2026-07-30")) Nothing))
                         )
         ]
 
@@ -478,28 +478,28 @@ paneKeysForRoute route =
         |> Page.paneKeys
 
 
-diaryKey : String -> Maybe String -> String
+diaryKey : LocalDate -> Maybe String -> String
 diaryKey selectedDate calendarMonth =
     "diary:"
-        ++ selectedDate
+        ++ LocalDate.format selectedDate
         ++ ":"
         ++ Maybe.withDefault "none" calendarMonth
 
 
-date : String
+date : LocalDate
 date =
-    "2026-07-20"
+    dateValue "2026-07-20"
 
 
-previousDate : String
+previousDate : LocalDate
 previousDate =
-    "2026-07-19"
+    dateValue "2026-07-19"
 
 
 productLog : FoodLog
 productLog =
     { id = "log-1"
-    , logDate = dateValue date
+    , logDate = date
     , deviceTimezone = Just "Asia/Kolkata"
     , mealSlot = Just Lunch
     , item =

@@ -69,7 +69,7 @@ tests =
         , test "saveGoalRequestEncoder includes device context and numeric fields" <|
             \_ ->
                 Api.Goals.saveGoalRequestEncoder
-                    { localDate = "2026-06-16"
+                    { localDate = date "2026-06-16"
                     , deviceTimezone = "Asia/Kolkata"
                     , targets =
                         { calorieTarget = 2100

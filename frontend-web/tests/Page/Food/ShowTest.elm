@@ -27,7 +27,7 @@ tests =
             \_ ->
                 let
                     ( model, initial ) =
-                        FoodShow.init "food-1" (Just "2026-05-29") (Just Lunch) Nothing
+                        FoodShow.init "food-1" (Just sampleDate) (Just Lunch) Nothing
 
                     loaded : FoodShow.Model
                     loaded =
@@ -99,9 +99,9 @@ tests =
         , test "local context builds the log request from the diary date or the device date" <|
             \_ ->
                 let
-                    context : { date : String, timezone : String }
+                    context : { date : LocalDate, timezone : String }
                     context =
-                        { date = "2026-06-04", timezone = "Asia/Kolkata" }
+                        { date = sampleDateFromString "2026-06-04", timezone = "Asia/Kolkata" }
 
                     requestFor : FoodShow.Model -> FoodShow.OutMsg
                     requestFor model =
@@ -115,39 +115,12 @@ tests =
                         { selectedDate = createLogRequest (sampleDateFromString "2026-05-29")
                         , deviceDate = createLogRequest (sampleDateFromString "2026-06-04")
                         }
-        , test "an unreadable device date fails the submission without a request" <|
-            \_ ->
-                let
-                    contextReady : FoodShow.Model
-                    contextReady =
-                        step FoodShow.SubmitClicked loadedWithoutDate
-
-                    afterContext : FoodShow.Model
-                    afterContext =
-                        step
-                            (FoodShow.LocalContextReceived
-                                { date = "not-a-date", timezone = "Asia/Kolkata" }
-                            )
-                            contextReady
-                in
-                { request =
-                    out
-                        (FoodShow.LocalContextReceived
-                            { date = "not-a-date", timezone = "Asia/Kolkata" }
-                        )
-                        contextReady
-                , error = toScreen afterContext |> .submitError
-                }
-                    |> Expect.equal
-                        { request = FoodShow.NoOp
-                        , error = Just "Could not read device date."
-                        }
         , test "a completed log reports the created log with its contextual search route" <|
             \_ ->
                 out (FoodShow.LogCompleted (Ok log)) savingModel
                     |> Expect.equal
                         (FoodShow.LogCreated log
-                            (FoodSearch (Just "2026-05-29") (Just Lunch))
+                            (FoodSearch (Just sampleDate) (Just Lunch))
                         )
         , test "a failed log keeps the current form and surfaces the request error" <|
             \_ ->
@@ -233,13 +206,13 @@ toScreen model =
             , error = Nothing
             }
 
-        FoodShow.LoadFailed message ->
+        FoodShow.LoadFailed failed ->
             { phase = "failed"
             , amount = Nothing
             , unit = Nothing
             , submit = Nothing
             , submitError = Nothing
-            , error = Just message
+            , error = Just failed.message
             }
 
 
@@ -258,7 +231,7 @@ createLogRequest logDate =
     FoodShow.RequestCreateLog
         { logDate = logDate
         , deviceTimezone = Just "Asia/Kolkata"
-        , mealSlot = Just "lunch"
+        , mealSlot = Just Lunch
         , item = { itemType = ItemRef.Product, id = "food-1" }
         , quantity = { amount = "2", unit = "serving" }
         , notes = Nothing
@@ -277,7 +250,7 @@ out msg model =
 
 emptyModel : FoodShow.Model
 emptyModel =
-    FoodShow.init "food-1" (Just "2026-05-29") (Just Lunch) Nothing
+    FoodShow.init "food-1" (Just sampleDate) (Just Lunch) Nothing
         |> Tuple.first
 
 
@@ -286,7 +259,7 @@ failedModel =
     step (FoodShow.UnitsLoaded (Err Client.NetworkError)) emptyModel
 
 
-initialLoad : Maybe String -> Maybe MealSlot -> FoodShow.Model
+initialLoad : Maybe LocalDate -> Maybe MealSlot -> FoodShow.Model
 initialLoad logDate mealSlot =
     FoodShow.init "food-1" logDate mealSlot Nothing
         |> Tuple.first
@@ -294,7 +267,7 @@ initialLoad logDate mealSlot =
 
 loadedModel : FoodShow.Model
 loadedModel =
-    initialLoad (Just "2026-05-29") (Just Lunch)
+    initialLoad (Just sampleDate) (Just Lunch)
         |> step (FoodShow.FoodLoaded "food-1" (Ok food))
         |> step (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
 
@@ -365,7 +338,7 @@ recentItem =
         FoodLog.ProductLogItem
             { id = "food-1", name = "Apple", brand = Nothing }
     , lastUsedDate = sampleDate
-    , mealSlot = Just "lunch"
+    , mealSlot = Just Lunch
     , quantity = { amount = "5", unit = "g" }
     , nutritionSummary = Nutrition.emptySummary
     , topQuantities = [ { quantity = { amount = "5", unit = "g" }, logCount = 2 } ]

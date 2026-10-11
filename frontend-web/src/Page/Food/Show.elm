@@ -23,6 +23,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import I18n
+import Lib.Date exposing (LocalDate)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
@@ -43,12 +44,12 @@ import View.Product
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
-    | LoadFailed String
+    | LoadFailed { productId : String, message : String }
 
 
 type alias LoadingModel =
     { productId : String
-    , logDate : Maybe String
+    , logDate : Maybe LocalDate
     , mealSlot : Maybe MealSlot
     , food : Maybe ProductDetail
     , units : Maybe (List UnitItem)
@@ -59,7 +60,7 @@ type alias LoadingModel =
 
 type alias LoadedModel =
     { productId : String
-    , logDate : Maybe String
+    , logDate : Maybe LocalDate
     , mealSlot : Maybe MealSlot
     , food : ProductDetail
     , units : List UnitItem
@@ -83,7 +84,7 @@ type OutMsg
     | SessionExpired
 
 
-init : String -> Maybe String -> Maybe MealSlot -> Maybe String -> ( Model, OutMsg )
+init : String -> Maybe LocalDate -> Maybe MealSlot -> Maybe String -> ( Model, OutMsg )
 init productId logDate mealSlot lookupNote =
     ( Loading
         { productId = productId
@@ -112,17 +113,17 @@ type Msg
     | LogCompleted (Result Client.ApiError FoodLog)
 
 
-modelId : Model -> Maybe String
+modelId : Model -> String
 modelId model =
     case model of
         Loading loading ->
-            Just loading.productId
+            loading.productId
 
         Loaded loaded ->
-            Just loaded.productId
+            loaded.productId
 
-        LoadFailed _ ->
-            Nothing
+        LoadFailed failed ->
+            failed.productId
 
 
 loadId : Msg -> Maybe String
@@ -140,7 +141,7 @@ loadId msg =
 
 isCurrent : String -> Model -> Bool
 isCurrent incomingId model =
-    modelId model == Just incomingId
+    modelId model == incomingId
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -275,13 +276,9 @@ update msg model =
 
 createLogFromLocalContext : LocalContext -> LoadedModel -> ( Model, Cmd Msg, OutMsg )
 createLogFromLocalContext context loaded =
-    let
-        logDate : String
-        logDate =
-            Maybe.withDefault context.date loaded.logDate
-    in
     case
-        FoodLogForm.createProductLogRequest logDate
+        FoodLogForm.createProductLogRequest
+            (Maybe.withDefault context.date loaded.logDate)
             (Just context.timezone)
             loaded.productId
             loaded.form
@@ -302,18 +299,6 @@ createLogFromLocalContext context loaded =
                     | form =
                         FoodLogForm.setSubmitState
                             (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
-                            loaded.form
-                }
-            , Cmd.none
-            , NoOp
-            )
-
-        Err FoodLogForm.InvalidDate ->
-            ( Loaded
-                { loaded
-                    | form =
-                        FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed FoodLogForm.InvalidDateMessage)
                             loaded.form
                 }
             , Cmd.none
@@ -413,7 +398,9 @@ failure =
     Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message _ -> LoadFailed message
+        , applyError =
+            \message current ->
+                LoadFailed { productId = modelId current, message = message }
         }
 
 
@@ -442,8 +429,8 @@ contentView env model =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
-            LoadFailed message ->
-                Feedback.errorBanner env.theme message
+            LoadFailed failed ->
+                Feedback.errorBanner env.theme failed.message
 
             Loaded _ ->
                 Element.none

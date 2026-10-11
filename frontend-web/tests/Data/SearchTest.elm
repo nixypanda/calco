@@ -156,7 +156,100 @@ tests =
                             |> Expect.equal [ { value = "fruit", count = 2 } ]
                     ]
                     ()
+        , describe "completion navigation"
+            [ test "no selection yields the first option for next and previous" <|
+                \_ ->
+                    ( Search.nextCompletion Nothing sampleCompletions
+                    , Search.previousCompletion Nothing sampleCompletions
+                    )
+                        |> Expect.equal
+                            ( Just firstCompletion, Just firstCompletion )
+            , test "next at the last option stays on it" <|
+                \_ ->
+                    Search.nextCompletion (Just lastCompletion) sampleCompletions
+                        |> Expect.equal (Just lastCompletion)
+            , test "previous at the first option stays on it" <|
+                \_ ->
+                    Search.previousCompletion (Just firstCompletion) sampleCompletions
+                        |> Expect.equal (Just firstCompletion)
+            , test "a selection missing from the list falls back to the first option" <|
+                \_ ->
+                    Expect.all
+                        [ \_ ->
+                            Search.completionIndex absentCompletion sampleCompletions
+                                |> Expect.equal Nothing
+                        , \_ ->
+                            Search.nextCompletion (Just absentCompletion) sampleCompletions
+                                |> Expect.equal (Just firstCompletion)
+                        , \_ ->
+                            Search.previousCompletion (Just absentCompletion) sampleCompletions
+                                |> Expect.equal (Just firstCompletion)
+                        ]
+                        ()
+            , test "reports the index of a selected completion" <|
+                \_ ->
+                    Expect.all
+                        [ \_ ->
+                            Search.completionIndex firstCompletion sampleCompletions
+                                |> Expect.equal (Just 0)
+                        , \_ ->
+                            Search.completionIndex middleCompletion sampleCompletions
+                                |> Expect.equal (Just 1)
+                        , \_ ->
+                            Search.completionIndex lastCompletion sampleCompletions
+                                |> Expect.equal (Just 2)
+                        ]
+                        ()
+            , test "steps down and back up through the options" <|
+                \_ ->
+                    Expect.all
+                        [ \_ ->
+                            Search.nextCompletion (Just firstCompletion) sampleCompletions
+                                |> Expect.equal (Just middleCompletion)
+                        , \_ ->
+                            Search.nextCompletion (Just middleCompletion) sampleCompletions
+                                |> Expect.equal (Just lastCompletion)
+                        , \_ ->
+                            Search.previousCompletion (Just lastCompletion) sampleCompletions
+                                |> Expect.equal (Just middleCompletion)
+                        , \_ ->
+                            Search.previousCompletion (Just middleCompletion) sampleCompletions
+                                |> Expect.equal (Just firstCompletion)
+                        ]
+                        ()
+            , test "empty completions never yield a selection" <|
+                \_ ->
+                    ( Search.nextCompletion Nothing []
+                    , Search.previousCompletion (Just firstCompletion) []
+                    )
+                        |> Expect.equal ( Nothing, Nothing )
+            ]
         ]
+
+
+sampleCompletions : List Search.Completion
+sampleCompletions =
+    [ firstCompletion, middleCompletion, lastCompletion ]
+
+
+firstCompletion : Search.Completion
+firstCompletion =
+    Search.OperatorCompletion "category:"
+
+
+middleCompletion : Search.Completion
+middleCompletion =
+    Search.CategoryCompletion "category:fruit" 2
+
+
+lastCompletion : Search.Completion
+lastCompletion =
+    Search.OperatorCompletion "-category:"
+
+
+absentCompletion : Search.Completion
+absentCompletion =
+    Search.OperatorCompletion "category:absent"
 
 
 withSuggestions : List { value : String, count : Int } -> Search.QueryState

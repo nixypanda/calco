@@ -44,7 +44,7 @@ import View.QuantityInput
 
 type Model
     = Loading LoadingModel
-    | LoadFailed String
+    | LoadFailed { mealId : String, message : String }
     | Loaded LoadedModel
 
 
@@ -102,17 +102,34 @@ type Msg
     | EditClicked
 
 
-modelId : Model -> Maybe String
+modelId : Model -> String
 modelId model =
     case model of
         Loading loading ->
-            Just loading.mealId
+            loading.mealId
 
         Loaded loaded ->
-            Just loaded.mealId
+            loaded.mealId
+
+        LoadFailed failed ->
+            failed.mealId
+
+
+{-| A load or preview response is applied only when it names this pane and the
+pane has not already failed. A failed pane stays failed until an explicit
+retry, matching `Food/Show`.
+-}
+acceptsLoad : String -> Model -> Bool
+acceptsLoad incomingId model =
+    case model of
+        Loading loading ->
+            loading.mealId == incomingId
+
+        Loaded loaded ->
+            loaded.mealId == incomingId
 
         LoadFailed _ ->
-            Nothing
+            False
 
 
 loadId : Msg -> Maybe String
@@ -132,7 +149,7 @@ update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         MealLoaded incomingId result ->
-            if modelId model /= Just incomingId then
+            if not (acceptsLoad incomingId model) then
                 ( model, Cmd.none, NoOp )
 
             else
@@ -227,7 +244,7 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
         NutrientPreviewLoaded incomingId result ->
-            if modelId model /= Just incomingId then
+            if not (acceptsLoad incomingId model) then
                 ( model, Cmd.none, NoOp )
 
             else
@@ -514,7 +531,9 @@ failure =
     Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message _ -> LoadFailed message
+        , applyError =
+            \message current ->
+                LoadFailed { mealId = modelId current, message = message }
         }
 
 
@@ -542,10 +561,10 @@ view env model =
                 , loadedView env loaded
                 ]
 
-            LoadFailed message ->
+            LoadFailed failed ->
                 [ Surface.section env.theme
                     { header = Just (headerView env model)
-                    , body = [ Feedback.errorBanner env.theme message ]
+                    , body = [ Feedback.errorBanner env.theme failed.message ]
                     , footer = Nothing
                     }
                 ]

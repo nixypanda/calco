@@ -304,7 +304,7 @@ update msg model =
             ( model
             , Cmd.none
             , Navigate
-                (DiaryDay (Just (LocalDate.format previous)) model.calendarMonth)
+                (DiaryDay (Just previous) model.calendarMonth)
             )
 
         NextDayClicked ->
@@ -313,7 +313,7 @@ update msg model =
                     ( model
                     , Cmd.none
                     , Navigate
-                        (DiaryDay (Just (LocalDate.format next)) model.calendarMonth)
+                        (DiaryDay (Just next) model.calendarMonth)
                     )
 
                 Nothing ->
@@ -322,7 +322,7 @@ update msg model =
         DetailsClicked ->
             ( model
             , Cmd.none
-            , Navigate (NutritionDetails (Just (LocalDate.format model.currentDate)))
+            , Navigate (NutritionDetails (Just model.currentDate))
             )
 
         MacroModeToggled ->
@@ -331,14 +331,14 @@ update msg model =
         AddFoodClicked slot ->
             ( model
             , Cmd.none
-            , Navigate (FoodSearch (Just (LocalDate.format model.currentDate)) (Just slot))
+            , Navigate (FoodSearch (Just model.currentDate) (Just slot))
             )
 
         LogClicked id ->
             ( model
             , Cmd.none
             , Navigate
-                (FoodLogEntry id (Just (LocalDate.format model.currentDate)) model.calendarMonth)
+                (FoodLogEntry id (Just model.currentDate) model.calendarMonth)
             )
 
         MealsClicked ->
@@ -367,11 +367,11 @@ latestSlotSources response =
     response.slots
         |> List.filterMap
             (\slot ->
-                MealSlot.fromString slot.mealSlot
-                    |> Maybe.map
-                        (\parsed ->
-                            { slot = parsed, sourceDate = slot.sourceDate, logs = slot.items }
-                        )
+                Maybe.map
+                    (\parsed ->
+                        { slot = parsed, sourceDate = slot.sourceDate, logs = slot.items }
+                    )
+                    slot.mealSlot
             )
 
 
@@ -415,7 +415,7 @@ copyRequestFromLog targetDate slot log =
             (\item ->
                 { logDate = targetDate
                 , deviceTimezone = log.deviceTimezone
-                , mealSlot = Just (MealSlot.toString slot)
+                , mealSlot = Just slot
                 , item = item
                 , quantity = log.quantity
                 , notes = log.notes
@@ -533,16 +533,27 @@ contentView env model =
         logs : List FoodLog
         logs =
             diaryLogs model.currentDate model.diary
+
+        fallbackViews : List (Element Msg)
+        fallbackViews =
+            copyErrorView env.theme model.copyState ++ [ logGroupsView env model logs ]
     in
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         (dateCard env model
-            :: (case activeDiaryError model.currentDate model.diary of
-                    Just message ->
-                        [ Feedback.errorBanner env.theme message ]
+            :: (case model.diary of
+                    Failed date message ->
+                        if LocalDate.equals date model.currentDate then
+                            [ Feedback.errorBanner env.theme message ]
 
-                    Nothing ->
-                        copyErrorView env.theme model.copyState ++ [ logGroupsView env model logs ]
+                        else
+                            fallbackViews
+
+                    Loading _ ->
+                        fallbackViews
+
+                    Loaded _ ->
+                        fallbackViews
                )
         )
 
@@ -959,20 +970,6 @@ loadedGoalTargets currentDate diary =
 loadingGoalTargets : GoalTargets
 loadingGoalTargets =
     { calorieTarget = 0, proteinTargetG = 0, carbsTargetG = 0, fatTargetG = 0 }
-
-
-activeDiaryError : LocalDate -> DiaryState -> Maybe String
-activeDiaryError currentDate diary =
-    case diary of
-        Failed date message ->
-            if LocalDate.equals date currentDate then
-                Just message
-
-            else
-                Nothing
-
-        _ ->
-            Nothing
 
 
 copyErrorView : Theme -> CopyState -> List (Element Msg)

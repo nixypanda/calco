@@ -331,7 +331,21 @@ view env model =
                 ]
 
             Ready ready ->
-                [ Feedback.maybeErrorBanner env.theme (requestError ready.save)
+                [ case ready.save of
+                    SaveFailed message ->
+                        Feedback.errorBanner env.theme message
+
+                    Idle ->
+                        Element.none
+
+                    ValidationFailed _ ->
+                        Element.none
+
+                    AwaitingLocalContext _ ->
+                        Element.none
+
+                    Saving ->
+                        Element.none
                 , Surface.section env.theme
                     { header =
                         Just
@@ -368,7 +382,21 @@ view env model =
                             , value = ready.form.fatTargetG
                             , onChange = FatTargetChanged
                             }
-                        , Feedback.maybeErrorBanner env.theme (formError ready.save)
+                        , case ready.save of
+                            ValidationFailed message ->
+                                Feedback.errorBanner env.theme message
+
+                            Idle ->
+                                Element.none
+
+                            AwaitingLocalContext _ ->
+                                Element.none
+
+                            Saving ->
+                                Element.none
+
+                            SaveFailed _ ->
+                                Element.none
                         ]
                     , footer = Nothing
                     }
@@ -415,26 +443,6 @@ isSaving save =
 
         _ ->
             False
-
-
-formError : SaveState -> Maybe String
-formError save =
-    case save of
-        ValidationFailed message ->
-            Just message
-
-        _ ->
-            Nothing
-
-
-requestError : SaveState -> Maybe String
-requestError save =
-    case save of
-        SaveFailed message ->
-            Just message
-
-        _ ->
-            Nothing
 
 
 goalsSettingsSkeleton : Theme -> Element msg

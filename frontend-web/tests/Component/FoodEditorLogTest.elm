@@ -4,6 +4,7 @@ import Api.Foods exposing (NutrientItem)
 import Component.FoodEditor as Editor
 import Data.FoodAssistant exposing (FoodDraft, SuggestedLog)
 import Expect
+import Lib.Date as LocalDate exposing (LocalDate)
 import Test exposing (Test, describe, test)
 
 
@@ -137,7 +138,7 @@ validForm =
     let
         form : Editor.FormModel
         form =
-            Editor.emptyLogForm (Just "2026-09-14") Nothing
+            Editor.emptyLogForm (Just (date "2026-09-14")) Nothing
     in
     { form
         | name = "Paneer wrap"
@@ -209,3 +210,18 @@ draft =
 suggested : SuggestedLog
 suggested =
     { amount = "1", unit = "serving", totalWeightGrams = "250" }
+
+
+date : String -> LocalDate
+date raw =
+    case LocalDate.fromString raw of
+        Just value ->
+            value
+
+        Nothing ->
+            case LocalDate.fromParts 1970 1 1 of
+                Just fallback ->
+                    fallback
+
+                Nothing ->
+                    date raw

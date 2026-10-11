@@ -24,7 +24,7 @@ import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition exposing (Quantity, defaultCode)
 import Element exposing (Element)
 import I18n
-import Lib.Date as LocalDate
+import Lib.Date exposing (LocalDate)
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Env exposing (Env)
@@ -80,13 +80,11 @@ type SubmitState
 
 type SubmitFailure
     = AmountRequiredMessage
-    | InvalidDateMessage
     | RequestFailed String
 
 
 type ValidationError
     = AmountRequired
-    | InvalidDate
 
 
 initLogFormFromFood : Maybe MealSlot -> ProductDetail -> Model
@@ -204,29 +202,24 @@ clearSubmitFailure submitState =
 
 
 createProductLogRequest :
-    String
+    LocalDate
     -> Maybe String
     -> String
     -> Model
     -> Result ValidationError CreateLogRequest
-createProductLogRequest rawDate deviceTimezone productId model =
+createProductLogRequest logDate deviceTimezone productId model =
     if Text.isBlank model.amount then
         Err AmountRequired
 
     else
-        case LocalDate.fromString rawDate of
-            Nothing ->
-                Err InvalidDate
-
-            Just logDate ->
-                Ok
-                    { logDate = logDate
-                    , deviceTimezone = deviceTimezone
-                    , mealSlot = Maybe.map MealSlot.toString model.mealSlot
-                    , item = { itemType = Product, id = productId }
-                    , quantity = Quantity model.amount model.unit
-                    , notes = Text.blankToMaybe model.notes
-                    }
+        Ok
+            { logDate = logDate
+            , deviceTimezone = deviceTimezone
+            , mealSlot = model.mealSlot
+            , item = { itemType = Product, id = productId }
+            , quantity = Quantity model.amount model.unit
+            , notes = Text.blankToMaybe model.notes
+            }
 
 
 createUpdateLogRequest : Model -> Result ValidationError UpdateLogRequest
@@ -236,7 +229,7 @@ createUpdateLogRequest model =
 
     else
         Ok
-            { mealSlot = Maybe.map MealSlot.toString model.mealSlot
+            { mealSlot = model.mealSlot
             , quantity = Quantity model.amount model.unit
             , notes = Text.blankToMaybe model.notes
             }
@@ -247,9 +240,6 @@ submitFailureMessage failure =
     case failure of
         AmountRequiredMessage ->
             I18n.en TidFoodLogAmountRequired
-
-        InvalidDateMessage ->
-            I18n.en TidFoodLogInvalidDeviceDate
 
         RequestFailed message ->
             message
@@ -269,11 +259,14 @@ panel section instead of a standalone card.
 -}
 fields : Env -> Maybe ProductDetail -> List UnitItem -> Model -> List (Element Msg)
 fields env food units model =
-    (case submitError model.submitState of
-        Just message ->
-            [ Feedback.errorBanner env.theme message ]
+    (case model.submitState of
+        SubmitFailed failure ->
+            [ Feedback.errorBanner env.theme (submitFailureMessage failure) ]
 
-        Nothing ->
+        SubmitIdle ->
+            []
+
+        SubmitSubmitting ->
             []
     )
         ++ [ mealSlotDropdown env model
@@ -294,16 +287,6 @@ fields env food units model =
                 , onChange = NotesChanged
                 }
            ]
-
-
-submitError : SubmitState -> Maybe String
-submitError submitState =
-    case submitState of
-        SubmitFailed failure ->
-            Just (submitFailureMessage failure)
-
-        _ ->
-            Nothing
 
 
 mealSlotDropdown : Env -> Model -> Element Msg

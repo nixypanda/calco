@@ -6,6 +6,7 @@ import Component.FoodAssistant as Assistant
 import Component.FoodEditor as Editor
 import Data.FoodAssistant exposing (FoodDraftTurn(..))
 import Expect
+import Lib.Date as LocalDate exposing (LocalDate)
 import Page.FoodLog.CreateAdHoc as Review
 import Page.FoodLog.CreateWithAi as CreateWithAi
 import Test exposing (Test, describe, test)
@@ -109,7 +110,7 @@ reviewedModel =
     let
         initial : CreateWithAi.Model
         initial =
-            CreateWithAi.init (Just "2026-09-14") Nothing |> Tuple.first
+            CreateWithAi.init (Just (date "2026-09-14")) Nothing |> Tuple.first
     in
     initial
         |> CreateWithAi.update
@@ -191,3 +192,18 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+date : String -> LocalDate
+date raw =
+    case LocalDate.fromString raw of
+        Just value ->
+            value
+
+        Nothing ->
+            case LocalDate.fromParts 1970 1 1 of
+                Just fallback ->
+                    fallback
+
+                Nothing ->
+                    date raw

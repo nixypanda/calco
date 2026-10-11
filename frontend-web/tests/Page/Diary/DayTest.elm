@@ -42,10 +42,10 @@ tests =
                         |> Expect.equal
                             { previous =
                                 DiaryDay.Navigate
-                                    (DiaryDay (Just "2026-05-29") (Just "2026-05"))
+                                    (DiaryDay (Just (date "2026-05-29")) (Just "2026-05"))
                             , next =
                                 DiaryDay.Navigate
-                                    (DiaryDay (Just "2026-05-30") (Just "2026-05"))
+                                    (DiaryDay (Just (date "2026-05-30")) (Just "2026-05"))
                             , atToday = DiaryDay.NoOp
                             }
             , test "a day that rolls over becomes the next navigable day" <|
@@ -54,7 +54,7 @@ tests =
                         |> step (DiaryDay.TodayChanged tomorrow)
                         |> out DiaryDay.NextDayClicked
                         |> Expect.equal
-                            (DiaryDay.Navigate (DiaryDay (Just "2026-05-31") Nothing))
+                            (DiaryDay.Navigate (DiaryDay (Just (date "2026-05-31")) Nothing))
             , test "diary actions navigate with the selected day and calendar context" <|
                 \_ ->
                     { details = out DiaryDay.DetailsClicked (initModel yesterday)
@@ -64,13 +64,13 @@ tests =
                     }
                         |> Expect.equal
                             { details =
-                                DiaryDay.Navigate (NutritionDetails (Just "2026-05-29"))
+                                DiaryDay.Navigate (NutritionDetails (Just (date "2026-05-29")))
                             , addFood =
                                 DiaryDay.Navigate
-                                    (FoodSearch (Just "2026-05-30") (Just Lunch))
+                                    (FoodSearch (Just (date "2026-05-30")) (Just Lunch))
                             , log =
                                 DiaryDay.Navigate
-                                    (FoodLogEntry "log-1" (Just "2026-05-30") Nothing)
+                                    (FoodLogEntry "log-1" (Just (date "2026-05-30")) Nothing)
                             , meals = DiaryDay.Navigate MealList
                             }
             ]
@@ -210,7 +210,7 @@ tests =
                             (DiaryDay.LatestSlotsReceived today
                                 (Ok
                                     { slots =
-                                        [ { dinnerSlotResponse | mealSlot = "brunch" }
+                                        [ { dinnerSlotResponse | mealSlot = Nothing }
                                         , lunchSlotResponse
                                         ]
                                     }
@@ -321,7 +321,7 @@ tests =
                                 DiaryDay.RequestCopyLatestSlot today
                                     [ { logDate = today
                                       , deviceTimezone = Nothing
-                                      , mealSlot = Just "dinner"
+                                      , mealSlot = Just Dinner
                                       , item =
                                             { itemType = ItemRef.Product
                                             , id = "food-1"
@@ -685,7 +685,7 @@ dinnerLog =
 dinnerSlotResponse : Api.Logs.LatestSlotResponse
 dinnerSlotResponse =
     { sourceDate = yesterday
-    , mealSlot = "dinner"
+    , mealSlot = Just Dinner
     , items = [ yesterdayDinnerLog ]
     }
 
@@ -693,7 +693,7 @@ dinnerSlotResponse =
 lunchSlotResponse : Api.Logs.LatestSlotResponse
 lunchSlotResponse =
     { sourceDate = yesterday
-    , mealSlot = "lunch"
+    , mealSlot = Just Lunch
     , items = [ yesterdayLunchLog ]
     }
 

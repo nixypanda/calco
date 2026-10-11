@@ -20,6 +20,7 @@ import Data.MealSlot exposing (MealSlot)
 import Element exposing (Element)
 import File exposing (File)
 import I18n
+import Lib.Date exposing (LocalDate)
 import Lib.Ticket exposing (Ticket)
 import Page.FoodLog.CreateAdHoc as Review
 import Translations.Ids exposing (TranslationId(..))
@@ -40,13 +41,13 @@ type alias Model =
     , showAdditionalNutrients : Bool
     , units : List UnitItem
     , nutrients : List NutrientItem
-    , dateParam : Maybe String
+    , dateParam : Maybe LocalDate
     , mealSlot : Maybe MealSlot
     , error : Maybe String
     }
 
 
-init : Maybe String -> Maybe MealSlot -> ( Model, OutMsg )
+init : Maybe LocalDate -> Maybe MealSlot -> ( Model, OutMsg )
 init dateParam mealSlot =
     ( { assistant = Tuple.first Assistant.init
       , review = Nothing

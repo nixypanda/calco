@@ -25,6 +25,7 @@ import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Element)
 import I18n
+import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
@@ -52,7 +53,7 @@ type SubmitState
     | LogFailedAfterFoodSaved { productId : String, message : String }
 
 
-init : Maybe String -> Maybe MealSlot -> Model
+init : Maybe LocalDate -> Maybe MealSlot -> Model
 init date mealSlot =
     { form = Editor.emptyLogForm date mealSlot
     , units = []
@@ -248,14 +249,16 @@ requestProductLog productId model =
             validationFailure message model
 
 
-setDateIfBlank : String -> Editor.FormModel -> Editor.FormModel
+setDateIfBlank : LocalDate -> Editor.FormModel -> Editor.FormModel
 setDateIfBlank date form =
     case form.context of
         Editor.FoodLogContext logFields persistence ->
             if String.isEmpty (String.trim logFields.date) then
                 { form
                     | context =
-                        Editor.FoodLogContext { logFields | date = date } persistence
+                        Editor.FoodLogContext
+                            { logFields | date = LocalDate.format date }
+                            persistence
                 }
 
             else
@@ -330,7 +333,27 @@ viewForAi env showOptional model =
                 Editor.CoreNutrientsOnly
     in
     UiPage.pageContainer
-        [ Feedback.maybeErrorBanner env.theme (submitError model.submit)
+        [ case model.submit of
+            SubmitFailed message ->
+                Feedback.errorBanner env.theme message
+
+            LogFailedAfterFoodSaved saved ->
+                Feedback.errorBanner env.theme saved.message
+
+            SubmitIdle ->
+                Element.none
+
+            AwaitingLocalContext ->
+                Element.none
+
+            LoggingAdHoc ->
+                Element.none
+
+            SavingCustomFood ->
+                Element.none
+
+            LoggingSavedFood _ ->
+                Element.none
         , Element.map FormMsg
             (Editor.viewForLog env visibility model.nutrients model.units model.form)
         , Button.textButton env.device
@@ -350,19 +373,6 @@ viewForAi env showOptional model =
             , trailing = Nothing
             }
         ]
-
-
-submitError : SubmitState -> Maybe String
-submitError state =
-    case state of
-        SubmitFailed message ->
-            Just message
-
-        LogFailedAfterFoodSaved saved ->
-            Just saved.message
-
-        _ ->
-            Nothing
 
 
 isSubmitting : SubmitState -> Bool

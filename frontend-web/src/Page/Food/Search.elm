@@ -21,7 +21,7 @@ import Data.BarcodeScan exposing (ScannerEvent)
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
 import Data.LocalContext exposing (LocalContext)
-import Data.MealSlot as MealSlot exposing (MealSlot)
+import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion, QueryState)
@@ -35,7 +35,7 @@ import Html.Attributes
 import Html.Events
 import I18n
 import Json.Decode as Decode
-import Lib.Date as LocalDate
+import Lib.Date exposing (LocalDate)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
@@ -71,12 +71,12 @@ type alias Model =
     , barcodeToken : Ticket
     , barcodeScanner : BarcodeScannerState
     , recentItems : Loadable Client.ApiError (List Logs.RecentItem)
-    , date : Maybe String
+    , date : Maybe LocalDate
     , mealSlot : Maybe MealSlot
     , quickAdd : QuickAddState
     , addedItems : List { key : String, token : Ticket }
     , addedToken : Ticket
-    , completionIndex : Int
+    , completionSelection : Maybe Completion
     }
 
 
@@ -140,7 +140,7 @@ type QuickAddButtonState
     | QuickAddAdded
 
 
-init : Maybe String -> Maybe MealSlot -> Model
+init : Maybe LocalDate -> Maybe MealSlot -> Model
 init date mealSlot =
     { search = Search.empty
     , scope = History
@@ -150,7 +150,7 @@ init date mealSlot =
     , barcodeToken = Ticket.initial
     , barcodeScanner = ScannerIdle
     , recentItems =
-        case date |> Maybe.andThen LocalDate.fromString of
+        case date of
             Just _ ->
                 Loading
 
@@ -161,11 +161,11 @@ init date mealSlot =
     , quickAdd = QuickAddIdle
     , addedItems = []
     , addedToken = Ticket.initial
-    , completionIndex = -1
+    , completionSelection = Nothing
     }
 
 
-retarget : Maybe String -> Maybe MealSlot -> Model -> ( Model, Bool )
+retarget : Maybe LocalDate -> Maybe MealSlot -> Model -> ( Model, Bool )
 retarget date mealSlot model =
     if model.date == date && model.mealSlot == mealSlot then
         ( model, False )
@@ -175,7 +175,7 @@ retarget date mealSlot model =
             | date = date
             , mealSlot = mealSlot
             , recentItems =
-                case date |> Maybe.andThen LocalDate.fromString of
+                case date of
                     Just _ ->
                         Loading
 
@@ -204,11 +204,11 @@ type Msg
     | CategorySuggestionsCompleted Ticket (Result Client.ApiError Foods.CategorySuggestionResponse)
     | CompleteFirstSuggestion
     | CompletionClicked Completion
-    | CompletionActiveChanged Int
+    | CompletionSelectionChanged (Maybe Completion)
     | DebounceElapsed Ticket String
     | CategoryDebounceElapsed Ticket String
     | SearchCompleted Ticket (Result Client.ApiError Foods.SearchResponse)
-    | RecentItemsLoaded (Maybe String) (Maybe MealSlot) RecentItemsResult
+    | RecentItemsLoaded (Maybe LocalDate) (Maybe MealSlot) RecentItemsResult
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
     | LocalContextReceived LocalContext
@@ -265,7 +265,14 @@ applyQueryChange rawQuery model =
             else
                 Loading
     in
-    ( { model | search = search, results = results, completionIndex = -1 }, debounceCmd, NoOp )
+    ( { model
+        | search = search
+        , results = results
+        , completionSelection = Nothing
+      }
+    , debounceCmd
+    , NoOp
+    )
 
 
 applyScopeChange : SearchScope -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -381,8 +388,8 @@ update msg model =
         QueryChanged rawQuery ->
             applyQueryChange rawQuery model
 
-        CompletionActiveChanged index ->
-            ( { model | completionIndex = index }, Cmd.none, NoOp )
+        CompletionSelectionChanged selection ->
+            ( { model | completionSelection = selection }, Cmd.none, NoOp )
 
         ScopeSelected scope ->
             applyScopeChange scope model
@@ -608,7 +615,18 @@ update msg model =
                     let
                         key : Maybe String
                         key =
-                            quickAddTarget model.quickAdd |> Maybe.map quickAddTargetKey
+                            case model.quickAdd of
+                                QuickAddRequestingContext target ->
+                                    Just (quickAddTargetKey target)
+
+                                QuickAddSubmitting target ->
+                                    Just (quickAddTargetKey target)
+
+                                QuickAddIdle ->
+                                    Nothing
+
+                                QuickAddFailed _ ->
+                                    Nothing
 
                         nextToken : Ticket
                         nextToken =
@@ -715,11 +733,16 @@ applyBarcodeScannerEvent event model =
 quickAddRequest : LocalContext -> Model -> QuickAddTarget -> Maybe Logs.CreateLogRequest
 quickAddRequest context model target =
     let
-        rawDate : String
-        rawDate =
-            Maybe.withDefault context.date model.date
+        resolvedDate : Maybe LocalDate
+        resolvedDate =
+            case model.date of
+                Just date ->
+                    Just date
+
+                Nothing ->
+                    Just context.date
     in
-    LocalDate.fromString rawDate
+    resolvedDate
         |> Maybe.map
             (\logDate ->
                 FoodLog.itemRef target.item.item
@@ -727,7 +750,7 @@ quickAddRequest context model target =
                         (\item ->
                             { logDate = logDate
                             , deviceTimezone = Just context.timezone
-                            , mealSlot = Maybe.map MealSlot.toString model.mealSlot
+                            , mealSlot = model.mealSlot
                             , item = item
                             , quantity = target.quantity
                             , notes = Nothing
@@ -751,35 +774,20 @@ quickAddTargetKey target =
     recentItemKey target.item target.quantity
 
 
-quickAddTarget : QuickAddState -> Maybe QuickAddTarget
-quickAddTarget quickAdd =
+quickAddIsAdding : String -> QuickAddState -> Bool
+quickAddIsAdding key quickAdd =
     case quickAdd of
-        QuickAddIdle ->
-            Nothing
-
         QuickAddRequestingContext target ->
-            Just target
+            quickAddTargetKey target == key
 
         QuickAddSubmitting target ->
-            Just target
+            quickAddTargetKey target == key
+
+        QuickAddIdle ->
+            False
 
         QuickAddFailed _ ->
-            Nothing
-
-
-quickAddAddingKey : QuickAddState -> Maybe String
-quickAddAddingKey quickAdd =
-    quickAdd |> quickAddTarget |> Maybe.map quickAddTargetKey
-
-
-quickAddError : QuickAddState -> Maybe String
-quickAddError quickAdd =
-    case quickAdd of
-        QuickAddFailed error ->
-            Just error
-
-        _ ->
-            Nothing
+            False
 
 
 canStartQuickAdd : QuickAddState -> Bool
@@ -979,8 +987,8 @@ textSearchInputView env model =
         , text = model.search.query
         , label = UiInput.LabelInside (searchLabel env.language model.scope)
         , completions = options
-        , activeIndex = model.completionIndex
-        , onActiveChanged = CompletionActiveChanged
+        , selection = model.completionSelection
+        , onSelectionChanged = CompletionSelectionChanged
         , onTabComplete = CompleteFirstSuggestion
         , onCompletionClick = CompletionClicked
         }
@@ -1403,7 +1411,18 @@ recentsView env model =
         , Element.height Element.fill
         , Element.spacing DesignTokens.space8
         ]
-        [ Feedback.maybeErrorBanner env.theme (quickAddError model.quickAdd)
+        [ case model.quickAdd of
+            QuickAddFailed message ->
+                Feedback.errorBanner env.theme message
+
+            QuickAddIdle ->
+                Element.none
+
+            QuickAddRequestingContext _ ->
+                Element.none
+
+            QuickAddSubmitting _ ->
+                Element.none
         , case model.recentItems of
             NotAsked ->
                 noRecentsState env
@@ -1496,7 +1515,7 @@ quickAddChipState model item quantity =
         key =
             recentItemKey item quantity
     in
-    if quickAddAddingKey model.quickAdd == Just key then
+    if quickAddIsAdding key model.quickAdd then
         QuickAddAdding
 
     else if not (canStartQuickAdd model.quickAdd) then

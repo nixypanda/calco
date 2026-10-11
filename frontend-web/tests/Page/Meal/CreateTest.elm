@@ -25,6 +25,16 @@ unauthorized =
     Client.BadStatus 401 "unauthorized" "Sign in again"
 
 
+submitErrorMessage : Common.SubmitState -> Maybe String
+submitErrorMessage state =
+    case state of
+        Common.SubmitFailed message ->
+            Just message
+
+        _ ->
+            Nothing
+
+
 tests : Test
 tests =
     describe "Page.Meal.Create"
@@ -82,9 +92,9 @@ tests =
                         step MealCreate.SubmitClicked noComponentForm
                 in
                 { noNameRequest = out MealCreate.SubmitClicked emptyFormFields
-                , noNameError = noName.submit |> Common.submitErrorMessage
+                , noNameError = noName.submit |> submitErrorMessage
                 , noComponentRequest = out MealCreate.SubmitClicked noComponentForm
-                , noComponentError = noComponent.submit |> Common.submitErrorMessage
+                , noComponentError = noComponent.submit |> submitErrorMessage
                 }
                     |> Expect.equal
                         { noNameRequest = MealCreate.NoOp
@@ -144,7 +154,7 @@ tests =
                     afterFailure =
                         step (MealCreate.SaveCompleted (Err Client.NetworkError)) submitting
                 in
-                { error = afterFailure.submit |> Common.submitErrorMessage
+                { error = afterFailure.submit |> submitErrorMessage
                 , failureRequest =
                     out (MealCreate.SaveCompleted (Err Client.NetworkError)) submitting
                 , unauthorized =

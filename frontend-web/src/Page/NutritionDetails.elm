@@ -144,7 +144,7 @@ navigateTo nextDate model =
     in
     ( Loading context
     , Cmd.none
-    , Navigate (Route.NutritionDetails (Just (LocalDate.format nextDate)))
+    , Navigate (Route.NutritionDetails (Just nextDate))
     )
 
 

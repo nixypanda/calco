@@ -29,7 +29,7 @@ import View.Nutrients
 
 completionDropdown :
     Env
-    -> { id : String, activeIndex : Int, onSelect : Completion -> msg }
+    -> { id : String, activeIndex : Maybe Int, onSelect : Completion -> msg }
     -> List Completion
     -> Element msg
 completionDropdown env config options =
@@ -56,8 +56,8 @@ searchInput :
         , text : String
         , label : UiInput.SearchLabel
         , completions : List Completion
-        , activeIndex : Int
-        , onActiveChanged : Int -> msg
+        , selection : Maybe Completion
+        , onSelectionChanged : Maybe Completion -> msg
         , onTabComplete : msg
         , onCompletionClick : Completion -> msg
         }
@@ -67,6 +67,11 @@ searchInput env config =
         hasCompletions : Bool
         hasCompletions =
             not (List.isEmpty config.completions)
+
+        activeIndex : Maybe Int
+        activeIndex =
+            config.selection
+                |> Maybe.andThen (\sel -> Search.completionIndex sel config.completions)
 
         ariaAttributes : List (Element.Attribute msg)
         ariaAttributes =
@@ -85,16 +90,21 @@ searchInput env config =
                 (Html.Attributes.attribute "aria-controls" config.id)
             , Element.htmlAttribute (Html.Attributes.attribute "aria-autocomplete" "list")
             ]
-                ++ (if hasCompletions && config.activeIndex >= 0 then
-                        [ Element.htmlAttribute
-                            (Html.Attributes.attribute
-                                "aria-activedescendant"
-                                (optionId config.id config.activeIndex)
-                            )
-                        ]
+                ++ (case activeIndex of
+                        Just index ->
+                            if hasCompletions then
+                                [ Element.htmlAttribute
+                                    (Html.Attributes.attribute
+                                        "aria-activedescendant"
+                                        (optionId config.id index)
+                                    )
+                                ]
 
-                    else
-                        []
+                            else
+                                []
+
+                        Nothing ->
+                            []
                    )
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
@@ -106,9 +116,9 @@ searchInput env config =
                 ariaAttributes
                     ++ [ Element.htmlAttribute
                             (keydownHandler
-                                { activeIndex = config.activeIndex
+                                { selection = config.selection
                                 , completions = config.completions
-                                , onActiveChanged = config.onActiveChanged
+                                , onSelectionChanged = config.onSelectionChanged
                                 , onTabComplete = config.onTabComplete
                                 , onCompletionClick = config.onCompletionClick
                                 }
@@ -117,7 +127,7 @@ searchInput env config =
             }
         , completionDropdown env
             { id = config.id
-            , activeIndex = config.activeIndex
+            , activeIndex = activeIndex
             , onSelect = config.onCompletionClick
             }
             config.completions
@@ -125,9 +135,9 @@ searchInput env config =
 
 
 keydownHandler :
-    { activeIndex : Int
+    { selection : Maybe Completion
     , completions : List Completion
-    , onActiveChanged : Int -> msg
+    , onSelectionChanged : Maybe Completion -> msg
     , onTabComplete : msg
     , onCompletionClick : Completion -> msg
     }
@@ -146,24 +156,24 @@ keydownHandler config =
                                 Decode.succeed ( config.onTabComplete, True )
 
                             "ArrowDown" ->
-                                let
-                                    nextActive : Int
-                                    nextActive =
-                                        min
-                                            (List.length config.completions - 1)
-                                            (config.activeIndex + 1)
-                                in
-                                Decode.succeed ( config.onActiveChanged nextActive, True )
-
-                            "ArrowUp" ->
                                 Decode.succeed
-                                    ( config.onActiveChanged
-                                        (max 0 (config.activeIndex - 1))
+                                    ( config.onSelectionChanged
+                                        (Search.nextCompletion config.selection config.completions)
                                     , True
                                     )
 
+                            "ArrowUp" ->
+                                let
+                                    previous : Maybe Completion
+                                    previous =
+                                        Search.previousCompletion
+                                            config.selection
+                                            config.completions
+                                in
+                                Decode.succeed ( config.onSelectionChanged previous, True )
+
                             "Enter" ->
-                                case completionAt config.activeIndex config.completions of
+                                case config.selection of
                                     Just completion ->
                                         Decode.succeed ( config.onCompletionClick completion, True )
 
@@ -171,21 +181,12 @@ keydownHandler config =
                                         Decode.fail "no active completion"
 
                             "Escape" ->
-                                Decode.succeed ( config.onActiveChanged -1, True )
+                                Decode.succeed ( config.onSelectionChanged Nothing, True )
 
                             _ ->
                                 Decode.fail "unhandled key"
                 )
         )
-
-
-completionAt : Int -> List Completion -> Maybe Completion
-completionAt index completions =
-    if index < 0 then
-        Nothing
-
-    else
-        completions |> List.drop index |> List.head
 
 
 optionId : String -> Int -> String
@@ -248,7 +249,7 @@ completionDropdownHeight device options =
 
 completionRow :
     Theme
-    -> { id : String, activeIndex : Int, onSelect : Completion -> msg }
+    -> { id : String, activeIndex : Maybe Int, onSelect : Completion -> msg }
     -> Int
     -> Completion
     -> Element msg
@@ -259,7 +260,7 @@ completionRow theme config index completion =
         , Element.htmlAttribute
             (Html.Attributes.attribute
                 "aria-selected"
-                (if index == config.activeIndex then
+                (if Just index == config.activeIndex then
                     "true"
 
                  else

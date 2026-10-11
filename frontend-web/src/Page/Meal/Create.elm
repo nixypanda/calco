@@ -17,7 +17,6 @@ import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Env exposing (Env)
-import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 
 
@@ -137,7 +136,7 @@ mapFormOutMsg maybeOutMsg =
 view : Env -> Model -> Element Msg
 view env model =
     UiPage.pageContainer
-        [ Feedback.maybeErrorBanner env.theme (Common.submitErrorMessage model.submit)
+        [ Common.submitErrorBanner env.theme model.submit
         , Common.viewFormFields env FormMsg model
         , Button.textButton env.device
             env.theme

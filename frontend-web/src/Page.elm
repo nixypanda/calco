@@ -804,7 +804,7 @@ retargetSearchForRoute route panes =
             ( panes, Cmd.none )
 
 
-retargetSearch : Maybe String -> Maybe MealSlot -> List Pane -> ( List Pane, Cmd Msg )
+retargetSearch : Maybe LocalDate -> Maybe MealSlot -> List Pane -> ( List Pane, Cmd Msg )
 retargetSearch dateParam mealSlot panes =
     let
         retarget : Pane -> ( Pane, Cmd Msg )
@@ -985,7 +985,7 @@ adminEditDesired context userId =
         (\_ -> AdminEditUser.init userId)
 
 
-diaryDesired : InitContext -> LocalDate -> Maybe String -> Maybe String -> DesiredPane
+diaryDesired : InitContext -> LocalDate -> Maybe LocalDate -> Maybe String -> DesiredPane
 diaryDesired context today dateParam calendarMonth =
     let
         paneId : DiaryPaneId
@@ -1001,11 +1001,9 @@ diaryDesired context today dateParam calendarMonth =
         )
 
 
-dateFromParam : LocalDate -> Maybe String -> LocalDate
+dateFromParam : LocalDate -> Maybe LocalDate -> LocalDate
 dateFromParam today dateParam =
-    dateParam
-        |> Maybe.andThen LocalDate.fromString
-        |> Maybe.withDefault today
+    Maybe.withDefault today dateParam
         |> LocalDate.clampTo today
 
 
@@ -1023,7 +1021,7 @@ calendarDesired context today monthParam =
         (\_ -> DiaryCalendar.init { monthParam = monthParam, today = today })
 
 
-nutritionDesired : InitContext -> LocalDate -> Maybe String -> DesiredPane
+nutritionDesired : InitContext -> LocalDate -> Maybe LocalDate -> DesiredPane
 nutritionDesired context today dateParam =
     let
         date : LocalDate
@@ -1055,7 +1053,7 @@ diarySettingsDesired context =
         (\_ -> DiarySettings.init)
 
 
-searchDesired : InitContext -> Maybe String -> Maybe MealSlot -> DesiredPane
+searchDesired : InitContext -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
 searchDesired _ dateParam mealSlot =
     DesiredPane "food-search"
         (\_ ->
@@ -1069,11 +1067,11 @@ searchDesired _ dateParam mealSlot =
 searchWorkspaceDesired :
     InitContext
     -> List Pane
-    -> Maybe String
+    -> Maybe LocalDate
     -> Maybe MealSlot
     -> List DesiredPane
 searchWorkspaceDesired context existing dateParam mealSlot =
-    case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
+    case ( context.today, dateParam ) of
         ( Just today, Just _ ) ->
             contextualWorkspace
                 existing
@@ -1088,7 +1086,7 @@ foodWorkspaceDesired :
     InitContext
     -> List Pane
     -> String
-    -> Maybe String
+    -> Maybe LocalDate
     -> Maybe MealSlot
     -> Maybe String
     -> List DesiredPane
@@ -1098,7 +1096,7 @@ foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote =
         detail =
             foodDetailDesired context productId dateParam mealSlot lookupNote
     in
-    case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
+    case ( context.today, dateParam ) of
         ( Just today, Just _ ) ->
             contextualWorkspace existing [ diaryDesired context today dateParam Nothing ] detail
 
@@ -1109,7 +1107,7 @@ foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote =
 foodDetailDesired :
     InitContext
     -> String
-    -> Maybe String
+    -> Maybe LocalDate
     -> Maybe MealSlot
     -> Maybe String
     -> DesiredPane
@@ -1117,7 +1115,7 @@ foodDetailDesired context productId dateParam mealSlot lookupNote =
     let
         contextKey : String
         contextKey =
-            Maybe.withDefault "none" dateParam
+            (Maybe.map LocalDate.format dateParam |> Maybe.withDefault "none")
                 ++ ":"
                 ++ Maybe.withDefault
                     "none"
@@ -1148,12 +1146,12 @@ foodLogDetailDesired context logId =
         (\_ -> FoodLogEntry.init logId)
 
 
-createAdHocLogDesired : InitContext -> Maybe String -> Maybe MealSlot -> DesiredPane
+createAdHocLogDesired : InitContext -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
 createAdHocLogDesired _ dateParam mealSlot =
     simpleDesired "create-ad-hoc-log" (CreateAdHocLogPane (CreateAdHocLog.init dateParam mealSlot))
 
 
-createWithAiLogDesired : InitContext -> Maybe String -> Maybe MealSlot -> DesiredPane
+createWithAiLogDesired : InitContext -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
 createWithAiLogDesired context dateParam mealSlot =
     fromInit context
         "create-ai-log"
@@ -1270,7 +1268,7 @@ isMainPane pane =
             False
 
 
-initialFoodSearchCmd : Maybe String -> Maybe MealSlot -> Cmd Msg
+initialFoodSearchCmd : Maybe LocalDate -> Maybe MealSlot -> Cmd Msg
 initialFoodSearchCmd dateParam mealSlot =
     case recentItemsRequest dateParam mealSlot of
         Just request ->
@@ -1557,14 +1555,14 @@ type alias PaneUpdate pane =
     { pane : pane, cmd : Cmd Msg, outMsg : OutMsg, mutation : Mutation }
 
 
-messageMatchesPane : Maybe String -> Maybe String -> Bool
+messageMatchesPane : Maybe String -> String -> Bool
 messageMatchesPane incoming current =
     case incoming of
         Nothing ->
             True
 
         Just incomingId ->
-            current == Just incomingId
+            current == incomingId
 
 
 updateFirst : (pane -> Maybe (PaneUpdate pane)) -> List pane -> Maybe (PaneUpdate (List pane))
@@ -2130,8 +2128,7 @@ todayChangedIn :
     -> (LocalDate -> Msg)
     -> Maybe (PaneUpdate Pane)
 todayChangedIn pageContext model context pane toMsg =
-    LocalDate.fromString context.date
-        |> Maybe.andThen (\today -> updatePane model.panes pageContext (toMsg today) pane)
+    updatePane model.panes pageContext (toMsg context.date) pane
 
 
 barcodeScannerEventReceived :
@@ -2536,7 +2533,7 @@ applyCreateAdHocLogOutMsg _ outMsg =
             )
 
         CreateAdHocLog.LogCreated log ->
-            ( Cmd.none, Navigate (DiaryDay (Just (LocalDate.format log.logDate)) Nothing) )
+            ( Cmd.none, Navigate (DiaryDay (Just log.logDate) Nothing) )
 
         CreateAdHocLog.SessionExpired ->
             ( Cmd.none, SessionExpired )
@@ -2611,7 +2608,7 @@ applyCreateWithAiLogOutMsg _ outMsg =
             )
 
         CreateWithAiLog.LogCreated log ->
-            ( Cmd.none, Navigate (DiaryDay (Just (LocalDate.format log.logDate)) Nothing) )
+            ( Cmd.none, Navigate (DiaryDay (Just log.logDate) Nothing) )
 
         CreateWithAiLog.SessionExpired ->
             ( Cmd.none, SessionExpired )
@@ -2656,7 +2653,7 @@ applyFoodLogDetailOutMsg context outMsg =
             , Navigate
                 (case context.route of
                     FoodLogEntry _ _ calendarMonth ->
-                        DiaryDay (Just (LocalDate.format date)) calendarMonth
+                        DiaryDay (Just date) calendarMonth
 
                     _ ->
                         route
@@ -3151,14 +3148,13 @@ lastUsedProductDefaultCmd route productId =
             []
 
 
-recentItemsRequest : Maybe String -> Maybe MealSlot -> Maybe Api.Logs.RecentItemsRequest
+recentItemsRequest : Maybe LocalDate -> Maybe MealSlot -> Maybe Api.Logs.RecentItemsRequest
 recentItemsRequest maybeDate maybeSlot =
     maybeDate
-        |> Maybe.andThen LocalDate.fromString
         |> Maybe.map
             (\toDate ->
                 { fromDate = LocalDate.addDays -30 toDate
                 , toDate = toDate
-                , mealSlot = Maybe.map MealSlot.toString maybeSlot
+                , mealSlot = maybeSlot
                 }
             )

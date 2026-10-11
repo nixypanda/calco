@@ -191,7 +191,21 @@ view env model =
                     , body = List.map (slotCheckbox env loaded.selected) MealSlot.all
                     , footer = Nothing
                     }
-                , Feedback.maybeErrorBanner env.theme (saveError loaded.saveState)
+                , case loaded.saveState of
+                    ValidationFailed message ->
+                        Feedback.errorBanner env.theme message
+
+                    SaveFailed message ->
+                        Feedback.errorBanner env.theme message
+
+                    Editing ->
+                        Element.none
+
+                    Saving ->
+                        Element.none
+
+                    Saved ->
+                        Element.none
                 , Button.textButton env.device
                     env.theme
                     { tone = Button.Primary
@@ -218,19 +232,6 @@ slotCheckbox env selected slot =
         , checked = List.member slot selected
         , onChange = SlotToggled slot
         }
-
-
-saveError : SaveState -> Maybe String
-saveError state =
-    case state of
-        ValidationFailed message ->
-            Just message
-
-        SaveFailed message ->
-            Just message
-
-        _ ->
-            Nothing
 
 
 diarySettingsSkeleton : Theme -> Element msg
