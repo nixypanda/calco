@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, QueryBuilder};
@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::*;
+use crate::nutrition::catalog::search_ranking::{self, SearchCandidate};
 
 mod open_food_facts;
 pub use open_food_facts::OpenFoodFactsClient;
@@ -15,6 +16,7 @@ pub use open_food_facts::OpenFoodFactsClient;
 
 const SEARCH_NUTRIENT_CODES: [&str; 5] =
     ["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G"];
+const SEARCH_RESULT_LIMIT: usize = 50;
 const PRODUCT_UPSERT_CHUNK_SIZE: usize = 1_000;
 const CHILD_ROW_CHUNK_SIZE: usize = 1_000;
 const PRODUCT_ID_CHUNK_SIZE: usize = 5_000;
@@ -264,7 +266,6 @@ impl ProductRepository for PostgresProductRepository {
             .iter()
             .map(|c| c.0.clone())
             .collect();
-        let text = query.text.clone();
 
         let mut builder = QueryBuilder::<Postgres>::new(
             r#"
@@ -277,6 +278,7 @@ impl ProductRepository for PostgresProductRepository {
             ProductSearchScope::History => {
                 builder.push(
                     r#"
+                    , l.last_log_date, l.last_logged_at
                     FROM products p
                     JOIN (
                         SELECT item_product_id AS product_id,
@@ -297,6 +299,8 @@ impl ProductRepository for PostgresProductRepository {
             _ => {
                 builder.push(
                     r#"
+                    , CAST(NULL AS date) AS last_log_date,
+                      CAST(NULL AS timestamptz) AS last_logged_at
                     FROM products p
                     "#,
                 );
@@ -307,9 +311,7 @@ impl ProductRepository for PostgresProductRepository {
             builder.push(" AND p.source = 'USER'");
         }
         push_category_filters(&mut builder, &include, &exclude);
-        push_search_match(&mut builder, scope, &text);
-        push_search_order(&mut builder, scope, &text);
-        builder.push(" LIMIT 50");
+        builder.push(" ORDER BY lower(p.name)");
 
         let rows = builder
             .build_query_as::<SearchProductRow>()
@@ -322,9 +324,37 @@ impl ProductRepository for PostgresProductRepository {
 
         let ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
         let categories_by_product = self.load_categories_for_products(&ids).await?;
-        let summary_nutrients_by_product = self.load_summary_nutrients(&ids).await?;
+        let candidates: Vec<SearchCandidate> = rows
+            .iter()
+            .map(|row| SearchCandidate {
+                barcode: row.barcode.clone(),
+                name: row.name.clone(),
+                brand: row.brand.clone(),
+                categories: categories_by_product
+                    .get(&row.id)
+                    .cloned()
+                    .unwrap_or_default(),
+                last_logged: match (row.last_log_date, row.last_logged_at) {
+                    (Some(date), Some(time)) => Some((date, time)),
+                    _ => None,
+                },
+            })
+            .collect();
 
-        rows.into_iter()
+        let selected_indices: Vec<usize> = search_ranking::rank(&candidates, &query.text, scope)
+            .into_iter()
+            .take(SEARCH_RESULT_LIMIT)
+            .collect();
+        let selected: Vec<SearchProductRow> = selected_indices
+            .iter()
+            .map(|&index| rows[index].clone())
+            .collect();
+
+        let product_ids: Vec<Uuid> = selected.iter().map(|row| row.id).collect();
+        let summary_nutrients_by_product = self.load_summary_nutrients(&product_ids).await?;
+
+        selected
+            .into_iter()
             .map(|row| {
                 let nutrients = summary_nutrients_by_product
                     .get(&row.id)
@@ -351,35 +381,25 @@ impl ProductRepository for PostgresProductRepository {
             FROM product_categories pc
             JOIN products p ON p.id = pc.product_id
             WHERE p.deleted_at IS NULL
-              AND ($1 = ''
-                   OR pc.category ILIKE $1 || '%'
-                   OR pc.category ILIKE '%' || $1 || '%'
-                   OR similarity(lower(pc.category), lower($1)) > 0.30)
             GROUP BY pc.category
-            ORDER BY
-                CASE
-                    WHEN pc.category ILIKE $1 || '%' THEN 0
-                    WHEN pc.category ILIKE '%' || $1 || '%' THEN 1
-                    ELSE 2
-                END,
-                COUNT(*) DESC,
-                similarity(lower(pc.category), lower($1)) DESC,
-                pc.category
-            LIMIT $2
             "#,
         )
-        .bind(query)
-        .bind(limit)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| CategorySuggestion {
-                value: row.value,
-                count: row.count,
-            })
-            .collect())
+        let categories: Vec<(String, i64)> =
+            rows.into_iter().map(|row| (row.value, row.count)).collect();
+        let limit = usize::try_from(limit.max(0)).unwrap_or(usize::MAX);
+
+        Ok(
+            search_ranking::rank_category_suggestions(&categories, query, limit)
+                .into_iter()
+                .map(|index| CategorySuggestion {
+                    value: categories[index].0.clone(),
+                    count: categories[index].1,
+                })
+                .collect(),
+        )
     }
 
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError> {
@@ -755,6 +775,8 @@ struct SearchProductRow {
     default_unit: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    last_log_date: Option<NaiveDate>,
+    last_logged_at: Option<DateTime<Utc>>,
 }
 
 impl SearchProductRow {
@@ -990,64 +1012,6 @@ struct UnitRow {
 struct MassFactorRow {
     code: String,
     canonical_grams: Decimal,
-}
-
-fn push_search_match(
-    query: &mut QueryBuilder<'_, Postgres>,
-    scope: ProductSearchScope,
-    text: &str,
-) {
-    query.push(" AND (");
-    query.push_bind(text.to_owned());
-    query.push(" = ''");
-    query.push(" OR p.name ILIKE '%' || ");
-    query.push_bind(text.to_owned());
-    query.push(" || '%' OR p.brand ILIKE '%' || ");
-    query.push_bind(text.to_owned());
-    query.push(" || '%' OR p.barcode ILIKE '%' || ");
-    query.push_bind(text.to_owned());
-    query.push(" || '%'");
-    if scope == ProductSearchScope::History {
-        query
-            .push(" OR EXISTS (SELECT 1 FROM product_categories pc WHERE pc.product_id = p.id AND (pc.category ILIKE '%' || ");
-        query.push_bind(text.to_owned());
-        query.push(" || '%' OR lower(pc.category) % lower(");
-        query.push_bind(text.to_owned());
-        query.push(")))");
-    }
-    query.push(" OR lower(p.name) % lower(");
-    query.push_bind(text.to_owned());
-    query.push(") OR (p.brand IS NOT NULL AND lower(p.brand) % lower(");
-    query.push_bind(text.to_owned());
-    query.push(")))");
-}
-
-fn push_search_order(
-    query: &mut QueryBuilder<'_, Postgres>,
-    scope: ProductSearchScope,
-    text: &str,
-) {
-    query.push(" ORDER BY");
-    if scope == ProductSearchScope::History {
-        query.push(" l.last_log_date DESC, l.last_logged_at DESC,");
-    }
-    query.push(" CASE WHEN p.barcode = ");
-    query.push_bind(text.to_owned());
-    query.push(" THEN 0 WHEN p.barcode ILIKE ");
-    query.push_bind(text.to_owned());
-    query.push(" || '%' THEN 1 WHEN p.name ILIKE ");
-    query.push_bind(text.to_owned());
-    query.push(" || '%' THEN 2 WHEN p.name ILIKE '%' || ");
-    query.push_bind(text.to_owned());
-    query.push(" || '%' THEN 3 WHEN p.brand ILIKE ");
-    query.push_bind(text.to_owned());
-    query.push(" || '%' THEN 4 WHEN p.brand ILIKE '%' || ");
-    query.push_bind(text.to_owned());
-    query.push(" || '%' THEN 5 ELSE 6 END, GREATEST(similarity(lower(p.name), lower(");
-    query.push_bind(text.to_owned());
-    query.push(")), similarity(lower(COALESCE(p.brand, '')), lower(");
-    query.push_bind(text.to_owned());
-    query.push("))) DESC, lower(p.name)");
 }
 
 fn push_category_filters<'a>(
