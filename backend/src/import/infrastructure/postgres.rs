@@ -2,6 +2,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, QueryBuilder};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::import::domain::*;
@@ -56,11 +58,10 @@ impl ImportRepository for PostgresImportRepository {
 
         for food in foods {
             sqlx::query(
-                r#"INSERT INTO staging_products (import_id, source, source_id, barcode, name, brand, categories, raw_payload, row_number)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                r#"INSERT INTO staging_products (import_id, source, source_id, barcode, name, brand, raw_payload, row_number)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                    ON CONFLICT (import_id, source, source_id) DO UPDATE SET
                        barcode = EXCLUDED.barcode, name = EXCLUDED.name, brand = EXCLUDED.brand,
-                       categories = EXCLUDED.categories,
                        raw_payload = EXCLUDED.raw_payload, row_number = EXCLUDED.row_number"#,
             )
             .bind(import_id.0)
@@ -69,11 +70,34 @@ impl ImportRepository for PostgresImportRepository {
             .bind(&food.barcode)
             .bind(&food.name)
             .bind(&food.brand)
-            .bind(&food.categories)
-            .bind(&food.raw_payload)
+            .bind(payload_to_text(&food.raw_payload))
             .bind(food.row_number)
             .execute(&mut *tx)
             .await?;
+
+            sqlx::query(
+                "DELETE FROM staging_product_categories \
+                 WHERE import_id = $1 AND source = $2 AND source_id = $3",
+            )
+            .bind(import_id.0)
+            .bind(&food.source)
+            .bind(&food.source_id)
+            .execute(&mut *tx)
+            .await?;
+
+            if !food.categories.is_empty() {
+                let mut query = QueryBuilder::<Postgres>::new(
+                    "INSERT INTO staging_product_categories (import_id, source, source_id, category) ",
+                );
+                query.push_values(food.categories.iter(), |mut row, category| {
+                    row.push_bind(import_id.0)
+                        .push_bind(&food.source)
+                        .push_bind(&food.source_id)
+                        .push_bind(category);
+                });
+                query.push(" ON CONFLICT (import_id, source, source_id, category) DO NOTHING");
+                query.build().execute(&mut *tx).await?;
+            }
         }
         for error in errors {
             self.add_error_in_tx(&mut tx, import_id, error).await?;
@@ -105,7 +129,7 @@ impl ImportRepository for PostgresImportRepository {
             .bind(&nutrient.source_id)
             .bind(&nutrient.nutrient_code)
             .bind(nutrient.amount_per_100g)
-            .bind(&nutrient.raw_payload)
+            .bind(payload_to_text(&nutrient.raw_payload))
             .bind(nutrient.row_number)
             .execute(&mut *tx)
             .await?;
@@ -141,7 +165,7 @@ impl ImportRepository for PostgresImportRepository {
             .bind(&s.source_id)
             .bind(&s.unit)
             .bind(s.grams_per_unit)
-            .bind(&s.raw_payload)
+            .bind(payload_to_text(&s.raw_payload))
             .bind(s.row_number)
             .execute(&mut *tx)
             .await?;
@@ -176,17 +200,49 @@ impl ImportRepository for PostgresImportRepository {
                         .await?;
                 }
 
-                let products = sqlx::query_as::<_, StagedProductRow>(
-                    r#"SELECT source, source_id, barcode, name, brand, categories, raw_payload, row_number
+                let product_rows = sqlx::query_as::<_, StagedProductRow>(
+                    r#"SELECT source, source_id, barcode, name, brand, raw_payload, row_number
                        FROM staging_products WHERE import_id = $1
                        ORDER BY source, source_id"#,
                 )
                 .bind(import_id.0)
                 .fetch_all(&mut *tx)
-                .await?
-                .into_iter()
-                .map(Into::into)
-                .collect();
+                .await?;
+                let category_rows = sqlx::query_as::<_, (String, String, String)>(
+                    r#"SELECT source, source_id, category FROM staging_product_categories
+                       WHERE import_id = $1
+                       ORDER BY source, source_id, category"#,
+                )
+                .bind(import_id.0)
+                .fetch_all(&mut *tx)
+                .await?;
+                let mut categories_by_product: HashMap<(String, String), Vec<String>> =
+                    HashMap::new();
+                for (source, source_id, category) in category_rows {
+                    categories_by_product
+                        .entry((source, source_id))
+                        .or_default()
+                        .push(category);
+                }
+                let products = product_rows
+                    .into_iter()
+                    .map(|row| {
+                        let categories = categories_by_product
+                            .get(&(row.source.clone(), row.source_id.clone()))
+                            .cloned()
+                            .unwrap_or_default();
+                        StagedImportProduct {
+                            source: row.source,
+                            source_id: row.source_id,
+                            barcode: row.barcode,
+                            name: row.name,
+                            brand: row.brand,
+                            categories,
+                            raw_payload: payload_from_text(row.raw_payload),
+                            row_number: row.row_number,
+                        }
+                    })
+                    .collect();
                 let nutrients = sqlx::query_as::<_, StagedNutrientRow>(
                     r#"SELECT source, source_id, nutrient_code, amount_per_100g, raw_payload, row_number
                        FROM staging_product_nutrients WHERE import_id = $1
@@ -342,7 +398,7 @@ impl PostgresImportRepository {
         .bind(import_id.0)
         .bind(error.row_number)
         .bind(&error.error)
-        .bind(&error.raw_payload)
+        .bind(payload_to_text(&error.raw_payload))
         .bind(Utc::now())
         .execute(&mut **tx)
         .await?;
@@ -357,24 +413,8 @@ struct StagedProductRow {
     barcode: Option<String>,
     name: String,
     brand: Option<String>,
-    categories: Vec<String>,
-    raw_payload: Option<serde_json::Value>,
+    raw_payload: Option<String>,
     row_number: Option<i32>,
-}
-
-impl From<StagedProductRow> for StagedImportProduct {
-    fn from(row: StagedProductRow) -> Self {
-        Self {
-            source: row.source,
-            source_id: row.source_id,
-            barcode: row.barcode,
-            name: row.name,
-            brand: row.brand,
-            categories: row.categories,
-            raw_payload: row.raw_payload,
-            row_number: row.row_number,
-        }
-    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -383,7 +423,7 @@ struct StagedNutrientRow {
     source_id: String,
     nutrient_code: String,
     amount_per_100g: Decimal,
-    raw_payload: Option<serde_json::Value>,
+    raw_payload: Option<String>,
     row_number: Option<i32>,
 }
 
@@ -394,7 +434,7 @@ impl From<StagedNutrientRow> for StagedImportNutrient {
             source_id: row.source_id,
             nutrient_code: row.nutrient_code,
             amount_per_100g: row.amount_per_100g,
-            raw_payload: row.raw_payload,
+            raw_payload: payload_from_text(row.raw_payload),
             row_number: row.row_number,
         }
     }
@@ -406,7 +446,7 @@ struct StagedServingRow {
     source_id: String,
     unit: String,
     grams_per_unit: Decimal,
-    raw_payload: Option<serde_json::Value>,
+    raw_payload: Option<String>,
     row_number: Option<i32>,
 }
 
@@ -417,7 +457,7 @@ impl From<StagedServingRow> for StagedImportServing {
             source_id: row.source_id,
             unit: row.unit,
             grams_per_unit: row.grams_per_unit,
-            raw_payload: row.raw_payload,
+            raw_payload: payload_from_text(row.raw_payload),
             row_number: row.row_number,
         }
     }
@@ -450,13 +490,23 @@ fn import_row_to_job(row: ImportRow) -> ImportJob {
 struct ImportErrorRow {
     row_number: Option<i32>,
     error: String,
-    raw_payload: Option<serde_json::Value>,
+    raw_payload: Option<String>,
 }
 
 fn import_error_row_to_record(row: ImportErrorRow) -> ImportErrorRecord {
     ImportErrorRecord {
         row_number: row.row_number,
         error: row.error,
-        raw_payload: row.raw_payload,
+        raw_payload: payload_from_text(row.raw_payload),
     }
+}
+
+fn payload_to_text(payload: &Option<serde_json::Value>) -> Option<String> {
+    payload
+        .as_ref()
+        .and_then(|value| serde_json::to_string(value).ok())
+}
+
+fn payload_from_text(payload: Option<String>) -> Option<serde_json::Value> {
+    payload.and_then(|text| serde_json::from_str(&text).ok())
 }

@@ -153,6 +153,97 @@ impl PostgresProductRepository {
         }
         Ok(by_product)
     }
+
+    async fn load_categories(&self, product_id: Uuid) -> Result<Vec<String>, NutritionError> {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT category FROM product_categories WHERE product_id = $1 ORDER BY category",
+        )
+        .bind(product_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|(category,)| category).collect())
+    }
+
+    async fn load_categories_for_products(
+        &self,
+        product_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<String>>, NutritionError> {
+        if product_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let mut query = QueryBuilder::<Postgres>::new(
+            "SELECT product_id, category FROM product_categories WHERE product_id IN (",
+        );
+        {
+            let mut separated = query.separated(", ");
+            for product_id in product_ids {
+                separated.push_bind(*product_id);
+            }
+            separated.push_unseparated(")");
+        }
+        query.push(" ORDER BY product_id, category");
+        let rows = query
+            .build_query_as::<(Uuid, String)>()
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut by_product: HashMap<Uuid, Vec<String>> = HashMap::new();
+        for (product_id, category) in rows {
+            by_product.entry(product_id).or_default().push(category);
+        }
+        Ok(by_product)
+    }
+
+    async fn load_summary_nutrients(
+        &self,
+        product_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<ProductNutrient>>, NutritionError> {
+        if product_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let mut query = QueryBuilder::<Postgres>::new(
+            r#"
+            SELECT pn.product_id, pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
+            FROM product_nutrients pn
+            JOIN nutrients n ON n.id = pn.nutrient_id
+            WHERE pn.product_id IN (
+            "#,
+        );
+        {
+            let mut separated = query.separated(", ");
+            for product_id in product_ids {
+                separated.push_bind(*product_id);
+            }
+            separated.push_unseparated(")");
+        }
+        query.push(" AND n.code IN (");
+        {
+            let mut separated = query.separated(", ");
+            for code in SEARCH_NUTRIENT_CODES {
+                separated.push_bind(code);
+            }
+            separated.push_unseparated(")");
+        }
+        let rows = query
+            .build_query_as::<SearchNutrientRow>()
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut by_product: HashMap<Uuid, Vec<ProductNutrient>> = HashMap::new();
+        for row in rows {
+            by_product
+                .entry(row.product_id)
+                .or_default()
+                .push(ProductNutrient {
+                    nutrient_code: NutrientCode(row.code),
+                    amount_per_100g: AmountPer100g::new(row.amount_per_100g)?,
+                    unit: UnitCode(row.unit),
+                    source: row.source,
+                    confidence: row.confidence.and_then(|c| c.parse().ok()),
+                });
+        }
+        Ok(by_product)
+    }
 }
 
 #[async_trait]
@@ -173,200 +264,77 @@ impl ProductRepository for PostgresProductRepository {
             .iter()
             .map(|c| c.0.clone())
             .collect();
+        let text = query.text.clone();
 
-        let rows = match scope {
-            ProductSearchScope::All => {
-                sqlx::query_as::<_, ProductRow>(
-                    r#"
-                    SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                           categories, default_quantity, default_unit,
-                           created_at, updated_at
-                    FROM products
-                    WHERE deleted_at IS NULL
-                      AND ($1 = ''
-                           OR name ILIKE '%' || $1 || '%'
-                           OR brand ILIKE '%' || $1 || '%'
-                           OR barcode ILIKE '%' || $1 || '%'
-                           OR lower(name) % lower($1)
-                           OR (brand IS NOT NULL AND lower(brand) % lower($1)))
-                      AND (cardinality($2::text[]) = 0 OR categories @> $2::text[])
-                      AND (cardinality($3::text[]) = 0 OR NOT categories && $3::text[])
-                    ORDER BY
-                        CASE
-                            WHEN barcode = $1 THEN 0
-                            WHEN barcode ILIKE $1 || '%' THEN 1
-                            WHEN name ILIKE $1 || '%' THEN 2
-                            WHEN name ILIKE '%' || $1 || '%' THEN 3
-                            WHEN brand ILIKE $1 || '%' THEN 4
-                            WHEN brand ILIKE '%' || $1 || '%' THEN 5
-                            ELSE 6
-                        END,
-                        GREATEST(
-                            similarity(lower(name), lower($1)),
-                            similarity(lower(COALESCE(brand, '')), lower($1))
-                        ) DESC,
-                        lower(name)
-                    LIMIT 50
-                    "#,
-                )
-                .bind(&query.text)
-                .bind(&include)
-                .bind(&exclude)
-                .fetch_all(&self.pool)
-                .await?
-            }
-            ProductSearchScope::Custom => {
-                sqlx::query_as::<_, ProductRow>(
-                    r#"
-                    SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                           categories, default_quantity, default_unit,
-                           created_at, updated_at
-                    FROM products
-                    WHERE deleted_at IS NULL
-                      AND source = 'USER'
-                      AND ($1 = ''
-                           OR name ILIKE '%' || $1 || '%'
-                           OR brand ILIKE '%' || $1 || '%'
-                           OR barcode ILIKE '%' || $1 || '%'
-                           OR lower(name) % lower($1)
-                           OR (brand IS NOT NULL AND lower(brand) % lower($1)))
-                      AND (cardinality($2::text[]) = 0 OR categories @> $2::text[])
-                      AND (cardinality($3::text[]) = 0 OR NOT categories && $3::text[])
-                    ORDER BY
-                        CASE
-                            WHEN barcode = $1 THEN 0
-                            WHEN barcode ILIKE $1 || '%' THEN 1
-                            WHEN name ILIKE $1 || '%' THEN 2
-                            WHEN name ILIKE '%' || $1 || '%' THEN 3
-                            WHEN brand ILIKE $1 || '%' THEN 4
-                            WHEN brand ILIKE '%' || $1 || '%' THEN 5
-                            ELSE 6
-                        END,
-                        GREATEST(
-                            similarity(lower(name), lower($1)),
-                            similarity(lower(COALESCE(brand, '')), lower($1))
-                        ) DESC,
-                        lower(name)
-                    LIMIT 50
-                    "#,
-                )
-                .bind(&query.text)
-                .bind(&include)
-                .bind(&exclude)
-                .fetch_all(&self.pool)
-                .await?
-            }
+        let mut builder = QueryBuilder::<Postgres>::new(
+            r#"
+            SELECT p.id, p.source, p.source_id, p.user_id, p.visibility, p.barcode,
+                   p.name, p.brand, p.default_quantity, p.default_unit,
+                   p.created_at, p.updated_at
+            "#,
+        );
+        match scope {
             ProductSearchScope::History => {
-                sqlx::query_as::<_, ProductRow>(
+                builder.push(
                     r#"
-                    WITH latest_logs AS (
+                    FROM products p
+                    JOIN (
                         SELECT item_product_id AS product_id,
                                MAX(log_date) AS last_log_date,
                                MAX(created_at) AS last_logged_at
                         FROM food_logs
-                        WHERE user_id = $2
-                          AND item_product_id IS NOT NULL
+                        WHERE item_product_id IS NOT NULL
+                          AND user_id = "#,
+                );
+                builder.push_bind(user_id);
+                builder.push(
+                    r#"
                         GROUP BY item_product_id
-                    )
-                    SELECT p.id, p.source, p.source_id, p.user_id, p.visibility, p.barcode,
-                           p.name, p.brand, p.categories, p.default_quantity, p.default_unit,
-                           p.created_at, p.updated_at
-                    FROM products p
-                    JOIN latest_logs l ON l.product_id = p.id
-                    WHERE p.deleted_at IS NULL
-                      AND ($1 = ''
-                           OR p.name ILIKE '%' || $1 || '%'
-                           OR p.brand ILIKE '%' || $1 || '%'
-                           OR p.barcode ILIKE '%' || $1 || '%'
-                           OR EXISTS (
-                               SELECT 1 FROM unnest(p.categories) AS category
-                               WHERE category ILIKE '%' || $1 || '%'
-                                  OR lower(category) % lower($1)
-                           )
-                           OR lower(p.name) % lower($1)
-                           OR (p.brand IS NOT NULL AND lower(p.brand) % lower($1)))
-                      AND (cardinality($3::text[]) = 0 OR p.categories @> $3::text[])
-                      AND (cardinality($4::text[]) = 0 OR NOT p.categories && $4::text[])
-                    ORDER BY
-                        l.last_log_date DESC,
-                        l.last_logged_at DESC,
-                        CASE
-                            WHEN p.barcode = $1 THEN 0
-                            WHEN p.barcode ILIKE $1 || '%' THEN 1
-                            WHEN p.name ILIKE $1 || '%' THEN 2
-                            WHEN p.name ILIKE '%' || $1 || '%' THEN 3
-                            WHEN p.brand ILIKE $1 || '%' THEN 4
-                            WHEN p.brand ILIKE '%' || $1 || '%' THEN 5
-                            ELSE 6
-                        END,
-                        GREATEST(
-                            similarity(lower(p.name), lower($1)),
-                            similarity(lower(COALESCE(p.brand, '')), lower($1))
-                        ) DESC,
-                        lower(p.name)
-                    LIMIT 50
+                    ) l ON l.product_id = p.id
                     "#,
-                )
-                .bind(&query.text)
-                .bind(user_id)
-                .bind(&include)
-                .bind(&exclude)
-                .fetch_all(&self.pool)
-                .await?
+                );
             }
-        };
+            _ => {
+                builder.push(
+                    r#"
+                    FROM products p
+                    "#,
+                );
+            }
+        }
+        builder.push(" WHERE p.deleted_at IS NULL");
+        if scope == ProductSearchScope::Custom {
+            builder.push(" AND p.source = 'USER'");
+        }
+        push_category_filters(&mut builder, &include, &exclude);
+        push_search_match(&mut builder, scope, &text);
+        push_search_order(&mut builder, scope, &text);
+        builder.push(" LIMIT 50");
 
-        let product_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-        let summary_nutrients_by_product = if product_ids.is_empty() {
-            HashMap::new()
-        } else {
-            let mut query = QueryBuilder::<Postgres>::new(
-                r#"
-                SELECT pn.product_id, pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
-                FROM product_nutrients pn
-                JOIN nutrients n ON n.id = pn.nutrient_id
-                WHERE pn.product_id IN (
-                "#,
-            );
-            let mut separated = query.separated(", ");
-            for product_id in &product_ids {
-                separated.push_bind(*product_id);
-            }
-            separated.push_unseparated(")");
-            query.push(" AND n.code IN (");
-            let mut separated = query.separated(", ");
-            for code in SEARCH_NUTRIENT_CODES {
-                separated.push_bind(code);
-            }
-            separated.push_unseparated(")");
-            let summary_rows = query
-                .build_query_as::<SearchNutrientRow>()
-                .fetch_all(&self.pool)
-                .await?;
+        let rows = builder
+            .build_query_as::<SearchProductRow>()
+            .fetch_all(&self.pool)
+            .await?;
 
-            let mut by_product: HashMap<Uuid, Vec<ProductNutrient>> = HashMap::new();
-            for r in summary_rows {
-                by_product
-                    .entry(r.product_id)
-                    .or_default()
-                    .push(ProductNutrient {
-                        nutrient_code: NutrientCode(r.code),
-                        amount_per_100g: AmountPer100g::new(r.amount_per_100g)?,
-                        unit: UnitCode(r.unit),
-                        source: r.source,
-                        confidence: r.confidence.and_then(|c| c.parse().ok()),
-                    });
-            }
-            by_product
-        };
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
+        let categories_by_product = self.load_categories_for_products(&ids).await?;
+        let summary_nutrients_by_product = self.load_summary_nutrients(&ids).await?;
 
         rows.into_iter()
-            .map(|r| {
+            .map(|row| {
                 let nutrients = summary_nutrients_by_product
-                    .get(&r.id)
+                    .get(&row.id)
                     .cloned()
                     .unwrap_or_default();
-                product_row_to_product(r, nutrients, vec![])
+                let categories = categories_by_product
+                    .get(&row.id)
+                    .cloned()
+                    .unwrap_or_default();
+                product_row_to_product(row.into_product_row(), categories, nutrients, vec![])
             })
             .collect()
     }
@@ -379,24 +347,24 @@ impl ProductRepository for PostgresProductRepository {
     ) -> Result<Vec<CategorySuggestion>, NutritionError> {
         let rows = sqlx::query_as::<_, CategorySuggestionRow>(
             r#"
-            SELECT category AS value, COUNT(*)::BIGINT AS count
-            FROM products p
-            CROSS JOIN LATERAL UNNEST(p.categories) AS category
+            SELECT pc.category AS value, COUNT(*) AS count
+            FROM product_categories pc
+            JOIN products p ON p.id = pc.product_id
             WHERE p.deleted_at IS NULL
               AND ($1 = ''
-                   OR category ILIKE $1 || '%'
-                   OR category ILIKE '%' || $1 || '%'
-                   OR similarity(lower(category), lower($1)) > 0.30)
-            GROUP BY category
+                   OR pc.category ILIKE $1 || '%'
+                   OR pc.category ILIKE '%' || $1 || '%'
+                   OR similarity(lower(pc.category), lower($1)) > 0.30)
+            GROUP BY pc.category
             ORDER BY
                 CASE
-                    WHEN category ILIKE $1 || '%' THEN 0
-                    WHEN category ILIKE '%' || $1 || '%' THEN 1
+                    WHEN pc.category ILIKE $1 || '%' THEN 0
+                    WHEN pc.category ILIKE '%' || $1 || '%' THEN 1
                     ELSE 2
                 END,
                 COUNT(*) DESC,
-                similarity(lower(category), lower($1)) DESC,
-                category
+                similarity(lower(pc.category), lower($1)) DESC,
+                pc.category
             LIMIT $2
             "#,
         )
@@ -407,9 +375,9 @@ impl ProductRepository for PostgresProductRepository {
 
         Ok(rows
             .into_iter()
-            .map(|r| CategorySuggestion {
-                value: r.value,
-                count: r.count,
+            .map(|row| CategorySuggestion {
+                value: row.value,
+                count: row.count,
             })
             .collect())
     }
@@ -418,7 +386,7 @@ impl ProductRepository for PostgresProductRepository {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit,
+                   default_quantity, default_unit,
                    created_at, updated_at
             FROM products WHERE id = $1 AND deleted_at IS NULL
             "#,
@@ -429,9 +397,12 @@ impl ProductRepository for PostgresProductRepository {
 
         match row {
             Some(r) => {
+                let categories = self.load_categories(r.id).await?;
                 let nutrients = self.load_nutrients(r.id).await?;
                 let servings = self.load_servings(r.id).await?;
-                Ok(Some(product_row_to_product(r, nutrients, servings)?))
+                Ok(Some(product_row_to_product(
+                    r, categories, nutrients, servings,
+                )?))
             }
             None => Ok(None),
         }
@@ -460,7 +431,7 @@ impl ProductRepository for PostgresProductRepository {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit,
+                   default_quantity, default_unit,
                    created_at, updated_at
             FROM products
             WHERE barcode = $1
@@ -473,9 +444,12 @@ impl ProductRepository for PostgresProductRepository {
 
         match row {
             Some(r) => {
+                let categories = self.load_categories(r.id).await?;
                 let nutrients = self.load_nutrients(r.id).await?;
                 let servings = self.load_servings(r.id).await?;
-                Ok(Some(product_row_to_product(r, nutrients, servings)?))
+                Ok(Some(product_row_to_product(
+                    r, categories, nutrients, servings,
+                )?))
             }
             None => Ok(None),
         }
@@ -485,7 +459,7 @@ impl ProductRepository for PostgresProductRepository {
         let rows = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit,
+                   default_quantity, default_unit,
                    created_at, updated_at
             FROM products
             WHERE source = 'USER'
@@ -501,14 +475,19 @@ impl ProductRepository for PostgresProductRepository {
         }
 
         let product_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+        let categories_by_product = self.load_categories_for_products(&product_ids).await?;
         let nutrients_by_product = self.load_nutrients_for_products(&product_ids).await?;
         let servings_by_product = self.load_servings_for_products(&product_ids).await?;
 
         rows.into_iter()
             .map(|r| {
+                let categories = categories_by_product
+                    .get(&r.id)
+                    .cloned()
+                    .unwrap_or_default();
                 let nutrients = nutrients_by_product.get(&r.id).cloned().unwrap_or_default();
                 let servings = servings_by_product.get(&r.id).cloned().unwrap_or_default();
-                product_row_to_product(r, nutrients, servings)
+                product_row_to_product(r, categories, nutrients, servings)
             })
             .collect()
     }
@@ -519,8 +498,8 @@ impl ProductRepository for PostgresProductRepository {
         sqlx::query(
             r#"
             INSERT INTO products (id, source, source_id, user_id, visibility, barcode, name,
-                                  brand, categories, default_quantity, default_unit)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                                  brand, default_quantity, default_unit)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(product.id.0)
@@ -531,18 +510,12 @@ impl ProductRepository for PostgresProductRepository {
         .bind(product.origin.barcode().map(|barcode| barcode.0.as_str()))
         .bind(product.name.as_str())
         .bind(product.brand.as_ref().map(|b| &b.0))
-        .bind(
-            product
-                .categories
-                .iter()
-                .map(|c| c.0.clone())
-                .collect::<Vec<_>>(),
-        )
         .bind(product.default_quantity)
         .bind(product.default_unit.as_ref().map(|u| &u.0))
         .execute(&mut *tx)
         .await?;
 
+        insert_product_categories(&mut tx, product.id.0, &product.categories).await?;
         insert_product_nutrients(&mut tx, product.id.0, &product.nutrients).await?;
         insert_product_servings(&mut tx, product.id.0, &product.servings).await?;
 
@@ -582,7 +555,7 @@ impl ProductRepository for PostgresProductRepository {
             let mut query = QueryBuilder::<Postgres>::new(
                 r#"INSERT INTO products (
                        id, source, source_id, user_id, visibility, barcode, name, brand,
-                       categories, default_quantity, default_unit
+                       default_quantity, default_unit
                    ) "#,
             );
             query.push_values(chunk.iter().copied(), |mut row, product| {
@@ -594,13 +567,6 @@ impl ProductRepository for PostgresProductRepository {
                     .push_bind(product.origin.barcode().map(|barcode| barcode.0.as_str()))
                     .push_bind(product.name.as_str())
                     .push_bind(product.brand.as_ref().map(|brand| brand.0.as_str()))
-                    .push_bind(
-                        product
-                            .categories
-                            .iter()
-                            .map(|category| category.0.clone())
-                            .collect::<Vec<_>>(),
-                    )
                     .push_bind(product.default_quantity)
                     .push_bind(product.default_unit.as_ref().map(|unit| unit.0.as_str()));
             });
@@ -614,7 +580,6 @@ impl ProductRepository for PostgresProductRepository {
                        barcode = incoming.barcode,
                        name = incoming.name,
                        brand = incoming.brand,
-                       categories = incoming.categories,
                        default_quantity = incoming.default_quantity,
                        default_unit = incoming.default_unit,
                        deleted_at = NULL,
@@ -629,20 +594,13 @@ impl ProductRepository for PostgresProductRepository {
                     .push_bind(product.origin.barcode().map(|barcode| barcode.0.as_str()))
                     .push_bind(product.name.as_str())
                     .push_bind(product.brand.as_ref().map(|brand| brand.0.as_str()))
-                    .push_bind(
-                        product
-                            .categories
-                            .iter()
-                            .map(|category| category.0.clone())
-                            .collect::<Vec<_>>(),
-                    )
                     .push_bind(product.default_quantity)
                     .push_bind(product.default_unit.as_ref().map(|unit| unit.0.as_str()));
             });
             query.push(
                 r#") AS incoming(
                        source, source_id, user_id, visibility, barcode, name, brand,
-                       categories, default_quantity, default_unit
+                       default_quantity, default_unit
                    )
                    WHERE product.source = incoming.source
                      AND product.source_id = incoming.source_id
@@ -652,7 +610,6 @@ impl ProductRepository for PostgresProductRepository {
                          OR product.barcode IS DISTINCT FROM incoming.barcode
                          OR product.name IS DISTINCT FROM incoming.name
                          OR product.brand IS DISTINCT FROM incoming.brand
-                         OR product.categories IS DISTINCT FROM incoming.categories
                          OR product.default_quantity IS DISTINCT FROM incoming.default_quantity
                          OR product.default_unit IS DISTINCT FROM incoming.default_unit
                          OR product.deleted_at IS NOT NULL
@@ -714,6 +671,7 @@ impl ProductRepository for PostgresProductRepository {
             replace_product_nutrients(&mut tx, &products, &product_ids, &nutrient_ids).await?;
         result.servings_written =
             replace_product_servings(&mut tx, &products, &product_ids).await?;
+        replace_external_categories(&mut tx, &products, &product_ids).await?;
 
         tx.commit().await?;
         Ok(result)
@@ -724,25 +682,20 @@ impl ProductRepository for PostgresProductRepository {
 
         sqlx::query(
             r#"
-            UPDATE products SET name=$2, brand=$3, categories=$4, default_quantity=$5,
-                                default_unit=$6, updated_at=CURRENT_TIMESTAMP
+            UPDATE products SET name=$2, brand=$3, default_quantity=$4,
+                                default_unit=$5, updated_at=CURRENT_TIMESTAMP
             WHERE id=$1
             "#,
         )
         .bind(product.id.0)
         .bind(product.name.as_str())
         .bind(product.brand.as_ref().map(|b| &b.0))
-        .bind(
-            product
-                .categories
-                .iter()
-                .map(|c| c.0.clone())
-                .collect::<Vec<_>>(),
-        )
         .bind(product.default_quantity)
         .bind(product.default_unit.as_ref().map(|u| &u.0))
         .execute(&mut *tx)
         .await?;
+
+        replace_product_categories(&mut tx, product.id.0, &product.categories).await?;
 
         sqlx::query("DELETE FROM product_nutrients WHERE product_id = $1")
             .bind(product.id.0)
@@ -782,11 +735,45 @@ struct ProductRow {
     barcode: Option<String>,
     name: String,
     brand: Option<String>,
-    categories: Vec<String>,
     default_quantity: Option<Decimal>,
     default_unit: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow, Clone)]
+struct SearchProductRow {
+    id: Uuid,
+    source: String,
+    source_id: Option<String>,
+    user_id: Option<Uuid>,
+    visibility: String,
+    barcode: Option<String>,
+    name: String,
+    brand: Option<String>,
+    default_quantity: Option<Decimal>,
+    default_unit: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl SearchProductRow {
+    fn into_product_row(self) -> ProductRow {
+        ProductRow {
+            id: self.id,
+            source: self.source,
+            source_id: self.source_id,
+            user_id: self.user_id,
+            visibility: self.visibility,
+            barcode: self.barcode,
+            name: self.name,
+            brand: self.brand,
+            default_quantity: self.default_quantity,
+            default_unit: self.default_unit,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -839,6 +826,7 @@ struct CategorySuggestionRow {
 
 fn product_row_to_product(
     row: ProductRow,
+    categories: Vec<String>,
     nutrients: Vec<ProductNutrient>,
     servings: Vec<ProductServing>,
 ) -> Result<Product, NutritionError> {
@@ -887,7 +875,7 @@ fn product_row_to_product(
             .map_err(NutritionError::Internal)?,
         name: ProductName::new(&row.name)?,
         brand: row.brand.map(Brand),
-        categories: row.categories.into_iter().map(Category).collect(),
+        categories: categories.into_iter().map(Category).collect(),
         default_quantity: row.default_quantity,
         default_unit: row.default_unit.map(UnitCode),
         nutrients,
@@ -1002,6 +990,140 @@ struct UnitRow {
 struct MassFactorRow {
     code: String,
     canonical_grams: Decimal,
+}
+
+fn push_search_match(
+    query: &mut QueryBuilder<'_, Postgres>,
+    scope: ProductSearchScope,
+    text: &str,
+) {
+    query.push(" AND (");
+    query.push_bind(text.to_owned());
+    query.push(" = ''");
+    query.push(" OR p.name ILIKE '%' || ");
+    query.push_bind(text.to_owned());
+    query.push(" || '%' OR p.brand ILIKE '%' || ");
+    query.push_bind(text.to_owned());
+    query.push(" || '%' OR p.barcode ILIKE '%' || ");
+    query.push_bind(text.to_owned());
+    query.push(" || '%'");
+    if scope == ProductSearchScope::History {
+        query
+            .push(" OR EXISTS (SELECT 1 FROM product_categories pc WHERE pc.product_id = p.id AND (pc.category ILIKE '%' || ");
+        query.push_bind(text.to_owned());
+        query.push(" || '%' OR lower(pc.category) % lower(");
+        query.push_bind(text.to_owned());
+        query.push(")))");
+    }
+    query.push(" OR lower(p.name) % lower(");
+    query.push_bind(text.to_owned());
+    query.push(") OR (p.brand IS NOT NULL AND lower(p.brand) % lower(");
+    query.push_bind(text.to_owned());
+    query.push(")))");
+}
+
+fn push_search_order(
+    query: &mut QueryBuilder<'_, Postgres>,
+    scope: ProductSearchScope,
+    text: &str,
+) {
+    query.push(" ORDER BY");
+    if scope == ProductSearchScope::History {
+        query.push(" l.last_log_date DESC, l.last_logged_at DESC,");
+    }
+    query.push(" CASE WHEN p.barcode = ");
+    query.push_bind(text.to_owned());
+    query.push(" THEN 0 WHEN p.barcode ILIKE ");
+    query.push_bind(text.to_owned());
+    query.push(" || '%' THEN 1 WHEN p.name ILIKE ");
+    query.push_bind(text.to_owned());
+    query.push(" || '%' THEN 2 WHEN p.name ILIKE '%' || ");
+    query.push_bind(text.to_owned());
+    query.push(" || '%' THEN 3 WHEN p.brand ILIKE ");
+    query.push_bind(text.to_owned());
+    query.push(" || '%' THEN 4 WHEN p.brand ILIKE '%' || ");
+    query.push_bind(text.to_owned());
+    query.push(" || '%' THEN 5 ELSE 6 END, GREATEST(similarity(lower(p.name), lower(");
+    query.push_bind(text.to_owned());
+    query.push(")), similarity(lower(COALESCE(p.brand, '')), lower(");
+    query.push_bind(text.to_owned());
+    query.push("))) DESC, lower(p.name)");
+}
+
+fn push_category_filters<'a>(
+    query: &mut QueryBuilder<'a, Postgres>,
+    include: &'a [String],
+    exclude: &'a [String],
+) {
+    if !include.is_empty() {
+        query.push(
+            " AND (SELECT COUNT(DISTINCT pc.category) FROM product_categories pc \
+             WHERE pc.product_id = p.id AND pc.category IN (",
+        );
+        {
+            let mut separated = query.separated(", ");
+            for category in include {
+                separated.push_bind(category);
+            }
+            separated.push_unseparated(")) = ");
+        }
+        query.push_bind(include.len() as i64);
+    }
+    if !exclude.is_empty() {
+        query.push(
+            " AND NOT EXISTS (SELECT 1 FROM product_categories pc \
+             WHERE pc.product_id = p.id AND pc.category IN (",
+        );
+        {
+            let mut separated = query.separated(", ");
+            for category in exclude {
+                separated.push_bind(category);
+            }
+            separated.push_unseparated("))");
+        }
+    }
+}
+
+async fn insert_product_categories(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    product_id: Uuid,
+    categories: &[Category],
+) -> Result<(), NutritionError> {
+    if categories.is_empty() {
+        return Ok(());
+    }
+    let mut query =
+        QueryBuilder::<Postgres>::new("INSERT INTO product_categories (product_id, category) ");
+    query.push_values(categories, |mut row, category| {
+        row.push_bind(product_id).push_bind(category.0.clone());
+    });
+    query.push(" ON CONFLICT (product_id, category) DO NOTHING");
+    query.build().execute(&mut **tx).await?;
+    Ok(())
+}
+
+async fn replace_product_categories(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    product_id: Uuid,
+    categories: &[Category],
+) -> Result<(), NutritionError> {
+    sqlx::query("DELETE FROM product_categories WHERE product_id = $1")
+        .bind(product_id)
+        .execute(&mut **tx)
+        .await?;
+    insert_product_categories(tx, product_id, categories).await
+}
+
+async fn replace_external_categories(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    products: &[&Product],
+    product_ids: &[Uuid],
+) -> Result<(), NutritionError> {
+    delete_by_product_ids(tx, "product_categories", product_ids).await?;
+    for (product, product_id) in products.iter().zip(product_ids) {
+        insert_product_categories(tx, *product_id, &product.categories).await?;
+    }
+    Ok(())
 }
 
 async fn resolve_nutrient_ids(

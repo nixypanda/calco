@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, QueryBuilder};
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -26,54 +26,60 @@ impl DiaryPreferencesRepository for PostgresDiaryPreferencesRepository {
         &self,
         user_id: Uuid,
     ) -> Result<Option<DiaryPreferences>, NutritionError> {
-        let row = sqlx::query_as::<_, DiaryPreferencesRow>(
-            "SELECT user_id, enabled_meal_slots FROM diary_preferences WHERE user_id = $1",
-        )
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let exists: Option<(Uuid,)> =
+            sqlx::query_as("SELECT user_id FROM diary_preferences WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        if exists.is_none() {
+            return Ok(None);
+        }
 
-        row.map(row_to_domain).transpose()
+        let rows: Vec<(String,)> =
+            sqlx::query_as("SELECT meal_slot FROM diary_preference_meal_slots WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?;
+        let slots = rows
+            .into_iter()
+            .map(|(slot,)| MealSlot::from_str(&slot).map_err(NutritionError::Internal))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Some(DiaryPreferences::new(
+            user_id,
+            EnabledMealSlots::new(slots)?,
+        )))
     }
 
     async fn save(&self, preferences: &DiaryPreferences) -> Result<(), NutritionError> {
-        let slots = preferences
-            .enabled_meal_slots
-            .canonical()
-            .into_iter()
-            .map(|slot| slot.as_str().to_owned())
-            .collect::<Vec<_>>();
+        let slots = preferences.enabled_meal_slots.canonical();
+        let mut tx = self.pool.begin().await?;
+
         sqlx::query(
             r#"
-            INSERT INTO diary_preferences (user_id, enabled_meal_slots)
-            VALUES ($1, $2)
-            ON CONFLICT (user_id) DO UPDATE
-            SET enabled_meal_slots = EXCLUDED.enabled_meal_slots,
-                updated_at = CURRENT_TIMESTAMP
+            INSERT INTO diary_preferences (user_id)
+            VALUES ($1)
+            ON CONFLICT (user_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
             "#,
         )
         .bind(preferences.user_id)
-        .bind(slots)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+
+        sqlx::query("DELETE FROM diary_preference_meal_slots WHERE user_id = $1")
+            .bind(preferences.user_id)
+            .execute(&mut *tx)
+            .await?;
+
+        let mut query = QueryBuilder::<Postgres>::new(
+            "INSERT INTO diary_preference_meal_slots (user_id, meal_slot) ",
+        );
+        query.push_values(slots.iter(), |mut row, slot| {
+            row.push_bind(preferences.user_id).push_bind(slot.as_str());
+        });
+        query.build().execute(&mut *tx).await?;
+
+        tx.commit().await?;
         Ok(())
     }
-}
-
-fn row_to_domain(row: DiaryPreferencesRow) -> Result<DiaryPreferences, NutritionError> {
-    let slots = row
-        .enabled_meal_slots
-        .iter()
-        .map(|slot| MealSlot::from_str(slot).map_err(NutritionError::Internal))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(DiaryPreferences::new(
-        row.user_id,
-        EnabledMealSlots::new(slots)?,
-    ))
-}
-
-#[derive(sqlx::FromRow)]
-struct DiaryPreferencesRow {
-    user_id: Uuid,
-    enabled_meal_slots: Vec<String>,
 }
