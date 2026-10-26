@@ -343,6 +343,210 @@ impl Session {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ApiKeyId(pub Uuid);
+
+impl ApiKeyId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+impl Default for ApiKeyId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApiKeyName(String);
+
+impl ApiKeyName {
+    const MAX_LEN: usize = 64;
+
+    pub fn new(raw: &str) -> Result<Self, AuthError> {
+        let trimmed = raw.trim();
+        let len = trimmed.chars().count();
+        if len == 0
+            || len > Self::MAX_LEN
+            || trimmed.chars().any(is_forbidden_api_key_name_char)
+            || !trimmed.chars().any(is_visible_api_key_name_char)
+        {
+            return Err(AuthError::InvalidApiKeyName);
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+pub struct ApiKeyToken(pub String);
+
+fn is_visible_api_key_name_char(c: char) -> bool {
+    !c.is_whitespace() && !c.is_control() && !matches!(c, '\u{200C}' | '\u{200D}')
+}
+
+fn is_forbidden_api_key_name_char(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{00AD}'
+                | '\u{061C}'
+                | '\u{180E}'
+                | '\u{200B}'
+                | '\u{200E}'
+                | '\u{200F}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{2060}'..='\u{206F}'
+                | '\u{FEFF}'
+                | '\u{FFF9}'..='\u{FFFB}'
+        )
+}
+
+#[derive(Debug, Clone)]
+pub struct ApiKeyTokenHash(pub String);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApiKeyScope {
+    Read,
+    ReadWrite,
+}
+
+impl ApiKeyScope {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ApiKeyScope::Read => "read",
+            ApiKeyScope::ReadWrite => "read_write",
+        }
+    }
+}
+
+impl FromStr for ApiKeyScope {
+    type Err = AuthError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "read" => Ok(ApiKeyScope::Read),
+            "read_write" => Ok(ApiKeyScope::ReadWrite),
+            _ => Err(AuthError::InvalidApiKeyScope),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ApiKey {
+    pub id: ApiKeyId,
+    pub identity_id: IdentityId,
+    pub identity_security_stamp: SessionSecurityStamp,
+    pub name: ApiKeyName,
+    pub token_hash: ApiKeyTokenHash,
+    pub token_hint: String,
+    pub scope: ApiKeyScope,
+    pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+impl ApiKey {
+    pub fn is_usable_for(&self, identity: &Identity, now: DateTime<Utc>) -> bool {
+        self.revoked_at.is_none()
+            && self.expires_at.is_none_or(|expires_at| now < expires_at)
+            && self.identity_security_stamp == identity.session_security_stamp
+    }
+
+    pub fn ensure_usable_for(
+        &self,
+        identity: &Identity,
+        now: DateTime<Utc>,
+    ) -> Result<(), AuthError> {
+        if self.revoked_at.is_some() {
+            return Err(AuthError::ApiKeyRevoked);
+        }
+        if self.expires_at.is_some_and(|expires_at| now >= expires_at) {
+            return Err(AuthError::ApiKeyExpired);
+        }
+        if self.identity_security_stamp != identity.session_security_stamp {
+            return Err(AuthError::InvalidApiKey);
+        }
+        Ok(())
+    }
+
+    pub fn should_refresh_last_used(&self, now: DateTime<Utc>, threshold: Duration) -> bool {
+        self.last_used_at
+            .is_none_or(|last_used_at| now - last_used_at >= threshold)
+    }
+
+    pub fn record_used(&self, now: DateTime<Utc>) -> Self {
+        Self {
+            last_used_at: Some(now),
+            ..self.clone()
+        }
+    }
+
+    pub fn revoke(&self, now: DateTime<Utc>) -> Self {
+        Self {
+            revoked_at: Some(now),
+            ..self.clone()
+        }
+    }
+}
+
+pub const API_KEY_TOKEN_PREFIX: &str = "calco_pat_";
+
+pub fn create_api_key(
+    identity: &Identity,
+    name: ApiKeyName,
+    scope: ApiKeyScope,
+    expires_at: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> Result<(ApiKeyToken, ApiKey), AuthError> {
+    use rand::RngCore;
+
+    if expires_at.is_some_and(|expires_at| expires_at <= now) {
+        return Err(AuthError::InvalidApiKeyExpiry);
+    }
+
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    let encoded = base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, bytes);
+    let raw_token = format!("{API_KEY_TOKEN_PREFIX}{encoded}");
+    let token_hint = raw_token.chars().take(18).collect();
+    let token_hash = ApiKeyTokenHash(hash_api_key_token(&raw_token));
+
+    let api_key = ApiKey {
+        id: ApiKeyId::new(),
+        identity_id: identity.id,
+        identity_security_stamp: identity.session_security_stamp,
+        name,
+        token_hash,
+        token_hint,
+        scope,
+        created_at: now,
+        last_used_at: None,
+        expires_at,
+        revoked_at: None,
+    };
+
+    Ok((ApiKeyToken(raw_token), api_key))
+}
+
+pub fn hash_api_key_token(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
 pub fn create_session(
     identity: &Identity,
     policy: &SessionPolicy,
@@ -402,6 +606,24 @@ pub enum AuthError {
     UsernameTaken,
     #[error("unauthorized")]
     Unauthorized,
+    #[error("invalid_api_key")]
+    InvalidApiKey,
+    #[error("api_key_expired")]
+    ApiKeyExpired,
+    #[error("api_key_revoked")]
+    ApiKeyRevoked,
+    #[error("api_key_not_found")]
+    ApiKeyNotFound,
+    #[error("api_key_limit_reached")]
+    ApiKeyLimitReached,
+    #[error("invalid_api_key_name")]
+    InvalidApiKeyName,
+    #[error("invalid_api_key_scope")]
+    InvalidApiKeyScope,
+    #[error("invalid_api_key_expiry")]
+    InvalidApiKeyExpiry,
+    #[error("insufficient_scope")]
+    InsufficientScope,
     #[error("database: {0}")]
     Database(#[from] sqlx::Error),
     #[error("credential_processing_failed")]
@@ -433,11 +655,55 @@ pub trait IdentityRepository: Send + Sync {
     async fn exists_admin(&self) -> Result<bool, AuthError>;
 }
 
+/// Auth credential lifecycle persistence exception: the narrow conditional
+/// operations in this and `ApiKeyRepository` keep revocation, heartbeats, and
+/// the active-key cap race-safe. They remain storage operations; business
+/// decisions stay in domain and application code.
 #[async_trait]
 pub trait SessionRepository: Send + Sync {
     async fn create(&self, session: &Session) -> Result<(), AuthError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError>;
     async fn update(&self, session: &Session) -> Result<(), AuthError>;
+    async fn update_last_seen_at_before(
+        &self,
+        id: Uuid,
+        now: DateTime<Utc>,
+        stale_before: DateTime<Utc>,
+    ) -> Result<bool, AuthError>;
+}
+
+/// Auth credential lifecycle persistence exception: these narrow conditional
+/// inserts and updates keep the active-key cap, revocation, and heartbeats
+/// race-safe. They are storage operations, not business-action services.
+#[async_trait]
+pub trait ApiKeyRepository: Send + Sync {
+    async fn create_if_active_count_below(
+        &self,
+        key: &ApiKey,
+        max_active: usize,
+        now: DateTime<Utc>,
+    ) -> Result<bool, AuthError>;
+    async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<ApiKey>, AuthError>;
+    async fn find_by_id(&self, id: ApiKeyId) -> Result<Option<ApiKey>, AuthError>;
+    async fn find_by_id_and_identity_id(
+        &self,
+        id: ApiKeyId,
+        identity_id: IdentityId,
+    ) -> Result<Option<ApiKey>, AuthError>;
+    async fn list_by_identity_id(&self, id: IdentityId) -> Result<Vec<ApiKey>, AuthError>;
+    async fn update_last_used_at_before(
+        &self,
+        id: ApiKeyId,
+        identity_id: IdentityId,
+        now: DateTime<Utc>,
+        stale_before: DateTime<Utc>,
+    ) -> Result<bool, AuthError>;
+    async fn update_revoked_at_if_null(
+        &self,
+        id: ApiKeyId,
+        identity_id: IdentityId,
+        now: DateTime<Utc>,
+    ) -> Result<bool, AuthError>;
 }
 
 #[async_trait]
@@ -535,6 +801,188 @@ mod tests {
         assert!(matches!(
             SessionPolicy::new(Duration::seconds(-1)),
             Err(InvalidSessionLifetime)
+        ));
+    }
+
+    fn api_key_fixture() -> (Identity, ApiKey) {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("api-key-user").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let (_, api_key) = create_api_key(
+            &identity,
+            ApiKeyName::new("Script").unwrap(),
+            ApiKeyScope::Read,
+            None,
+            now,
+        )
+        .unwrap();
+        (identity, api_key)
+    }
+
+    #[test]
+    fn api_key_token_has_prefix_length_hint_and_deterministic_hash() {
+        let (identity, api_key) = api_key_fixture();
+        let now = Utc::now();
+        let (token, key) = create_api_key(
+            &identity,
+            ApiKeyName::new("Script").unwrap(),
+            ApiKeyScope::ReadWrite,
+            None,
+            now,
+        )
+        .unwrap();
+
+        assert!(token.0.starts_with(API_KEY_TOKEN_PREFIX));
+        assert_eq!(token.0.len(), 53);
+        assert_eq!(key.token_hint, token.0.chars().take(18).collect::<String>());
+        assert_eq!(key.token_hash.0, hash_api_key_token(&token.0));
+        assert_eq!(key.token_hash.0, hash_api_key_token(&token.0));
+        assert_eq!(key.token_hash.0.len(), 64);
+        assert_ne!(key.token_hash.0, token.0);
+        assert_ne!(api_key.token_hash.0, key.token_hash.0);
+    }
+
+    #[test]
+    fn api_key_name_is_trimmed_and_bounded() {
+        assert_eq!(ApiKeyName::new("  Script  ").unwrap().as_str(), "Script");
+        assert!(matches!(
+            ApiKeyName::new("   "),
+            Err(AuthError::InvalidApiKeyName)
+        ));
+        assert!(ApiKeyName::new(&"a".repeat(64)).is_ok());
+        assert!(matches!(
+            ApiKeyName::new(&"a".repeat(65)),
+            Err(AuthError::InvalidApiKeyName)
+        ));
+        assert!(matches!(
+            ApiKeyName::new("bad\nname"),
+            Err(AuthError::InvalidApiKeyName)
+        ));
+    }
+
+    #[test]
+    fn api_key_name_rejects_bidi_and_invisible_format_controls() {
+        assert!(ApiKeyName::new("Café 日本語 key").is_ok());
+        assert!(ApiKeyName::new("family 👨\u{200D}👩\u{200D}👧").is_ok());
+        assert!(ApiKeyName::new("हिन्दी\u{200C}key").is_ok());
+
+        for name in [
+            "zero\u{200B}width",
+            "left\u{200E}mark",
+            "right\u{200F}mark",
+            "line\u{2028}separator",
+            "paragraph\u{2029}separator",
+            "embed\u{202A}ding",
+            "override\u{202E}ding",
+            "word\u{2060}joiner",
+            "bom\u{FEFF}mark",
+            "soft\u{00AD}hyphen",
+            "\u{200C}",
+            "\u{200D}",
+            " \u{200C} ",
+        ] {
+            assert!(
+                matches!(ApiKeyName::new(name), Err(AuthError::InvalidApiKeyName)),
+                "expected {name:?} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn api_key_expiry_must_be_in_the_future() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("expiry-user").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let name = || ApiKeyName::new("Script").unwrap();
+
+        assert!(
+            create_api_key(
+                &identity,
+                name(),
+                ApiKeyScope::Read,
+                Some(now + Duration::seconds(1)),
+                now,
+            )
+            .is_ok()
+        );
+        assert!(matches!(
+            create_api_key(&identity, name(), ApiKeyScope::Read, Some(now), now),
+            Err(AuthError::InvalidApiKeyExpiry)
+        ));
+        assert!(matches!(
+            create_api_key(
+                &identity,
+                name(),
+                ApiKeyScope::Read,
+                Some(now - Duration::seconds(1)),
+                now,
+            ),
+            Err(AuthError::InvalidApiKeyExpiry)
+        ));
+        assert!(create_api_key(&identity, name(), ApiKeyScope::Read, None, now).is_ok());
+    }
+
+    #[test]
+    fn api_key_usability_rejects_revoked_expired_and_stamp_mismatch() {
+        let (identity, api_key) = api_key_fixture();
+        let now = Utc::now();
+
+        assert!(api_key.is_usable_for(&identity, now));
+        assert!(api_key.ensure_usable_for(&identity, now).is_ok());
+
+        let revoked = api_key.revoke(now);
+        assert!(!revoked.is_usable_for(&identity, now));
+        assert!(matches!(
+            revoked.ensure_usable_for(&identity, now),
+            Err(AuthError::ApiKeyRevoked)
+        ));
+
+        let expired = ApiKey {
+            expires_at: Some(now - Duration::seconds(1)),
+            ..api_key.clone()
+        };
+        assert!(!expired.is_usable_for(&identity, now));
+        assert!(matches!(
+            expired.ensure_usable_for(&identity, now),
+            Err(AuthError::ApiKeyExpired)
+        ));
+
+        let rotated_identity = identity.disable(now);
+        assert!(!api_key.is_usable_for(&rotated_identity, now));
+        assert!(matches!(
+            api_key.ensure_usable_for(&rotated_identity, now),
+            Err(AuthError::InvalidApiKey)
+        ));
+    }
+
+    #[test]
+    fn api_key_last_used_refresh_respects_the_threshold() {
+        let (_, api_key) = api_key_fixture();
+        let now = Utc::now();
+        let threshold = Duration::seconds(60);
+
+        assert!(api_key.should_refresh_last_used(now, threshold));
+        let recently_used = api_key.record_used(now);
+        assert!(!recently_used.should_refresh_last_used(now + Duration::seconds(30), threshold));
+        assert!(recently_used.should_refresh_last_used(now + Duration::seconds(60), threshold));
+    }
+
+    #[test]
+    fn api_key_scope_parses_known_values_only() {
+        assert_eq!("read".parse::<ApiKeyScope>().unwrap(), ApiKeyScope::Read);
+        assert_eq!(
+            "read_write".parse::<ApiKeyScope>().unwrap(),
+            ApiKeyScope::ReadWrite
+        );
+        assert!(matches!(
+            "admin".parse::<ApiKeyScope>(),
+            Err(AuthError::InvalidApiKeyScope)
         ));
     }
 }

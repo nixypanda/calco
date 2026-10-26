@@ -183,7 +183,7 @@ services.calco.assistant = {
 
 Plaintext `KEY=VALUE` lines passed via systemd `EnvironmentFile`:
 
-```
+```text
 CORS_ALLOWED_ORIGINS=https://calco.example.com
 SESSION_COOKIE_NAME=calco_session
 SESSION_COOKIE_SECURE=true
@@ -192,6 +192,12 @@ SESSION_TTL_SECONDS=604800
 
 `DATABASE_URL`, `APP_HOST`, `APP_PORT` are set by the module itself — do
 not put them in this file.
+
+> **Warning:** `CORS_ALLOWED_ORIGINS` is a credential-minting trust boundary.
+> When it is non-empty, the backend enables credentialed CORS for those origins.
+> Any listed origin can use a signed-in user's session cookie to call the
+> API-key management route and read the raw token from the create response. List
+> only first-party origins you control.
 
 The module reads only the environment variables in `backend/src/config/`; everything there
 has a sane default except `DATABASE_URL` (set by the module).

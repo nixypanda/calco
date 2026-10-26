@@ -77,6 +77,14 @@ type alias BootstrapModel =
     { session : Session, adminExists : Bool }
 
 
+type alias CopyTextRequest =
+    { generation : Int, requestId : Int, text : String }
+
+
+type alias CopyTextResult =
+    { generation : Int, requestId : Int, succeeded : Bool }
+
+
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     let
@@ -119,6 +127,7 @@ type Msg
     | GotPageMsg Page.Msg
     | GotLocalContext RawLocalContext
     | GotBarcodeScannerEvent ScannerEvent
+    | GotCopyTextResult CopyTextResult
     | GotChromeMsg Chrome.Msg
     | GotVersionMsg Version.Msg
 
@@ -199,6 +208,19 @@ update msg model =
         GotBarcodeScannerEvent event ->
             stepPageUpdate
                 (Page.barcodeScannerEventReceived (pageContext model) event model.page)
+                model
+
+        GotCopyTextResult result ->
+            stepPageUpdate
+                (Page.update
+                    (pageContext model)
+                    (Page.CopyTextResult
+                        result.generation
+                        result.requestId
+                        result.succeeded
+                    )
+                    model.page
+                )
                 model
 
         GotPageMsg pageMsg ->
@@ -461,6 +483,15 @@ applyPageOutMsg outMsg model =
         Page.RevokePhotoPreviewUrls urls ->
             ( model, revokePhotoPreviewUrls urls )
 
+        Page.CopyText generation requestId text ->
+            ( model
+            , copyText
+                { generation = generation
+                , requestId = requestId
+                , text = text
+                }
+            )
+
         Page.LoginSucceeded loginSession ->
             let
                 nextSession : Session
@@ -638,6 +669,7 @@ subscriptions _ =
     Sub.batch
         [ localContextReceived GotLocalContext
         , barcodeScannerEvent GotBarcodeScannerEvent
+        , copyTextResult GotCopyTextResult
         , Browser.Events.onResize WindowResized
         , Sub.map GotVersionMsg Version.subscriptions
         ]
@@ -663,6 +695,12 @@ port barcodeScannerEvent : (ScannerEvent -> msg) -> Sub msg
 
 
 port revokePhotoPreviewUrls : List String -> Cmd msg
+
+
+port copyText : CopyTextRequest -> Cmd msg
+
+
+port copyTextResult : (CopyTextResult -> msg) -> Sub msg
 
 
 port persistThemeMode : String -> Cmd msg

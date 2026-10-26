@@ -34,6 +34,13 @@ tests =
                     emptyModel
                     |> resultSummary
                     |> Expect.equal ( Just "Sign in again", SessionExpired )
+        , test "forbidden failures are errors and do not expire the session" <|
+            \_ ->
+                Client.failure config
+                    (Client.BadStatus 403 "insufficient_scope" "Insufficient scope")
+                    emptyModel
+                    |> resultSummary
+                    |> Expect.equal ( Just "Insufficient scope", NoOp )
         ]
 
 

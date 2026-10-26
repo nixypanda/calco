@@ -50,6 +50,18 @@ tests =
             \_ ->
                 Access.resolveRoute admin True GoalSettings
                     |> Expect.equal (Navigate AdminDashboard)
+        , test "API key settings allows authenticated users" <|
+            \_ ->
+                Access.resolveRoute normalUser True SettingsApiKeys
+                    |> Expect.equal (Render SettingsApiKeys)
+        , test "API key settings rejects signed-out users" <|
+            \_ ->
+                Access.resolveRoute Unauthenticated True SettingsApiKeys
+                    |> Expect.equal (Navigate AuthLogin)
+        , test "API key settings rejects admins" <|
+            \_ ->
+                Access.resolveRoute admin True SettingsApiKeys
+                    |> Expect.equal (Navigate AdminDashboard)
         , test "Loading session holds for Root when admin exists" <|
             \_ ->
                 Access.resolveRoute Loading True Root

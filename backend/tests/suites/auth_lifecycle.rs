@@ -1,7 +1,11 @@
 use crate::common::*;
 use axum::http::{Method, StatusCode, header};
+use calco_backend::auth::domain::{SessionRepository, hash_session_token};
+use calco_backend::auth::infrastructure::postgres::PostgresSessionRepository;
+use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 #[sqlx::test]
 async fn session_lifecycle_bootstrap_login_session_logout(pool: PgPool) {
@@ -60,6 +64,97 @@ async fn session_lifecycle_bootstrap_login_session_logout(pool: PgPool) {
     assert_eq!(login_response["identity"]["username"], "admin");
     assert_eq!(login_response["identity"]["role"], "admin");
     assert!(login_response["profile"].is_null());
+}
+
+#[sqlx::test]
+async fn session_heartbeat_after_logout_cannot_restore_the_session(pool: PgPool) {
+    let router = app(pool.clone()).await;
+    let admin_cookie = bootstrap_admin(&router).await;
+    let raw_token = admin_cookie
+        .strip_prefix(&format!("{COOKIE_NAME}="))
+        .expect("session cookie value");
+    let token_hash = hash_session_token(raw_token);
+    let session_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM sessions WHERE session_token_hash = $1")
+            .bind(&token_hash)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    // Age the heartbeat so the stale predicate would match without the
+    // revoked_at guard.
+    let aged_last_seen: chrono::DateTime<Utc> = sqlx::query_scalar(
+        "UPDATE sessions SET last_seen_at = $2 WHERE id = $1 RETURNING last_seen_at",
+    )
+    .bind(session_id)
+    .bind(Utc::now() - Duration::hours(2))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let logout_req = empty_request(Method::POST, "/api/auth/logout", Some(&admin_cookie));
+    let (logout_status, _headers, logout_bytes) = send(&router, logout_req).await;
+    assert_status(logout_status, StatusCode::OK, &logout_bytes);
+
+    let repo = PostgresSessionRepository::new(pool.clone());
+    let updated = repo
+        .update_last_seen_at_before(
+            session_id,
+            Utc::now(),
+            aged_last_seen + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+    assert!(!updated);
+
+    let (last_seen_after, revoked_at): (chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>) =
+        sqlx::query_as("SELECT last_seen_at, revoked_at FROM sessions WHERE id = $1")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(last_seen_after, aged_last_seen);
+    assert!(revoked_at.is_some());
+
+    let session_req = empty_request(Method::GET, "/api/auth/session", Some(&admin_cookie));
+    let (session_status, _headers, session_bytes) = send(&router, session_req).await;
+    assert_status(session_status, StatusCode::UNAUTHORIZED, &session_bytes);
+}
+
+#[sqlx::test]
+async fn session_heartbeat_advances_an_aged_last_seen(pool: PgPool) {
+    let router = app(pool.clone()).await;
+    let admin_cookie = bootstrap_admin(&router).await;
+    let raw_token = admin_cookie
+        .strip_prefix(&format!("{COOKIE_NAME}="))
+        .expect("session cookie value");
+    let token_hash = hash_session_token(raw_token);
+    let session_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM sessions WHERE session_token_hash = $1")
+            .bind(&token_hash)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let aged_last_seen: chrono::DateTime<Utc> = sqlx::query_scalar(
+        "UPDATE sessions SET last_seen_at = $2 WHERE id = $1 RETURNING last_seen_at",
+    )
+    .bind(session_id)
+    .bind(Utc::now() - Duration::hours(2))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let _: Value = get_json(&router, "/api/auth/session", &admin_cookie).await;
+
+    let advanced: chrono::DateTime<Utc> =
+        sqlx::query_scalar("SELECT last_seen_at FROM sessions WHERE id = $1")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(advanced > aged_last_seen);
+    assert!(advanced > Utc::now() - Duration::minutes(1));
 }
 
 #[sqlx::test]

@@ -66,6 +66,25 @@ impl SessionRepository for PostgresSessionRepository {
 
         Ok(())
     }
+
+    async fn update_last_seen_at_before(
+        &self,
+        id: Uuid,
+        now: DateTime<Utc>,
+        stale_before: DateTime<Utc>,
+    ) -> Result<bool, AuthError> {
+        let result = sqlx::query(
+            "UPDATE sessions SET last_seen_at = $2 \
+             WHERE id = $1 AND revoked_at IS NULL AND last_seen_at <= $3",
+        )
+        .bind(id)
+        .bind(now)
+        .bind(stale_before)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
 }
 
 #[derive(sqlx::FromRow)]

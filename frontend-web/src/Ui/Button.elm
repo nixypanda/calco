@@ -7,6 +7,7 @@ module Ui.Button exposing
     , iconButton
     , submittingOrIdle
     , textButton
+    , textButtonWithAttributes
     )
 
 import Element exposing (Device, Element)
@@ -65,6 +66,19 @@ submittingOrIdle isSubmitting =
 
 textButton : Device -> Theme -> ButtonConfig msg -> Element msg
 textButton device theme config =
+    textButtonWithAttributes device theme [] config
+
+
+{-| Same as `textButton`, with caller-supplied attributes on the actual button.
+Useful for an accessible name that needs context the visible label omits.
+-}
+textButtonWithAttributes :
+    Device
+    -> Theme
+    -> List (Element.Attribute msg)
+    -> ButtonConfig msg
+    -> Element msg
+textButtonWithAttributes device theme extraAttrs config =
     let
         isActive : Bool
         isActive =
@@ -258,6 +272,7 @@ textButton device theme config =
                 else
                     []
                )
+            ++ extraAttrs
         )
         { onPress =
             if isActive then

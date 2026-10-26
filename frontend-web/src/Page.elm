@@ -27,6 +27,7 @@ module Page exposing
     )
 
 import Api.Admin
+import Api.ApiKeys
 import Api.Auth
 import Api.Client
 import Api.DiaryPreferences
@@ -70,6 +71,7 @@ import Page.Meal.Edit as MealEdit
 import Page.Meal.List as MealList
 import Page.Meal.Show as MealShow
 import Page.NutritionDetails as NutritionDetails
+import Page.Settings.ApiKeys as SettingsApiKeys
 import Page.Users.BootstrapSetup as BootstrapSetup
 import Page.Users.CreateUser as AdminCreateUser
 import Page.Users.Dashboard as AdminDashboard
@@ -89,7 +91,11 @@ import Ui.Workspace as Workspace
 
 
 type alias Model =
-    { panes : List Pane, waitingForToday : Bool, store : Store }
+    { panes : List Pane
+    , waitingForToday : Bool
+    , store : Store
+    , nextApiKeysGeneration : Int
+    }
 
 
 type Pane
@@ -103,6 +109,7 @@ type Pane
     | NutritionDetailsPane LocalDate NutritionDetails.Model
     | GoalsSettingsPane LocalDate GoalsSettings.Model
     | DiarySettingsPane DiarySettings.Model
+    | ApiKeysPane Int SettingsApiKeys.Model
     | FoodSearchPane FoodSearch.Model
     | FoodDetailPane String FoodShow.Model
     | FoodLogDetailPane String FoodLogEntry.Model
@@ -143,6 +150,7 @@ type OutMsg
     | RequestBarcodeScanStart
     | RequestBarcodeScanStop
     | RevokePhotoPreviewUrls (List String)
+    | CopyText Int Int String
     | LoginSucceeded Auth.LoginSession
     | SetupSucceeded Auth.LoginSession
 
@@ -154,12 +162,20 @@ isLoading model =
 
 loading : Model
 loading =
-    { panes = [], waitingForToday = True, store = Store.empty }
+    { panes = []
+    , waitingForToday = True
+    , store = Store.empty
+    , nextApiKeysGeneration = 0
+    }
 
 
 clearStore : Model -> Model
 clearStore model =
-    { panes = [], waitingForToday = True, store = Store.reset model.store }
+    { model
+        | panes = []
+        , waitingForToday = True
+        , store = Store.reset model.store
+    }
 
 
 paneKeys : Model -> List String
@@ -216,6 +232,9 @@ paneKey pane =
 
         DiarySettingsPane _ ->
             "diary-settings"
+
+        ApiKeysPane _ _ ->
+            "api-keys"
 
         FoodSearchPane _ ->
             "food-search"
@@ -277,18 +296,36 @@ goalsSettingsPaneKey date =
 
 init : InitContext -> ( Model, Cmd Msg, OutMsg )
 init context =
-    initPreserving context { panes = [], waitingForToday = False, store = Store.empty }
+    initPreserving context
+        { panes = []
+        , waitingForToday = False
+        , store = Store.empty
+        , nextApiKeysGeneration = 0
+        }
 
 
 initPreserving : InitContext -> Model -> ( Model, Cmd Msg, OutMsg )
 initPreserving context current =
-    case panesForRoute context current.panes of
+    let
+        generation : Int
+        generation =
+            current.nextApiKeysGeneration + 1
+    in
+    case panesForRoute context generation current.panes of
         Nothing ->
-            ( { current | panes = [], waitingForToday = True }, Cmd.none, NoOutMsg )
+            ( { current
+                | panes = []
+                , waitingForToday = True
+                , nextApiKeysGeneration = generation
+              }
+            , Cmd.none
+            , NoOutMsg
+            )
 
         Just desiredPanes ->
             finishReconcile context
                 current.store
+                generation
                 (reconcile paneKey desiredPaneKey initDesiredPane current.panes desiredPanes)
 
 
@@ -344,9 +381,10 @@ initDesiredPane (DesiredPane _ initialize) =
 finishReconcile :
     InitContext
     -> Store
+    -> Int
     -> ReconcileResult Pane ( Cmd Msg, OutMsg )
     -> ( Model, Cmd Msg, OutMsg )
-finishReconcile context store result =
+finishReconcile context store generation result =
     let
         ( retargetedPanes, retargetCmd ) =
             retargetSearchForRoute context.route result.panes
@@ -363,7 +401,11 @@ finishReconcile context store result =
         ( finalStore, dateCmd ) =
             ensureDateData hydratedPanes nextStore
     in
-    ( { panes = hydratedPanes, waitingForToday = False, store = finalStore }
+    ( { panes = hydratedPanes
+      , waitingForToday = False
+      , store = finalStore
+      , nextApiKeysGeneration = generation
+      }
     , Cmd.batch
         [ result.effects |> List.map Tuple.first |> Cmd.batch, retargetCmd, sharedCmd, dateCmd ]
     , result.effects |> List.map Tuple.second |> List.foldl preferOutMsg NoOutMsg
@@ -751,6 +793,9 @@ needsSessionData pane =
         DiarySettingsPane _ ->
             True
 
+        ApiKeysPane _ _ ->
+            False
+
         FoodSearchPane _ ->
             True
 
@@ -833,8 +878,8 @@ retargetSearch dateParam mealSlot panes =
     ( List.map Tuple.first results, results |> List.map Tuple.second |> Cmd.batch )
 
 
-panesForRoute : InitContext -> List Pane -> Maybe (List DesiredPane)
-panesForRoute context existing =
+panesForRoute : InitContext -> Int -> List Pane -> Maybe (List DesiredPane)
+panesForRoute context generation existing =
     case context.route of
         AuthLogin ->
             Just [ simpleDesired "login" (LoginPane AuthLogin.init) ]
@@ -884,6 +929,9 @@ panesForRoute context existing =
 
         DiarySettings ->
             Just [ diarySettingsDesired context ]
+
+        SettingsApiKeys ->
+            Just [ apiKeysDesired context generation ]
 
         FoodSearch dateParam mealSlot ->
             Just (searchWorkspaceDesired context existing dateParam mealSlot)
@@ -1051,6 +1099,21 @@ diarySettingsDesired context =
         DiarySettingsPane
         applyDiarySettingsOutMsg
         (\_ -> DiarySettings.init)
+
+
+apiKeysDesired : InitContext -> Int -> DesiredPane
+apiKeysDesired context generation =
+    DesiredPane "api-keys"
+        (\_ ->
+            let
+                ( subModel, subOut ) =
+                    SettingsApiKeys.init
+
+                ( cmd, outMsg ) =
+                    applyApiKeysOutMsg context generation subOut
+            in
+            ( ApiKeysPane generation subModel, cmd, outMsg )
+        )
 
 
 searchDesired : InitContext -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
@@ -1335,6 +1398,8 @@ type Msg
     | GotNutritionDetailsMsg NutritionDetails.Msg
     | GotGoalsSettingsMsg GoalsSettings.Msg
     | GotDiarySettingsMsg DiarySettings.Msg
+    | GotApiKeysMsg Int SettingsApiKeys.Msg
+    | CopyTextResult Int Int Bool
     | GotFoodSearchMsg FoodSearch.Msg
     | GotFoodDetailMsg FoodShow.Msg
     | GotFoodLogDetailMsg FoodLogEntry.Msg
@@ -1707,6 +1772,30 @@ updatePane allPanes context msg pane =
                 applyDiarySettingsOutMsg
                 mutation
                 (DiarySettings.update subMsg sub)
+
+        ( GotApiKeysMsg generation subMsg, ApiKeysPane currentGeneration sub ) ->
+            if generation /= currentGeneration then
+                Nothing
+
+            else
+                stepPane context
+                    (ApiKeysPane generation)
+                    (GotApiKeysMsg generation)
+                    (\_ -> applyApiKeysOutMsg context generation)
+                    NoMutation
+                    (SettingsApiKeys.update subMsg sub)
+
+        ( CopyTextResult generation copyId succeeded, ApiKeysPane currentGeneration sub ) ->
+            if generation /= currentGeneration then
+                Nothing
+
+            else
+                stepPane context
+                    (ApiKeysPane generation)
+                    (GotApiKeysMsg generation)
+                    (\_ -> applyApiKeysOutMsg context generation)
+                    NoMutation
+                    (SettingsApiKeys.update (SettingsApiKeys.CopyCompleted copyId succeeded) sub)
 
         ( GotFoodSearchMsg subMsg, FoodSearchPane sub ) ->
             let
@@ -2394,6 +2483,41 @@ applyDiarySettingsOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
+applyApiKeysOutMsg : InitContext -> Int -> SettingsApiKeys.OutMsg -> ( Cmd Msg, OutMsg )
+applyApiKeysOutMsg _ generation outMsg =
+    case outMsg of
+        SettingsApiKeys.NoOp ->
+            ( Cmd.none, NoOutMsg )
+
+        SettingsApiKeys.RequestList ->
+            ( Api.ApiKeys.list
+                (GotApiKeysMsg generation << SettingsApiKeys.ApiKeysLoaded)
+            , NoOutMsg
+            )
+
+        SettingsApiKeys.RequestCreate requestId request ->
+            ( Api.ApiKeys.create request
+                (GotApiKeysMsg generation
+                    << SettingsApiKeys.CreateCompleted requestId
+                )
+            , NoOutMsg
+            )
+
+        SettingsApiKeys.RequestRevoke key ->
+            ( Api.ApiKeys.revoke key.id
+                (GotApiKeysMsg generation
+                    << SettingsApiKeys.RevokeCompleted key
+                )
+            , NoOutMsg
+            )
+
+        SettingsApiKeys.CopyText copyId text ->
+            ( Cmd.none, CopyText generation copyId text )
+
+        SettingsApiKeys.SessionExpired ->
+            ( Cmd.none, SessionExpired )
+
+
 applyGoalsSettingsOutMsg : InitContext -> GoalsSettings.OutMsg -> ( Cmd Msg, OutMsg )
 applyGoalsSettingsOutMsg _ outMsg =
     case outMsg of
@@ -3048,6 +3172,9 @@ paneView env selectedDate pane =
         DiarySettingsPane sub ->
             Element.map GotDiarySettingsMsg (DiarySettings.view env sub)
 
+        ApiKeysPane generation sub ->
+            Element.map (GotApiKeysMsg generation) (SettingsApiKeys.view env sub)
+
         FoodSearchPane sub ->
             Element.map GotFoodSearchMsg (FoodSearch.contentView env sub)
 
@@ -3117,6 +3244,10 @@ paneModalView env pane =
 
         AdminEditUserPane _ sub ->
             AdminEditUser.modalView env sub |> Maybe.map (Element.map GotAdminEditUserMsg)
+
+        ApiKeysPane generation sub ->
+            SettingsApiKeys.modalView env sub
+                |> Maybe.map (Element.map (GotApiKeysMsg generation))
 
         _ ->
             Nothing

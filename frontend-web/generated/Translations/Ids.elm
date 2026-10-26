@@ -9,6 +9,49 @@ type TranslationId
     | TidApiErrorRateLimitedSeconds String
     | TidApiErrorServer
     | TidApiErrorTimeout
+    | TidApiKeysConfirmRevoke
+    | TidApiKeysCopied
+    | TidApiKeysCopy
+    | TidApiKeysCopyAria
+    | TidApiKeysCopyFailed
+    | TidApiKeysCopying
+    | TidApiKeysCreate
+    | TidApiKeysCreateDescription
+    | TidApiKeysCreateTitle
+    | TidApiKeysCreatedOn String
+    | TidApiKeysCreatedTitle
+    | TidApiKeysCreatedWarning
+    | TidApiKeysDescription
+    | TidApiKeysDone
+    | TidApiKeysEmpty
+    | TidApiKeysExpires String
+    | TidApiKeysExpiry
+    | TidApiKeysExpiry30Days
+    | TidApiKeysExpiry365Days
+    | TidApiKeysExpiry90Days
+    | TidApiKeysExpiryNever
+    | TidApiKeysHint String
+    | TidApiKeysLastUsed String
+    | TidApiKeysListTitle
+    | TidApiKeysName
+    | TidApiKeysNameRequired
+    | TidApiKeysNameTooLong
+    | TidApiKeysNeverExpires
+    | TidApiKeysNeverUsed
+    | TidApiKeysRevoke
+    | TidApiKeysRevokeDescription String String
+    | TidApiKeysRevokeNamed String
+    | TidApiKeysRevokeTitle
+    | TidApiKeysRevoking
+    | TidApiKeysScope
+    | TidApiKeysScopeRead
+    | TidApiKeysScopeReadDescription
+    | TidApiKeysScopeReadWrite
+    | TidApiKeysScopeReadWriteDescription
+    | TidApiKeysScopeUnknown
+    | TidApiKeysSecretLabel
+    | TidApiKeysUsage
+    | TidApiKeysUsageExample
     | TidAssistantApplyReplacesForm
     | TidAssistantApplyToForm
     | TidAssistantApplying
@@ -306,6 +349,7 @@ type TranslationId
     | TidMealUnknownFood
     | TidMealUpdate
     | TidNavAdmin
+    | TidNavApiKeys
     | TidNavBack
     | TidNavCalendar
     | TidNavDiary
@@ -407,6 +451,7 @@ type TranslationId
     | TidSetupTitle
     | TidTitleAddToMealSlot String
     | TidTitleAdmin
+    | TidTitleApiKeys
     | TidTitleCalendar
     | TidTitleCreateFood
     | TidTitleCreateMeal

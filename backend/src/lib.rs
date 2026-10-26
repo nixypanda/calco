@@ -101,7 +101,7 @@ fn build_cors_layer(config: &ServerConfig) -> CorsLayer {
         Method::PATCH,
         Method::OPTIONS,
     ];
-    let headers = [header::CONTENT_TYPE, header::ACCEPT];
+    let headers = [header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION];
 
     if config.cors_allowed_origins.is_empty() {
         return CorsLayer::new()

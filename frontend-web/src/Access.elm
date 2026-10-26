@@ -90,6 +90,9 @@ resolveKnownSession session adminExists route =
             DiarySettings ->
                 Render route
 
+            SettingsApiKeys ->
+                Render route
+
             FoodLogEntry _ _ _ ->
                 Render route
 

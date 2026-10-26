@@ -58,6 +58,24 @@ app.ports.revokePhotoPreviewUrls.subscribe((urls) => {
     urls.forEach((url) => URL.revokeObjectURL(url));
 });
 
+app.ports.copyText.subscribe(async (request) => {
+    const result = {
+        generation: request.generation,
+        requestId: request.requestId,
+        succeeded: false,
+    };
+    try {
+        if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+            throw new Error("Clipboard API unavailable");
+        }
+        await navigator.clipboard.writeText(request.text);
+        result.succeeded = true;
+    } catch (_) {
+        // Clipboard access can be blocked; the token remains selectable.
+    }
+    app.ports.copyTextResult.send(result);
+});
+
 // Barcode scanner port wiring.
 const barcodeScanner = createBarcodeScanner({
     videoElementId: "calco-barcode-scanner-video",

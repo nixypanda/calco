@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::auth::interfaces::http::AuthUser;
+use crate::auth::interfaces::http::{ReadUser, WriteUser};
 use crate::nutrition::catalog::application::BarcodeLookupOrigin;
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::module::CatalogModule;
@@ -267,7 +267,7 @@ pub struct CategoryQuery {
 // ─── Handlers ─────────────────────────────────────────────────
 
 async fn search_products_handler(
-    auth: AuthUser,
+    auth: ReadUser,
     State(state): State<CatalogModule>,
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
@@ -287,7 +287,7 @@ async fn search_products_handler(
 }
 
 async fn list_categories_handler(
-    auth: AuthUser,
+    auth: ReadUser,
     State(state): State<CatalogModule>,
     Query(query): Query<CategoryQuery>,
 ) -> impl IntoResponse {
@@ -309,7 +309,7 @@ async fn list_categories_handler(
 }
 
 async fn list_custom_foods_handler(
-    auth: AuthUser,
+    auth: ReadUser,
     State(state): State<CatalogModule>,
 ) -> impl IntoResponse {
     let products = match state.services.list_custom_foods(auth.0.id).await {
@@ -324,7 +324,7 @@ async fn list_custom_foods_handler(
 }
 
 async fn barcode_lookup_handler(
-    auth: AuthUser,
+    auth: ReadUser,
     State(state): State<CatalogModule>,
     Path(barcode): Path<String>,
 ) -> impl IntoResponse {
@@ -347,7 +347,7 @@ async fn barcode_lookup_handler(
 }
 
 async fn product_detail_handler(
-    auth: AuthUser,
+    auth: ReadUser,
     State(state): State<CatalogModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
@@ -363,7 +363,7 @@ async fn product_detail_handler(
 }
 
 async fn create_custom_food_handler(
-    auth: AuthUser,
+    auth: WriteUser,
     State(state): State<CatalogModule>,
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
@@ -379,7 +379,7 @@ async fn create_custom_food_handler(
 }
 
 async fn update_custom_food_handler(
-    auth: AuthUser,
+    auth: WriteUser,
     State(state): State<CatalogModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<CreateCustomFoodRequest>,
@@ -400,7 +400,7 @@ async fn update_custom_food_handler(
 }
 
 async fn delete_custom_food_handler(
-    auth: AuthUser,
+    auth: WriteUser,
     State(state): State<CatalogModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
@@ -415,7 +415,7 @@ async fn delete_custom_food_handler(
 }
 
 async fn list_nutrients_handler(
-    _auth: AuthUser,
+    _auth: ReadUser,
     State(state): State<CatalogModule>,
 ) -> impl IntoResponse {
     match state.services.list_nutrients().await {
@@ -429,7 +429,7 @@ async fn list_nutrients_handler(
 }
 
 async fn get_nutrient_handler(
-    _auth: AuthUser,
+    _auth: ReadUser,
     State(state): State<CatalogModule>,
     Path(code): Path<String>,
 ) -> impl IntoResponse {
@@ -443,7 +443,7 @@ async fn get_nutrient_handler(
 }
 
 async fn list_units_handler(
-    _auth: AuthUser,
+    _auth: ReadUser,
     State(state): State<CatalogModule>,
 ) -> impl IntoResponse {
     match state.services.list_units().await {

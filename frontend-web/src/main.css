@@ -216,6 +216,25 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* A one-time secret is read-only, focusable, and selectable so clipboard
+   failure never traps the value in a non-selectable block. */
+.ui-secret-token {
+  display: block;
+  width: 100%;
+  min-height: 3em;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ui-text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  resize: none;
+  cursor: text;
+}
+
 /* Toggle switch
    The theme switch needs a real thumb element so CSS can animate translation smoothly. */
 .ui-toggle-track {

@@ -211,10 +211,84 @@ pub async fn delete_no_content(router: &Router, uri: &str, cookie: &str) {
 pub async fn get_status(router: &Router, uri: &str, cookie: &str) -> (StatusCode, Value) {
     let req = empty_request(Method::GET, uri, Some(cookie));
     let (status, _h, bytes) = send(router, req).await;
+    body_or_null(status, &bytes)
+}
+
+pub fn bearer_json_request(
+    method: Method,
+    uri: &str,
+    token: &str,
+    body: &impl Serialize,
+) -> Request<Body> {
+    let bytes = serde_json::to_vec(body).expect("serialize body");
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::from(bytes))
+        .expect("build bearer json request")
+}
+
+pub fn bearer_empty_request(method: Method, uri: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .expect("build bearer request")
+}
+
+pub async fn get_json_bearer<T: DeserializeOwned>(router: &Router, uri: &str, token: &str) -> T {
+    let req = bearer_empty_request(Method::GET, uri, token);
+    let (status, _h, bytes) = send(router, req).await;
+    assert_status(status, StatusCode::OK, &bytes);
+    parse_json(&bytes)
+}
+
+pub async fn post_json_bearer<T: DeserializeOwned>(
+    router: &Router,
+    uri: &str,
+    token: &str,
+    body: &impl Serialize,
+    expected: StatusCode,
+) -> T {
+    let req = bearer_json_request(Method::POST, uri, token, body);
+    let (status, _h, bytes) = send(router, req).await;
+    assert_status(status, expected, &bytes);
+    parse_json(&bytes)
+}
+
+pub async fn put_json_bearer<T: DeserializeOwned>(
+    router: &Router,
+    uri: &str,
+    token: &str,
+    body: &impl Serialize,
+    expected: StatusCode,
+) -> T {
+    let req = bearer_json_request(Method::PUT, uri, token, body);
+    let (status, _h, bytes) = send(router, req).await;
+    assert_status(status, expected, &bytes);
+    parse_json(&bytes)
+}
+
+pub async fn delete_bearer_no_content(router: &Router, uri: &str, token: &str) {
+    let req = bearer_empty_request(Method::DELETE, uri, token);
+    let (status, _h, bytes) = send(router, req).await;
+    assert_status(status, StatusCode::NO_CONTENT, &bytes);
+}
+
+pub async fn get_status_bearer(router: &Router, uri: &str, token: &str) -> (StatusCode, Value) {
+    let req = bearer_empty_request(Method::GET, uri, token);
+    let (status, _h, bytes) = send(router, req).await;
+    body_or_null(status, &bytes)
+}
+
+fn body_or_null(status: StatusCode, bytes: &Bytes) -> (StatusCode, Value) {
     let body: Value = if bytes.is_empty() {
         Value::Null
     } else {
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+        serde_json::from_slice(bytes).unwrap_or(Value::Null)
     };
     (status, body)
 }

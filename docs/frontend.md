@@ -391,6 +391,7 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /home?date=YYYY-MM-DD
 /settings/goals
 /settings/diary
+/settings/api-keys
 /logs/:id
 /search
 /search?date=YYYY-MM-DD
@@ -438,6 +439,7 @@ API modules live in `frontend-web/src/Api/`:
 
 - `Auth.elm`
 - `Admin.elm`
+- `ApiKeys.elm`
 - `Foods.elm`
 - `DiaryPreferences.elm`
 - `Goals.elm`
@@ -481,6 +483,8 @@ owns the JavaScript ports for:
 - persisted theme preference.
 - requested page reloads.
 - camera barcode scanning through `barcodeScanner.js`.
+- clipboard copy request/result ports for API-key secrets through
+  `navigator.clipboard.writeText`.
 
 The scanner uses ZXing for EAN/UPC detection and stops camera tracks when the
 scan completes or is cancelled.
@@ -537,6 +541,42 @@ history/trends screen is out of scope.
 
 `Page.Goals.Settings` lets an authenticated user view and save calorie and
 macro targets for the current local day.
+
+### API Keys
+
+`Page.Settings.ApiKeys` renders `/settings/api-keys` for normal users. Anonymous
+visitors go to login; admin identities go to the admin dashboard. `View.Chrome`
+supplies the **API keys** screen title. The profile-menu **API keys** entry is
+shown to normal users only; admin sessions do not see it.
+
+The page provides:
+
+- an empty state with an explanation and a create action.
+- key rows showing name, token hint, scope, created date, last-used date (or
+  "Never used"), expiry date (or "Never expires"), and a revoke action.
+  Timestamps are date-only values derived from the UTC date portion of the API
+  timestamps; times of day are not displayed. Expired keys are not marked with a
+  separate expired badge; only the expiry date is shown.
+- a create dialog with name, `read` or `read_write` scope, and an expiry choice
+  that defaults to 90 days.
+- a one-time created dialog with the raw token in a readonly, focusable textarea
+  in monospace, a Copy action, and an `Authorization: Bearer` usage example.
+- copy feedback: "Copying…" while pending, "Copied" on success, or a
+  "Copy failed — select the key manually." message. Both Copy and Done are
+  disabled while a copy is pending.
+- revoke confirmation through `View.DeleteModal.confirmModalView`.
+- loading, load-failure retry, create/revoke error, and session-expiry states.
+
+Closing the created dialog removes the raw token from page state. If clipboard
+permission fails, the token remains selectable and the page does not crash. The
+list is full-width on mobile and does not add a bottom-navigation item.
+
+`Data.ApiKey` owns key metadata types, creation payloads, and decoding.
+`Api.ApiKeys` owns list, create, and revoke requests through `Api.Client`.
+Copying is a request/result port pair: the page returns `CopyText`, `Main` sends
+a `copyText` request (generation, request id, text), `index.js` uses
+`navigator.clipboard.writeText`, and `Main` subscribes to `copyTextResult` before
+forwarding `CopyTextResult` back to the active pane.
 
 ### Foods
 

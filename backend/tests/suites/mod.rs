@@ -1,4 +1,5 @@
 mod ad_hoc_log_lifecycle;
+mod api_key_lifecycle;
 mod assistant_http;
 mod auth_lifecycle;
 mod cross_entity;

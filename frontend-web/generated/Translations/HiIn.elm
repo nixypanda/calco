@@ -27,6 +27,135 @@ hiInTranslations tid =
         TidApiErrorTimeout ->
             "सर्वर ने उत्तर देने में बहुत समय लिया। दोबारा प्रयास करें।"
 
+        TidApiKeysConfirmRevoke ->
+            "कुंजी रद्द करें"
+
+        TidApiKeysCopied ->
+            "कॉपी हो गई"
+
+        TidApiKeysCopy ->
+            "कॉपी करें"
+
+        TidApiKeysCopyAria ->
+            "API कुंजी को क्लिपबोर्ड में कॉपी करें"
+
+        TidApiKeysCopyFailed ->
+            "कॉपी नहीं हो सकी — कुंजी को मैन्युअल रूप से चुनें।"
+
+        TidApiKeysCopying ->
+            "कॉपी की जा रही है…"
+
+        TidApiKeysCreate ->
+            "API कुंजी बनाएँ"
+
+        TidApiKeysCreateDescription ->
+            "कुंजी को ऐसा नाम दें जिससे आप उसे बाद में पहचान सकें।"
+
+        TidApiKeysCreateTitle ->
+            "API कुंजी बनाएँ"
+
+        TidApiKeysCreatedOn hole0 ->
+            hole0 ++ " को बनाया गया"
+
+        TidApiKeysCreatedTitle ->
+            "API कुंजी बन गई"
+
+        TidApiKeysCreatedWarning ->
+            "इस कुंजी को अभी कॉपी करें। यह दोबारा नहीं दिखाई जाएगी।"
+
+        TidApiKeysDescription ->
+            "API कुंजियाँ स्क्रिप्ट और टूल को आपका डेटा एक्सेस करने देती हैं। इन्हें पासवर्ड की तरह संभालें।"
+
+        TidApiKeysDone ->
+            "हो गया"
+
+        TidApiKeysEmpty ->
+            "आपके पास अभी कोई API कुंजी नहीं है।"
+
+        TidApiKeysExpires hole0 ->
+            hole0 ++ " को समाप्त होगी"
+
+        TidApiKeysExpiry ->
+            "समाप्ति"
+
+        TidApiKeysExpiry30Days ->
+            "30 दिन"
+
+        TidApiKeysExpiry365Days ->
+            "1 वर्ष"
+
+        TidApiKeysExpiry90Days ->
+            "90 दिन"
+
+        TidApiKeysExpiryNever ->
+            "कभी नहीं"
+
+        TidApiKeysHint hole0 ->
+            "कुंजी संकेत: " ++ hole0
+
+        TidApiKeysLastUsed hole0 ->
+            "अंतिम बार " ++ hole0 ++ " को उपयोग"
+
+        TidApiKeysListTitle ->
+            "आपकी API कुंजियाँ"
+
+        TidApiKeysName ->
+            "नाम"
+
+        TidApiKeysNameRequired ->
+            "नाम आवश्यक है।"
+
+        TidApiKeysNameTooLong ->
+            "नाम 64 वर्णों या उससे कम होना चाहिए।"
+
+        TidApiKeysNeverExpires ->
+            "कभी समाप्त नहीं होगी"
+
+        TidApiKeysNeverUsed ->
+            "कभी उपयोग नहीं हुई"
+
+        TidApiKeysRevoke ->
+            "रद्द करें"
+
+        TidApiKeysRevokeDescription hole0 hole1 ->
+            hole0 ++ " (" ++ hole1 ++ ") का उपयोग करने वाली हर चीज़ तुरंत काम करना बंद कर देगी।"
+
+        TidApiKeysRevokeNamed hole0 ->
+            hole0 ++ " रद्द करें"
+
+        TidApiKeysRevokeTitle ->
+            "API कुंजी रद्द करें?"
+
+        TidApiKeysRevoking ->
+            "रद्द की जा रही है..."
+
+        TidApiKeysScope ->
+            "दायरा"
+
+        TidApiKeysScopeRead ->
+            "केवल पढ़ें"
+
+        TidApiKeysScopeReadDescription ->
+            "आपकी डायरी, खाद्य पदार्थ, भोजन, लक्ष्य और प्राथमिकताएँ पढ़ सकती है।"
+
+        TidApiKeysScopeReadWrite ->
+            "पढ़ें और लिखें"
+
+        TidApiKeysScopeReadWriteDescription ->
+            "आपकी डायरी, खाद्य पदार्थ, भोजन, लक्ष्य और प्राथमिकताएँ पढ़ और बदल सकती है।"
+
+        TidApiKeysScopeUnknown ->
+            "अज्ञात दायरा"
+
+        TidApiKeysSecretLabel ->
+            "API कुंजी गोपनीय मान"
+
+        TidApiKeysUsage ->
+            "इसे Authorization हेडर में भेजें:"
+
+        TidApiKeysUsageExample ->
+            "Authorization: Bearer <your API key>"
+
         TidAssistantApplyReplacesForm ->
             "इस ड्राफ़्ट को लागू करने से फ़ॉर्म में पहले से मौजूद मान बदल जाएँगे।"
 
@@ -918,6 +1047,9 @@ hiInTranslations tid =
         TidNavAdmin ->
             "एडमिन"
 
+        TidNavApiKeys ->
+            "API कुंजियाँ"
+
         TidNavBack ->
             "वापस"
 
@@ -1220,6 +1352,9 @@ hiInTranslations tid =
 
         TidTitleAdmin ->
             "एडमिन"
+
+        TidTitleApiKeys ->
+            "API कुंजियाँ"
 
         TidTitleCalendar ->
             "कैलेंडर"

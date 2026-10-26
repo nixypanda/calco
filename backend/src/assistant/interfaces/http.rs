@@ -21,7 +21,7 @@ use crate::assistant::domain::{
     FoodDraftPurpose, FoodDraftTurn, SuggestedLog,
 };
 use crate::assistant::infrastructure::AdmissionRejection;
-use crate::auth::interfaces::http::AuthUser;
+use crate::auth::interfaces::http::SessionUser;
 
 const MAX_REQUEST_BYTES: usize = 41 * 1024 * 1024;
 const MAX_CONVERSATION_FIELD_BYTES: usize = 92 * 1024;
@@ -168,7 +168,7 @@ struct ErrorBody {
 }
 
 async fn status_handler(
-    _auth: AuthUser,
+    _user: SessionUser,
     State(components): State<AssistantComponents>,
 ) -> Json<AssistantStatusResponse> {
     Json(AssistantStatusResponse {
@@ -178,15 +178,15 @@ async fn status_handler(
 }
 
 async fn draft_handler(
-    AuthUser(user): AuthUser,
+    user: SessionUser,
     State(components): State<AssistantComponents>,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> Response {
     let started = Instant::now();
-    let result = draft(components, user.id, multipart).await;
+    let result = draft(components, user.profile.id, multipart).await;
     if let Some(reason) = result.rejection_reason {
         tracing::warn!(
-            user_id = %user.id,
+            user_id = %user.profile.id,
             latency_ms = started.elapsed().as_millis() as u64,
             outcome = result.outcome,
             reason,
@@ -194,7 +194,7 @@ async fn draft_handler(
         );
     } else {
         tracing::info!(
-            user_id = %user.id,
+            user_id = %user.profile.id,
             latency_ms = started.elapsed().as_millis() as u64,
             outcome = result.outcome,
             input_tokens = result.usage.and_then(|value| value.input_tokens),

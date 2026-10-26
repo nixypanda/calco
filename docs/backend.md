@@ -9,8 +9,12 @@ backend/src/
   lib.rs                 # AppState, build_app_state, build_router
   auth/
     domain.rs
-    application.rs
-    infrastructure/postgres.rs
+    application/
+      api_key.rs
+      ...
+    infrastructure/postgres/
+      api_key_repository.rs
+      ...
     interfaces/http.rs
   import/
     domain.rs
@@ -47,7 +51,10 @@ backend/src/
       food_log.rs
 ```
 
-`AppState` is the app-wide composition root and lives in `lib.rs`. The `AuthUser` extractor lives in `auth/interfaces/http.rs` and is used by nutrition handlers — auth is a foundational dependency of nutrition, not the other way around.
+`AppState` is the app-wide composition root and lives in `lib.rs`. The
+`ReadUser` and `WriteUser` extractors live in `auth/interfaces/http.rs` and are
+used by nutrition handlers — auth is a foundational dependency of nutrition, not
+the other way around.
 
 ## DDD Decisions
 
@@ -129,6 +136,15 @@ mark_complete(id)
 
 If the method name says what happened in the business, it belongs in domain or application code. If the method name says how to persist or query already-decided state, it can belong in the repository.
 
+The auth credential repositories are a narrowly scoped exception for atomic
+credential lifecycle operations. `ApiKeyRepository::create_if_active_count_below`,
+`ApiKeyRepository::update_last_used_at_before`,
+`ApiKeyRepository::update_revoked_at_if_null`, and
+`SessionRepository::update_last_seen_at_before` are storage-shaped conditional
+inserts and updates that keep the 10-key cap, revocation, and heartbeats
+race-safe. They remain persistence operations, not business-action services, and
+must not be used as precedent for normal repositories.
+
 The import repository is an explicit exception for now because imports are primarily an infrastructure and data-ingestion workflow. Do not use import repository patterns as precedent for normal domain repositories.
 
 ## API Design Notes
@@ -146,9 +162,9 @@ These notes capture endpoint choices surfaced during feature mapping.
 - Log history uses `GET /logs?log_date=YYYY-MM-DD` for a single-day view. Do not
   add a separate `GET /logs/day/{date}` endpoint.
 - Nutrition summaries use
-  `GET /summary?from=YYYY-MM-DD&to=YYYY-MM-DD&codes=...`. Use the same date for
-  `from` and `to` for daily totals. Omit `codes` to return all tracked
-  nutrients.
+  `GET /logs/summary?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD`. Use the same date
+  for both parameters for daily totals. The response includes energy and macro
+  totals per day.
 - Goal targets use `GET /goal?date=YYYY-MM-DD` to resolve the effective targets
   for a selected day and `PUT /goal` to create or overwrite the current day's
   saved targets.
@@ -156,7 +172,7 @@ These notes capture endpoint choices surfaced during feature mapping.
   `PUT /diary-preferences` to read or replace a user's enabled meal slots.
 - Meals use aggregate-shaped endpoints: `POST /meals`, `GET /meals`,
   `GET /meals/{id}`, `PUT /meals/{id}`, `DELETE /meals/{id}`, and
-  `GET /meals/{id}/nutrients?quantity=&unit=`.
+  `GET /meals/{id}/nutrients?amount=&unit=`.
 - Food logs accept `item.type` values of `product` and `meal`.
 - Import APIs are admin-only and include staging endpoints for foods, nutrients,
   and servings.
@@ -190,7 +206,7 @@ These notes capture endpoint choices surfaced during feature mapping.
 
 Current aggregate roots:
 
-- `Identity`, `UserProfile`, and `Session` for auth.
+- `Identity`, `UserProfile`, `Session`, and `ApiKey` for auth.
 - `Product` for catalog foods.
 - `FoodLog` for logged entries and nutrient snapshots.
 - `Meal` for reusable user-defined meals.
@@ -227,13 +243,203 @@ Consequences:
 
 `Identity` is for authentication. `UserProfile` is for application data ownership.
 
-Normal food-tracking data is keyed by `user_profiles.id`, not `identities.id`. Admin identities exist for account recovery and import operations and do not satisfy normal user extractors.
+Normal food-tracking data is keyed by `user_profiles.id`, not `identities.id`.
+Admin identities exist for account recovery and import operations and do not
+satisfy normal user extractors.
+
+Personal API keys belong to a normal user identity, store a snapshot of its
+security stamp, and resolve to the same `UserProfile` as a browser session.
+Admin identities cannot create or use them. Key authentication is never an
+alternative path to admin or import authorization.
 
 ### Imports As Anti-Corruption Layer
 
 External datasets are converted into a normalized staging format before they reach the catalog. The import module validates rows, records row-level errors, and commits staged rows into catalog tables.
 
 CLI scripts are the operational interface for imports. Browser import UI is intentionally out of scope.
+
+## Personal API Keys
+
+Personal API keys let a signed-in user call normal user-data routes with
+`Authorization: Bearer` instead of a browser session cookie. Keys belong to an
+`Identity`, authorize as a normal user, and resolve to that identity's
+`UserProfile`. Existing authorization and ownership checks remain the source of
+truth.
+
+See [api-access.md](api-access.md) for the user-facing workflow and examples.
+
+### Token Model
+
+- Token format is `calco_pat_` followed by 32 random bytes encoded as
+  base64url without padding.
+- Only the SHA-256 hex hash is stored in `api_keys.token_hash`. The unique
+  constraint provides the lookup index.
+- `api_keys.token_hint` stores the first 18 characters for display.
+- The raw token is returned only from the create endpoint with
+  `Cache-Control: no-store`. It is never stored, logged, or accepted in a URL.
+- SHA-256 is used instead of a password hash because the token is
+  machine-generated with 256 bits of entropy and is not user-chosen.
+
+### Scopes And Extractors
+
+| Extractor | Authentication | Key scope | Use |
+| --- | --- | --- | --- |
+| `SessionUser` | Browser session cookie only | Not applicable | API-key management and assistant routes |
+| `ReadUser` | Bearer key or browser session | `read` or `read_write` for keys | Read routes |
+| `WriteUser` | Bearer key or browser session | `read_write` for keys | Mutating user-data routes |
+| `AuthAdmin` | Admin session cookie only | Not applicable | Admin and import routes |
+| `RawSessionToken` | Session cookie only | Not applicable | Session and logout routes |
+
+`ReadUser` and `WriteUser` resolve authentication in this order:
+
+1. If an `Authorization` header is present, require a valid `Bearer <token>`
+   form. Authenticate through `ApiKeyService`. Do not fall back to a cookie.
+   Require a normal user role, an active identity, and a profile. Enforce the
+   scope shown above.
+2. Otherwise, use the existing browser session path.
+
+An invalid bearer key returns `401 invalid_api_key`. A valid key with
+insufficient scope returns `403 insufficient_scope`. `SessionUser` always uses
+the browser session path and ignores `Authorization`; API keys cannot
+authenticate key-management or assistant routes. `AuthAdmin` remains cookie-only
+and likewise ignores `Authorization`.
+
+### Route Scope Mapping
+
+Read routes use `ReadUser`:
+
+- Catalog: `GET /foods/search`, `GET /foods/categories`,
+  `GET /foods/barcode/{barcode}`, `GET /foods/{id}`, `GET /foods/custom`,
+  `GET /nutrients`, `GET /nutrients/{code}`, `GET /units`.
+- Logs: `POST /logs/last-used`; `GET /logs/recent-items`,
+  `GET /logs/latest-slots`, `GET /logs/summary`, `GET /logs/{id}`,
+  `GET /logs`.
+- Nutrition details: `GET /nutrition/details`.
+- Meals: `GET /meals`, `GET /meals/{id}`, `GET /meals/{id}/nutrients`.
+- Goals: `GET /goal`.
+- Diary preferences: `GET /diary-preferences`.
+
+Write routes use `WriteUser`:
+
+- Catalog: `POST /foods/custom`, `PUT /foods/custom/{id}`,
+  `DELETE /foods/custom/{id}`.
+- Logs: `POST /logs`, `POST /logs/ad-hoc`, `POST /logs/batch`,
+  `PUT /logs/{id}`, `DELETE /logs/{id}`.
+- Meals: `POST /meals`, `PUT /meals/{id}`, `DELETE /meals/{id}`.
+- Goals: `PUT /goal`.
+- Diary preferences: `PUT /diary-preferences`.
+
+`POST /logs/last-used` is read-scoped even though it uses POST because it only
+returns prefill data. Assistant routes remain `SessionUser` in v1. Admin and
+import routes remain `AuthAdmin`, so no API key can use them.
+
+`GET /foods/barcode/{barcode}` can persist an Open Food Facts product on a cache
+miss. This existing read-path side effect is allowed for `read` keys.
+
+### Management Routes
+
+All three routes use `SessionUser`:
+
+```text
+GET    /auth/api-keys
+POST   /auth/api-keys
+DELETE /auth/api-keys/{id}
+```
+
+Create request fields:
+
+- `name`: trimmed, 1 to 64 characters. Names must contain visible text and
+  reject control and invisible formatting characters, including bidi controls,
+  zero-width space, line/paragraph separators, BOM, and soft hyphen. ZWNJ and
+  ZWJ are allowed inside normal text and emoji, but whitespace-only or
+  invisible-only names are rejected.
+- `scope`: optional `read` or `read_write`; defaults to `read`.
+- `expires_in_days`: optional integer from 1 to 3650. Omission means the key
+  never expires; the API does not apply the web UI's 90-day default.
+
+Responses:
+
+- Create returns `201` with the created key metadata and the raw `token`, plus
+  `Cache-Control: no-store`.
+- List returns metadata only: id, name, token hint, scope, created time, last
+  used time, and expiry time.
+- Delete returns `204`. Revocation is idempotent.
+- Token hashes are never exposed.
+
+`ApiKeyService::list` returns non-revoked keys that match the identity's current
+security stamp, newest first. Expired keys are still returned; the web UI
+displays their `expires_at` date but does not currently show a separate expired
+badge.
+
+### Limits And Lifecycle
+
+- A user may have at most 10 active keys. Active means not revoked, not expired,
+  and matching the current security stamp.
+- Optional expiry is stored as `expires_at`. An expired key fails
+  authentication.
+- Revocation marks `revoked_at` immediately; there is no rotation endpoint.
+  Create a replacement and revoke the old key.
+- Admin password resets rotate the identity security stamp, invalidating all
+  existing keys. Self-service password change is planned, not implemented.
+- Disabling an identity rotates the security stamp and invalidates keys.
+  Re-enabling does not restore old keys because the stamp is not reset back.
+- `last_used_at` is refreshed with a conditional atomic update at most once per
+  60 seconds. A failed metadata write is ignored and does not fail
+  authentication, so the timestamp can remain stale.
+
+### Persistence
+
+The `api_keys` table stores:
+
+- `id`, `identity_id` (referencing `identities`), and a snapshot of
+  `identity_security_stamp`.
+- `name`, `token_hash`, `token_hint`, and `scope`.
+- `created_at`, `last_used_at`, `expires_at`, and `revoked_at`.
+
+Constraints enforce a unique token hash, `scope IN ('read', 'read_write')`, a
+name length from 1 to 64 characters, and `expires_at > created_at` when an expiry
+is present. `identity_id` is indexed; `token_hash` relies on its unique
+constraint. Raw tokens are never stored.
+
+### Error Codes
+
+| Status | Code | When |
+| --- | --- | --- |
+| `401` | `invalid_api_key` | Bearer token is malformed, missing a matching key, expired, revoked, or invalidated by a security-stamp change. |
+| `403` | `insufficient_scope` | Valid key scope does not permit the route. |
+| `404` | `api_key_not_found` | Key-management route referenced a key that is absent or owned by another identity. |
+| `409` | `api_key_limit_reached` | The identity already has 10 active keys. |
+| `400` | `invalid_api_key_name` | Name is empty, whitespace-only/invisible-only, longer than 64 characters, or contains a forbidden control/invisible formatting character. |
+| `400` | `invalid_api_key_scope` | Scope is not `read` or `read_write`. |
+| `400` | `invalid_api_key_expiry` | `expires_in_days` is outside 1 to 3650. |
+
+Expired, revoked, and security-stamp-invalidated keys intentionally collapse to
+the generic `401 invalid_api_key` response at the HTTP boundary. On
+browser-session-only routes (key management, assistant, admin, and import), an
+`Authorization` header is ignored; a bearer-only request fails with the session
+rejection, normally `401 unauthorized`, not `invalid_api_key`.
+
+### Security Behavior
+
+- Key authentication requires a normal, active user identity and an existing
+  profile. Admin identities and missing profiles fail closed.
+- On `ReadUser`/`WriteUser` user-data routes, a malformed `Authorization` header
+  is rejected and CalCo does not fall back to a cookie. Key-management,
+  assistant, admin, and import routes ignore `Authorization` and use their
+  session/cookie authentication.
+- Keys remain subject to normal ownership checks, so cross-user access fails.
+- API keys cannot manage keys, use admin or import routes, or use assistant
+  routes.
+- `AUTHORIZATION` is included in the allowed CORS headers. This permits trusted
+  tools to send bearer tokens; it does not make embedded browser secrets safe.
+- Raw tokens are never logged or returned outside the create response.
+
+> **Warning:** `CORS_ALLOWED_ORIGINS` is a credential-minting trust boundary.
+> When it is non-empty, the backend enables credentialed CORS for exactly those
+> origins. Any listed origin can use a signed-in user's session cookie to call
+> the cookie-authenticated key-management route and read the raw token from the
+> create response. List only first-party origins you control; never add
+> third-party or untrusted origins.
 
 ## HTTP Routes
 
@@ -254,6 +460,14 @@ POST /auth/bootstrap/admin
 POST /auth/login
 GET  /auth/session
 POST /auth/logout
+```
+
+Personal API key management (browser session only):
+
+```text
+GET    /auth/api-keys
+POST   /auth/api-keys
+DELETE /auth/api-keys/{id}
 ```
 
 Admin user management:
@@ -279,6 +493,7 @@ Profile read/update endpoints are intentionally out of scope.
 
 ```text
 GET    /foods/search?q=
+GET    /foods/categories
 GET    /foods/barcode/{barcode}
 GET    /foods/{id}
 GET    /foods/custom
@@ -290,7 +505,7 @@ GET    /nutrients/{code}
 GET    /units
 ```
 
-Food detail includes product nutrients and servings. There are no separate public nutrient/serving detail endpoints.
+Food detail includes product nutrients and servings. There are no separate public nutrient/serving detail endpoints. Catalog reads use `ReadUser`; custom-food writes use `WriteUser`.
 
 `GET /foods/barcode/{barcode}` trims the path value and uses local-first lookup.
 Locally cached values are returned without an external request. Only an
@@ -333,6 +548,7 @@ Barcode-specific failures use the normal error envelope:
 
 ```text
 POST   /logs
+POST   /logs/ad-hoc
 POST   /logs/batch
 POST   /logs/last-used
 GET    /logs/recent-items?from_date=&to_date=&meal_slot=
@@ -341,10 +557,11 @@ GET    /logs/{id}
 GET    /logs?log_date=YYYY-MM-DD
 PUT    /logs/{id}
 DELETE /logs/{id}
-GET    /summary?from=YYYY-MM-DD&to=YYYY-MM-DD&codes=...
+GET    /logs/summary?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
 ```
 
-Use the same date for `from` and `to` for a single-day view.
+Use the same date for `from` and `to` for a single-day view. Log reads and
+`POST /logs/last-used` use `ReadUser`; log mutations use `WriteUser`.
 
 `GET /logs/recent-items` dedups logs to one entry per item and orders both the
 items and each item's `top_quantities` by time-decayed usage frequency. Log age
@@ -359,6 +576,15 @@ item.type = product
 item.type = meal
 ```
 
+### Nutrition Details
+
+```text
+GET /nutrition/details?date=YYYY-MM-DD
+```
+
+Returns per-nutrient known amounts, reference guidance, item counts, coverage,
+and status for the requested day. It uses `ReadUser`.
+
 ### Meals
 
 ```text
@@ -367,10 +593,11 @@ GET    /meals
 GET    /meals/{id}
 PUT    /meals/{id}
 DELETE /meals/{id}
-GET    /meals/{id}/nutrients?quantity=&unit=
+GET    /meals/{id}/nutrients?amount=&unit=
 ```
 
-Meal requests are aggregate-shaped. There are no standalone meal-component mutation routes.
+Meal requests are aggregate-shaped. There are no standalone meal-component
+mutation routes. Meal reads use `ReadUser`; meal mutations use `WriteUser`.
 
 ### Goals
 
@@ -379,7 +606,8 @@ GET /goal?date=YYYY-MM-DD
 PUT /goal
 ```
 
-`GET /goal` resolves the target snapshot effective for the requested local date.
+`GET /goal` resolves the target snapshot effective for the requested local date
+and uses `ReadUser`. `PUT /goal` uses `WriteUser`.
 
 `PUT /goal` saves the current day's target values using:
 
@@ -402,11 +630,12 @@ PUT /diary-preferences
 ```
 
 The update replaces the authenticated user's enabled meal slots. At least one
-known slot must remain enabled.
+known slot must remain enabled. `GET` uses `ReadUser`; `PUT` uses `WriteUser`.
 
 ### Imports
 
-Admin-only:
+Admin-only and cookie-only through `AuthAdmin`; API keys cannot use these
+routes:
 
 ```text
 POST /imports
@@ -420,17 +649,18 @@ GET  /imports/{id}/errors
 
 ### Assistant
 
-Authenticated user routes:
+Authenticated user routes (browser session only through `SessionUser`; API keys
+cannot use these routes in v1):
 
 ```text
-GET  /api/ai/food-assistant/status
-POST /api/ai/custom-food/draft
+GET  /ai/food-assistant/status
+POST /ai/custom-food/draft
 ```
 
-`GET /api/ai/food-assistant/status` returns whether drafting is enabled and
-reports `supports_images` from the configured provider capability.
+`GET /ai/food-assistant/status` returns whether drafting is enabled and reports
+`supports_images` from the configured provider capability.
 
-`POST /api/ai/custom-food/draft` accepts `multipart/form-data` with exactly one
+`POST /ai/custom-food/draft` accepts `multipart/form-data` with exactly one
 non-file `conversation` field and, when `supports_images` is true, up to four
 `photos` file fields. Its JSON value is `{ "turns": [...] }`, with a non-empty
 array of at most 20 `{ role, text }` turns. Roles are `user` or `assistant`, and
@@ -465,7 +695,8 @@ DATABASE_URL=postgres://calco:calco@localhost:5432/calco just migrate-backend
 
 Important tables:
 
-- Auth: `identities`, `user_profiles`, `sessions`, `auth_audit_events`
+- Auth: `identities`, `user_profiles`, `sessions`, `api_keys`,
+  `auth_audit_events`
 - Catalog: `products`, `product_nutrients`, `product_servings`, `nutrients`, `units`
 - Logs: `food_logs`, `food_log_nutrients`
 - Meals: `meals`, `meal_components`
