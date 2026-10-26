@@ -12,7 +12,10 @@ imports, assistant access, or API-key management.
 
 Personal API keys provide:
 
-- Multiple named keys per user, up to 10 active keys.
+- Multiple named keys per user. CalCo normally allows up to 10 active keys. The
+  limit is best-effort; simultaneous creates can occasionally leave you over it.
+  The overage lasts until a key expires or is revoked, so revoke an unused key
+  to get back under.
 - Two scopes: `read` (default) and `read_write`.
 - Optional expiry. The web UI defaults to 90 days and allows `Never`.
 - A secret shown once at creation and never retrievable again.
@@ -207,9 +210,10 @@ the old key.
 - Self-service password change is planned, not implemented. Until then, an admin
   password reset is the only password-change path.
 - Key metadata includes `created_at`, `last_used_at`, and `expires_at`.
-  `last_used_at` is refreshed with a conditional atomic update at most once per
-  60 seconds. A failed metadata write does not fail authentication, so the value
-  can remain stale.
+  `last_used_at` is refreshed best-effort and application-throttled to roughly
+  once per 60 seconds. A failed metadata write does not fail authentication, so
+  the value can remain stale. Concurrent requests may both refresh the
+  timestamp.
 
 ## Do Not Use Keys In Browser Apps
 
@@ -256,7 +260,7 @@ product change. Do not rely on API-key scopes to provide that isolation.
 | `401` | `unauthorized` (or session error) | A bearer token was sent to a browser-session-only route (key management, assistant, admin, or import) without a valid session cookie. These routes ignore `Authorization`. |
 | `403` | `insufficient_scope` | The key is valid but its scope does not permit the route. |
 | `404` | `api_key_not_found` | A key-management route referenced a key that does not exist for this user. |
-| `409` | `api_key_limit_reached` | The user already has 10 active keys. |
+| `409` | `api_key_limit_reached` | The account is at its soft limit of 10 active keys; revoke an unused key and retry. |
 | `400` | `invalid_api_key_name` | The key name is empty, whitespace-only/invisible-only, too long, or contains a forbidden control/invisible formatting character. |
 | `400` | `invalid_api_key_scope` | The scope is not `read` or `read_write`. |
 | `400` | `invalid_api_key_expiry` | `expires_in_days` is outside 1 to 3650. |

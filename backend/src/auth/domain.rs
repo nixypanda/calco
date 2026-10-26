@@ -500,6 +500,27 @@ impl ApiKey {
     }
 }
 
+pub const MAX_ACTIVE_API_KEYS: usize = 10;
+
+/// Best-effort pre-check for the active-key cap. Concurrent creates can race
+/// past this check, so callers must treat it as a UX guard, not an invariant.
+pub fn ensure_api_key_capacity(
+    keys: &[ApiKey],
+    identity: &Identity,
+    now: DateTime<Utc>,
+) -> Result<(), AuthError> {
+    let active_count = keys
+        .iter()
+        .filter(|key| key.is_usable_for(identity, now))
+        .count();
+
+    if active_count >= MAX_ACTIVE_API_KEYS {
+        return Err(AuthError::ApiKeyLimitReached);
+    }
+
+    Ok(())
+}
+
 pub const API_KEY_TOKEN_PREFIX: &str = "calco_pat_";
 
 pub fn create_api_key(
@@ -655,34 +676,16 @@ pub trait IdentityRepository: Send + Sync {
     async fn exists_admin(&self) -> Result<bool, AuthError>;
 }
 
-/// Auth credential lifecycle persistence exception: the narrow conditional
-/// operations in this and `ApiKeyRepository` keep revocation, heartbeats, and
-/// the active-key cap race-safe. They remain storage operations; business
-/// decisions stay in domain and application code.
 #[async_trait]
 pub trait SessionRepository: Send + Sync {
     async fn create(&self, session: &Session) -> Result<(), AuthError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError>;
     async fn update(&self, session: &Session) -> Result<(), AuthError>;
-    async fn update_last_seen_at_before(
-        &self,
-        id: Uuid,
-        now: DateTime<Utc>,
-        stale_before: DateTime<Utc>,
-    ) -> Result<bool, AuthError>;
 }
 
-/// Auth credential lifecycle persistence exception: these narrow conditional
-/// inserts and updates keep the active-key cap, revocation, and heartbeats
-/// race-safe. They are storage operations, not business-action services.
 #[async_trait]
 pub trait ApiKeyRepository: Send + Sync {
-    async fn create_if_active_count_below(
-        &self,
-        key: &ApiKey,
-        max_active: usize,
-        now: DateTime<Utc>,
-    ) -> Result<bool, AuthError>;
+    async fn create(&self, key: &ApiKey) -> Result<(), AuthError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<ApiKey>, AuthError>;
     async fn find_by_id(&self, id: ApiKeyId) -> Result<Option<ApiKey>, AuthError>;
     async fn find_by_id_and_identity_id(
@@ -691,19 +694,7 @@ pub trait ApiKeyRepository: Send + Sync {
         identity_id: IdentityId,
     ) -> Result<Option<ApiKey>, AuthError>;
     async fn list_by_identity_id(&self, id: IdentityId) -> Result<Vec<ApiKey>, AuthError>;
-    async fn update_last_used_at_before(
-        &self,
-        id: ApiKeyId,
-        identity_id: IdentityId,
-        now: DateTime<Utc>,
-        stale_before: DateTime<Utc>,
-    ) -> Result<bool, AuthError>;
-    async fn update_revoked_at_if_null(
-        &self,
-        id: ApiKeyId,
-        identity_id: IdentityId,
-        now: DateTime<Utc>,
-    ) -> Result<bool, AuthError>;
+    async fn update(&self, key: &ApiKey) -> Result<(), AuthError>;
 }
 
 #[async_trait]

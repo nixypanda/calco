@@ -4,7 +4,6 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::auth::domain::*;
 
-const MAX_ACTIVE_API_KEYS: usize = 10;
 const LAST_USED_REFRESH_SECONDS: i64 = 60;
 const MAX_API_KEY_TOKEN_LEN: usize = 256;
 
@@ -58,16 +57,11 @@ impl ApiKeyService {
             None => None,
         };
 
+        let keys = self.api_key_repo.list_by_identity_id(identity.id).await?;
+        ensure_api_key_capacity(&keys, identity, now)?;
+
         let (token, api_key) = create_api_key(identity, name, scope, expires_at, now)?;
-        // The repository counts and inserts under a per-identity lock so
-        // concurrent creates cannot exceed the cap.
-        let created = self
-            .api_key_repo
-            .create_if_active_count_below(&api_key, MAX_ACTIVE_API_KEYS, now)
-            .await?;
-        if !created {
-            return Err(AuthError::ApiKeyLimitReached);
-        }
+        self.api_key_repo.create(&api_key).await?;
 
         Ok(CreatedApiKey { api_key, token })
     }
@@ -95,19 +89,8 @@ impl ApiKeyService {
             return Ok(());
         }
 
-        let now = Utc::now();
-        if !self
-            .api_key_repo
-            .update_revoked_at_if_null(key.id, identity.id, now)
-            .await?
-            && self
-                .api_key_repo
-                .find_by_id_and_identity_id(key.id, identity.id)
-                .await?
-                .is_none()
-        {
-            return Err(AuthError::ApiKeyNotFound);
-        }
+        let key = key.revoke(Utc::now());
+        self.api_key_repo.update(&key).await?;
 
         Ok(())
     }
@@ -151,12 +134,8 @@ impl ApiKeyService {
 
         if api_key.should_refresh_last_used(now, Duration::seconds(LAST_USED_REFRESH_SECONDS)) {
             // Best-effort heartbeat: failure here must not break authentication.
-            // The conditional update cannot resurrect a concurrently revoked key.
-            let stale_before = now - Duration::seconds(LAST_USED_REFRESH_SECONDS);
-            let _ = self
-                .api_key_repo
-                .update_last_used_at_before(api_key.id, api_key.identity_id, now, stale_before)
-                .await;
+            let refreshed = api_key.record_used(now);
+            let _ = self.api_key_repo.update(&refreshed).await;
         }
 
         Ok(ApiKeyAuthentication {

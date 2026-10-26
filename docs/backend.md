@@ -136,15 +136,6 @@ mark_complete(id)
 
 If the method name says what happened in the business, it belongs in domain or application code. If the method name says how to persist or query already-decided state, it can belong in the repository.
 
-The auth credential repositories are a narrowly scoped exception for atomic
-credential lifecycle operations. `ApiKeyRepository::create_if_active_count_below`,
-`ApiKeyRepository::update_last_used_at_before`,
-`ApiKeyRepository::update_revoked_at_if_null`, and
-`SessionRepository::update_last_seen_at_before` are storage-shaped conditional
-inserts and updates that keep the 10-key cap, revocation, and heartbeats
-race-safe. They remain persistence operations, not business-action services, and
-must not be used as precedent for normal repositories.
-
 The import repository is an explicit exception for now because imports are primarily an infrastructure and data-ingestion workflow. Do not use import repository patterns as precedent for normal domain repositories.
 
 ## API Design Notes
@@ -251,6 +242,10 @@ Personal API keys belong to a normal user identity, store a snapshot of its
 security stamp, and resolve to the same `UserProfile` as a browser session.
 Admin identities cannot create or use them. Key authentication is never an
 alternative path to admin or import authorization.
+
+Browser-session `last_seen_at` is refreshed best-effort at roughly 60-second
+intervals. Update failures are ignored, and a stale heartbeat cannot clear a
+concurrent logout's revocation.
 
 ### Imports As Anti-Corruption Layer
 
@@ -373,8 +368,11 @@ badge.
 
 ### Limits And Lifecycle
 
-- A user may have at most 10 active keys. Active means not revoked, not expired,
-  and matching the current security stamp.
+- A user's 10-active-key cap is a best-effort application-level limit, not a
+  database-enforced invariant. Concurrent creates can leave the account with
+  more than 10 active keys, and the overage persists until a key is revoked or
+  expires. Active means not revoked, not expired, and matching the current
+  security stamp.
 - Optional expiry is stored as `expires_at`. An expired key fails
   authentication.
 - Revocation marks `revoked_at` immediately; there is no rotation endpoint.
@@ -383,9 +381,10 @@ badge.
   existing keys. Self-service password change is planned, not implemented.
 - Disabling an identity rotates the security stamp and invalidates keys.
   Re-enabling does not restore old keys because the stamp is not reset back.
-- `last_used_at` is refreshed with a conditional atomic update at most once per
-  60 seconds. A failed metadata write is ignored and does not fail
-  authentication, so the timestamp can remain stale.
+- `last_used_at` is refreshed best-effort and application-throttled to roughly
+  once per 60 seconds. A failed metadata write is ignored and does not fail
+  authentication, so the timestamp can remain stale. Concurrent requests may
+  both refresh the timestamp. A heartbeat update does not clear a revocation.
 
 ### Persistence
 
@@ -408,7 +407,7 @@ constraint. Raw tokens are never stored.
 | `401` | `invalid_api_key` | Bearer token is malformed, missing a matching key, expired, revoked, or invalidated by a security-stamp change. |
 | `403` | `insufficient_scope` | Valid key scope does not permit the route. |
 | `404` | `api_key_not_found` | Key-management route referenced a key that is absent or owned by another identity. |
-| `409` | `api_key_limit_reached` | The identity already has 10 active keys. |
+| `409` | `api_key_limit_reached` | The identity has at least 10 active keys according to the best-effort application check. |
 | `400` | `invalid_api_key_name` | Name is empty, whitespace-only/invisible-only, longer than 64 characters, or contains a forbidden control/invisible formatting character. |
 | `400` | `invalid_api_key_scope` | Scope is not `read` or `read_write`. |
 | `400` | `invalid_api_key_expiry` | `expires_in_days` is outside 1 to 3650. |

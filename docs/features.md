@@ -118,10 +118,11 @@ or trend platform.
       import notice on the food detail page.
 - [x] As a user, I want named personal API keys with `read` or `read_write`
       scope so that my own scripts and tools can access my CalCo data without my
-      password or browser session. Keys are shown once, limited to 10 active
-      keys, optionally expire, and can be revoked immediately from
-      `/settings/api-keys`. Keys never grant admin, import, assistant, or
-      key-management access. See [API Access](api-access.md).
+      password or browser session. Keys are shown once, can optionally expire,
+      and can be revoked immediately from `/settings/api-keys`. Users normally
+      have up to 10 active keys; the limit is best-effort, so simultaneous
+      creates can occasionally go over it. Keys never grant admin, import,
+      assistant, or key-management access. See [API Access](api-access.md).
 
 ## Next User Stories
 

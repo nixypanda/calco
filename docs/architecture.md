@@ -54,9 +54,7 @@ SQL directly. The shared domain error enums currently carry `sqlx::Error`
 variants as a pragmatic adapter leak; new domain behavior should not deepen
 that coupling.
 
-Repository ports remain storage-shaped. The narrow auth credential lifecycle
-exception for atomic conditional operations is documented in
-[backend.md](backend.md); it is not precedent for normal repositories.
+Repository ports remain storage-shaped.
 
 ## Bounded Contexts
 
@@ -240,9 +238,17 @@ it is either a gram quantity or a quantity using a configured serving unit.
 - Food-log writes are transactional. Food-log reads load headers and nutrient
   snapshots separately, so a concurrent update could theoretically produce a
   mixed read. This is an accepted tradeoff for the current homelab scale.
-- API-key `last_used_at` uses a conditional atomic update at most once per 60
-  seconds. A failed metadata write does not fail authentication. The value can
-  remain stale.
+- API-key `last_used_at` is refreshed best-effort and application-throttled to
+  roughly once per 60 seconds. A failed metadata write does not fail
+  authentication, and the value can remain stale. Concurrent requests may both
+  refresh the timestamp.
+- Browser-session `last_seen_at` is refreshed best-effort at roughly 60-second
+  intervals. Failed updates are ignored, and a stale heartbeat cannot clear a
+  concurrent logout's revocation.
+- The 10-active-key cap is a best-effort application-level limit, not a
+  database-enforced invariant. Concurrent creates can leave an account with more
+  than 10 active keys, and the overage persists until a key is revoked or
+  expires. This is an accepted homelab-scale tradeoff.
 
 ## API Surface
 

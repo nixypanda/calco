@@ -30,9 +30,6 @@ infrastructure/postgres -> domain ports
   `food_log_nutrients`, not current catalog nutrients.
 - Normal food-tracking data is keyed by `user_profiles.id`, not
   `identities.id`.
-- The narrow auth credential lifecycle repository exception for atomic
-  conditional operations is documented in `../docs/backend.md`. It is not
-  precedent for normal repositories.
 - The import repository is an exception for the import workflow. Do not use its
   patterns as precedent for normal domain repositories.
 

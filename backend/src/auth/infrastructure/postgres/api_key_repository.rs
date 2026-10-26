@@ -18,41 +18,7 @@ impl PostgresApiKeyRepository {
 
 #[async_trait]
 impl ApiKeyRepository for PostgresApiKeyRepository {
-    async fn create_if_active_count_below(
-        &self,
-        key: &ApiKey,
-        max_active: usize,
-        now: DateTime<Utc>,
-    ) -> Result<bool, AuthError> {
-        let mut tx = self.pool.begin().await?;
-
-        // Serialize active-key counting and insertion for one identity. The
-        // identity row is a stable per-identity lock and is also the row whose
-        // security stamp decides whether an existing key is still active.
-        // FOR NO KEY UPDATE serializes creators without blocking FK key-share
-        // locks held by dependent rows.
-        sqlx::query("SELECT id FROM identities WHERE id = $1 FOR NO KEY UPDATE")
-            .bind(key.identity_id.0)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(AuthError::IdentityNotFound)?;
-
-        let active_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM api_keys \
-             WHERE identity_id = $1 AND identity_security_stamp = $2 AND revoked_at IS NULL \
-             AND (expires_at IS NULL OR expires_at > $3)",
-        )
-        .bind(key.identity_id.0)
-        .bind(key.identity_security_stamp.0)
-        .bind(now)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        if active_count >= max_active as i64 {
-            tx.rollback().await?;
-            return Ok(false);
-        }
-
+    async fn create(&self, key: &ApiKey) -> Result<(), AuthError> {
         sqlx::query(
             "INSERT INTO api_keys (id, identity_id, identity_security_stamp, name, token_hash, token_hint, scope, created_at, last_used_at, expires_at, revoked_at) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -68,11 +34,10 @@ impl ApiKeyRepository for PostgresApiKeyRepository {
         .bind(key.last_used_at)
         .bind(key.expires_at)
         .bind(key.revoked_at)
-        .execute(&mut *tx)
+        .execute(&self.pool)
         .await?;
 
-        tx.commit().await?;
-        Ok(true)
+        Ok(())
     }
 
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<ApiKey>, AuthError> {
@@ -128,45 +93,26 @@ impl ApiKeyRepository for PostgresApiKeyRepository {
         rows.into_iter().map(api_key_row_to_api_key).collect()
     }
 
-    async fn update_last_used_at_before(
-        &self,
-        id: ApiKeyId,
-        identity_id: IdentityId,
-        now: DateTime<Utc>,
-        stale_before: DateTime<Utc>,
-    ) -> Result<bool, AuthError> {
-        let result = sqlx::query(
-            "UPDATE api_keys SET last_used_at = $3 \
-             WHERE id = $1 AND identity_id = $2 AND revoked_at IS NULL \
-             AND (last_used_at IS NULL OR last_used_at <= $4)",
+    async fn update(&self, key: &ApiKey) -> Result<(), AuthError> {
+        sqlx::query(
+            "UPDATE api_keys SET identity_id = $1, identity_security_stamp = $2, name = $3, token_hash = $4, token_hint = $5, scope = $6, created_at = $7, last_used_at = $8, expires_at = $9, revoked_at = $10 WHERE id = $11 AND identity_id = $12 AND (revoked_at IS NULL OR $10 IS NOT NULL)",
         )
-        .bind(id.0)
-        .bind(identity_id.0)
-        .bind(now)
-        .bind(stale_before)
+        .bind(key.identity_id.0)
+        .bind(key.identity_security_stamp.0)
+        .bind(key.name.as_str())
+        .bind(&key.token_hash.0)
+        .bind(&key.token_hint)
+        .bind(key.scope.as_str())
+        .bind(key.created_at)
+        .bind(key.last_used_at)
+        .bind(key.expires_at)
+        .bind(key.revoked_at)
+        .bind(key.id.0)
+        .bind(key.identity_id.0)
         .execute(&self.pool)
         .await?;
 
-        Ok(result.rows_affected() > 0)
-    }
-
-    async fn update_revoked_at_if_null(
-        &self,
-        id: ApiKeyId,
-        identity_id: IdentityId,
-        now: DateTime<Utc>,
-    ) -> Result<bool, AuthError> {
-        let result = sqlx::query(
-            "UPDATE api_keys SET revoked_at = $3 \
-             WHERE id = $1 AND identity_id = $2 AND revoked_at IS NULL",
-        )
-        .bind(id.0)
-        .bind(identity_id.0)
-        .bind(now)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.rows_affected() > 0)
+        Ok(())
     }
 }
 

@@ -93,12 +93,8 @@ impl AuthSessionService {
             .should_refresh_last_seen(now, chrono::Duration::seconds(LAST_SEEN_REFRESH_SECONDS))
         {
             // Best-effort last-seen heartbeat: failure here must not break session validation.
-            // The narrow conditional update cannot overwrite a concurrent logout.
-            let stale_before = now - chrono::Duration::seconds(LAST_SEEN_REFRESH_SECONDS);
-            let _ = self
-                .session_repo
-                .update_last_seen_at_before(session.id, now, stale_before)
-                .await;
+            let refreshed = session.record_seen(now);
+            let _ = self.session_repo.update(&refreshed).await;
         }
 
         let profile = if identity.role == IdentityRole::User {

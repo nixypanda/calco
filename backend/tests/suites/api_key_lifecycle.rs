@@ -4,7 +4,7 @@ use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use calco_backend::auth::domain::{ApiKeyId, ApiKeyRepository, IdentityId, hash_api_key_token};
 use calco_backend::auth::infrastructure::postgres::PostgresApiKeyRepository;
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -824,43 +824,26 @@ async fn heartbeat_after_revoke_cannot_restore_a_key(pool: PgPool) {
     let stale_snapshot = repo.find_by_id(id).await.unwrap().unwrap();
     assert!(stale_snapshot.revoked_at.is_none());
 
-    let now = Utc::now();
-    let wrong_identity = IdentityId(Uuid::new_v4());
-    assert!(
-        !repo
-            .update_revoked_at_if_null(id, wrong_identity, now)
-            .await
-            .unwrap()
-    );
-    assert!(
-        !repo
-            .update_last_used_at_before(id, wrong_identity, now, now - Duration::seconds(60),)
-            .await
-            .unwrap()
-    );
+    let mut wrong_owner = stale_snapshot.clone();
+    wrong_owner.identity_id = IdentityId(Uuid::new_v4());
+    repo.update(&wrong_owner.record_used(Utc::now()))
+        .await
+        .unwrap();
     let untouched = repo.find_by_id(id).await.unwrap().unwrap();
     assert!(untouched.revoked_at.is_none());
     assert!(untouched.last_used_at.is_none());
 
-    assert!(
-        repo.update_revoked_at_if_null(id, stale_snapshot.identity_id, now)
-            .await
-            .unwrap()
+    let request = empty_request(
+        Method::DELETE,
+        &format!("/api/auth/api-keys/{key_id}"),
+        Some(&user),
     );
+    let (status, _headers, bytes) = send(&router, request).await;
+    assert_status(status, StatusCode::NO_CONTENT, &bytes);
 
-    // This is the same conditional statement the authentication heartbeat now
-    // uses. Running it after revocation must affect zero rows and must not
-    // clear revoked_at.
-    let updated = repo
-        .update_last_used_at_before(
-            id,
-            stale_snapshot.identity_id,
-            now + Duration::seconds(1),
-            now - Duration::seconds(60),
-        )
+    repo.update(&stale_snapshot.record_used(Utc::now()))
         .await
         .unwrap();
-    assert!(!updated);
 
     let stored = repo.find_by_id(id).await.unwrap().unwrap();
     assert!(stored.revoked_at.is_some());
@@ -898,7 +881,7 @@ async fn heartbeat_after_revoke_cannot_restore_a_key(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn active_key_limit_is_enforced(pool: PgPool) {
+async fn active_key_limit_rejects_an_eleventh_key(pool: PgPool) {
     let router = app(pool).await;
     let (_admin, user) = bootstrap_and_user(&router).await;
 
@@ -929,85 +912,6 @@ async fn active_key_limit_is_enforced(pool: PgPool) {
     assert_status(status, StatusCode::NO_CONTENT, &bytes);
 
     let _ = create_api_key(&router, &user, "Replacement", None, None).await;
-}
-
-#[sqlx::test]
-async fn concurrent_creates_cannot_exceed_active_key_limit(pool: PgPool) {
-    let router = app(pool.clone()).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-
-    for index in 0..9 {
-        let _ = create_api_key(&router, &user, &format!("Key {index}"), None, None).await;
-    }
-
-    let identity_id: Uuid = sqlx::query_scalar("SELECT id FROM identities WHERE username = $1")
-        .bind("tester")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-
-    // Hold the same per-identity lock the create path uses so both requests
-    // must reach the lock before either can count active keys.
-    let mut lock_tx = pool.begin().await.unwrap();
-    sqlx::query("SELECT id FROM identities WHERE id = $1 FOR NO KEY UPDATE")
-        .bind(identity_id)
-        .fetch_one(&mut *lock_tx)
-        .await
-        .unwrap();
-
-    let first = create_api_key_request(&user, &api_key_body("Concurrent A", None, None));
-    let second = create_api_key_request(&user, &api_key_body("Concurrent B", None, None));
-    let first_router = router.clone();
-    let second_router = router.clone();
-    let first_task = tokio::spawn(async move { send(&first_router, first).await });
-    let second_task = tokio::spawn(async move { send(&second_router, second).await });
-
-    let mut both_waiting = false;
-    for _ in 0..400 {
-        let waiting: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM pg_stat_activity \
-             WHERE datname = current_database() AND pid <> pg_backend_pid() \
-             AND wait_event_type = 'Lock' \
-             AND query ILIKE '%FROM identities%FOR NO KEY UPDATE%'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        if waiting >= 2 {
-            both_waiting = true;
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-    }
-
-    lock_tx.rollback().await.unwrap();
-
-    let (first_result, second_result) = tokio::join!(first_task, second_task);
-    let first_result = first_result.unwrap();
-    let second_result = second_result.unwrap();
-    assert!(
-        both_waiting,
-        "both create requests should be waiting on the identity lock"
-    );
-
-    let mut created = 0;
-    let mut limited = 0;
-    for (status, _headers, bytes) in [first_result, second_result] {
-        match status {
-            StatusCode::CREATED => created += 1,
-            StatusCode::CONFLICT => {
-                limited += 1;
-                let body: Value = parse_json(&bytes);
-                assert_eq!(body["error"]["code"], "api_key_limit_reached");
-            }
-            other => panic!("unexpected concurrent create status: {other}"),
-        }
-    }
-    assert_eq!(created, 1);
-    assert_eq!(limited, 1);
-
-    let listed: Value = get_json(&router, "/api/auth/api-keys", &user).await;
-    assert_eq!(listed["items"].as_array().unwrap().len(), 10);
 }
 
 #[sqlx::test]

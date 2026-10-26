@@ -81,8 +81,6 @@ async fn session_heartbeat_after_logout_cannot_restore_the_session(pool: PgPool)
             .await
             .unwrap();
 
-    // Age the heartbeat so the stale predicate would match without the
-    // revoked_at guard.
     let aged_last_seen: chrono::DateTime<Utc> = sqlx::query_scalar(
         "UPDATE sessions SET last_seen_at = $2 WHERE id = $1 RETURNING last_seen_at",
     )
@@ -92,20 +90,21 @@ async fn session_heartbeat_after_logout_cannot_restore_the_session(pool: PgPool)
     .await
     .unwrap();
 
+    let repo = PostgresSessionRepository::new(pool.clone());
+    let stale_session = repo
+        .find_by_token_hash(&token_hash)
+        .await
+        .unwrap()
+        .expect("session should exist");
+    assert!(stale_session.revoked_at.is_none());
+
     let logout_req = empty_request(Method::POST, "/api/auth/logout", Some(&admin_cookie));
     let (logout_status, _headers, logout_bytes) = send(&router, logout_req).await;
     assert_status(logout_status, StatusCode::OK, &logout_bytes);
 
-    let repo = PostgresSessionRepository::new(pool.clone());
-    let updated = repo
-        .update_last_seen_at_before(
-            session_id,
-            Utc::now(),
-            aged_last_seen + Duration::seconds(1),
-        )
+    repo.update(&stale_session.record_seen(Utc::now()))
         .await
         .unwrap();
-    assert!(!updated);
 
     let (last_seen_after, revoked_at): (chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>) =
         sqlx::query_as("SELECT last_seen_at, revoked_at FROM sessions WHERE id = $1")

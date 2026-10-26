@@ -51,7 +51,7 @@ impl SessionRepository for PostgresSessionRepository {
     async fn update(&self, session: &Session) -> Result<(), AuthError> {
         sqlx::query(
             "UPDATE sessions SET identity_id = $1, identity_security_stamp = $2, session_token_hash = $3, created_at = $4, \
-             last_seen_at = $5, expires_at = $6, revoked_at = $7 WHERE id = $8",
+             last_seen_at = $5, expires_at = $6, revoked_at = $7 WHERE id = $8 AND (revoked_at IS NULL OR $7 IS NOT NULL)",
         )
         .bind(session.identity_id.0)
         .bind(session.identity_security_stamp.0)
@@ -65,25 +65,6 @@ impl SessionRepository for PostgresSessionRepository {
         .await?;
 
         Ok(())
-    }
-
-    async fn update_last_seen_at_before(
-        &self,
-        id: Uuid,
-        now: DateTime<Utc>,
-        stale_before: DateTime<Utc>,
-    ) -> Result<bool, AuthError> {
-        let result = sqlx::query(
-            "UPDATE sessions SET last_seen_at = $2 \
-             WHERE id = $1 AND revoked_at IS NULL AND last_seen_at <= $3",
-        )
-        .bind(id)
-        .bind(now)
-        .bind(stale_before)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.rows_affected() > 0)
     }
 }
 
