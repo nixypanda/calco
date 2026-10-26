@@ -1,5 +1,6 @@
 module Ui.Feedback exposing
-    ( emptyState
+    ( blockingOverlay
+    , emptyState
     , emptyStateWithIcon
     , errorBanner
     , errorRetry
@@ -16,6 +17,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Html.Attributes
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
@@ -119,6 +121,22 @@ warningBanner theme message =
         [ Element.text message ]
 
 
+{-| A modal for work that must finish before the user can continue. It has no
+footer or dismiss action, so nothing inside invites leaving early.
+-}
+blockingOverlay : Theme -> { title : String, body : List (Element msg) } -> Element msg
+blockingOverlay theme config =
+    modalScrim theme
+        { card =
+            modalCard theme
+                { title = config.title
+                , body = config.body
+                , footer = Nothing
+                }
+        , onBackgroundPress = Nothing
+        }
+
+
 modalOverlay :
     Theme
     ->
@@ -129,32 +147,74 @@ modalOverlay :
         }
     -> Element msg
 modalOverlay theme config =
+    modalScrim theme
+        { card =
+            modalCard theme
+                { title = config.title
+                , body = config.body
+                , footer = Just config.actions
+                }
+        , onBackgroundPress = config.onBackgroundPress
+        }
+
+
+{-| The backdrop is a plain element when the dialog cannot be dismissed: a
+button with no accessible name would still be reachable by keyboard.
+-}
+modalScrim : Theme -> { card : Element msg, onBackgroundPress : Maybe msg } -> Element msg
+modalScrim theme config =
     let
-        modalCard : Element msg
-        modalCard =
-            Element.el
-                [ Element.centerX
-                , Element.centerY
-                , Element.width (Element.fill |> Element.maximum 480)
-                , Element.padding space16
-                , uiClass "ui-modal-card"
-                ]
-                (Surface.section theme
-                    { header = Just (sectionTitle theme config.title)
-                    , body = config.body
-                    , footer = Just config.actions
-                    }
-                )
-    in
-    Element.el
-        [ Element.width Element.fill, Element.height Element.fill, Element.inFront modalCard ]
-        (Input.button
+        backdropAttrs : List (Element.Attribute msg)
+        backdropAttrs =
             [ Element.width Element.fill
             , Element.height Element.fill
             , Background.color theme.scrim
             , uiClass "ui-modal-backdrop"
             ]
-            { onPress = config.onBackgroundPress, label = Element.none }
+
+        backdrop : Element msg
+        backdrop =
+            case config.onBackgroundPress of
+                Just onPress ->
+                    Input.button backdropAttrs
+                        { onPress = Just onPress, label = Element.none }
+
+                Nothing ->
+                    Element.el backdropAttrs Element.none
+    in
+    Element.el
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.inFront config.card
+        ]
+        backdrop
+
+
+modalCard :
+    Theme
+    ->
+        { title : String
+        , body : List (Element msg)
+        , footer : Maybe (Element msg)
+        }
+    -> Element msg
+modalCard theme config =
+    Element.el
+        [ Element.centerX
+        , Element.centerY
+        , Element.width (Element.fill |> Element.maximum 480)
+        , Element.padding space16
+        , uiClass "ui-modal-card"
+        , Element.htmlAttribute (Html.Attributes.attribute "role" "dialog")
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-modal" "true")
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.title)
+        , Element.htmlAttribute (Html.Attributes.attribute "tabindex" "-1")
+        ]
+        (Surface.section theme
+            { header = Just (sectionTitle theme config.title)
+            , body = config.body
+            , footer = config.footer
+            }
         )
 
 

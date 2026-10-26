@@ -314,6 +314,11 @@ screenMeta env session route =
             , leading = GoBack (DiaryDay Nothing Nothing)
             }
 
+        SettingsApiKeyCreate ->
+            { title = I18n.t env.language TidApiKeysCreateTitle
+            , leading = GoBack SettingsApiKeys
+            }
+
         FoodSearch maybeDate maybeSlot ->
             { title =
                 case maybeSlot of

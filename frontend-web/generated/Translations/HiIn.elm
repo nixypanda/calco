@@ -66,6 +66,9 @@ hiInTranslations tid =
         TidApiKeysDescription ->
             "API कुंजियाँ स्क्रिप्ट और टूल को आपका डेटा एक्सेस करने देती हैं। इन्हें पासवर्ड की तरह संभालें।"
 
+        TidApiKeysDetails ->
+            "कुंजी विवरण"
+
         TidApiKeysDone ->
             "हो गया"
 
@@ -96,11 +99,11 @@ hiInTranslations tid =
         TidApiKeysLastUsed hole0 ->
             "अंतिम बार " ++ hole0 ++ " को उपयोग"
 
-        TidApiKeysListTitle ->
-            "आपकी API कुंजियाँ"
-
         TidApiKeysName ->
             "नाम"
+
+        TidApiKeysNameInvalid ->
+            "नाम में असमर्थित वर्ण हैं।"
 
         TidApiKeysNameRequired ->
             "नाम आवश्यक है।"

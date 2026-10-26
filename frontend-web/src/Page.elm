@@ -71,6 +71,7 @@ import Page.Meal.Edit as MealEdit
 import Page.Meal.List as MealList
 import Page.Meal.Show as MealShow
 import Page.NutritionDetails as NutritionDetails
+import Page.Settings.ApiKeyCreate as SettingsApiKeyCreate
 import Page.Settings.ApiKeys as SettingsApiKeys
 import Page.Users.BootstrapSetup as BootstrapSetup
 import Page.Users.CreateUser as AdminCreateUser
@@ -110,6 +111,7 @@ type Pane
     | GoalsSettingsPane LocalDate GoalsSettings.Model
     | DiarySettingsPane DiarySettings.Model
     | ApiKeysPane Int SettingsApiKeys.Model
+    | ApiKeyCreatePane Int SettingsApiKeyCreate.Model
     | FoodSearchPane FoodSearch.Model
     | FoodDetailPane String FoodShow.Model
     | FoodLogDetailPane String FoodLogEntry.Model
@@ -235,6 +237,9 @@ paneKey pane =
 
         ApiKeysPane _ _ ->
             "api-keys"
+
+        ApiKeyCreatePane _ _ ->
+            "api-key-create"
 
         FoodSearchPane _ ->
             "food-search"
@@ -796,6 +801,9 @@ needsSessionData pane =
         ApiKeysPane _ _ ->
             False
 
+        ApiKeyCreatePane _ _ ->
+            False
+
         FoodSearchPane _ ->
             True
 
@@ -932,6 +940,9 @@ panesForRoute context generation existing =
 
         SettingsApiKeys ->
             Just [ apiKeysDesired context generation ]
+
+        SettingsApiKeyCreate ->
+            Just [ apiKeyCreateDesired context generation ]
 
         FoodSearch dateParam mealSlot ->
             Just (searchWorkspaceDesired context existing dateParam mealSlot)
@@ -1113,6 +1124,21 @@ apiKeysDesired context generation =
                     applyApiKeysOutMsg context generation subOut
             in
             ( ApiKeysPane generation subModel, cmd, outMsg )
+        )
+
+
+apiKeyCreateDesired : InitContext -> Int -> DesiredPane
+apiKeyCreateDesired context generation =
+    DesiredPane "api-key-create"
+        (\_ ->
+            let
+                ( subModel, subOut ) =
+                    SettingsApiKeyCreate.init
+
+                ( cmd, outMsg ) =
+                    applyApiKeyCreateOutMsg context generation subOut
+            in
+            ( ApiKeyCreatePane generation subModel, cmd, outMsg )
         )
 
 
@@ -1399,6 +1425,7 @@ type Msg
     | GotGoalsSettingsMsg GoalsSettings.Msg
     | GotDiarySettingsMsg DiarySettings.Msg
     | GotApiKeysMsg Int SettingsApiKeys.Msg
+    | GotApiKeyCreateMsg Int SettingsApiKeyCreate.Msg
     | CopyTextResult Int Int Bool
     | GotFoodSearchMsg FoodSearch.Msg
     | GotFoodDetailMsg FoodShow.Msg
@@ -1785,17 +1812,32 @@ updatePane allPanes context msg pane =
                     NoMutation
                     (SettingsApiKeys.update subMsg sub)
 
-        ( CopyTextResult generation copyId succeeded, ApiKeysPane currentGeneration sub ) ->
+        ( GotApiKeyCreateMsg generation subMsg, ApiKeyCreatePane currentGeneration sub ) ->
             if generation /= currentGeneration then
                 Nothing
 
             else
                 stepPane context
-                    (ApiKeysPane generation)
-                    (GotApiKeysMsg generation)
-                    (\_ -> applyApiKeysOutMsg context generation)
+                    (ApiKeyCreatePane generation)
+                    (GotApiKeyCreateMsg generation)
+                    (\_ -> applyApiKeyCreateOutMsg context generation)
                     NoMutation
-                    (SettingsApiKeys.update (SettingsApiKeys.CopyCompleted copyId succeeded) sub)
+                    (SettingsApiKeyCreate.update subMsg sub)
+
+        ( CopyTextResult generation copyId succeeded, ApiKeyCreatePane currentGeneration sub ) ->
+            if generation /= currentGeneration then
+                Nothing
+
+            else
+                stepPane context
+                    (ApiKeyCreatePane generation)
+                    (GotApiKeyCreateMsg generation)
+                    (\_ -> applyApiKeyCreateOutMsg context generation)
+                    NoMutation
+                    (SettingsApiKeyCreate.update
+                        (SettingsApiKeyCreate.CopyCompleted copyId succeeded)
+                        sub
+                    )
 
         ( GotFoodSearchMsg subMsg, FoodSearchPane sub ) ->
             let
@@ -2495,26 +2537,46 @@ applyApiKeysOutMsg _ generation outMsg =
             , NoOutMsg
             )
 
-        SettingsApiKeys.RequestCreate requestId request ->
-            ( Api.ApiKeys.create request
-                (GotApiKeysMsg generation
-                    << SettingsApiKeys.CreateCompleted requestId
-                )
-            , NoOutMsg
-            )
-
-        SettingsApiKeys.RequestRevoke key ->
+        SettingsApiKeys.RequestRevoke requestId key ->
             ( Api.ApiKeys.revoke key.id
                 (GotApiKeysMsg generation
-                    << SettingsApiKeys.RevokeCompleted key
+                    << SettingsApiKeys.RevokeCompleted requestId key
                 )
             , NoOutMsg
             )
 
-        SettingsApiKeys.CopyText copyId text ->
-            ( Cmd.none, CopyText generation copyId text )
+        SettingsApiKeys.Navigate route ->
+            ( Cmd.none, Navigate route )
 
         SettingsApiKeys.SessionExpired ->
+            ( Cmd.none, SessionExpired )
+
+
+applyApiKeyCreateOutMsg :
+    InitContext
+    -> Int
+    -> SettingsApiKeyCreate.OutMsg
+    -> ( Cmd Msg, OutMsg )
+applyApiKeyCreateOutMsg _ generation outMsg =
+    case outMsg of
+        SettingsApiKeyCreate.NoOp ->
+            ( Cmd.none, NoOutMsg )
+
+        SettingsApiKeyCreate.RequestCreate requestId request ->
+            ( Api.ApiKeys.create request
+                (GotApiKeyCreateMsg generation
+                    << SettingsApiKeyCreate.CreateCompleted requestId
+                )
+            , NoOutMsg
+            )
+
+        SettingsApiKeyCreate.CopyText copyId text ->
+            ( Cmd.none, CopyText generation copyId text )
+
+        SettingsApiKeyCreate.Navigate route ->
+            ( Cmd.none, Navigate route )
+
+        SettingsApiKeyCreate.SessionExpired ->
             ( Cmd.none, SessionExpired )
 
 
@@ -3175,6 +3237,9 @@ paneView env selectedDate pane =
         ApiKeysPane generation sub ->
             Element.map (GotApiKeysMsg generation) (SettingsApiKeys.view env sub)
 
+        ApiKeyCreatePane generation sub ->
+            Element.map (GotApiKeyCreateMsg generation) (SettingsApiKeyCreate.view env sub)
+
         FoodSearchPane sub ->
             Element.map GotFoodSearchMsg (FoodSearch.contentView env sub)
 
@@ -3248,6 +3313,10 @@ paneModalView env pane =
         ApiKeysPane generation sub ->
             SettingsApiKeys.modalView env sub
                 |> Maybe.map (Element.map (GotApiKeysMsg generation))
+
+        ApiKeyCreatePane generation sub ->
+            SettingsApiKeyCreate.modalView env sub
+                |> Maybe.map (Element.map (GotApiKeyCreateMsg generation))
 
         _ ->
             Nothing

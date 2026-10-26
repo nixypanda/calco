@@ -66,6 +66,9 @@ enUsTranslations tid =
         TidApiKeysDescription ->
             "API keys let scripts and tools access your data. Treat them like passwords."
 
+        TidApiKeysDetails ->
+            "Key details"
+
         TidApiKeysDone ->
             "Done"
 
@@ -96,11 +99,11 @@ enUsTranslations tid =
         TidApiKeysLastUsed hole0 ->
             "Last used " ++ hole0
 
-        TidApiKeysListTitle ->
-            "Your API keys"
-
         TidApiKeysName ->
             "Name"
+
+        TidApiKeysNameInvalid ->
+            "Name contains unsupported characters."
 
         TidApiKeysNameRequired ->
             "Name is required."

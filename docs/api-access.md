@@ -53,9 +53,14 @@ keys in v1.
 Create keys from a signed-in browser session:
 
 1. Open the profile menu and choose **API keys**, or navigate to
-   `/settings/api-keys`.
-2. Choose a name, scope, and expiry.
-3. Copy the secret from the confirmation dialog immediately.
+   `/settings/api-keys`, then choose **Create API key**.
+2. Choose a name, scope, and expiry on `/settings/api-keys/new`. A blocking
+   progress dialog covers the form while the key is being created; the app
+   chrome behind it is inert and cannot be reached with Tab.
+3. Copy the secret from the non-dismissible reveal dialog immediately. Choose
+   **Done** to return to the key list. The app chrome behind the dialog is
+   inert, so within the app only **Done** dismisses it; browser back, refresh,
+   and closing the tab are not intercepted.
 4. Store the secret in a password manager, secret manager, or environment
    variable on the machine that runs the script.
 

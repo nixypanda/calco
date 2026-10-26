@@ -25,6 +25,7 @@ tests =
         , parses "/details?date=2026-06-04" (NutritionDetails (Just (date "2026-06-04")))
         , parses "/settings/goals" GoalSettings
         , parses "/settings/api-keys" SettingsApiKeys
+        , parses "/settings/api-keys/new" SettingsApiKeyCreate
         , parses "/logs/abc" (FoodLogEntry "abc" Nothing Nothing)
         , parses "/logs/abc?date=2026-06-04"
             (FoodLogEntry "abc" (Just (date "2026-06-04")) Nothing)
@@ -92,6 +93,7 @@ routeFuzzer =
         , Fuzz.map NutritionDetails maybeDateFuzzer
         , Fuzz.constant GoalSettings
         , Fuzz.constant SettingsApiKeys
+        , Fuzz.constant SettingsApiKeyCreate
         , Fuzz.map3 FoodLogEntry safeSegmentFuzzer maybeDateFuzzer maybeMonthFuzzer
         , Fuzz.map2 AdHocLogCreate maybeDateFuzzer maybeMealSlotFuzzer
         , Fuzz.map2 AiLogCreate maybeDateFuzzer maybeMealSlotFuzzer

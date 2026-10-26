@@ -22,6 +22,7 @@ type TranslationId
     | TidApiKeysCreatedTitle
     | TidApiKeysCreatedWarning
     | TidApiKeysDescription
+    | TidApiKeysDetails
     | TidApiKeysDone
     | TidApiKeysEmpty
     | TidApiKeysExpires String
@@ -32,8 +33,8 @@ type TranslationId
     | TidApiKeysExpiryNever
     | TidApiKeysHint String
     | TidApiKeysLastUsed String
-    | TidApiKeysListTitle
     | TidApiKeysName
+    | TidApiKeysNameInvalid
     | TidApiKeysNameRequired
     | TidApiKeysNameTooLong
     | TidApiKeysNeverExpires

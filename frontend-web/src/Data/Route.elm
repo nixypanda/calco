@@ -25,6 +25,7 @@ type Route
     | GoalSettings
     | DiarySettings
     | SettingsApiKeys
+    | SettingsApiKeyCreate
     | FoodLogEntry String (Maybe LocalDate) (Maybe String)
     | AdHocLogCreate (Maybe LocalDate) (Maybe MealSlot)
     | AiLogCreate (Maybe LocalDate) (Maybe MealSlot)
@@ -63,6 +64,7 @@ routeParser =
         , Parser.map GoalSettings (s "settings" </> s "goals")
         , Parser.map DiarySettings (s "settings" </> s "diary")
         , Parser.map SettingsApiKeys (s "settings" </> s "api-keys")
+        , Parser.map SettingsApiKeyCreate (s "settings" </> s "api-keys" </> s "new")
         , Parser.map AdHocLogCreate
             (s "logs" </> s "new" </> s "ad-hoc" <?> dateQuery <?> mealSlotQuery)
         , Parser.map AiLogCreate
@@ -126,6 +128,9 @@ primaryRoute route =
 
         MealCreate ->
             MealList
+
+        SettingsApiKeyCreate ->
+            SettingsApiKeys
 
         MealShow _ ->
             MealList
@@ -208,6 +213,9 @@ routeToPath route =
 
         SettingsApiKeys ->
             "/settings/api-keys"
+
+        SettingsApiKeyCreate ->
+            "/settings/api-keys/new"
 
         FoodLogEntry id maybeDate maybeCalendarMonth ->
             withQueryParams ("/logs/" ++ id)

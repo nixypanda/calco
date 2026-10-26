@@ -8,6 +8,7 @@ import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Typography as Typography
@@ -69,21 +70,48 @@ confirmModalView env config state =
             , Feedback.maybeErrorBanner env.theme state.error
             ]
         , actions =
-            Button.bottomActionButtons env.device
-                env.theme
-                [ { label = I18n.t env.language TidCommonCancel
-                  , onPress = config.onCancel
-                  , tone = Button.Primary
-                  }
-                , { label =
-                        if state.pending then
-                            config.pendingLabel
+            Element.row
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space12
+                ]
+                [ Element.el [ Element.width Element.fill ]
+                    (Button.textButton env.device
+                        env.theme
+                        { tone = Button.Primary
+                        , width = Button.FullWidth
+                        , label = I18n.t env.language TidCommonCancel
+                        , onPress = config.onCancel
+                        , submitState =
+                            Just
+                                (if state.pending then
+                                    Button.Disabled
 
-                        else
-                            config.confirmLabel
-                  , onPress = config.onConfirm
-                  , tone = Button.Danger
-                  }
+                                 else
+                                    Button.Idle
+                                )
+                        , submittingLabel = Nothing
+                        , trailing = Nothing
+                        }
+                    )
+                , Element.el [ Element.width Element.fill ]
+                    (Button.textButton env.device
+                        env.theme
+                        { tone = Button.Danger
+                        , width = Button.FullWidth
+                        , label = config.confirmLabel
+                        , onPress = config.onConfirm
+                        , submitState =
+                            Just
+                                (if state.pending then
+                                    Button.Submitting
+
+                                 else
+                                    Button.Idle
+                                )
+                        , submittingLabel = Just config.pendingLabel
+                        , trailing = Nothing
+                        }
+                    )
                 ]
         , onBackgroundPress = Just config.onCancel
         }

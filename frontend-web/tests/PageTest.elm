@@ -9,6 +9,7 @@ import Lib.Date as LocalDate exposing (LocalDate)
 import Page
 import Page.Diary.Day as DiaryDayPage
 import Page.Food.Search as FoodSearchPage
+import Page.Settings.ApiKeyCreate as ApiKeyCreate
 import Page.Settings.ApiKeys as ApiKeys
 import Test exposing (Test, describe, test)
 import Time
@@ -130,6 +131,10 @@ routePaneCases =
     , ( "API key settings is standalone"
       , SettingsApiKeys
       , [ "api-keys" ]
+      )
+    , ( "API key creation is standalone"
+      , SettingsApiKeyCreate
+      , [ "api-key-create" ]
       )
     , ( "custom food create is standalone"
       , CustomFoodCreate
@@ -459,7 +464,7 @@ routeFlowTests =
 apiKeysPaneTests : Test
 apiKeysPaneTests =
     describe "api key pane lifetimes"
-        [ test "a completion from a previous api-keys pane cannot complete the new pane" <|
+        [ test "a list load from a previous api-keys pane cannot replace the new pane" <|
             \_ ->
                 let
                     context : Page.InitContext
@@ -474,27 +479,9 @@ apiKeysPaneTests =
                     generationA =
                         apiKeysGeneration started |> Maybe.withDefault 0
 
-                    pendingA : Page.Model
-                    pendingA =
-                        started
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationA (ApiKeys.ApiKeysLoaded (Ok [])))
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationA ApiKeys.CreateClicked)
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationA
-                                    (ApiKeys.CreateNameChanged "First script")
-                                )
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationA ApiKeys.CreateSubmitted)
-
-                    requestA : Int
-                    requestA =
-                        apiKeysPendingRequestId pendingA |> Maybe.withDefault 0
-
                     returned : Page.Model
                     returned =
-                        pendingA
+                        started
                             |> Page.initPreserving
                                 { route = DiarySettings, today = Just today }
                             |> first
@@ -505,57 +492,35 @@ apiKeysPaneTests =
                     generationB =
                         apiKeysGeneration returned |> Maybe.withDefault 0
 
-                    pendingB : Page.Model
-                    pendingB =
-                        returned
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationB (ApiKeys.ApiKeysLoaded (Ok [])))
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationB ApiKeys.CreateClicked)
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationB
-                                    (ApiKeys.CreateNameChanged "Second script")
-                                )
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationB ApiKeys.CreateSubmitted)
-
-                    requestB : Int
-                    requestB =
-                        apiKeysPendingRequestId pendingB |> Maybe.withDefault 0
+                    loadedB : Page.Model
+                    loadedB =
+                        pageStep context
+                            (Page.GotApiKeysMsg generationB
+                                (ApiKeys.ApiKeysLoaded (Ok [ createdKeyB.apiKey ]))
+                            )
+                            returned
 
                     afterStaleA : Page.Model
                     afterStaleA =
                         pageStep context
                             (Page.GotApiKeysMsg generationA
-                                (ApiKeys.CreateCompleted requestA (Ok createdKeyA))
+                                (ApiKeys.ApiKeysLoaded (Ok [ createdKeyA.apiKey ]))
                             )
-                            pendingB
-
-                    afterB : Page.Model
-                    afterB =
-                        pageStep context
-                            (Page.GotApiKeysMsg generationB
-                                (ApiKeys.CreateCompleted requestB (Ok createdKeyB))
-                            )
-                            afterStaleA
+                            loadedB
                 in
-                { stale =
-                    ( apiKeysPendingRequestId afterStaleA
-                    , apiKeysCreatedToken afterStaleA
-                    , apiKeysNames afterStaleA
-                    )
-                , final = ( apiKeysCreatedToken afterB, apiKeysNames afterB )
+                { generationsDiffer = generationA /= generationB
+                , names = apiKeysNames afterStaleA
                 }
                     |> Expect.equal
-                        { stale = ( Just requestB, Nothing, [] )
-                        , final = ( Just "token-b", [ "Second script" ] )
+                        { generationsDiffer = True
+                        , names = [ "Second script" ]
                         }
-        , test "a stale copy result from an old pane generation is ignored" <|
+        , test "a create completion from an old api-key-create pane is ignored" <|
             \_ ->
                 let
                     context : Page.InitContext
                     context =
-                        { route = SettingsApiKeys, today = Just today }
+                        { route = SettingsApiKeyCreate, today = Just today }
 
                     started : Page.Model
                     started =
@@ -563,32 +528,205 @@ apiKeysPaneTests =
 
                     generationA : Int
                     generationA =
-                        apiKeysGeneration started |> Maybe.withDefault 0
+                        apiKeyCreateGeneration started |> Maybe.withDefault 0
 
-                    pendingA : Page.Model
-                    pendingA =
-                        started
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationA (ApiKeys.ApiKeysLoaded (Ok [])))
-                            |> startCreate context generationA "First script"
+                    submittedA : Page.Model
+                    submittedA =
+                        startApiKeyCreate context generationA "First script" started
 
                     requestA : Int
                     requestA =
-                        apiKeysPendingRequestId pendingA |> Maybe.withDefault 0
+                        apiKeyCreatePendingRequestId submittedA |> Maybe.withDefault 0
+
+                    returned : Page.Model
+                    returned =
+                        submittedA
+                            |> Page.initPreserving
+                                { route = DiarySettings, today = Just today }
+                            |> first
+                            |> Page.initPreserving context
+                            |> first
+
+                    generationB : Int
+                    generationB =
+                        apiKeyCreateGeneration returned |> Maybe.withDefault 0
+
+                    submittedB : Page.Model
+                    submittedB =
+                        startApiKeyCreate context generationB "Second script" returned
+
+                    requestB : Int
+                    requestB =
+                        apiKeyCreatePendingRequestId submittedB |> Maybe.withDefault 0
+
+                    afterStaleA : Page.Model
+                    afterStaleA =
+                        pageStep context
+                            (Page.GotApiKeyCreateMsg generationA
+                                (ApiKeyCreate.CreateCompleted requestA (Ok createdKeyA))
+                            )
+                            submittedB
+
+                    afterB : Page.Model
+                    afterB =
+                        pageStep context
+                            (Page.GotApiKeyCreateMsg generationB
+                                (ApiKeyCreate.CreateCompleted requestB (Ok createdKeyB))
+                            )
+                            afterStaleA
+                in
+                { generationsDiffer = generationA /= generationB
+                , sameRequestId = requestA == requestB
+                , stale =
+                    ( apiKeyCreatePendingRequestId afterStaleA
+                    , apiKeyCreateCreatedToken afterStaleA
+                    )
+                , final = apiKeyCreateCreatedToken afterB
+                }
+                    |> Expect.equal
+                        { generationsDiffer = True
+                        , sameRequestId = True
+                        , stale = ( Just requestB, Nothing )
+                        , final = Just "token-b"
+                        }
+        , test "Done on the created api-key pane returns to the api-keys list" <|
+            \_ ->
+                let
+                    context : Page.InitContext
+                    context =
+                        { route = SettingsApiKeyCreate, today = Just today }
+
+                    started : Page.Model
+                    started =
+                        Page.init context |> first
+
+                    generation : Int
+                    generation =
+                        apiKeyCreateGeneration started |> Maybe.withDefault 0
+
+                    created : Page.Model
+                    created =
+                        completeApiKeyCreate context generation "First script" createdKeyA started
+                in
+                { token = apiKeyCreateCreatedToken created
+                , out =
+                    pageOut context
+                        (Page.GotApiKeyCreateMsg generation ApiKeyCreate.DoneClicked)
+                        created
+                }
+                    |> Expect.equal
+                        { token = Just "token-a"
+                        , out = Just (Page.Navigate SettingsApiKeys)
+                        }
+        , test "Copy on the created api-key pane sends the copy port request" <|
+            \_ ->
+                let
+                    context : Page.InitContext
+                    context =
+                        { route = SettingsApiKeyCreate, today = Just today }
+
+                    started : Page.Model
+                    started =
+                        Page.init context |> first
+
+                    generation : Int
+                    generation =
+                        apiKeyCreateGeneration started |> Maybe.withDefault 0
+
+                    created : Page.Model
+                    created =
+                        completeApiKeyCreate context generation "First script" createdKeyA started
+
+                    copied : Page.Model
+                    copied =
+                        pageStep context
+                            (Page.GotApiKeyCreateMsg generation ApiKeyCreate.CopyClicked)
+                            created
+                in
+                { out =
+                    pageOut context
+                        (Page.GotApiKeyCreateMsg generation ApiKeyCreate.CopyClicked)
+                        created
+                        |> Maybe.andThen pageCopySummary
+                , copyId = apiKeyCreateCopyPendingId copied
+                , token = apiKeyCreateCreatedToken copied
+                }
+                    |> Expect.equal
+                        { out = Just ( generation, 2, "token-a" )
+                        , copyId = Just 2
+                        , token = Just "token-a"
+                        }
+        , test "navigating to api keys after creation drops the create pane and token" <|
+            \_ ->
+                let
+                    context : Page.InitContext
+                    context =
+                        { route = SettingsApiKeyCreate, today = Just today }
+
+                    started : Page.Model
+                    started =
+                        Page.init context |> first
+
+                    generation : Int
+                    generation =
+                        apiKeyCreateGeneration started |> Maybe.withDefault 0
+
+                    created : Page.Model
+                    created =
+                        completeApiKeyCreate context generation "First script" createdKeyA started
+
+                    navigated : Page.Model
+                    navigated =
+                        created
+                            |> Page.initPreserving
+                                { route = SettingsApiKeys, today = Just today }
+                            |> first
+                in
+                { keys = Page.paneKeys navigated
+                , token = apiKeyCreateCreatedToken navigated
+                }
+                    |> Expect.equal
+                        { keys = [ "api-keys" ]
+                        , token = Nothing
+                        }
+        , test "a stale copy result from an old api-key-create pane generation is ignored" <|
+            \_ ->
+                let
+                    context : Page.InitContext
+                    context =
+                        { route = SettingsApiKeyCreate, today = Just today }
+
+                    started : Page.Model
+                    started =
+                        Page.init context |> first
+
+                    generationA : Int
+                    generationA =
+                        apiKeyCreateGeneration started |> Maybe.withDefault 0
+
+                    submittedA : Page.Model
+                    submittedA =
+                        startApiKeyCreate context generationA "First script" started
+
+                    requestA : Int
+                    requestA =
+                        apiKeyCreatePendingRequestId submittedA |> Maybe.withDefault 0
 
                     copyA : Page.Model
                     copyA =
-                        pendingA
+                        submittedA
                             |> pageStep context
-                                (Page.GotApiKeysMsg generationA
-                                    (ApiKeys.CreateCompleted requestA (Ok createdKeyA))
+                                (Page.GotApiKeyCreateMsg generationA
+                                    (ApiKeyCreate.CreateCompleted requestA (Ok createdKeyA))
                                 )
                             |> pageStep context
-                                (Page.GotApiKeysMsg generationA ApiKeys.CopyClicked)
+                                (Page.GotApiKeyCreateMsg generationA
+                                    ApiKeyCreate.CopyClicked
+                                )
 
                     oldCopyId : Int
                     oldCopyId =
-                        apiKeysCopyPendingId copyA |> Maybe.withDefault 0
+                        apiKeyCreateCopyPendingId copyA |> Maybe.withDefault 0
 
                     returned : Page.Model
                     returned =
@@ -601,32 +739,31 @@ apiKeysPaneTests =
 
                     generationB : Int
                     generationB =
-                        apiKeysGeneration returned |> Maybe.withDefault 0
+                        apiKeyCreateGeneration returned |> Maybe.withDefault 0
 
-                    pendingB : Page.Model
-                    pendingB =
-                        returned
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationB (ApiKeys.ApiKeysLoaded (Ok [])))
-                            |> startCreate context generationB "Second script"
+                    submittedB : Page.Model
+                    submittedB =
+                        startApiKeyCreate context generationB "Second script" returned
 
                     requestB : Int
                     requestB =
-                        apiKeysPendingRequestId pendingB |> Maybe.withDefault 0
+                        apiKeyCreatePendingRequestId submittedB |> Maybe.withDefault 0
 
                     copyB : Page.Model
                     copyB =
-                        pendingB
+                        submittedB
                             |> pageStep context
-                                (Page.GotApiKeysMsg generationB
-                                    (ApiKeys.CreateCompleted requestB (Ok createdKeyB))
+                                (Page.GotApiKeyCreateMsg generationB
+                                    (ApiKeyCreate.CreateCompleted requestB (Ok createdKeyB))
                                 )
                             |> pageStep context
-                                (Page.GotApiKeysMsg generationB ApiKeys.CopyClicked)
+                                (Page.GotApiKeyCreateMsg generationB
+                                    ApiKeyCreate.CopyClicked
+                                )
 
                     newCopyId : Int
                     newCopyId =
-                        apiKeysCopyPendingId copyB |> Maybe.withDefault 0
+                        apiKeyCreateCopyPendingId copyB |> Maybe.withDefault 0
 
                     afterOldCopy : Page.Model
                     afterOldCopy =
@@ -643,10 +780,10 @@ apiKeysPaneTests =
                 { generationsDiffer = generationA /= generationB
                 , sameCopyId = oldCopyId == newCopyId
                 , stale =
-                    ( apiKeysCreatedToken afterOldCopy
-                    , apiKeysCopyStateName afterOldCopy
+                    ( apiKeyCreateCreatedToken afterOldCopy
+                    , apiKeyCreateCopyStateName afterOldCopy
                     )
-                , final = apiKeysCopyStateName afterNewCopy
+                , final = apiKeyCreateCopyStateName afterNewCopy
                 }
                     |> Expect.equal
                         { generationsDiffer = True
@@ -654,12 +791,12 @@ apiKeysPaneTests =
                         , stale = ( Just "token-b", "pending" )
                         , final = "succeeded"
                         }
-        , test "clearStore keeps the api-keys generation across re-entry" <|
+        , test "clearStore keeps the api-key-create generation across re-entry" <|
             \_ ->
                 let
                     context : Page.InitContext
                     context =
-                        { route = SettingsApiKeys, today = Just today }
+                        { route = SettingsApiKeyCreate, today = Just today }
 
                     started : Page.Model
                     started =
@@ -667,69 +804,62 @@ apiKeysPaneTests =
 
                     generationA : Int
                     generationA =
-                        apiKeysGeneration started |> Maybe.withDefault 0
+                        apiKeyCreateGeneration started |> Maybe.withDefault 0
 
-                    pendingA : Page.Model
-                    pendingA =
-                        started
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationA (ApiKeys.ApiKeysLoaded (Ok [])))
-                            |> startCreate context generationA "First script"
+                    submittedA : Page.Model
+                    submittedA =
+                        startApiKeyCreate context generationA "First script" started
 
                     requestA : Int
                     requestA =
-                        apiKeysPendingRequestId pendingA |> Maybe.withDefault 0
+                        apiKeyCreatePendingRequestId submittedA |> Maybe.withDefault 0
 
                     reentered : Page.Model
                     reentered =
-                        pendingA
+                        submittedA
                             |> Page.clearStore
                             |> Page.initPreserving context
                             |> first
 
                     generationB : Int
                     generationB =
-                        apiKeysGeneration reentered |> Maybe.withDefault 0
+                        apiKeyCreateGeneration reentered |> Maybe.withDefault 0
 
-                    pendingB : Page.Model
-                    pendingB =
-                        reentered
-                            |> pageStep context
-                                (Page.GotApiKeysMsg generationB (ApiKeys.ApiKeysLoaded (Ok [])))
-                            |> startCreate context generationB "Second script"
+                    submittedB : Page.Model
+                    submittedB =
+                        startApiKeyCreate context generationB "Second script" reentered
 
                     requestB : Int
                     requestB =
-                        apiKeysPendingRequestId pendingB |> Maybe.withDefault 0
+                        apiKeyCreatePendingRequestId submittedB |> Maybe.withDefault 0
 
                     afterStaleA : Page.Model
                     afterStaleA =
                         pageStep context
-                            (Page.GotApiKeysMsg generationA
-                                (ApiKeys.CreateCompleted requestA (Ok createdKeyA))
+                            (Page.GotApiKeyCreateMsg generationA
+                                (ApiKeyCreate.CreateCompleted requestA (Ok createdKeyA))
                             )
-                            pendingB
+                            submittedB
 
                     afterB : Page.Model
                     afterB =
                         pageStep context
-                            (Page.GotApiKeysMsg generationB
-                                (ApiKeys.CreateCompleted requestB (Ok createdKeyB))
+                            (Page.GotApiKeyCreateMsg generationB
+                                (ApiKeyCreate.CreateCompleted requestB (Ok createdKeyB))
                             )
                             afterStaleA
                 in
                 { generationsDiffer = generationA /= generationB
                 , stale =
-                    ( apiKeysPendingRequestId afterStaleA
-                    , apiKeysCreatedToken afterStaleA
-                    , apiKeysNames afterStaleA
+                    ( apiKeyCreatePendingRequestId afterStaleA
+                    , apiKeyCreateCreatedToken afterStaleA
                     )
-                , final = ( apiKeysCreatedToken afterB, apiKeysNames afterB )
+                , final = apiKeyCreateCreatedToken afterB
                 }
                     |> Expect.equal
                         { generationsDiffer = True
-                        , stale = ( Just requestB, Nothing, [] )
-                        , final = ( Just "token-b", [ "Second script" ] )
+                        , stale = ( Just requestB, Nothing )
+                        , final = Just "token-b"
                         }
         ]
 
@@ -770,13 +900,43 @@ pageStep context msg model =
         |> Maybe.withDefault model
 
 
-startCreate : Page.InitContext -> Int -> String -> Page.Model -> Page.Model
-startCreate context generation name model =
+pageOut : Page.InitContext -> Page.Msg -> Page.Model -> Maybe Page.OutMsg
+pageOut context msg model =
+    Page.update context msg model
+        |> Maybe.map third
+
+
+startApiKeyCreate : Page.InitContext -> Int -> String -> Page.Model -> Page.Model
+startApiKeyCreate context generation name model =
     model
-        |> pageStep context (Page.GotApiKeysMsg generation ApiKeys.CreateClicked)
         |> pageStep context
-            (Page.GotApiKeysMsg generation (ApiKeys.CreateNameChanged name))
-        |> pageStep context (Page.GotApiKeysMsg generation ApiKeys.CreateSubmitted)
+            (Page.GotApiKeyCreateMsg generation (ApiKeyCreate.NameChanged name))
+        |> pageStep context
+            (Page.GotApiKeyCreateMsg generation ApiKeyCreate.Submitted)
+
+
+completeApiKeyCreate :
+    Page.InitContext
+    -> Int
+    -> String
+    -> CreatedApiKey
+    -> Page.Model
+    -> Page.Model
+completeApiKeyCreate context generation name created model =
+    let
+        submitted : Page.Model
+        submitted =
+            startApiKeyCreate context generation name model
+
+        requestId : Int
+        requestId =
+            apiKeyCreatePendingRequestId submitted |> Maybe.withDefault 0
+    in
+    pageStep context
+        (Page.GotApiKeyCreateMsg generation
+            (ApiKeyCreate.CreateCompleted requestId (Ok created))
+        )
+        submitted
 
 
 apiKeysGeneration : Page.Model -> Maybe Int
@@ -799,97 +959,121 @@ apiKeysPane model =
         |> List.head
 
 
-apiKeysPendingRequestId : Page.Model -> Maybe Int
-apiKeysPendingRequestId model =
-    apiKeysPane model
+apiKeyCreateGeneration : Page.Model -> Maybe Int
+apiKeyCreateGeneration model =
+    apiKeyCreatePane model |> Maybe.map Tuple.first
+
+
+apiKeyCreatePane : Page.Model -> Maybe ( Int, ApiKeyCreate.Model )
+apiKeyCreatePane model =
+    model.panes
+        |> List.filterMap
+            (\pane ->
+                case pane of
+                    Page.ApiKeyCreatePane generation sub ->
+                        Just ( generation, sub )
+
+                    _ ->
+                        Nothing
+            )
+        |> List.head
+
+
+apiKeyCreateForm : Page.Model -> Maybe ApiKeyCreate.CreateForm
+apiKeyCreateForm model =
+    apiKeyCreatePane model
         |> Maybe.andThen
             (\( _, sub ) ->
                 case sub of
-                    ApiKeys.Loaded loaded ->
-                        case loaded.dialog of
-                            ApiKeys.Creating form ->
-                                case form.state of
-                                    ApiKeys.Submitting requestId ->
-                                        Just requestId
+                    ApiKeyCreate.Form formModel ->
+                        Just formModel.form
 
-                                    _ ->
-                                        Nothing
+                    ApiKeyCreate.Created _ ->
+                        Nothing
+            )
 
-                            _ ->
-                                Nothing
+
+apiKeyCreatePendingRequestId : Page.Model -> Maybe Int
+apiKeyCreatePendingRequestId model =
+    apiKeyCreateForm model
+        |> Maybe.andThen
+            (\createForm ->
+                case createForm.state of
+                    ApiKeyCreate.Submitting requestId ->
+                        Just requestId
 
                     _ ->
                         Nothing
             )
 
 
-apiKeysCreatedToken : Page.Model -> Maybe String
-apiKeysCreatedToken model =
-    apiKeysPane model
+apiKeyCreateCreatedToken : Page.Model -> Maybe String
+apiKeyCreateCreatedToken model =
+    apiKeyCreatePane model
         |> Maybe.andThen
             (\( _, sub ) ->
                 case sub of
-                    ApiKeys.Loaded loaded ->
-                        case loaded.dialog of
-                            ApiKeys.Created created _ ->
-                                Just created.token
+                    ApiKeyCreate.Created createdModel ->
+                        Just createdModel.created.token
 
-                            _ ->
-                                Nothing
-
-                    _ ->
+                    ApiKeyCreate.Form _ ->
                         Nothing
             )
 
 
-apiKeysCopyPendingId : Page.Model -> Maybe Int
-apiKeysCopyPendingId model =
-    apiKeysPane model
+apiKeyCreateCopyPendingId : Page.Model -> Maybe Int
+apiKeyCreateCopyPendingId model =
+    apiKeyCreatePane model
         |> Maybe.andThen
             (\( _, sub ) ->
                 case sub of
-                    ApiKeys.Loaded loaded ->
-                        case loaded.dialog of
-                            ApiKeys.Created _ (ApiKeys.CopyPending copyId) ->
+                    ApiKeyCreate.Created createdModel ->
+                        case createdModel.copyState of
+                            ApiKeyCreate.CopyPending copyId ->
                                 Just copyId
 
                             _ ->
                                 Nothing
 
-                    _ ->
+                    ApiKeyCreate.Form _ ->
                         Nothing
             )
 
 
-apiKeysCopyStateName : Page.Model -> String
-apiKeysCopyStateName model =
-    apiKeysPane model
+apiKeyCreateCopyStateName : Page.Model -> String
+apiKeyCreateCopyStateName model =
+    apiKeyCreatePane model
         |> Maybe.map
             (\( _, sub ) ->
                 case sub of
-                    ApiKeys.Loaded loaded ->
-                        case loaded.dialog of
-                            ApiKeys.Created _ copyState ->
-                                case copyState of
-                                    ApiKeys.CopyIdle ->
-                                        "idle"
+                    ApiKeyCreate.Created createdModel ->
+                        case createdModel.copyState of
+                            ApiKeyCreate.CopyIdle ->
+                                "idle"
 
-                                    ApiKeys.CopyPending _ ->
-                                        "pending"
+                            ApiKeyCreate.CopyPending _ ->
+                                "pending"
 
-                                    ApiKeys.CopySucceeded ->
-                                        "succeeded"
+                            ApiKeyCreate.CopySucceeded ->
+                                "succeeded"
 
-                                    ApiKeys.CopyFailed ->
-                                        "failed"
+                            ApiKeyCreate.CopyFailed ->
+                                "failed"
 
-                            _ ->
-                                "none"
-
-                    _ ->
+                    ApiKeyCreate.Form _ ->
                         "none"
             )
         |> Maybe.withDefault "none"
+
+
+pageCopySummary : Page.OutMsg -> Maybe ( Int, Int, String )
+pageCopySummary outMsg =
+    case outMsg of
+        Page.CopyText generation copyId token ->
+            Just ( generation, copyId, token )
+
+        _ ->
+            Nothing
 
 
 apiKeysNames : Page.Model -> List String

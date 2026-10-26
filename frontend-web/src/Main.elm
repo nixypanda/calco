@@ -25,6 +25,7 @@ import Element exposing (Element)
 import Element.Background as Background
 import Element.Font as Font
 import Html
+import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page
 import Translations.Util exposing (Language(..))
@@ -535,6 +536,11 @@ view model =
         isLoadingPage =
             Page.isLoading model.page
 
+        modal : Maybe (Element Msg)
+        modal =
+            Page.modalView model.env model.page
+                |> Maybe.map (Element.map GotPageMsg)
+
         updateBanner : Maybe (Element Msg)
         updateBanner =
             if model.version.updateAvailable then
@@ -564,17 +570,13 @@ view model =
                     { borderColor = Nothing, backgroundColor = Nothing, shadow = Nothing }
                 ]
             }
-            (layoutAttrs model
-                ++ Chrome.bottomNavLayoutAttrs
-                    model.env
-                    session
-                    model.route
-                    isLoadingPage
-                    GotChromeMsg
+            (modalLayoutAttrs modal
+                ++ bottomNavAttrs modal model session isLoadingPage
             )
           <|
-            uiLayout model.env.theme <|
-                Chrome.viewFrame
+            uiLayout model.env.theme
+                (modalContentAttrs modal)
+                (Chrome.viewFrame
                     model.env
                     model.chrome
                     session
@@ -583,12 +585,52 @@ view model =
                     updateBanner
                     (pageView model)
                     GotChromeMsg
+                )
         ]
     }
 
 
-uiLayout : Theme -> Element msg -> Element msg
-uiLayout theme content =
+{-| A page dialog is rendered as a root-level `inFront` sibling of the shell
+content, so the shell content can be marked inert: keyboard focus and pointer
+input cannot reach the chrome or page behind the dialog while it stays
+interactive.
+-}
+modalContentAttrs : Maybe (Element Msg) -> List (Element.Attribute Msg)
+modalContentAttrs modal =
+    case modal of
+        Just _ ->
+            [ Element.htmlAttribute (Html.Attributes.attribute "inert" "") ]
+
+        Nothing ->
+            []
+
+
+{-| The bottom nav is part of the shell, so it is omitted while a dialog is
+open. `Chrome.viewFrame` still reserves the page's bottom padding from the same
+nav visibility rule, so the page does not shift when the nav is hidden.
+-}
+bottomNavAttrs :
+    Maybe (Element Msg)
+    -> Model
+    -> Session
+    -> Bool
+    -> List (Element.Attribute Msg)
+bottomNavAttrs modal model session isLoadingPage =
+    case modal of
+        Just _ ->
+            []
+
+        Nothing ->
+            Chrome.bottomNavLayoutAttrs
+                model.env
+                session
+                model.route
+                isLoadingPage
+                GotChromeMsg
+
+
+uiLayout : Theme -> List (Element.Attribute msg) -> Element msg -> Element msg
+uiLayout theme extraAttrs content =
     Element.column
         [ Element.width Element.fill
         , Element.height Element.fill
@@ -598,14 +640,21 @@ uiLayout theme content =
         , Font.size 16
         , uiClass "ui-theme-root"
         ]
-        [ content ]
+        [ Element.el
+            ([ Element.width Element.fill
+             , Element.height Element.fill
+             ]
+                ++ extraAttrs
+            )
+            content
+        ]
 
 
-layoutAttrs : Model -> List (Element.Attribute Msg)
-layoutAttrs model =
-    case Page.modalView model.env model.page of
-        Just modal ->
-            [ Element.inFront (Element.map GotPageMsg modal) ]
+modalLayoutAttrs : Maybe (Element Msg) -> List (Element.Attribute Msg)
+modalLayoutAttrs modal =
+    case modal of
+        Just modalCard ->
+            [ Element.inFront modalCard ]
 
         Nothing ->
             []
