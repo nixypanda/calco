@@ -4,13 +4,16 @@ use axum::extract::FromRef;
 use sqlx::PgPool;
 
 use crate::AppState;
-use crate::auth::application::{AdminUserService, AuthBootstrapService, AuthSessionService};
+use crate::auth::application::{
+    AdminUserService, ApiKeyService, AuthBootstrapService, AuthSessionService,
+};
 use crate::auth::domain::{
-    IdentityRepository, SessionPolicy, SessionRepository, UserProfileRepository,
+    ApiKeyRepository, IdentityRepository, SessionPolicy, SessionRepository, UserProfileRepository,
 };
 use crate::auth::infrastructure::argon2_credentials::Argon2Credentials;
 use crate::auth::infrastructure::postgres::{
-    PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository,
+    PostgresApiKeyRepository, PostgresIdentityRepository, PostgresSessionRepository,
+    PostgresUserProfileRepository,
 };
 use crate::auth::interfaces::SessionCookieConfig;
 
@@ -21,6 +24,7 @@ pub struct AuthModule {
     pub bootstrap: AuthBootstrapService,
     pub sessions: AuthSessionService,
     pub admin_users: AdminUserService,
+    pub api_keys: ApiKeyService,
 }
 
 impl AuthModule {
@@ -35,6 +39,8 @@ impl AuthModule {
             Arc::new(PostgresSessionRepository::new(pool.clone())) as Arc<dyn SessionRepository>;
         let profile_repo = Arc::new(PostgresUserProfileRepository::new(pool.clone()))
             as Arc<dyn UserProfileRepository>;
+        let api_key_repo =
+            Arc::new(PostgresApiKeyRepository::new(pool.clone())) as Arc<dyn ApiKeyRepository>;
         let credentials = Arc::new(Argon2Credentials);
 
         let bootstrap = AuthBootstrapService::new(
@@ -50,7 +56,9 @@ impl AuthModule {
             credentials.clone(),
             session_policy,
         );
-        let admin_users = AdminUserService::new(identity_repo, profile_repo, credentials);
+        let admin_users =
+            AdminUserService::new(identity_repo.clone(), profile_repo.clone(), credentials);
+        let api_keys = ApiKeyService::new(api_key_repo, identity_repo, profile_repo);
 
         Self {
             cookie_config,
@@ -58,6 +66,7 @@ impl AuthModule {
             bootstrap,
             sessions,
             admin_users,
+            api_keys,
         }
     }
 }

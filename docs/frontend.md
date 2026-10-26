@@ -391,6 +391,8 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /home?date=YYYY-MM-DD
 /settings/goals
 /settings/diary
+/settings/api-keys
+/settings/api-keys/new
 /logs/:id
 /search
 /search?date=YYYY-MM-DD
@@ -438,6 +440,7 @@ API modules live in `frontend-web/src/Api/`:
 
 - `Auth.elm`
 - `Admin.elm`
+- `ApiKeys.elm`
 - `Foods.elm`
 - `DiaryPreferences.elm`
 - `Goals.elm`
@@ -481,6 +484,8 @@ owns the JavaScript ports for:
 - persisted theme preference.
 - requested page reloads.
 - camera barcode scanning through `barcodeScanner.js`.
+- clipboard copy request/result ports for API-key secrets through
+  `navigator.clipboard.writeText`.
 
 The scanner uses ZXing for EAN/UPC detection and stops camera tracks when the
 scan completes or is cancelled.
@@ -537,6 +542,59 @@ history/trends screen is out of scope.
 
 `Page.Goals.Settings` lets an authenticated user view and save calorie and
 macro targets for the current local day.
+
+### API Keys
+
+`Page.Settings.ApiKeys` renders `/settings/api-keys` and
+`Page.Settings.ApiKeyCreate` renders `/settings/api-keys/new` for normal users.
+Anonymous visitors go to login; admin identities go to the admin dashboard.
+`View.Chrome` supplies the **API keys** and **Create API key** screen titles. The
+profile-menu **API keys** entry is shown to normal users only; admin sessions do
+not see it.
+
+The list page provides:
+
+- a single description paragraph above the keys card.
+- a create action in the card header that opens `/settings/api-keys/new`.
+- an empty state with an explanation.
+- key rows showing name, token hint, scope, created date, last-used date (or
+  "Never used"), expiry date (or "Never expires"), and a revoke action.
+  Timestamps are date-only values derived from the UTC date portion of the API
+  timestamps; times of day are not displayed. Expired keys are not marked with a
+  separate expired badge; only the expiry date is shown.
+- revoke confirmation through `View.DeleteModal.confirmModalView`.
+- loading, load-failure retry, and session-expiry states.
+
+The create form is its own routed page at `/settings/api-keys/new` and provides:
+
+- a form with name, `read` or `read_write` scope, and an expiry choice that
+  defaults to 90 days.
+- a blocking progress dialog while the create request is in flight. The app
+  chrome behind it is inert, so it cannot be clicked or reached with Tab while
+  the POST is pending.
+- a non-dismissible one-time secret reveal dialog after creation: the raw token
+  in a readonly, autofocused textarea in monospace, a Copy action, an
+  `Authorization: Bearer` usage example, and a Done action. The app chrome
+  behind it is inert, so within the app only Done dismisses it. Browser back,
+  refresh, and closing the tab are not intercepted; leaving the page discards
+  the raw token.
+- copy feedback: "Copying…" while pending, "Copied" on success, or a
+  "Copy failed — select the key manually." message. Both Copy and Done are
+  disabled while a copy is pending.
+- Done returns to `/settings/api-keys`; leaving the page removes the raw token
+  from page state.
+- create validation and error, plus session-expiry states.
+
+If clipboard permission fails, the token remains selectable and the page does
+not crash. The list is full-width on mobile and does not add a bottom-navigation
+item.
+
+`Data.ApiKey` owns key metadata types, creation payloads, and decoding.
+`Api.ApiKeys` owns list, create, and revoke requests through `Api.Client`.
+Copying is a request/result port pair: the create page returns `CopyText`, `Main`
+sends a `copyText` request (generation, request id, text), `index.js` uses
+`navigator.clipboard.writeText`, and `Main` subscribes to `copyTextResult` before
+forwarding `CopyTextResult` back to the active pane.
 
 ### Foods
 

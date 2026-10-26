@@ -9,7 +9,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::auth::interfaces::http::AuthUser;
+use crate::auth::interfaces::http::{ReadUser, WriteUser};
 use crate::nutrition::error::NutritionError;
 use crate::nutrition::goals::domain::{GoalTargetSnapshot, GoalTargetSource, GoalTargets};
 use crate::nutrition::module::GoalTargetModule;
@@ -54,7 +54,7 @@ pub enum GoalSourceDto {
 }
 
 async fn get_goal_handler(
-    auth: AuthUser,
+    auth: ReadUser,
     State(state): State<GoalTargetModule>,
     Query(query): Query<GoalQuery>,
 ) -> impl IntoResponse {
@@ -74,7 +74,7 @@ async fn get_goal_handler(
 }
 
 async fn put_goal_handler(
-    auth: AuthUser,
+    auth: WriteUser,
     State(state): State<GoalTargetModule>,
     Json(request): Json<PutGoalRequest>,
 ) -> impl IntoResponse {

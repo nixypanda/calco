@@ -27,6 +27,138 @@ enUsTranslations tid =
         TidApiErrorTimeout ->
             "The server took too long to respond. Try again."
 
+        TidApiKeysConfirmRevoke ->
+            "Revoke key"
+
+        TidApiKeysCopied ->
+            "Copied"
+
+        TidApiKeysCopy ->
+            "Copy"
+
+        TidApiKeysCopyAria ->
+            "Copy API key to clipboard"
+
+        TidApiKeysCopyFailed ->
+            "Copy failed — select the key manually."
+
+        TidApiKeysCopying ->
+            "Copying…"
+
+        TidApiKeysCreate ->
+            "Create API key"
+
+        TidApiKeysCreateDescription ->
+            "Name the key so you can recognize it later."
+
+        TidApiKeysCreateTitle ->
+            "Create API key"
+
+        TidApiKeysCreatedOn hole0 ->
+            "Created " ++ hole0
+
+        TidApiKeysCreatedTitle ->
+            "API key created"
+
+        TidApiKeysCreatedWarning ->
+            "Copy this key now. It will not be shown again."
+
+        TidApiKeysDescription ->
+            "API keys let scripts and tools access your data. Treat them like passwords."
+
+        TidApiKeysDetails ->
+            "Key details"
+
+        TidApiKeysDone ->
+            "Done"
+
+        TidApiKeysEmpty ->
+            "You don't have any API keys yet."
+
+        TidApiKeysExpires hole0 ->
+            "Expires " ++ hole0
+
+        TidApiKeysExpiry ->
+            "Expiry"
+
+        TidApiKeysExpiry30Days ->
+            "30 days"
+
+        TidApiKeysExpiry365Days ->
+            "1 year"
+
+        TidApiKeysExpiry90Days ->
+            "90 days"
+
+        TidApiKeysExpiryNever ->
+            "Never"
+
+        TidApiKeysHint hole0 ->
+            "Key hint: " ++ hole0
+
+        TidApiKeysLastUsed hole0 ->
+            "Last used " ++ hole0
+
+        TidApiKeysName ->
+            "Name"
+
+        TidApiKeysNameInvalid ->
+            "Name contains unsupported characters."
+
+        TidApiKeysNameRequired ->
+            "Name is required."
+
+        TidApiKeysNameTooLong ->
+            "Name must be 64 characters or fewer."
+
+        TidApiKeysNeverExpires ->
+            "Never expires"
+
+        TidApiKeysNeverUsed ->
+            "Never used"
+
+        TidApiKeysRevoke ->
+            "Revoke"
+
+        TidApiKeysRevokeDescription hole0 hole1 ->
+            "Anything using " ++ hole0 ++ " (" ++ hole1 ++ ") will stop working immediately."
+
+        TidApiKeysRevokeNamed hole0 ->
+            "Revoke " ++ hole0
+
+        TidApiKeysRevokeTitle ->
+            "Revoke API key?"
+
+        TidApiKeysRevoking ->
+            "Revoking..."
+
+        TidApiKeysScope ->
+            "Scope"
+
+        TidApiKeysScopeRead ->
+            "Read only"
+
+        TidApiKeysScopeReadDescription ->
+            "Can read your diary, foods, meals, goals, and preferences."
+
+        TidApiKeysScopeReadWrite ->
+            "Read and write"
+
+        TidApiKeysScopeReadWriteDescription ->
+            "Can read and change your diary, foods, meals, goals, and preferences."
+
+        TidApiKeysScopeUnknown ->
+            "Unknown scope"
+
+        TidApiKeysSecretLabel ->
+            "API key secret"
+
+        TidApiKeysUsage ->
+            "Send it in the Authorization header:"
+
+        TidApiKeysUsageExample ->
+            "Authorization: Bearer <your API key>"
+
         TidAssistantApplyReplacesForm ->
             "Applying this draft will replace the values already in the form."
 
@@ -918,6 +1050,9 @@ enUsTranslations tid =
         TidNavAdmin ->
             "Admin"
 
+        TidNavApiKeys ->
+            "API keys"
+
         TidNavBack ->
             "Back"
 
@@ -1220,6 +1355,9 @@ enUsTranslations tid =
 
         TidTitleAdmin ->
             "Admin"
+
+        TidTitleApiKeys ->
+            "API keys"
 
         TidTitleCalendar ->
             "Calendar"

@@ -5,14 +5,17 @@ module Ui.Input exposing
     , completionDropdown
     , completionRow
     , decimalInputWithSuffix
+    , disabledInput
     , fieldLabel
     , input
     , numericInput
     , numericInputMode
     , optionRow
+    , optionRowWithState
     , passwordInput
     , searchInput
     , selectDropdown
+    , selectDropdownWithState
     , suggestionList
     , toggleSwitch
     )
@@ -89,6 +92,19 @@ inputBorder theme =
 input : Theme -> InputConfig msg -> Element msg
 input theme config =
     textInput theme [] config
+
+
+{-| A read-only presentation of a field while its dialog is submitting.
+`Input.text` routes `Element.htmlAttribute` to the real `<input>`, so this
+disables the control rather than only its wrapper.
+-}
+disabledInput : Theme -> InputConfig msg -> Element msg
+disabledInput theme config =
+    textInput theme
+        [ Element.htmlAttribute (Html.Attributes.disabled True)
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-disabled" "true")
+        ]
+        config
 
 
 {-| Digits-only keypad for fields such as a barcode: no decimal separator. Passed
@@ -333,30 +349,104 @@ optionRow :
         }
     -> Element msg
 optionRow theme config =
+    optionRowView theme
+        { label = config.label
+        , trailing = config.trailing
+        , selected = config.selected
+        , onPress = config.onPress
+        , disabled = False
+        , extraAttributes = []
+        }
+
+
+{-| Toggle-like option row for choice controls that expose their selected
+state. Plain dropdown/completion rows keep `optionRow` and avoid toggle ARIA.
+-}
+optionRowWithState :
+    Theme
+    ->
+        { label : String
+        , trailing : Maybe (Element msg)
+        , selected : Bool
+        , onPress : msg
+        , disabled : Bool
+        }
+    -> Element msg
+optionRowWithState theme config =
+    optionRowView theme
+        { label = config.label
+        , trailing = config.trailing
+        , selected = config.selected
+        , onPress = config.onPress
+        , disabled = config.disabled
+        , extraAttributes =
+            [ Element.htmlAttribute
+                (Html.Attributes.attribute
+                    "aria-pressed"
+                    (boolString config.selected)
+                )
+            , Element.htmlAttribute
+                (Html.Attributes.attribute
+                    "aria-disabled"
+                    (boolString config.disabled)
+                )
+            ]
+        }
+
+
+optionRowView :
+    Theme
+    ->
+        { label : String
+        , trailing : Maybe (Element msg)
+        , selected : Bool
+        , onPress : msg
+        , disabled : Bool
+        , extraAttributes : List (Element.Attribute msg)
+        }
+    -> Element msg
+optionRowView theme config =
     let
         itemColor : Element.Color
         itemColor =
-            if config.selected then
+            if config.disabled then
+                theme.textMuted
+
+            else if config.selected then
                 theme.solidControlFg
 
             else
                 theme.textPrimary
     in
     Input.button
-        [ Element.width Element.fill
-        , Element.paddingXY space12 10
-        , Border.rounded radiusControl
-        , Background.color
+        ([ Element.width Element.fill
+         , Element.paddingXY space12 10
+         , Border.rounded radiusControl
+         , Background.color
             (if config.selected then
                 theme.brandBlue
 
              else
                 theme.cardBg
             )
-        , Font.color itemColor
-        , uiClass "ui-motion ui-pressable"
-        ]
-        { onPress = Just config.onPress
+         , Font.color itemColor
+         , Element.alpha
+            (if config.disabled then
+                0.6
+
+             else
+                1
+            )
+         , uiClass "ui-motion ui-pressable"
+         ]
+            ++ config.extraAttributes
+        )
+        { onPress =
+            if config.disabled then
+                Nothing
+
+            else
+                Just config.onPress
         , label =
             Element.row [ Element.width Element.fill, Element.spacing space8, minWidthZero ]
                 [ Element.el
@@ -365,6 +455,15 @@ optionRow theme config =
                 , Maybe.withDefault Element.none config.trailing
                 ]
         }
+
+
+boolString : Bool -> String
+boolString value =
+    if value then
+        "true"
+
+    else
+        "false"
 
 
 suggestionList : Theme -> List (Element msg) -> Element msg
@@ -386,6 +485,34 @@ selectDropdown :
         }
     -> Element msg
 selectDropdown device theme language config =
+    selectDropdownWithState device
+        theme
+        language
+        { label = config.label
+        , selected = config.selected
+        , options = config.options
+        , onChange = config.onChange
+        , isOpen = config.isOpen
+        , onToggle = config.onToggle
+        , disabled = False
+        }
+
+
+selectDropdownWithState :
+    Device
+    -> Theme
+    -> Language
+    ->
+        { label : String
+        , selected : a
+        , options : List ( a, String )
+        , onChange : a -> msg
+        , isOpen : Bool
+        , onToggle : msg
+        , disabled : Bool
+        }
+    -> Element msg
+selectDropdownWithState device theme language config =
     let
         selectedLabel : String
         selectedLabel =
@@ -419,7 +546,7 @@ selectDropdown device theme language config =
 
         triggerAnchor : List (Element.Attribute msg)
         triggerAnchor =
-            if config.isOpen then
+            if config.isOpen && not config.disabled then
                 [ Element.width Element.fill, Element.below optionsElement ]
 
             else
@@ -427,7 +554,7 @@ selectDropdown device theme language config =
 
         selectedColor : Element.Color
         selectedColor =
-            if selectedLabel == "" then
+            if config.disabled || selectedLabel == "" then
                 theme.textMuted
 
             else
@@ -492,12 +619,34 @@ selectDropdown device theme language config =
                  , Border.rounded radiusControl
                  , Background.color theme.cardBg
                  , Element.clip
+                 , Element.alpha
+                    (if config.disabled then
+                        0.6
+
+                     else
+                        1
+                    )
+                 , Element.htmlAttribute
+                    (Html.Attributes.attribute
+                        "aria-disabled"
+                        (boolString config.disabled)
+                    )
+                 , Element.htmlAttribute
+                    (Html.Attributes.attribute
+                        "aria-expanded"
+                        (boolString (config.isOpen && not config.disabled))
+                    )
                  , uiClass "ui-motion"
                  , hoverEffect device [ Border.color theme.brandBlue ]
                  ]
                     ++ inputBorder theme
                 )
-                { onPress = Just config.onToggle
+                { onPress =
+                    if config.disabled then
+                        Nothing
+
+                    else
+                        Just config.onToggle
                 , label =
                     Element.row [ Element.width Element.fill, Element.height Element.fill ]
                         [ fieldText, triggerDivider, chevronSegment ]

@@ -1,8 +1,10 @@
 mod admin_user;
+mod api_key;
 mod bootstrap;
 mod session;
 
 pub use admin_user::AdminUserService;
+pub use api_key::{ApiKeyAuthentication, ApiKeyService, CreatedApiKey};
 pub use bootstrap::AuthBootstrapService;
 pub use session::AuthSessionService;
 

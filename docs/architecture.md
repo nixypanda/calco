@@ -54,6 +54,8 @@ SQL directly. The shared domain error enums currently carry `sqlx::Error`
 variants as a pragmatic adapter leak; new domain behavior should not deepen
 that coupling.
 
+Repository ports remain storage-shaped.
+
 ## Bounded Contexts
 
 Four bounded contexts: `auth`, `nutrition`, `import`, and `assistant`. Each
@@ -69,17 +71,32 @@ import -> nutrition -> auth
 assistant -> nutrition (read-only catalog vocabulary)
 ```
 
-`auth` depends on nothing. `nutrition` depends on `auth` only at the interface edge (its HTTP handlers use the `AuthUser` extractor), never in domain or application. `import` depends on `nutrition` only through the catalog domain (`catalog::Category`). Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
+`auth` depends on nothing. `nutrition` depends on `auth` only at the interface edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or application. `import` depends on `nutrition` only through the catalog domain (`catalog::Category`). Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
 
 ### Auth
 
 Auth separates login identity from application user ownership:
 
-- `Identity`: username, password hash, role, status.
+- `Identity`: username, password hash, role, status, and a rotating security
+  stamp.
 - `UserProfile`: application user identity; food data uses `user_profiles.id`.
 - `Session`: server-managed browser session with hashed token storage.
+- `ApiKey`: personal bearer credential bound to an identity and a snapshot of
+  its security stamp. Stored in `api_keys` with a SHA-256 token hash and display
+  hint only; the raw token is returned once at creation.
 
-Admin identities are for account recovery and import operations. They do not own food logs, custom foods, or meals.
+Admin identities are for account recovery and import operations. They do not
+own food logs, custom foods, or meals, and they cannot create or use personal
+API keys.
+
+Personal API keys authenticate as the owning normal user and resolve to the same
+`UserProfile` as that user's browser session. They carry either `read` or
+`read_write` scope, may expire, and remain subject to the existing ownership
+checks. The raw token is never persisted; only its hash is stored.
+
+Auth persistence includes the `api_keys` table. Each row carries the owning
+identity, a security-stamp snapshot, name, token hash and hint, scope, and
+creation, last-use, expiry, and revocation timestamps.
 
 ### Nutrition
 
@@ -221,24 +238,42 @@ it is either a gram quantity or a quantity using a configured serving unit.
 - Food-log writes are transactional. Food-log reads load headers and nutrient
   snapshots separately, so a concurrent update could theoretically produce a
   mixed read. This is an accepted tradeoff for the current homelab scale.
+- API-key `last_used_at` is refreshed best-effort and application-throttled to
+  roughly once per 60 seconds. A failed metadata write does not fail
+  authentication, and the value can remain stale. Concurrent requests may both
+  refresh the timestamp.
+- Browser-session `last_seen_at` is refreshed best-effort at roughly 60-second
+  intervals. Failed updates are ignored, and a stale heartbeat cannot clear a
+  concurrent logout's revocation.
+- The 10-active-key cap is a best-effort application-level limit, not a
+  database-enforced invariant. Concurrent creates can leave an account with more
+  than 10 active keys, and the overage persists until a key is revoked or
+  expires. This is an accepted homelab-scale tradeoff.
 
 ## API Surface
 
 All app routes are mounted under `/api`.
 
+Normal user-data routes accept either the browser session cookie or a personal
+API key through `Authorization: Bearer`. Key-management routes
+(`/auth/api-keys`), the assistant, and admin/import routes require a browser
+session cookie. Admin and import routes also require an admin session.
+
 Major route groups:
 
 - `/auth/*`
+- `/auth/api-keys` (browser session only)
 - `/admin/users/*`
 - `/foods/*`
 - `/nutrients`
 - `/units`
 - `/logs`
+- `/nutrition/*`
 - `/goal`
 - `/diary-preferences`
 - `/meals`
 - `/imports`
-- `/api/ai/food-assistant/status`
-- `/api/ai/custom-food/draft`
+- `/ai/food-assistant/status`
+- `/ai/custom-food/draft`
 
 See [backend.md](backend.md) for route details.

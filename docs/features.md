@@ -7,8 +7,8 @@ granular implementation features and API calls.
 
 Current implementation covers the core food diary plus configurable meal slots,
 meals/recipes, repeat and recent-item logging, admin import staging/commit APIs,
-Python dataset import tooling, and local-first barcode lookup with an Open Food
-Facts fallback:
+Python dataset import tooling, personal API keys, and local-first barcode lookup
+with an Open Food Facts fallback:
 
 ```text
 Search/select food -> log quantity -> snapshot nutrients -> review daily totals
@@ -16,8 +16,9 @@ Search/select food -> log quantity -> snapshot nutrients -> review daily totals
 
 The frontend currently implements auth, admin user management, diary, goal
 settings, food search/detail, manual and camera-based barcode lookup, custom
-food create/edit/show, log detail/edit, meals, and responsive layouts. The
-product goal is a simple food tracker, not an analytics or trend platform.
+food create/edit/show, log detail/edit, meals, personal API key management, and
+responsive layouts. The product goal is a simple food tracker, not an analytics
+or trend platform.
 
 ## MVP User Stories
 
@@ -115,6 +116,13 @@ product goal is a simple food tracker, not an analytics or trend platform.
       packaged food manually. A successful result is normalized, saved as a
       global `OFF` catalog product, opened for logging, and identified with an
       import notice on the food detail page.
+- [x] As a user, I want named personal API keys with `read` or `read_write`
+      scope so that my own scripts and tools can access my CalCo data without my
+      password or browser session. Keys are shown once, can optionally expire,
+      and can be revoked immediately from `/settings/api-keys`. Users normally
+      have up to 10 active keys; the limit is best-effort, so simultaneous
+      creates can occasionally go over it. Keys never grant admin, import,
+      assistant, or key-management access. See [API Access](api-access.md).
 
 ## Next User Stories
 

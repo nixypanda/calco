@@ -309,6 +309,16 @@ screenMeta env session route =
             , leading = GoBack (DiaryDay Nothing Nothing)
             }
 
+        SettingsApiKeys ->
+            { title = I18n.t env.language TidTitleApiKeys
+            , leading = GoBack (DiaryDay Nothing Nothing)
+            }
+
+        SettingsApiKeyCreate ->
+            { title = I18n.t env.language TidApiKeysCreateTitle
+            , leading = GoBack SettingsApiKeys
+            }
+
         FoodSearch maybeDate maybeSlot ->
             { title =
                 case maybeSlot of
@@ -739,47 +749,64 @@ profileMenuContent env session onNavigate onLogout onSetLanguage =
         , submittingLabel = Nothing
         , trailing = Nothing
         }
-    , Element.row
-        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Button.textButton env.device
-            env.theme
-            { tone =
-                if env.language == EN_US then
-                    Button.Primary
-
-                else
-                    Button.Ghost
-            , width = Button.FullWidth
-            , label = "English"
-            , onPress = onSetLanguage EN_US
-            , submitState = Nothing
-            , submittingLabel = Nothing
-            , trailing = Nothing
-            }
-        , Button.textButton env.device
-            env.theme
-            { tone =
-                if env.language == HI_IN then
-                    Button.Primary
-
-                else
-                    Button.Ghost
-            , width = Button.FullWidth
-            , label = "हिन्दी"
-            , onPress = onSetLanguage HI_IN
-            , submitState = Nothing
-            , submittingLabel = Nothing
-            , trailing = Nothing
-            }
-        ]
-    , Button.textButton env.device
-        env.theme
-        { tone = Button.Danger
-        , width = Button.FullWidth
-        , label = I18n.t env.language TidNavLogout
-        , onPress = onLogout
-        , submitState = Nothing
-        , submittingLabel = Nothing
-        , trailing = Nothing
-        }
     ]
+        ++ (if Auth.isAdmin session then
+                []
+
+            else
+                [ Button.textButton env.device
+                    env.theme
+                    { tone = Button.Ghost
+                    , width = Button.FullWidth
+                    , label = I18n.t env.language TidNavApiKeys
+                    , onPress = onNavigate SettingsApiKeys
+                    , submitState = Nothing
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
+                ]
+           )
+        ++ [ Element.row
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                [ Button.textButton env.device
+                    env.theme
+                    { tone =
+                        if env.language == EN_US then
+                            Button.Primary
+
+                        else
+                            Button.Ghost
+                    , width = Button.FullWidth
+                    , label = "English"
+                    , onPress = onSetLanguage EN_US
+                    , submitState = Nothing
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
+                , Button.textButton env.device
+                    env.theme
+                    { tone =
+                        if env.language == HI_IN then
+                            Button.Primary
+
+                        else
+                            Button.Ghost
+                    , width = Button.FullWidth
+                    , label = "हिन्दी"
+                    , onPress = onSetLanguage HI_IN
+                    , submitState = Nothing
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
+                ]
+           , Button.textButton env.device
+                env.theme
+                { tone = Button.Danger
+                , width = Button.FullWidth
+                , label = I18n.t env.language TidNavLogout
+                , onPress = onLogout
+                , submitState = Nothing
+                , submittingLabel = Nothing
+                , trailing = Nothing
+                }
+           ]

@@ -3,8 +3,9 @@ use axum::{
     extract::{FromRef, FromRequestParts, Path, State},
     http::{Response, StatusCode, header, request::Parts},
     response::{IntoResponse, Json},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -23,6 +24,11 @@ pub fn auth_routes(state: AuthModule) -> Router {
         .route("/auth/login", post(login_handler))
         .route("/auth/session", get(session_handler))
         .route("/auth/logout", post(logout_handler))
+        .route(
+            "/auth/api-keys",
+            get(list_api_keys_handler).post(create_api_key_handler),
+        )
+        .route("/auth/api-keys/{id}", delete(delete_api_key_handler))
         .route(
             "/admin/users",
             get(admin_list_users_handler).post(admin_create_user_handler),
@@ -60,9 +66,12 @@ where
 
 // ─── Auth Extractors ──────────────────────────────────────────
 
-pub struct AuthIdentity(pub Identity);
+pub struct SessionUser {
+    pub identity: Identity,
+    pub profile: UserProfile,
+}
 
-impl<S> FromRequestParts<S> for AuthIdentity
+impl<S> FromRequestParts<S> for SessionUser
 where
     S: Send + Sync,
     SessionCookieConfig: FromRef<S>,
@@ -71,20 +80,13 @@ where
     type Rejection = AuthErrorResponse;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
-        let auth = AuthModule::from_ref(state);
-        let result = auth
-            .sessions
-            .get_session(&token)
-            .await
-            .map_err(|e| auth_error_to_response(&e))?;
-        Ok(AuthIdentity(result.identity))
+        resolve_session_user(parts, state).await
     }
 }
 
-pub struct AuthUser(pub UserProfile);
+pub struct ReadUser(pub UserProfile);
 
-impl<S> FromRequestParts<S> for AuthUser
+impl<S> FromRequestParts<S> for ReadUser
 where
     S: Send + Sync,
     SessionCookieConfig: FromRef<S>,
@@ -93,21 +95,22 @@ where
     type Rejection = AuthErrorResponse;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
-        let auth = AuthModule::from_ref(state);
-        let result = auth
-            .sessions
-            .get_session(&token)
-            .await
-            .map_err(|e| auth_error_to_response(&e))?;
+        Ok(ReadUser(resolve_read_user(parts, state).await?))
+    }
+}
 
-        if result.identity.role != IdentityRole::User {
-            return Err(forbidden_auth_error_response());
-        }
+pub struct WriteUser(pub UserProfile);
 
-        let profile = result.profile.ok_or_else(forbidden_auth_error_response)?;
+impl<S> FromRequestParts<S> for WriteUser
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
+    type Rejection = AuthErrorResponse;
 
-        Ok(AuthUser(profile))
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        Ok(WriteUser(resolve_write_user(parts, state).await?))
     }
 }
 
@@ -260,6 +263,52 @@ pub struct ResetPasswordRequest {
     pub new_password: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiKeyScopeDto {
+    Read,
+    ReadWrite,
+}
+
+impl From<ApiKeyScope> for ApiKeyScopeDto {
+    fn from(scope: ApiKeyScope) -> Self {
+        match scope {
+            ApiKeyScope::Read => ApiKeyScopeDto::Read,
+            ApiKeyScope::ReadWrite => ApiKeyScopeDto::ReadWrite,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct ApiKeyItemDto {
+    pub id: Uuid,
+    pub name: String,
+    pub token_hint: String,
+    pub scope: ApiKeyScopeDto,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Serialize)]
+pub struct ApiKeyListResponse {
+    pub items: Vec<ApiKeyItemDto>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateApiKeyRequest {
+    pub name: String,
+    pub scope: Option<String>,
+    pub expires_in_days: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct CreatedApiKeyResponse {
+    #[serde(flatten)]
+    pub item: ApiKeyItemDto,
+    pub token: String,
+}
+
 // ─── Handlers ─────────────────────────────────────────────────
 
 async fn bootstrap_status_handler(
@@ -343,6 +392,75 @@ async fn logout_handler(
 
     let clear_cookie = build_clear_cookie(&state.cookie_config);
     Ok((StatusCode::OK, [clear_cookie]))
+}
+
+async fn list_api_keys_handler(
+    user: SessionUser,
+    State(state): State<AuthModule>,
+) -> Result<Json<ApiKeyListResponse>, AuthErrorResponse> {
+    let keys = state
+        .api_keys
+        .list(&user.identity)
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
+
+    Ok(Json(ApiKeyListResponse {
+        items: keys.into_iter().map(api_key_to_item_dto).collect(),
+    }))
+}
+
+async fn create_api_key_handler(
+    user: SessionUser,
+    State(state): State<AuthModule>,
+    Json(body): Json<CreateApiKeyRequest>,
+) -> Result<
+    (
+        StatusCode,
+        [(header::HeaderName, String); 1],
+        Json<CreatedApiKeyResponse>,
+    ),
+    AuthErrorResponse,
+> {
+    let scope = match body.scope.as_deref() {
+        Some(raw) => raw
+            .parse::<ApiKeyScope>()
+            .map_err(|e| auth_error_to_response(&e))?,
+        None => ApiKeyScope::Read,
+    };
+
+    let created = state
+        .api_keys
+        .create(
+            &user.identity,
+            &body.name,
+            scope,
+            body.expires_in_days,
+            Utc::now(),
+        )
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
+
+    let response = CreatedApiKeyResponse {
+        item: api_key_to_item_dto(created.api_key),
+        token: created.token.0,
+    };
+    let no_store = (header::CACHE_CONTROL, "no-store".to_string());
+
+    Ok((StatusCode::CREATED, [no_store], Json(response)))
+}
+
+async fn delete_api_key_handler(
+    user: SessionUser,
+    State(state): State<AuthModule>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AuthErrorResponse> {
+    state
+        .api_keys
+        .revoke(&user.identity, ApiKeyId(id))
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn admin_create_user_handler(
@@ -459,6 +577,15 @@ fn auth_error_to_status_and_code(err: &AuthError) -> (StatusCode, &'static str) 
         AuthError::AdminAlreadyExists => (StatusCode::CONFLICT, "admin_already_exists"),
         AuthError::UsernameTaken => (StatusCode::CONFLICT, "username_taken"),
         AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+        AuthError::InvalidApiKey | AuthError::ApiKeyExpired | AuthError::ApiKeyRevoked => {
+            (StatusCode::UNAUTHORIZED, "invalid_api_key")
+        }
+        AuthError::ApiKeyNotFound => (StatusCode::NOT_FOUND, "api_key_not_found"),
+        AuthError::ApiKeyLimitReached => (StatusCode::CONFLICT, "api_key_limit_reached"),
+        AuthError::InvalidApiKeyName => (StatusCode::BAD_REQUEST, "invalid_api_key_name"),
+        AuthError::InvalidApiKeyScope => (StatusCode::BAD_REQUEST, "invalid_api_key_scope"),
+        AuthError::InvalidApiKeyExpiry => (StatusCode::BAD_REQUEST, "invalid_api_key_expiry"),
+        AuthError::InsufficientScope => (StatusCode::FORBIDDEN, "insufficient_scope"),
         AuthError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
         AuthError::CredentialProcessingFailed => {
             (StatusCode::INTERNAL_SERVER_ERROR, "internal_error")
@@ -472,6 +599,9 @@ fn auth_error_to_message(err: &AuthError) -> String {
         AuthError::Database(_) | AuthError::CredentialProcessingFailed | AuthError::Internal(_) => {
             tracing::error!(error = %err, "auth request failed");
             "internal server error".to_string()
+        }
+        AuthError::InvalidApiKey | AuthError::ApiKeyExpired | AuthError::ApiKeyRevoked => {
+            "invalid_api_key".to_string()
         }
         _ => err.to_string(),
     }
@@ -525,6 +655,18 @@ fn created_user_to_login_session_response(user: CreatedUser) -> LoginSessionResp
     }
 }
 
+fn api_key_to_item_dto(api_key: ApiKey) -> ApiKeyItemDto {
+    ApiKeyItemDto {
+        id: api_key.id.0,
+        name: api_key.name.into_inner(),
+        token_hint: api_key.token_hint,
+        scope: api_key.scope.into(),
+        created_at: api_key.created_at,
+        last_used_at: api_key.last_used_at,
+        expires_at: api_key.expires_at,
+    }
+}
+
 fn users_to_list_response(users: Vec<UserWithProfile>) -> UserListResponse {
     UserListResponse {
         users: users
@@ -545,6 +687,107 @@ fn user_with_profile_to_item_dto(user: UserWithProfile) -> UserItemDto {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
+
+async fn resolve_session_user<S>(
+    parts: &mut Parts,
+    state: &S,
+) -> Result<SessionUser, AuthErrorResponse>
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
+    let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
+    let auth = AuthModule::from_ref(state);
+    let result = auth
+        .sessions
+        .get_session(&token)
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
+
+    if result.identity.role != IdentityRole::User {
+        return Err(forbidden_auth_error_response());
+    }
+
+    let profile = result.profile.ok_or_else(forbidden_auth_error_response)?;
+
+    Ok(SessionUser {
+        identity: result.identity,
+        profile,
+    })
+}
+
+async fn resolve_read_user<S>(
+    parts: &mut Parts,
+    state: &S,
+) -> Result<UserProfile, AuthErrorResponse>
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
+    resolve_bearer_or_session_user(parts, state, false).await
+}
+
+async fn resolve_write_user<S>(
+    parts: &mut Parts,
+    state: &S,
+) -> Result<UserProfile, AuthErrorResponse>
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
+    resolve_bearer_or_session_user(parts, state, true).await
+}
+
+async fn resolve_bearer_or_session_user<S>(
+    parts: &mut Parts,
+    state: &S,
+    require_write: bool,
+) -> Result<UserProfile, AuthErrorResponse>
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
+    if let Some(value) = parts.headers.get(header::AUTHORIZATION) {
+        let raw_token = parse_bearer_token(value)?;
+        let auth = AuthModule::from_ref(state);
+        let authenticated = auth
+            .api_keys
+            .authenticate(raw_token, Utc::now())
+            .await
+            .map_err(|e| auth_error_to_response(&e))?;
+
+        if require_write && authenticated.scope != ApiKeyScope::ReadWrite {
+            return Err(auth_error_to_response(&AuthError::InsufficientScope));
+        }
+
+        return Ok(authenticated.profile);
+    }
+
+    Ok(resolve_session_user(parts, state).await?.profile)
+}
+
+fn parse_bearer_token(value: &header::HeaderValue) -> Result<&str, AuthErrorResponse> {
+    let value = value
+        .to_str()
+        .map_err(|_| auth_error_to_response(&AuthError::InvalidApiKey))?;
+    let (scheme, rest) = value
+        .split_once(' ')
+        .ok_or_else(|| auth_error_to_response(&AuthError::InvalidApiKey))?;
+    let token = rest.trim_start_matches(' ');
+
+    if !scheme.eq_ignore_ascii_case("bearer")
+        || token.is_empty()
+        || token.chars().any(char::is_whitespace)
+    {
+        return Err(auth_error_to_response(&AuthError::InvalidApiKey));
+    }
+
+    Ok(token)
+}
 
 fn extract_session_token(
     parts: &Parts,

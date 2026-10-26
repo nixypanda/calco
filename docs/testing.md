@@ -168,6 +168,10 @@ Instrumented builds use a separate `target/llvm-cov-target/` directory, so the f
 
 ## Gotchas
 
+- Run only one `cargo test` process against a given PostgreSQL cluster at a
+  time. `#[sqlx::test]` database names are cluster-global, so concurrent
+  cargo-test processes can collide even when using separate target directories.
+  This is an environment limitation, not a code bug.
 - `.env` sets `DATABASE_URL` for `cargo run`/`cargo test`; if another Postgres is bound to port 5432 with different credentials, integration tests fail to connect. Either stop the conflicting container or override `DATABASE_URL` per command.
 - Catalog `Source` values are uppercase enums (`OFF`, `USDA`, `IFCT`, `INDB`, `USER`). Tests that stage imports must use those exact codes.
 - `GET /meals/{id}/nutrients?amount=X` scales by the meal's `total_quantity`. For predictable assertions, set `total_quantity` to match the sum of component weights.

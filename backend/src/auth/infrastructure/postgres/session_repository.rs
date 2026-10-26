@@ -51,7 +51,7 @@ impl SessionRepository for PostgresSessionRepository {
     async fn update(&self, session: &Session) -> Result<(), AuthError> {
         sqlx::query(
             "UPDATE sessions SET identity_id = $1, identity_security_stamp = $2, session_token_hash = $3, created_at = $4, \
-             last_seen_at = $5, expires_at = $6, revoked_at = $7 WHERE id = $8",
+             last_seen_at = $5, expires_at = $6, revoked_at = $7 WHERE id = $8 AND (revoked_at IS NULL OR $7 IS NOT NULL)",
         )
         .bind(session.identity_id.0)
         .bind(session.identity_security_stamp.0)

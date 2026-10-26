@@ -11,6 +11,7 @@ module Ui.Surface exposing
     , panel
     , section
     , sectionHeader
+    , staticRow
     )
 
 import Element exposing (Element)
@@ -364,31 +365,73 @@ listRow :
     -> Element msg
 listRow config =
     Element.wrappedRow
-        [ Element.width Element.fill, Element.padding space16, Element.spacing space12 ]
+        listRowAttrs
         [ Input.button
             [ Element.width Element.fill, uiClass "ui-motion ui-pressable" ]
             { onPress = Just config.onSelect
             , label =
                 Element.row
-                    [ Element.width Element.fill, Element.spacing space12, minWidthZero ]
+                    listRowLabelAttrs
                     [ listRowLeading config.leading
-                    , Element.column
-                        [ Element.width Element.fill
-                        , Element.spacing space4
-                        , Element.alignTop
-                        , minWidthZero
-                        ]
-                        (config.title :: config.subtitle)
+                    , listRowText config.title config.subtitle
                     ]
             }
-        , if List.isEmpty config.trailing then
-            Element.none
-
-          else
-            Element.row
-                [ Element.padding space8, Element.spacing space12, Element.alignTop ]
-                config.trailing
+        , listRowTrailing config.trailing
         ]
+
+
+{-| A non-selectable companion to `listRow` for rows whose own actions live in
+the trailing slot, such as API keys with a revoke button.
+-}
+staticRow :
+    { leading : List (Element msg)
+    , title : Element msg
+    , subtitle : List (Element msg)
+    , trailing : List (Element msg)
+    }
+    -> Element msg
+staticRow config =
+    Element.wrappedRow
+        listRowAttrs
+        [ Element.row
+            listRowLabelAttrs
+            [ listRowLeading config.leading
+            , listRowText config.title config.subtitle
+            ]
+        , listRowTrailing config.trailing
+        ]
+
+
+listRowAttrs : List (Element.Attribute msg)
+listRowAttrs =
+    [ Element.width Element.fill, Element.padding space16, Element.spacing space12 ]
+
+
+listRowLabelAttrs : List (Element.Attribute msg)
+listRowLabelAttrs =
+    [ Element.width Element.fill, Element.spacing space12, minWidthZero ]
+
+
+listRowText : Element msg -> List (Element msg) -> Element msg
+listRowText title subtitle =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing space4
+        , Element.alignTop
+        , minWidthZero
+        ]
+        (title :: subtitle)
+
+
+listRowTrailing : List (Element msg) -> Element msg
+listRowTrailing trailing =
+    if List.isEmpty trailing then
+        Element.none
+
+    else
+        Element.row
+            [ Element.padding space8, Element.spacing space12, Element.alignTop ]
+            trailing
 
 
 listRowLeading : List (Element msg) -> Element msg
