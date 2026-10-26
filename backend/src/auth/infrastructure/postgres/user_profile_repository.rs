@@ -369,12 +369,13 @@ mod tests {
         let middle_identity = seed_identity(&pool, "profile-list-middle").await;
         let newest_identity = seed_identity(&pool, "profile-list-newest").await;
 
-        let oldest = profile_fixture(
+        let mut oldest = profile_fixture(
             Uuid::new_v4(),
             oldest_identity,
             "Oldest Profile",
             1_800_000_000,
         );
+        oldest.updated_at = timestamp(1_800_002_000);
         let middle = profile_fixture(
             Uuid::new_v4(),
             middle_identity,
@@ -386,6 +387,10 @@ mod tests {
             newest_identity,
             "Newest Profile",
             1_800_000_200,
+        );
+        assert!(
+            oldest.updated_at > newest.updated_at,
+            "fixture must invert updated_at relative to created_at"
         );
 
         for profile in [&oldest, &middle, &newest] {

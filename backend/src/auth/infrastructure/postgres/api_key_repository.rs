@@ -555,6 +555,24 @@ mod tests {
             ),
             sea_row
         );
+        let other_key = api_key_fixture(
+            Uuid::new_v4(),
+            other_identity_id,
+            stamp,
+            "other owner key",
+            "other-owner-token-hash",
+            1_800_000_200,
+        );
+        repository
+            .create(&other_key)
+            .await
+            .expect("create other-owner api key");
+        assert_eq!(
+            fetch_api_key_row(&pool, other_key.id).await,
+            api_key_as_row(&other_key),
+            "other-owner fixture key must exist before the mismatch check"
+        );
+
         assert_eq!(
             legacy_find_by_id_and_identity_id(&pool, sea_key.id, IdentityId(other_identity_id))
                 .await
@@ -566,7 +584,8 @@ mod tests {
                 .find_by_id_and_identity_id(sea_key.id, IdentityId(other_identity_id))
                 .await
                 .expect("repository find_by_id_and_identity_id mismatch")
-                .is_none()
+                .is_none(),
+            "owner mismatch must still require the id predicate"
         );
     }
 
@@ -577,7 +596,7 @@ mod tests {
         let repository = PostgresApiKeyRepository::new(pool.clone());
         let stamp = Uuid::new_v4();
 
-        let oldest = api_key_fixture(
+        let mut oldest = api_key_fixture(
             Uuid::new_v4(),
             identity_id,
             stamp,
@@ -585,6 +604,7 @@ mod tests {
             "list-token-oldest",
             1_800_000_000,
         );
+        oldest.expires_at = Some(timestamp(1_800_002_000));
         let middle = api_key_fixture(
             Uuid::new_v4(),
             identity_id,
@@ -600,6 +620,10 @@ mod tests {
             "newest key",
             "list-token-newest",
             1_800_000_200,
+        );
+        assert!(
+            oldest.expires_at > newest.expires_at,
+            "fixture must invert expires_at relative to created_at"
         );
         let other = api_key_fixture(
             Uuid::new_v4(),

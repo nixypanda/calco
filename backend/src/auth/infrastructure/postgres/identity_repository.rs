@@ -461,7 +461,7 @@ mod tests {
             None
         );
 
-        let requested_ids = [alpha.id, gamma.id, IdentityId(Uuid::new_v4())];
+        let requested_ids = [alpha.id, beta.id, gamma.id, IdentityId(Uuid::new_v4())];
         let mut legacy_by_ids = legacy_find_by_ids(&pool, &requested_ids)
             .await
             .expect("legacy find_by_ids");
@@ -475,11 +475,23 @@ mod tests {
 
         sort_rows(&mut legacy_by_ids);
         sort_rows(&mut sea_by_ids);
-        let mut expected_by_ids = vec![identity_as_row(&alpha), identity_as_row(&gamma)];
+        let mut expected_by_ids = vec![
+            identity_as_row(&alpha),
+            identity_as_row(&beta),
+            identity_as_row(&gamma),
+        ];
         sort_rows(&mut expected_by_ids);
-        assert_eq!(legacy_by_ids.len(), 2, "must return both requested ids");
+        assert_eq!(
+            legacy_by_ids.len(),
+            3,
+            "must return all three requested existing ids"
+        );
         assert_eq!(sea_by_ids, legacy_by_ids);
-        assert_eq!(sea_by_ids.len(), 2, "array bind must not be truncated");
+        assert_eq!(
+            sea_by_ids.len(),
+            3,
+            "array bind must not be truncated or limited to two rows"
+        );
         assert_eq!(sea_by_ids, expected_by_ids);
 
         let empty_ids: Vec<IdentityId> = Vec::new();
@@ -607,6 +619,43 @@ mod tests {
                 .await
                 .expect("count duplicate username");
         assert_eq!(username_count, 1);
+
+        let duplicate_primary_key = identity_fixture(
+            existing_username_user.id.0,
+            "duplicate-primary-key-user",
+            IdentityRole::User,
+            IdentityStatus::Active,
+            "duplicate-primary-key-hash",
+            stamp,
+            1_800_000_100,
+            1_800_000_100,
+        );
+        let legacy_err = legacy_create(&pool, &duplicate_primary_key)
+            .await
+            .expect_err("legacy duplicate primary key must fail");
+        assert!(
+            matches!(
+                map_identity_insert_error(legacy_err),
+                AuthError::Database(_)
+            ),
+            "legacy primary-key violations must map to Database"
+        );
+        let sea_err = repository
+            .create(&duplicate_primary_key)
+            .await
+            .expect_err("repository duplicate primary key must fail");
+        assert!(
+            matches!(sea_err, AuthError::Database(_)),
+            "repository primary-key violations must map to Database"
+        );
+
+        let primary_key_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM identities WHERE username = $1")
+                .bind("duplicate-primary-key-user")
+                .fetch_one(&pool)
+                .await
+                .expect("count duplicate primary-key username");
+        assert_eq!(primary_key_count, 0);
 
         let existing_admin = identity_fixture(
             Uuid::new_v4(),
@@ -798,5 +847,27 @@ mod tests {
                 .await
                 .expect("count admins");
         assert_eq!(admin_count, 1);
+
+        sqlx::query("UPDATE identities SET status = 'disabled' WHERE id = $1")
+            .bind(admin.id.0)
+            .execute(&pool)
+            .await
+            .expect("disable admin");
+        let disabled_admin = fetch_identity_row(&pool, admin.id).await;
+        assert_eq!(disabled_admin.status, "disabled");
+        assert!(
+            repository
+                .exists_admin()
+                .await
+                .expect("repository exists_admin for disabled admin"),
+            "exists_admin must check role only, not active status"
+        );
+        assert_eq!(
+            legacy_exists_admin(&pool)
+                .await
+                .expect("legacy exists_admin for disabled admin"),
+            (true,),
+            "legacy exists_admin must check role only, not active status"
+        );
     }
 }
