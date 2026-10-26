@@ -320,6 +320,14 @@ fn insert_external_products_statement(chunk: &[&Product]) -> InsertStatement {
     statement.to_owned()
 }
 
+fn nutrient_ids_by_code_statement(nutrient_codes: &[String]) -> SelectStatement {
+    Query::select()
+        .columns([Nutrients::Code, Nutrients::Id])
+        .from(Nutrients::Table)
+        .and_where(Expr::col(Nutrients::Code).eq_any(nutrient_codes.to_vec()))
+        .to_owned()
+}
+
 fn resolve_external_product_ids_statement(chunk: &[&Product]) -> SelectStatement {
     let identities = chunk.iter().map(|product| {
         (
@@ -903,6 +911,10 @@ impl ProductRepository for PostgresProductRepository {
         }
 
         let mut tx = self.pool.begin().await?;
+        // Intentionally raw boundary: LOCK TABLE and the bulk UPDATE below are
+        // Postgres-specific. Sea-query has no table-lock builder, and the
+        // UPDATE's ROW(...) IS DISTINCT FROM comparison is clearer and safer to
+        // keep in its proven Postgres form than to reassemble through sea-query.
         sqlx::query(
             "LOCK TABLE products, product_nutrients, product_servings IN SHARE ROW EXCLUSIVE MODE",
         )
@@ -926,12 +938,11 @@ impl ProductRepository for PostgresProductRepository {
         let nutrient_rows = if requested_nutrient_codes.is_empty() {
             Vec::new()
         } else {
-            sqlx::query_as::<_, (String, Uuid)>(
-                "SELECT code, id FROM nutrients WHERE code = ANY($1)",
-            )
-            .bind(&requested_nutrient_codes)
-            .fetch_all(&mut *tx)
-            .await?
+            let (sql, values) = nutrient_ids_by_code_statement(&requested_nutrient_codes)
+                .build_sqlx(PostgresQueryBuilder);
+            sqlx::query_as_with::<_, (String, Uuid), _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .fetch_all(&mut *tx)
+                .await?
         };
         let nutrient_ids: HashMap<String, Uuid> = nutrient_rows.into_iter().collect();
         let mut unknown_codes: Vec<&str> = requested_nutrient_codes
@@ -956,7 +967,8 @@ impl ProductRepository for PostgresProductRepository {
                 .await?
                 .rows_affected() as i64;
 
-            // Intentionally raw: the bulk UPDATE ... FROM (VALUES ...) with a
+            // Intentionally raw; part of the same Postgres-specific boundary as
+            // the LOCK TABLE above. The bulk UPDATE ... FROM (VALUES ...) with a
             // ROW(...) IS DISTINCT FROM comparison is clearer and safer to keep
             // in its proven Postgres form than to reassemble through sea-query.
             let mut query = QueryBuilder::<Postgres>::new(
@@ -2630,6 +2642,55 @@ mod tests {
             ),
             "search summary must bind one text[] nutrient codes array: {sql}"
         );
+    }
+
+    #[sqlx::test]
+    async fn nutrient_id_lookup_binds_one_text_array_and_resolves_multiple_codes(pool: PgPool) {
+        let codes = vec![
+            "ENERGY_KCAL".to_owned(),
+            "PROTEIN_G".to_owned(),
+            "FAT_G".to_owned(),
+        ];
+        let (sql, values) = nutrient_ids_by_code_statement(&codes).build_sqlx(PostgresQueryBuilder);
+        let normalized = normalize_sql(&sql);
+
+        assert_eq!(
+            values.0.iter().count(),
+            1,
+            "nutrient lookup must bind one text[] array: {normalized}"
+        );
+        assert!(
+            matches!(
+                values.0.iter().next(),
+                Some(sea_query::Value::Array(
+                    sea_query::ArrayType::String,
+                    Some(values)
+                )) if values.len() == codes.len()
+            ),
+            "nutrient lookup must bind every requested code without truncation: {normalized}"
+        );
+        assert!(
+            sql_contains(&normalized, r#""code" = ANY("#),
+            "nutrient lookup must use a single code = ANY(array) predicate: {normalized}"
+        );
+
+        let rows: Vec<(String, Uuid)> =
+            sqlx::query_as_with::<_, (String, Uuid), _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .fetch_all(&pool)
+                .await
+                .expect("resolve nutrient ids");
+        let resolved: HashSet<String> = rows.into_iter().map(|(code, _)| code).collect();
+        assert_eq!(
+            resolved.len(),
+            codes.len(),
+            "nutrient lookup must resolve every requested code: {normalized}"
+        );
+        for code in &codes {
+            assert!(
+                resolved.contains(code),
+                "nutrient lookup must resolve {code}: {normalized}"
+            );
+        }
     }
 
     #[test]

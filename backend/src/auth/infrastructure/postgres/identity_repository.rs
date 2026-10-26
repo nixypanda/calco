@@ -319,6 +319,7 @@ mod tests {
         DateTime::<Utc>::from_timestamp(seconds, 0).expect("valid timestamp")
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn identity_fixture(
         id: Uuid,
         username: &str,
