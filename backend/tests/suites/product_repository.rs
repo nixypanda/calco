@@ -292,10 +292,12 @@ async fn external_upsert_table_locks_block_writers_but_allow_reads(pool: PgPool)
         .enumerate()
     {
         let mut blocker = pool.begin().await.unwrap();
-        sqlx::query(&format!("LOCK TABLE {table} IN ROW EXCLUSIVE MODE"))
-            .execute(&mut *blocker)
-            .await
-            .unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "LOCK TABLE {table} IN ROW EXCLUSIVE MODE"
+        )))
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
 
         let repository = PostgresProductRepository::new(pool.clone());
         let product =

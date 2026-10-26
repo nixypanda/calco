@@ -12,7 +12,9 @@ thiserror = "2"
 tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "uuid", "chrono", "rust_decimal", "macros", "migrate"] }
+sqlx = { version = "0.9", features = ["postgres", "runtime-tokio", "uuid", "chrono", "rust_decimal", "macros", "migrate"] }
+sea-query = { version = "1.0", default-features = false, features = ["derive", "backend-postgres", "with-uuid", "with-chrono", "with-rust_decimal", "postgres-array"] }
+sea-query-sqlx = { version = "0.9", features = ["sqlx-postgres", "runtime-tokio", "with-uuid", "with-chrono", "with-rust_decimal", "postgres-array"] }
 rust_decimal = { version = "1", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 argon2 = "0.5"
