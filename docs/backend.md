@@ -560,7 +560,7 @@ DELETE /logs/{id}
 GET    /logs/summary?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
 ```
 
-Use the same date for `from` and `to` for a single-day view. Log reads and
+Use the same date for `from_date` and `to_date` for a single-day view. Log reads and
 `POST /logs/last-used` use `ReadUser`; log mutations use `WriteUser`.
 
 `GET /logs/recent-items` dedups logs to one entry per item and orders both the
