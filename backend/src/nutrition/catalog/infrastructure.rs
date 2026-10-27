@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
-use sea_query::extension::postgres::PgExpr;
+use sea_query::extension::postgres::{PgBinOper, PgExpr};
 use sea_query::{
-    DeleteStatement, Expr, ExprTrait, Iden, InsertStatement, JoinType, OnConflict, Order,
-    PostgresQueryBuilder, Query, SelectStatement, UpdateStatement,
+    Alias, Asterisk, CommonTableExpression, Condition, DeleteStatement, Expr, ExprTrait, Func,
+    Iden, InsertStatement, JoinType, OnConflict, Order, PostgresQueryBuilder, Query,
+    SelectStatement, UpdateStatement,
 };
 use sea_query_sqlx::SqlxBinder;
 use sqlx::postgres::PgPool;
@@ -29,41 +30,128 @@ const PRODUCT_UPSERT_CHUNK_SIZE: usize = 1_000;
 // Ranking lives in `domain/search_ranking.rs`. These candidate queries only
 // apply storage filters; they intentionally contain no text matching, ranking,
 // ordering, or pre-ranking limit.
-const CATALOG_SEARCH_CANDIDATES_SQL: &str = r#"
-    SELECT id, name, brand, barcode
-    FROM products
-    WHERE deleted_at IS NULL
-      AND (cardinality($1::text[]) = 0 OR categories @> $1::text[])
-      AND (cardinality($2::text[]) = 0 OR NOT categories && $2::text[])
-"#;
+fn search_catalog_candidates_statement(
+    scope: CatalogSearchScope,
+    include: &[String],
+    exclude: &[String],
+) -> SelectStatement {
+    let mut statement = Query::select();
+    statement
+        .columns([
+            Products::Id,
+            Products::Name,
+            Products::Brand,
+            Products::Barcode,
+        ])
+        .from(Products::Table)
+        .and_where(Expr::col(Products::DeletedAt).is_null());
 
-const CUSTOM_SEARCH_CANDIDATES_SQL: &str = r#"
-    SELECT id, name, brand, barcode
-    FROM products
-    WHERE deleted_at IS NULL
-      AND source = 'USER'
-      AND (cardinality($1::text[]) = 0 OR categories @> $1::text[])
-      AND (cardinality($2::text[]) = 0 OR NOT categories && $2::text[])
-"#;
+    if scope == CatalogSearchScope::Custom {
+        statement.and_where(Expr::col(Products::Source).eq("USER"));
+    }
 
-const HISTORY_SEARCH_CANDIDATES_SQL: &str = r#"
-    WITH latest_logs AS (
-        SELECT item_product_id AS product_id,
-               MAX(log_date) AS last_log_date,
-               MAX(created_at) AS last_logged_at
-        FROM food_logs
-        WHERE user_id = $1
-          AND item_product_id IS NOT NULL
-        GROUP BY item_product_id
-    )
-    SELECT p.id, p.name, p.brand, p.barcode, p.categories,
-           l.last_log_date, l.last_logged_at
-    FROM products p
-    JOIN latest_logs l ON l.product_id = p.id
-    WHERE p.deleted_at IS NULL
-      AND (cardinality($2::text[]) = 0 OR p.categories @> $2::text[])
-      AND (cardinality($3::text[]) = 0 OR NOT p.categories && $3::text[])
-"#;
+    apply_category_filters(&mut statement, include, exclude);
+    statement.to_owned()
+}
+
+fn search_history_candidates_statement(
+    user_id: Uuid,
+    include: &[String],
+    exclude: &[String],
+) -> SelectStatement {
+    let latest_logs = Query::select()
+        .expr_as(Expr::col(FoodLogs::ItemProductId), Alias::new("product_id"))
+        .expr_as(
+            Func::max(Expr::col(FoodLogs::LogDate)),
+            Alias::new("last_log_date"),
+        )
+        .expr_as(
+            Func::max(Expr::col(FoodLogs::CreatedAt)),
+            Alias::new("last_logged_at"),
+        )
+        .from(FoodLogs::Table)
+        .and_where(Expr::col(FoodLogs::UserId).eq(user_id))
+        .and_where(Expr::col(FoodLogs::ItemProductId).is_not_null())
+        .group_by_col(FoodLogs::ItemProductId)
+        .to_owned();
+    let latest_logs = CommonTableExpression::new()
+        .table_name(LatestLogs::Table)
+        .query(latest_logs)
+        .to_owned();
+
+    let mut statement = Query::select();
+    statement
+        .column((Products::Table, Products::Id))
+        .column((Products::Table, Products::Name))
+        .column((Products::Table, Products::Brand))
+        .column((Products::Table, Products::Barcode))
+        .column((Products::Table, Products::Categories))
+        .column((LatestLogs::Table, LatestLogs::LastLogDate))
+        .column((LatestLogs::Table, LatestLogs::LastLoggedAt))
+        .from(Products::Table)
+        .join(
+            JoinType::InnerJoin,
+            LatestLogs::Table,
+            Expr::col((LatestLogs::Table, LatestLogs::ProductId))
+                .equals((Products::Table, Products::Id)),
+        )
+        .and_where(Expr::col(Products::DeletedAt).is_null())
+        .with_cte(latest_logs);
+
+    apply_category_filters(&mut statement, include, exclude);
+    statement.to_owned()
+}
+
+fn category_counts_statement() -> SelectStatement {
+    // sea-query has no first-class UNNEST/BTRIM expressions; these custom
+    // function names are the only raw identifiers in this generated query.
+    let categories = Query::select()
+        .expr_as(
+            Func::cust(Alias::new("unnest"))
+                .arg(Expr::col((Products::Table, Products::Categories))),
+            Alias::new("category"),
+        )
+        .take();
+
+    Query::select()
+        .expr_as(
+            Expr::col((CategoryUnnest::Table, CategoryUnnest::Category)),
+            Alias::new("value"),
+        )
+        .expr_as(Func::count(Expr::col(Asterisk)), Alias::new("count"))
+        .from(Products::Table)
+        // `join_lateral` always emits an `ON` clause, so `CrossJoin` would
+        // render invalid SQL. `INNER JOIN LATERAL ... ON TRUE` is equivalent
+        // to `CROSS JOIN LATERAL` for this set-returning subquery.
+        .join_lateral(
+            JoinType::InnerJoin,
+            categories,
+            CategoryUnnest::Table,
+            Condition::all(),
+        )
+        .and_where(Expr::col(Products::DeletedAt).is_null())
+        .and_where(
+            Func::cust(Alias::new("btrim"))
+                .arg(Expr::col(Products::Name))
+                .ne(""),
+        )
+        .group_by_col((CategoryUnnest::Table, CategoryUnnest::Category))
+        .to_owned()
+}
+
+fn apply_category_filters(statement: &mut SelectStatement, include: &[String], exclude: &[String]) {
+    // Empty filters add no predicates, so they also add no array binds.
+    if !include.is_empty() {
+        statement.and_where(Expr::col(Products::Categories).contains(Expr::val(include.to_vec())));
+    }
+    if !exclude.is_empty() {
+        statement.and_where(
+            Expr::col(Products::Categories)
+                .binary(PgBinOper::Overlap, Expr::val(exclude.to_vec()))
+                .not(),
+        );
+    }
+}
 
 #[derive(Iden)]
 enum Products {
@@ -82,6 +170,29 @@ enum Products {
     DeletedAt,
     CreatedAt,
     UpdatedAt,
+}
+
+#[derive(Iden)]
+enum FoodLogs {
+    Table,
+    UserId,
+    LogDate,
+    ItemProductId,
+    CreatedAt,
+}
+
+#[derive(Iden)]
+enum LatestLogs {
+    Table,
+    ProductId,
+    LastLogDate,
+    LastLoggedAt,
+}
+
+#[derive(Iden)]
+enum CategoryUnnest {
+    Table,
+    Category,
 }
 
 #[derive(Iden)]
@@ -653,15 +764,14 @@ impl ProductRepository for PostgresProductRepository {
             .iter()
             .map(|category| category.0.clone())
             .collect();
-        let sql = match scope {
-            CatalogSearchScope::All => CATALOG_SEARCH_CANDIDATES_SQL,
-            CatalogSearchScope::Custom => CUSTOM_SEARCH_CANDIDATES_SQL,
-        };
-        let rows = sqlx::query_as::<_, ProductSearchCandidateRow>(sql)
-            .bind(&include)
-            .bind(&exclude)
-            .fetch_all(&self.pool)
-            .await?;
+        let (sql, values) = search_catalog_candidates_statement(scope, &include, &exclude)
+            .build_sqlx(PostgresQueryBuilder);
+        let rows = sqlx::query_as_with::<_, ProductSearchCandidateRow, _>(
+            sqlx::AssertSqlSafe(sql.as_str()),
+            values,
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -684,12 +794,14 @@ impl ProductRepository for PostgresProductRepository {
             .iter()
             .map(|category| category.0.clone())
             .collect();
-        let rows = sqlx::query_as::<_, HistorySearchCandidateRow>(HISTORY_SEARCH_CANDIDATES_SQL)
-            .bind(user_id)
-            .bind(&include)
-            .bind(&exclude)
-            .fetch_all(&self.pool)
-            .await?;
+        let (sql, values) = search_history_candidates_statement(user_id, &include, &exclude)
+            .build_sqlx(PostgresQueryBuilder);
+        let rows = sqlx::query_as_with::<_, HistorySearchCandidateRow, _>(
+            sqlx::AssertSqlSafe(sql.as_str()),
+            values,
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -700,15 +812,10 @@ impl ProductRepository for PostgresProductRepository {
     async fn category_counts(&self) -> Result<Vec<CategoryCount>, NutritionError> {
         // Ranking lives in `domain/search_ranking.rs`; only storage aggregation
         // remains here.
-        let rows = sqlx::query_as::<_, CategoryCountRow>(
-            r#"
-            SELECT category AS value, COUNT(*)::BIGINT AS count
-            FROM products p
-            CROSS JOIN LATERAL UNNEST(p.categories) AS category
-            WHERE p.deleted_at IS NULL
-              AND btrim(p.name) <> ''
-            GROUP BY category
-            "#,
+        let (sql, values) = category_counts_statement().build_sqlx(PostgresQueryBuilder);
+        let rows = sqlx::query_as_with::<_, CategoryCountRow, _>(
+            sqlx::AssertSqlSafe(sql.as_str()),
+            values,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -1577,9 +1684,129 @@ async fn replace_product_servings(
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use sea_query::{ArrayType, Value};
 
     fn timestamp(day: u32, hour: u32) -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 6, day, hour, 0, 0).unwrap()
+    }
+
+    fn sql_contains(sql: &str, needle: &str) -> bool {
+        // Use UFCS: `PgExpr` also provides `contains` for `Into<Expr>` types.
+        str::contains(sql, needle)
+    }
+
+    fn assert_string_array(value: &Value, expected: &[&str]) {
+        let Value::Array(ArrayType::String, Some(values)) = value else {
+            panic!("expected a string array, got {value:?}");
+        };
+        let actual = values
+            .iter()
+            .map(|value| {
+                let Value::String(Some(value)) = value else {
+                    panic!("expected a string array element, got {value:?}");
+                };
+                value.as_str()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(actual.as_slice(), expected);
+    }
+
+    #[test]
+    fn catalog_search_statement_skips_empty_filters_and_applies_scope() {
+        let (all_sql, all_values) =
+            search_catalog_candidates_statement(CatalogSearchScope::All, &[], &[])
+                .build_sqlx(PostgresQueryBuilder);
+
+        assert!(sql_contains(&all_sql, "\"deleted_at\" IS NULL"));
+        assert!(!sql_contains(&all_sql, "\"source\""));
+        assert!(!sql_contains(&all_sql, "@>"));
+        assert!(!sql_contains(&all_sql, "&&"));
+        assert!(all_values.0.0.is_empty());
+
+        let (custom_sql, custom_values) =
+            search_catalog_candidates_statement(CatalogSearchScope::Custom, &[], &[])
+                .build_sqlx(PostgresQueryBuilder);
+
+        assert!(sql_contains(&custom_sql, "\"source\" ="));
+        assert!(!sql_contains(&custom_sql, "@>"));
+        assert!(!sql_contains(&custom_sql, "&&"));
+        assert_eq!(custom_values.0.0.len(), 1);
+        assert!(
+            matches!(&custom_values.0.0[0], Value::String(Some(value)) if value == "USER"),
+            "Custom scope must bind the USER source"
+        );
+    }
+
+    #[test]
+    fn catalog_search_statement_binds_include_and_exclude_arrays() {
+        let include = vec!["breakfast".to_owned(), "grain".to_owned()];
+        let exclude = vec!["snack".to_owned(), "dessert".to_owned()];
+        let (sql, values) =
+            search_catalog_candidates_statement(CatalogSearchScope::All, &include, &exclude)
+                .build_sqlx(PostgresQueryBuilder);
+
+        assert!(sql_contains(&sql, "\"categories\" @>"));
+        assert!(sql_contains(&sql, "NOT (\"categories\" &&"));
+        assert_eq!(values.0.0.len(), 2);
+        assert_string_array(&values.0.0[0], &["breakfast", "grain"]);
+        assert_string_array(&values.0.0[1], &["snack", "dessert"]);
+    }
+
+    #[test]
+    fn history_search_statement_renders_latest_logs_cte_and_filters() {
+        let user_id = Uuid::new_v4();
+        let include = vec!["dairy".to_owned()];
+        let exclude = vec!["snacks".to_owned()];
+        let (sql, values) = search_history_candidates_statement(user_id, &include, &exclude)
+            .build_sqlx(PostgresQueryBuilder);
+
+        assert!(sql_contains(&sql, "WITH \"latest_logs\" AS"));
+        assert!(sql_contains(&sql, "AS \"product_id\""));
+        assert!(sql_contains(&sql, "MAX(\"log_date\")"));
+        assert!(sql_contains(&sql, "MAX(\"created_at\")"));
+        assert!(sql_contains(&sql, "GROUP BY \"item_product_id\""));
+        assert!(sql_contains(&sql, "\"user_id\" = $1"));
+        assert!(sql_contains(&sql, "\"item_product_id\" IS NOT NULL"));
+        assert!(sql_contains(&sql, "INNER JOIN \"latest_logs\""));
+        assert!(sql_contains(
+            &sql,
+            "\"latest_logs\".\"product_id\" = \"products\".\"id\""
+        ));
+        assert!(sql_contains(&sql, "\"deleted_at\" IS NULL"));
+        assert!(sql_contains(&sql, "@>"));
+        assert!(sql_contains(&sql, "&&"));
+        assert_eq!(values.0.0.len(), 3);
+        assert!(
+            matches!(&values.0.0[0], Value::Uuid(Some(value)) if value == &user_id),
+            "History must bind the user before category filters"
+        );
+        assert_string_array(&values.0.0[1], &["dairy"]);
+        assert_string_array(&values.0.0[2], &["snacks"]);
+    }
+
+    #[test]
+    fn category_counts_statement_groups_lateral_unnest() {
+        let (sql, values) = category_counts_statement().build_sqlx(PostgresQueryBuilder);
+
+        assert!(sql_contains(
+            &sql,
+            "\"category_unnest\".\"category\" AS \"value\""
+        ));
+        assert!(sql_contains(&sql, "COUNT(*) AS \"count\""));
+        assert!(sql_contains(&sql, "unnest("));
+        assert!(sql_contains(&sql, "INNER JOIN LATERAL"));
+        assert!(sql_contains(&sql, "ON TRUE"));
+        assert!(sql_contains(
+            &sql,
+            "GROUP BY \"category_unnest\".\"category\""
+        ));
+        assert!(sql_contains(&sql, "btrim(\"name\") <> $1"));
+        assert!(sql_contains(&sql, "\"deleted_at\" IS NULL"));
+        assert_eq!(values.0.0.len(), 1);
+        assert!(
+            matches!(&values.0.0[0], Value::String(Some(value)) if value.is_empty()),
+            "btrim predicate must bind the empty string"
+        );
     }
 
     fn custom_origin(user_id: Uuid) -> ProductOrigin {

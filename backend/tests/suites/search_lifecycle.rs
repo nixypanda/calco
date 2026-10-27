@@ -310,13 +310,38 @@ async fn catalog_search_applies_include_and_exclude_category_filters(pool: PgPoo
     let custom_breakfast = search_ids(&router, &user, "filter category:breakfast", "custom").await;
     assert_ids_unordered(custom_breakfast, vec![oats.clone(), yogurt.clone()]);
 
+    let custom_without_dairy = search_ids(&router, &user, "filter -category:dairy", "custom").await;
+    assert_ids_unordered(custom_without_dairy, vec![oats.clone(), chips.clone()]);
+
+    let custom_breakfast_without_grain = search_ids(
+        &router,
+        &user,
+        "filter category:breakfast -category:grain",
+        "custom",
+    )
+    .await;
+    assert_eq!(custom_breakfast_without_grain, vec![yogurt.clone()]);
+
     log_product(&router, &user, &oats, "2026-06-01").await;
     log_product(&router, &user, &yogurt, "2026-06-02").await;
     log_product(&router, &user, &chips, "2026-06-03").await;
 
     let history_breakfast =
         search_ids(&router, &user, "filter category:breakfast", "history").await;
-    assert_ids_unordered(history_breakfast, vec![oats, yogurt]);
+    assert_ids_unordered(history_breakfast, vec![oats.clone(), yogurt.clone()]);
+
+    let history_without_dairy =
+        search_ids(&router, &user, "filter -category:dairy", "history").await;
+    assert_ids_unordered(history_without_dairy, vec![oats, chips]);
+
+    let history_breakfast_without_grain = search_ids(
+        &router,
+        &user,
+        "filter category:breakfast -category:grain",
+        "history",
+    )
+    .await;
+    assert_eq!(history_breakfast_without_grain, vec![yogurt]);
 }
 
 #[sqlx::test]
@@ -581,6 +606,45 @@ async fn deleted_products_disappear_from_search_and_category_counts(pool: PgPool
     assert!(
         !suggestions.iter().any(|(value, _)| value == category),
         "deleted category must not be suggested; got {suggestions:?}"
+    );
+}
+
+#[sqlx::test]
+async fn category_counts_ignore_space_only_product_names(pool: PgPool) {
+    let router = app(pool.clone()).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+
+    create_custom_product(
+        &router,
+        &user,
+        "Blank Name Control",
+        "Blank Lab",
+        &["blank-name-visible"],
+    )
+    .await;
+    insert_external_product(
+        &pool,
+        "blank-name-hidden",
+        "   ",
+        None,
+        None,
+        &["blank-name-hidden"],
+    )
+    .await;
+
+    let suggestions = category_suggestions(&router, &user, Some("blank-name")).await;
+
+    assert!(
+        suggestions
+            .iter()
+            .any(|(value, _)| value == "blank-name-visible"),
+        "visible category should still be suggested; got {suggestions:?}"
+    );
+    assert!(
+        !suggestions
+            .iter()
+            .any(|(value, _)| value == "blank-name-hidden"),
+        "space-only product name must be excluded from counts; got {suggestions:?}"
     );
 }
 
