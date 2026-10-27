@@ -11,3 +11,4 @@ mod meal_lifecycle;
 mod nutrition_details_lifecycle;
 mod product_lifecycle;
 mod product_repository;
+mod search_lifecycle;

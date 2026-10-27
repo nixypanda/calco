@@ -1,11 +1,12 @@
 use calco_backend::nutrition::catalog::domain::{
     ExternalProductBatch, ExternalProductBuilder, ExternalSource, Nutrient, NutrientCatalog,
-    NutrientCode, NutritionError, Product, ProductNutrientInput, ProductRepository,
+    NutrientCode, NutritionError, Product, ProductId, ProductNutrientInput, ProductRepository,
     ProductServingInput, UnitCode,
 };
 use calco_backend::nutrition::catalog::infrastructure::PostgresProductRepository;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 fn nutrient_catalog() -> NutrientCatalog {
@@ -19,6 +20,30 @@ fn nutrient_catalog() -> NutrientCatalog {
         Nutrient {
             code: NutrientCode("PROTEIN_G".into()),
             name: "Protein".into(),
+            unit: UnitCode("g".into()),
+            category: "macro".into(),
+        },
+        Nutrient {
+            code: NutrientCode("CARBS_G".into()),
+            name: "Carbohydrates".into(),
+            unit: UnitCode("g".into()),
+            category: "macro".into(),
+        },
+        Nutrient {
+            code: NutrientCode("FAT_G".into()),
+            name: "Fat".into(),
+            unit: UnitCode("g".into()),
+            category: "macro".into(),
+        },
+        Nutrient {
+            code: NutrientCode("FIBER_G".into()),
+            name: "Fiber".into(),
+            unit: UnitCode("g".into()),
+            category: "macro".into(),
+        },
+        Nutrient {
+            code: NutrientCode("SUGAR_G".into()),
+            name: "Sugar".into(),
             unit: UnitCode("g".into()),
             category: "macro".into(),
         },
@@ -524,4 +549,76 @@ async fn external_upsert_handles_more_than_one_chunk(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(last_name, "Renamed last chunk product");
+}
+
+#[sqlx::test]
+async fn find_search_summaries_returns_requested_set_with_summary_children(pool: PgPool) {
+    let repository = PostgresProductRepository::new(pool.clone());
+
+    assert!(
+        repository
+            .find_search_summaries(&[])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    let first = external_product(
+        "search-summary-first",
+        None,
+        "Search summary first",
+        &[
+            ("ENERGY_KCAL", 100),
+            ("PROTEIN_G", 10),
+            ("CARBS_G", 20),
+            ("FAT_G", 5),
+            ("FIBER_G", 3),
+            ("SUGAR_G", 7),
+        ],
+        &[("cup", 200)],
+    );
+    let second = external_product(
+        "search-summary-second",
+        None,
+        "Search summary second",
+        &[("ENERGY_KCAL", 250)],
+        &[],
+    );
+    let deleted = external_product(
+        "search-summary-deleted",
+        None,
+        "Search summary deleted",
+        &[],
+        &[],
+    );
+    let batch = external_batch(vec![first.clone(), second.clone(), deleted.clone()]);
+    repository.upsert_external_many(&batch).await.unwrap();
+    repository.delete(deleted.id).await.unwrap();
+
+    let products = repository
+        .find_search_summaries(&[second.id, first.id, deleted.id])
+        .await
+        .unwrap();
+
+    let returned_ids: HashSet<ProductId> = products.iter().map(|product| product.id).collect();
+    assert_eq!(returned_ids, HashSet::from([first.id, second.id]));
+
+    let first_product = products
+        .iter()
+        .find(|product| product.id == first.id)
+        .expect("first product missing");
+    let mut nutrient_codes: Vec<&str> = first_product
+        .nutrients
+        .iter()
+        .map(|nutrient| nutrient.nutrient_code.0.as_str())
+        .collect();
+    nutrient_codes.sort();
+    assert_eq!(
+        nutrient_codes,
+        vec!["CARBS_G", "ENERGY_KCAL", "FAT_G", "FIBER_G", "PROTEIN_G"]
+    );
+    assert!(
+        first_product.servings.is_empty(),
+        "search summaries must not load servings"
+    );
 }
