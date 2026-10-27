@@ -1779,7 +1779,7 @@ defaultPortionCard env units form =
     Surface.formSection env.theme
         (I18n.t env.language TidFoodEditorDefaultPortion)
         [ defaultPortionFields env units form
-        , Typography.mutedCaption env.theme
+        , Typography.mutedCaptionParagraph env.theme
             (if form.defaultUnit == "" then
                 if List.isEmpty form.servings then
                     I18n.t env.language TidFoodEditorDefaultPortionHint100g
@@ -1871,7 +1871,11 @@ nutrientsCard env basis visibility form nutrients =
     Surface.section env.theme
         { header =
             Just
-                (Element.column [ Element.spacing DesignTokens.space8 ]
+                (Element.column
+                    [ Element.width Element.fill
+                    , UiCommon.minWidthZero
+                    , Element.spacing DesignTokens.space8
+                    ]
                     [ Typography.subsectionTitle env.theme
                         (case basis of
                             Per100Grams ->
@@ -1955,9 +1959,14 @@ servingsCard env form units =
 categoryInputView : Env -> Bool -> CategoryInput -> Element Msg
 categoryInputView env open input =
     Element.column [ Element.width Element.fill ]
-        [ Element.row [ Element.spacing DesignTokens.space4 ]
+        [ Element.row
+            [ Element.width Element.fill
+            , UiCommon.minWidthZero
+            , Element.spacing DesignTokens.space4
+            ]
             [ UiInput.fieldLabel env.theme (I18n.t env.language TidFoodEditorCategories)
-            , Typography.mutedCaption env.theme (I18n.t env.language TidFoodEditorCategoriesHint)
+            , Typography.mutedCaptionParagraph env.theme
+                (I18n.t env.language TidFoodEditorCategoriesHint)
             ]
         , Element.row [ Element.width Element.fill ]
             [ Element.el [ Element.width Element.fill ]
@@ -1989,7 +1998,7 @@ addCategoryButton env input =
 chipRowView : Env -> List String -> Element Msg
 chipRowView env tags =
     if List.isEmpty tags then
-        Typography.mutedCaption env.theme (I18n.t env.language TidFoodEditorNoCategories)
+        Typography.mutedCaptionParagraph env.theme (I18n.t env.language TidFoodEditorNoCategories)
 
     else
         Element.wrappedRow
@@ -2191,7 +2200,7 @@ rowActionButton env config =
 
 addRowHint : Env -> Element msg
 addRowHint env =
-    Typography.mutedCaption env.theme (I18n.t env.language TidFoodEditorAddRowHint)
+    Typography.mutedCaptionParagraph env.theme (I18n.t env.language TidFoodEditorAddRowHint)
 
 
 nutrientHint : Env -> NutrientBasis -> Element msg
@@ -2201,4 +2210,5 @@ nutrientHint env basis =
             addRowHint env
 
         PerLoggedPortion ->
-            Typography.mutedCaption env.theme (I18n.t env.language TidFoodEditorPortionHint)
+            Typography.mutedCaptionParagraph env.theme
+                (I18n.t env.language TidFoodEditorPortionHint)
