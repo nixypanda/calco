@@ -1550,28 +1550,8 @@ mod tests {
         Utc.with_ymd_and_hms(2026, 6, day, hour, 0, 0).unwrap()
     }
 
-    fn normalize_sql(sql: &str) -> String {
-        sql.split_whitespace().collect::<Vec<_>>().join(" ")
-    }
-
-    fn sql_contains(sql: &str, needle: &str) -> bool {
-        str::contains(sql, needle)
-    }
-
-    fn sql_match_count(sql: &str, needle: &str) -> usize {
-        str::matches(sql, needle).count()
-    }
-
     fn custom_origin(user_id: Uuid) -> ProductOrigin {
         ProductOrigin::Custom { user_id }
-    }
-
-    fn external_origin(source_id: &str, barcode: Option<&str>) -> ProductOrigin {
-        ProductOrigin::External {
-            source: ExternalSource::Off,
-            source_id: ExternalProductId::new(source_id).expect("valid external product id"),
-            barcode: barcode.map(|barcode| Barcode(barcode.to_owned())),
-        }
     }
 
     fn serving(unit: &str, grams_per_unit: i64) -> ProductServing {
@@ -1612,32 +1592,6 @@ mod tests {
             created_at,
             updated_at,
         }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn external_product(
-        id: Uuid,
-        source_id: &str,
-        barcode: Option<&str>,
-        name: &str,
-        categories: &[&str],
-        nutrients: Vec<ProductNutrient>,
-        servings: Vec<ProductServing>,
-        created_at: DateTime<Utc>,
-    ) -> Product {
-        product_fixture(
-            id,
-            external_origin(source_id, barcode),
-            name,
-            Some("Bulk brand"),
-            categories,
-            Some(100),
-            Some("g"),
-            nutrients,
-            servings,
-            created_at,
-            created_at,
-        )
     }
 
     async fn seed_identity_and_profile(pool: &PgPool, label: &str) -> Uuid {
@@ -1779,158 +1733,14 @@ mod tests {
         .expect("insert product serving row");
     }
 
-    #[test]
-    fn bulk_load_statements_use_single_array_binds() {
-        let ids = vec![Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
-
-        let (sql, values) =
-            load_nutrients_for_products_statement(&ids).build_sqlx(PostgresQueryBuilder);
-        assert_eq!(
-            values.0.iter().count(),
-            1,
-            "nutrient bulk load must bind one uuid[] array: {sql}"
-        );
-        assert!(
-            matches!(
-                values.0.iter().next(),
-                Some(sea_query::Value::Array(
-                    sea_query::ArrayType::Uuid,
-                    Some(values)
-                )) if values.len() == 3
-            ),
-            "nutrient bulk load must bind all ids without truncation: {sql}"
-        );
-
-        let (sql, values) =
-            load_servings_for_products_statement(&ids).build_sqlx(PostgresQueryBuilder);
-        assert_eq!(
-            values.0.iter().count(),
-            1,
-            "serving bulk load must bind one uuid[] array: {sql}"
-        );
-        assert!(
-            matches!(
-                values.0.iter().next(),
-                Some(sea_query::Value::Array(
-                    sea_query::ArrayType::Uuid,
-                    Some(values)
-                )) if values.len() == 3
-            ),
-            "serving bulk load must bind all ids without truncation: {sql}"
-        );
-
-        let (sql, values) = existing_ids_statement(ids).build_sqlx(PostgresQueryBuilder);
-        assert_eq!(
-            values.0.iter().count(),
-            1,
-            "existing_ids must bind one uuid[] array: {sql}"
-        );
-        assert!(
-            matches!(
-                values.0.iter().next(),
-                Some(sea_query::Value::Array(
-                    sea_query::ArrayType::Uuid,
-                    Some(values)
-                )) if values.len() == 3
-            ),
-            "existing_ids must bind all ids without truncation: {sql}"
-        );
-    }
-
-    #[test]
-    fn serving_statements_order_by_position() {
-        let product_id = Uuid::new_v4();
-
-        let (sql, values) = load_servings_statement(product_id).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-        assert!(
-            sql.ends_with(r#"ORDER BY "position" ASC"#),
-            "single-product servings must order by position: {sql}"
-        );
-        assert_eq!(
-            values.0.iter().count(),
-            1,
-            "single-product servings must bind one product id: {sql}"
-        );
-
-        let (sql, values) =
-            load_servings_for_products_statement(&[product_id]).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-        assert!(
-            sql.ends_with(r#"ORDER BY "product_id" ASC, "position" ASC"#),
-            "bulk servings must order by product_id then position: {sql}"
-        );
-        assert_eq!(
-            values.0.iter().count(),
-            1,
-            "bulk servings must bind one uuid[] product id array: {sql}"
-        );
-    }
-
-    #[test]
-    fn search_summary_statement_uses_uuid_and_text_array_binds() {
-        let ids = vec![Uuid::new_v4(), Uuid::new_v4()];
-        let (sql, values) =
-            search_summary_nutrients_statement(&ids).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-
-        assert_eq!(
-            values.0.iter().count(),
-            2,
-            "search summary must bind two arrays: {sql}"
-        );
-        let mut values = values.0.iter();
-        assert!(
-            matches!(
-                values.next(),
-                Some(sea_query::Value::Array(
-                    sea_query::ArrayType::Uuid,
-                    Some(ids)
-                )) if ids.len() == 2
-            ),
-            "search summary must bind a uuid[] product ids array: {sql}"
-        );
-        assert!(
-            matches!(
-                values.next(),
-                Some(sea_query::Value::Array(
-                    sea_query::ArrayType::String,
-                    Some(codes)
-                )) if codes.len() == SEARCH_NUTRIENT_CODES.len()
-            ),
-            "search summary must bind one text[] nutrient codes array: {sql}"
-        );
-    }
-
     #[sqlx::test]
-    async fn nutrient_id_lookup_binds_one_text_array_and_resolves_multiple_codes(pool: PgPool) {
+    async fn nutrient_id_lookup_resolves_multiple_codes(pool: PgPool) {
         let codes = vec![
             "ENERGY_KCAL".to_owned(),
             "PROTEIN_G".to_owned(),
             "FAT_G".to_owned(),
         ];
         let (sql, values) = nutrient_ids_by_code_statement(&codes).build_sqlx(PostgresQueryBuilder);
-        let normalized = normalize_sql(&sql);
-
-        assert_eq!(
-            values.0.iter().count(),
-            1,
-            "nutrient lookup must bind one text[] array: {normalized}"
-        );
-        assert!(
-            matches!(
-                values.0.iter().next(),
-                Some(sea_query::Value::Array(
-                    sea_query::ArrayType::String,
-                    Some(values)
-                )) if values.len() == codes.len()
-            ),
-            "nutrient lookup must bind every requested code without truncation: {normalized}"
-        );
-        assert!(
-            sql_contains(&normalized, r#""code" = ANY("#),
-            "nutrient lookup must use a single code = ANY(array) predicate: {normalized}"
-        );
 
         let rows: Vec<(String, Uuid)> =
             sqlx::query_as_with::<_, (String, Uuid), _>(sqlx::AssertSqlSafe(sql.as_str()), values)
@@ -1941,198 +1751,14 @@ mod tests {
         assert_eq!(
             resolved.len(),
             codes.len(),
-            "nutrient lookup must resolve every requested code: {normalized}"
+            "nutrient lookup must resolve every requested code"
         );
         for code in &codes {
             assert!(
                 resolved.contains(code),
-                "nutrient lookup must resolve {code}: {normalized}"
+                "nutrient lookup must resolve {code}"
             );
         }
-    }
-
-    #[test]
-    fn external_upsert_statements_use_conflict_target_and_tuple_in() {
-        let created_at = timestamp(1, 8);
-        let first = external_product(
-            Uuid::new_v4(),
-            "statement-first",
-            None,
-            "Statement first",
-            &[],
-            vec![],
-            vec![],
-            created_at,
-        );
-        let second = external_product(
-            Uuid::new_v4(),
-            "statement-second",
-            None,
-            "Statement second",
-            &[],
-            vec![],
-            vec![],
-            created_at,
-        );
-        let products = vec![&first, &second];
-
-        let (sql, values) =
-            insert_external_products_statement(&products).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-        assert!(
-            sql_contains(&sql, r#"ON CONFLICT ("source", "source_id") DO NOTHING"#),
-            "external insert must use the source/source_id conflict target: {sql}"
-        );
-        assert_eq!(
-            values.0.iter().count(),
-            22,
-            "two products must bind eleven columns each: {sql}"
-        );
-
-        let (sql, values) =
-            resolve_external_product_ids_statement(&products).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-        assert!(
-            sql_contains(&sql, r#"("source", "source_id") IN (($1, $2), ($3, $4))"#),
-            "identity resolve must use a tuple IN list: {sql}"
-        );
-        assert!(
-            sql.ends_with(r#"ORDER BY "source" ASC, "source_id" ASC"#),
-            "identity resolve must remain deterministic: {sql}"
-        );
-        assert_eq!(
-            values.0.iter().count(),
-            4,
-            "identity resolve must bind two values per product: {sql}"
-        );
-    }
-
-    #[test]
-    fn upsert_chunk_boundary_statements_bind_every_product() {
-        assert_eq!(
-            PRODUCT_UPSERT_CHUNK_SIZE, 1_000,
-            "the upsert chunk size is a pinned persistence contract"
-        );
-        let created_at = timestamp(1, 8);
-        let products = (0..=PRODUCT_UPSERT_CHUNK_SIZE)
-            .map(|index| {
-                external_product(
-                    Uuid::new_v4(),
-                    &format!("chunk-boundary-{index}"),
-                    None,
-                    "Chunk boundary product",
-                    &[],
-                    vec![],
-                    vec![],
-                    created_at,
-                )
-            })
-            .collect::<Vec<_>>();
-        let references = products.iter().collect::<Vec<_>>();
-        let chunks = references
-            .chunks(PRODUCT_UPSERT_CHUNK_SIZE)
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            chunks.iter().map(|chunk| chunk.len()).collect::<Vec<_>>(),
-            vec![PRODUCT_UPSERT_CHUNK_SIZE, 1],
-            "one product over the constant must produce a full chunk and a remainder"
-        );
-
-        let mut insert_binds = 0;
-        let mut resolve_binds = 0;
-        for chunk in &chunks {
-            let (_, values) =
-                insert_external_products_statement(chunk).build_sqlx(PostgresQueryBuilder);
-            let chunk_insert_binds = values.0.iter().count();
-            assert_eq!(
-                chunk_insert_binds,
-                11 * chunk.len(),
-                "insert must bind eleven columns per product in a {}-product chunk",
-                chunk.len()
-            );
-            insert_binds += chunk_insert_binds;
-
-            let (sql, values) =
-                resolve_external_product_ids_statement(chunk).build_sqlx(PostgresQueryBuilder);
-            let chunk_resolve_binds = values.0.iter().count();
-            assert_eq!(
-                chunk_resolve_binds,
-                2 * chunk.len(),
-                "identity resolve must bind two values per product in a {}-product chunk",
-                chunk.len()
-            );
-            let sql = normalize_sql(&sql);
-            assert_eq!(
-                sql_match_count(&sql, "), (") + 1,
-                chunk.len(),
-                "identity resolve must contain one tuple per product: {sql}"
-            );
-            resolve_binds += chunk_resolve_binds;
-        }
-
-        assert_eq!(
-            insert_binds,
-            11 * (PRODUCT_UPSERT_CHUNK_SIZE + 1),
-            "chunked inserts must bind every product across the boundary"
-        );
-        assert_eq!(
-            resolve_binds,
-            2 * (PRODUCT_UPSERT_CHUNK_SIZE + 1),
-            "chunked identity resolves must bind every identity across the boundary"
-        );
-    }
-
-    #[test]
-    fn update_and_delete_statements_use_current_timestamp_and_target_one_id() {
-        let created_at = timestamp(1, 8);
-        let product = product_fixture(
-            Uuid::new_v4(),
-            custom_origin(Uuid::new_v4()),
-            "Timestamp product",
-            Some("Brand"),
-            &["category"],
-            Some(100),
-            Some("g"),
-            vec![],
-            vec![],
-            created_at,
-            created_at,
-        );
-
-        let (sql, values) = update_product_statement(&product).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-        assert!(
-            sql_contains(&sql, r#""updated_at" = CURRENT_TIMESTAMP"#),
-            "update must use CURRENT_TIMESTAMP: {sql}"
-        );
-        assert_eq!(
-            sql_match_count(&sql, " WHERE "),
-            1,
-            "update must have exactly one WHERE clause: {sql}"
-        );
-        let where_tail = sql
-            .rsplit_once(" WHERE ")
-            .map(|(_, tail)| tail)
-            .expect("update statement must have a WHERE clause");
-        assert_eq!(
-            where_tail, r#""id" = $6"#,
-            "id must be the only update predicate: {sql}"
-        );
-        assert_eq!(
-            values.0.iter().count(),
-            6,
-            "update must bind five editable columns and id only: {sql}"
-        );
-
-        let (sql, values) =
-            soft_delete_product_statement(product.id.0).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-        assert_eq!(
-            sql,
-            r#"UPDATE "products" SET "deleted_at" = CURRENT_TIMESTAMP WHERE "id" = $1"#
-        );
-        assert_eq!(values.0.iter().count(), 1, "delete must bind one id: {sql}");
     }
 
     #[sqlx::test]

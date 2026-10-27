@@ -607,334 +607,324 @@ async fn insert_food_log_nutrients(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     fn date(year: i32, month: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(year, month, day).unwrap()
-    }
-
-    fn base_filter(date_range: DateRange) -> FoodLogListFilter {
-        FoodLogListFilter {
-            user_id: Uuid::nil(),
-            date_range,
-            meal_slot: None,
-            items: Vec::new(),
-        }
-    }
-
-    fn filter_sql(filter: FoodLogListFilter) -> String {
-        let (sql, _values) = food_log_filter_query(filter).build_sqlx(PostgresQueryBuilder);
-        normalize_sql(&sql)
-    }
-
-    fn normalize_sql(sql: &str) -> String {
-        sql.split_whitespace().collect::<Vec<_>>().join(" ")
-    }
-
-    fn sql_contains(sql: &str, needle: &str) -> bool {
-        str::contains(sql, needle)
-    }
-
-    fn expected_filter_sql(where_tail: &str) -> String {
-        format!(
-            "SELECT \"id\", \"user_id\", \"log_date\", \"meal_slot\", \"device_timezone\", \
-             \"item_product_id\", \"item_meal_id\", \"item_name\", \"item_brand\", \"quantity\", \
-             \"unit\", \"notes\", \"created_at\", \"updated_at\" FROM \"food_logs\" \
-             WHERE \"user_id\" = $1 {where_tail} \
-             ORDER BY \"log_date\" DESC, \"created_at\" DESC"
-        )
-    }
-
-    #[test]
-    fn filter_query_uses_inclusive_date_bounds() {
-        let sql = filter_sql(base_filter(
-            DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
-        ));
-
-        assert_eq!(
-            sql,
-            expected_filter_sql("AND \"log_date\" >= $2 AND \"log_date\" <= $3")
-        );
-    }
-
-    #[test]
-    fn filter_query_uses_exclusive_end_date_bound() {
-        let sql = filter_sql(base_filter(
-            DateRange::inclusive_to_exclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
-        ));
-
-        assert_eq!(
-            sql,
-            expected_filter_sql("AND \"log_date\" >= $2 AND \"log_date\" < $3")
-        );
-    }
-
-    #[test]
-    fn filter_query_adds_meal_slot_predicate() {
-        let mut filter =
-            base_filter(DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap());
-        filter.meal_slot = Some(MealSlot::Breakfast);
-
-        let sql = filter_sql(filter);
-
-        assert_eq!(
-            sql,
-            expected_filter_sql(
-                "AND \"log_date\" >= $2 AND \"log_date\" <= $3 AND \"meal_slot\" = $4"
-            )
-        );
-    }
-
-    #[test]
-    fn filter_query_adds_product_item_predicate() {
-        let mut filter =
-            base_filter(DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap());
-        filter
-            .items
-            .push(FoodLogItemRef::Product(ProductId(Uuid::nil())));
-
-        let sql = filter_sql(filter);
-
-        assert_eq!(
-            sql,
-            expected_filter_sql(
-                "AND \"log_date\" >= $2 AND \"log_date\" <= $3 AND \
-                 \"item_product_id\" = ANY($4)"
-            )
-        );
-    }
-
-    #[test]
-    fn filter_query_adds_meal_item_predicate() {
-        let mut filter =
-            base_filter(DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap());
-        filter.items.push(FoodLogItemRef::Meal(MealId(Uuid::nil())));
-
-        let sql = filter_sql(filter);
-
-        assert_eq!(
-            sql,
-            expected_filter_sql(
-                "AND \"log_date\" >= $2 AND \"log_date\" <= $3 AND \
-                 \"item_meal_id\" = ANY($4)"
-            )
-        );
-    }
-
-    #[test]
-    fn filter_query_adds_mixed_item_predicates() {
-        let mut filter =
-            base_filter(DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap());
-        filter
-            .items
-            .push(FoodLogItemRef::Product(ProductId(Uuid::nil())));
-        filter.items.push(FoodLogItemRef::Meal(MealId(Uuid::nil())));
-
-        let sql = filter_sql(filter);
-
-        assert_eq!(
-            sql,
-            expected_filter_sql(
-                "AND \"log_date\" >= $2 AND \"log_date\" <= $3 AND \
-                 (\"item_product_id\" = ANY($4) OR \"item_meal_id\" = ANY($5))"
-            )
-        );
-    }
-
-    #[test]
-    fn filter_query_uses_exclusive_start_date_bound() {
-        let sql = filter_sql(base_filter(DateRange {
-            start: Bound::Excluded(date(2026, 6, 1)),
-            end: Bound::Included(date(2026, 6, 3)),
-        }));
-
-        assert_eq!(
-            sql,
-            expected_filter_sql("AND \"log_date\" > $2 AND \"log_date\" <= $3")
-        );
-    }
-
-    #[test]
-    fn filter_query_omits_unbounded_start_date_bound() {
-        let sql = filter_sql(base_filter(DateRange {
-            start: Bound::Unbounded,
-            end: Bound::Included(date(2026, 6, 3)),
-        }));
-
-        assert_eq!(sql, expected_filter_sql("AND \"log_date\" <= $2"));
-    }
-
-    #[test]
-    fn filter_query_omits_unbounded_end_date_bound() {
-        let sql = filter_sql(base_filter(DateRange {
-            start: Bound::Included(date(2026, 6, 1)),
-            end: Bound::Unbounded,
-        }));
-
-        assert_eq!(sql, expected_filter_sql("AND \"log_date\" >= $2"));
     }
 
     fn timestamp(day: NaiveDate, hour: u32) -> DateTime<Utc> {
         day.and_hms_opt(hour, 0, 0).unwrap().and_utc()
     }
 
-    fn snapshot(code: &str, amount: i64, unit: &str) -> FoodLogNutrientSnapshot {
-        FoodLogNutrientSnapshot {
-            nutrient_code: NutrientCode(code.to_owned()),
-            amount: Decimal::from(amount),
-            unit: UnitCode(unit.to_owned()),
-        }
+    async fn seed_identity_and_profile(pool: &PgPool, label: &str) -> Uuid {
+        let identity_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+
+        sqlx::query(
+            r#"
+            INSERT INTO identities (
+                id, username, password_hash, role, status, created_at, updated_at,
+                session_security_stamp
+            )
+            VALUES ($1, $2, 'test-password-hash', 'user', 'active', now(), now(), $3)
+            "#,
+        )
+        .bind(identity_id)
+        .bind(format!("{label}-{identity_id}"))
+        .bind(Uuid::new_v4())
+        .execute(pool)
+        .await
+        .expect("seed identity");
+
+        sqlx::query(
+            r#"
+            INSERT INTO user_profiles (id, identity_id, display_name, created_at, updated_at)
+            VALUES ($1, $2, $3, now(), now())
+            "#,
+        )
+        .bind(user_id)
+        .bind(identity_id)
+        .bind(label)
+        .execute(pool)
+        .await
+        .expect("seed user profile");
+
+        user_id
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn log_fixture(
+    async fn seed_product_row(pool: &PgPool, user_id: Uuid, name: &str) -> Uuid {
+        let product_id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO products (id, source, user_id, visibility, name)
+            VALUES ($1, 'USER', $2, 'global', $3)
+            "#,
+        )
+        .bind(product_id)
+        .bind(user_id)
+        .bind(name)
+        .execute(pool)
+        .await
+        .expect("seed product");
+        product_id
+    }
+
+    async fn seed_meal_row(pool: &PgPool, user_id: Uuid, name: &str) -> Uuid {
+        let meal_id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO meals (id, user_id, name)
+            VALUES ($1, $2, $3)
+            "#,
+        )
+        .bind(meal_id)
+        .bind(user_id)
+        .bind(name)
+        .execute(pool)
+        .await
+        .expect("seed meal");
+        meal_id
+    }
+
+    fn log_with_item(
         id: Uuid,
         user_id: Uuid,
         log_date: NaiveDate,
         meal_slot: Option<MealSlot>,
-        device_timezone: Option<&str>,
         item: FoodLogItemSnapshot,
-        quantity_amount: Decimal,
-        quantity_unit: &str,
-        snapshots: Vec<FoodLogNutrientSnapshot>,
-        notes: Option<&str>,
-        created_at: DateTime<Utc>,
     ) -> FoodLog {
+        let created_at = timestamp(log_date, 8);
         FoodLog::restore(
             FoodLogId(id),
             user_id,
             log_date,
             meal_slot,
-            device_timezone.map(str::to_owned),
+            Some("UTC".to_owned()),
             item,
-            quantity_amount,
-            UnitCode(quantity_unit.to_owned()),
-            snapshots,
-            notes.map(str::to_owned),
+            Decimal::from(100),
+            UnitCode("g".to_owned()),
+            Vec::new(),
+            None,
             created_at,
             created_at,
         )
     }
 
-    #[test]
-    fn list_by_user_and_date_statement_orders_slots_then_created_at() {
-        let (sql, values) = list_by_user_and_date_statement(Uuid::nil(), date(2026, 6, 2))
-            .build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-
-        assert!(
-            sql_contains(&sql, "CASE WHEN"),
-            "meal slots must be ranked with a CASE expression: {sql}"
-        );
-        assert!(
-            sql_contains(&sql, "ELSE") && sql_contains(&sql, "END"),
-            "meal slot ranking must preserve ELSE 6: {sql}"
-        );
-        let expected_order_tail = r#"ORDER BY (CASE WHEN ("meal_slot" = $3) THEN $4 WHEN ("meal_slot" = $5) THEN $6 WHEN ("meal_slot" = $7) THEN $8 WHEN ("meal_slot" = $9) THEN $10 WHEN ("meal_slot" = $11) THEN $12 ELSE $13 END) ASC, "created_at" DESC"#;
-        assert!(
-            sql.ends_with(expected_order_tail),
-            "meal slot order must end with the exact CASE/created_at tail: {sql}"
-        );
-        assert_eq!(
-            values.0.iter().count(),
-            13,
-            "expected user_id, log_date, five slot values, five ranks, and ELSE rank: {sql}"
-        );
-        assert!(
-            values
-                .0
-                .iter()
-                .any(|value| matches!(value, sea_query::Value::Int(Some(6)))),
-            "ELSE rank must be 6: {sql}"
-        );
-    }
-
-    #[test]
-    fn snapshot_join_statement_uses_one_uuid_array_bind() {
-        let ids = vec![Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
-        let (sql, values) = snapshot_join_statement(ids).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-
-        assert!(
-            sql_contains(&sql, "ANY("),
-            "snapshot join must use a Postgres ANY array predicate: {sql}"
-        );
-        assert_eq!(
-            values.0.iter().count(),
-            1,
-            "snapshot join must bind one uuid[] array: {sql}"
-        );
-        assert!(
-            matches!(
-                values.0.iter().next(),
-                Some(sea_query::Value::Array(
-                    sea_query::ArrayType::Uuid,
-                    Some(ids)
-                )) if ids.len() == 3
-            ),
-            "snapshot join must bind a single uuid[] value: {sql}"
-        );
-    }
-
-    #[test]
-    fn update_statement_uses_current_timestamp_without_extra_bind() {
-        let log = log_fixture(
-            Uuid::nil(),
-            Uuid::nil(),
-            date(2026, 6, 1),
-            Some(MealSlot::Breakfast),
-            Some("UTC"),
+    fn ad_hoc_log(
+        id: Uuid,
+        user_id: Uuid,
+        log_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+    ) -> FoodLog {
+        log_with_item(
+            id,
+            user_id,
+            log_date,
+            meal_slot,
             FoodLogItemSnapshot::AdHoc {
-                name: "Timestamp".into(),
+                name: format!("ad-hoc-{id}"),
                 brand: None,
             },
-            Decimal::from(100),
-            "g",
-            vec![],
-            None,
-            timestamp(date(2026, 6, 1), 8),
-        );
-        let (sql, values) = update_food_log_statement(&log).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
+        )
+    }
 
-        assert!(
-            sql_contains(&sql, r#""updated_at" = CURRENT_TIMESTAMP"#),
-            "update must use CURRENT_TIMESTAMP: {sql}"
-        );
+    fn filter(
+        user_id: Uuid,
+        date_range: DateRange,
+        meal_slot: Option<MealSlot>,
+        items: Vec<FoodLogItemRef>,
+    ) -> FoodLogListFilter {
+        FoodLogListFilter {
+            user_id,
+            date_range,
+            meal_slot,
+            items,
+        }
+    }
+
+    fn ids(logs: &[FoodLog]) -> HashSet<FoodLogId> {
+        logs.iter().map(FoodLog::id).collect()
+    }
+
+    fn expected_ids(ids: &[Uuid]) -> HashSet<FoodLogId> {
+        ids.iter().copied().map(FoodLogId).collect()
+    }
+
+    #[sqlx::test]
+    async fn list_by_filter_applies_date_bounds_and_meal_slot(pool: PgPool) {
+        let user_id = seed_identity_and_profile(&pool, "food-log-filter-dates").await;
+        let other_user_id = seed_identity_and_profile(&pool, "food-log-filter-dates-other").await;
+        let repository = PostgresFoodLogRepository::new(pool.clone());
+
+        let before_start = Uuid::new_v4();
+        let on_start = Uuid::new_v4();
+        let in_middle = Uuid::new_v4();
+        let on_end = Uuid::new_v4();
+        let after_end = Uuid::new_v4();
+        let other_user_log = Uuid::new_v4();
+
+        repository
+            .create_many(&[
+                ad_hoc_log(
+                    before_start,
+                    user_id,
+                    date(2026, 5, 31),
+                    Some(MealSlot::Breakfast),
+                ),
+                ad_hoc_log(
+                    on_start,
+                    user_id,
+                    date(2026, 6, 1),
+                    Some(MealSlot::Breakfast),
+                ),
+                ad_hoc_log(in_middle, user_id, date(2026, 6, 2), Some(MealSlot::Lunch)),
+                ad_hoc_log(on_end, user_id, date(2026, 6, 3), Some(MealSlot::Breakfast)),
+                ad_hoc_log(
+                    after_end,
+                    user_id,
+                    date(2026, 6, 4),
+                    Some(MealSlot::Breakfast),
+                ),
+                ad_hoc_log(
+                    other_user_log,
+                    other_user_id,
+                    date(2026, 6, 2),
+                    Some(MealSlot::Breakfast),
+                ),
+            ])
+            .await
+            .expect("create food logs");
+
+        let inclusive = repository
+            .list_by_filter(filter(
+                user_id,
+                DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
+                None,
+                Vec::new(),
+            ))
+            .await
+            .expect("list inclusive date range");
         assert_eq!(
-            values.0.iter().count(),
-            11,
-            "update must bind the ten editable columns and id only: {sql}"
+            ids(&inclusive),
+            expected_ids(&[on_start, in_middle, on_end]),
+            "inclusive bounds must include both endpoints and exclude adjacent dates and other users"
         );
-        assert!(
-            sql.ends_with(r#"WHERE "id" = $11"#),
-            "update must target exactly one food log by id: {sql}"
+
+        let exclusive_end = repository
+            .list_by_filter(filter(
+                user_id,
+                DateRange::inclusive_to_exclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
+                None,
+                Vec::new(),
+            ))
+            .await
+            .expect("list exclusive end date range");
+        assert_eq!(
+            ids(&exclusive_end),
+            expected_ids(&[on_start, in_middle]),
+            "exclusive end bound must exclude the end date"
+        );
+
+        let breakfast_only = repository
+            .list_by_filter(filter(
+                user_id,
+                DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
+                Some(MealSlot::Breakfast),
+                Vec::new(),
+            ))
+            .await
+            .expect("list breakfast logs");
+        assert_eq!(
+            ids(&breakfast_only),
+            expected_ids(&[on_start, on_end]),
+            "meal slot filter must exclude logs in other slots"
         );
     }
 
-    #[test]
-    fn insert_statement_binds_all_fourteen_columns() {
-        let log = log_fixture(
-            Uuid::nil(),
-            Uuid::nil(),
-            date(2026, 6, 1),
-            None,
-            None,
-            FoodLogItemSnapshot::AdHoc {
-                name: "Insert".into(),
-                brand: None,
-            },
-            Decimal::from(100),
-            "g",
-            vec![snapshot("FAT_G", 2, "g")],
-            None,
-            timestamp(date(2026, 6, 1), 8),
-        );
-        let (sql, values) = insert_food_log_statement(&log).build_sqlx(PostgresQueryBuilder);
+    #[sqlx::test]
+    async fn list_by_filter_matches_product_or_meal_items(pool: PgPool) {
+        let user_id = seed_identity_and_profile(&pool, "food-log-filter-items").await;
+        let product_a = seed_product_row(&pool, user_id, "Product A").await;
+        let product_c = seed_product_row(&pool, user_id, "Product C").await;
+        let meal_b = seed_meal_row(&pool, user_id, "Meal B").await;
+        let repository = PostgresFoodLogRepository::new(pool.clone());
 
+        let product_a_log = Uuid::new_v4();
+        let meal_b_log = Uuid::new_v4();
+        let product_c_log = Uuid::new_v4();
+        let log_date = date(2026, 6, 2);
+
+        repository
+            .create_many(&[
+                log_with_item(
+                    product_a_log,
+                    user_id,
+                    log_date,
+                    Some(MealSlot::Breakfast),
+                    FoodLogItemSnapshot::Product {
+                        id: ProductId(product_a),
+                        name: "Product A".to_owned(),
+                        brand: None,
+                    },
+                ),
+                log_with_item(
+                    meal_b_log,
+                    user_id,
+                    log_date,
+                    Some(MealSlot::Lunch),
+                    FoodLogItemSnapshot::Meal {
+                        id: MealId(meal_b),
+                        name: "Meal B".to_owned(),
+                    },
+                ),
+                log_with_item(
+                    product_c_log,
+                    user_id,
+                    log_date,
+                    Some(MealSlot::Dinner),
+                    FoodLogItemSnapshot::Product {
+                        id: ProductId(product_c),
+                        name: "Product C".to_owned(),
+                        brand: None,
+                    },
+                ),
+            ])
+            .await
+            .expect("create item food logs");
+
+        let range = DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap();
+        let mixed = repository
+            .list_by_filter(filter(
+                user_id,
+                range.clone(),
+                None,
+                vec![
+                    FoodLogItemRef::Product(ProductId(product_a)),
+                    FoodLogItemRef::Meal(MealId(meal_b)),
+                ],
+            ))
+            .await
+            .expect("list mixed item filters");
         assert_eq!(
-            values.0.iter().count(),
-            14,
-            "insert must bind every food_logs column: {sql}"
+            ids(&mixed),
+            expected_ids(&[product_a_log, meal_b_log]),
+            "product and meal item filters must be OR-ed"
+        );
+
+        let meal_only = repository
+            .list_by_filter(filter(
+                user_id,
+                range,
+                None,
+                vec![FoodLogItemRef::Meal(MealId(meal_b))],
+            ))
+            .await
+            .expect("list meal item filter");
+        assert_eq!(
+            ids(&meal_only),
+            expected_ids(&[meal_b_log]),
+            "meal item filter must not require a matching product filter"
         );
     }
 }

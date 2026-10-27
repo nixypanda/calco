@@ -108,36 +108,3 @@ struct DiaryPreferencesRow {
     user_id: Uuid,
     enabled_meal_slots: Vec<String>,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn normalize_sql(sql: &str) -> String {
-        sql.split_whitespace().collect::<Vec<_>>().join(" ")
-    }
-
-    #[test]
-    fn save_statement_uses_current_timestamp_without_extra_bind() {
-        let preferences = DomainDiaryPreferences::new(
-            Uuid::nil(),
-            EnabledMealSlots::new([MealSlot::Breakfast]).expect("valid slots"),
-        );
-        let (sql, values) = save_statement(&preferences).build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
-
-        assert!(
-            sql.contains(r#""updated_at" = CURRENT_TIMESTAMP"#),
-            "save must set updated_at from the current timestamp: {sql}"
-        );
-        assert!(
-            !sql.contains(r#""excluded"."updated_at""#),
-            "save must not bind EXCLUDED.updated_at: {sql}"
-        );
-        assert_eq!(
-            values.0.iter().count(),
-            2,
-            "save must bind exactly user_id and enabled_meal_slots: {sql}"
-        );
-    }
-}

@@ -167,29 +167,156 @@ mod tests {
         NaiveDate::from_ymd_opt(year, month, day).unwrap()
     }
 
-    fn normalize_sql(sql: &str) -> String {
-        sql.split_whitespace().collect::<Vec<_>>().join(" ")
+    fn timestamp(day: NaiveDate, hour: u32) -> DateTime<Utc> {
+        day.and_hms_opt(hour, 0, 0).unwrap().and_utc()
     }
 
-    #[test]
-    fn find_effective_for_date_statement_has_limit() {
-        let (sql, values) = find_effective_for_date_statement(Uuid::nil(), date(2026, 1, 1))
-            .build_sqlx(PostgresQueryBuilder);
-        let sql = normalize_sql(&sql);
+    async fn seed_identity_and_profile(pool: &PgPool, label: &str) -> Uuid {
+        let identity_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
 
-        assert!(
-            sql.contains(" LIMIT "),
-            "find_effective_for_date must limit to one row: {sql}"
+        sqlx::query(
+            r#"
+            INSERT INTO identities (
+                id, username, password_hash, role, status, created_at, updated_at,
+                session_security_stamp
+            )
+            VALUES ($1, $2, 'test-password-hash', 'user', 'active', now(), now(), $3)
+            "#,
+        )
+        .bind(identity_id)
+        .bind(format!("{label}-{identity_id}"))
+        .bind(Uuid::new_v4())
+        .execute(pool)
+        .await
+        .expect("seed identity");
+
+        sqlx::query(
+            r#"
+            INSERT INTO user_profiles (id, identity_id, display_name, created_at, updated_at)
+            VALUES ($1, $2, $3, now(), now())
+            "#,
+        )
+        .bind(user_id)
+        .bind(identity_id)
+        .bind(label)
+        .execute(pool)
+        .await
+        .expect("seed user profile");
+
+        user_id
+    }
+
+    #[sqlx::test]
+    async fn finds_latest_effective_goal_on_or_before_date(pool: PgPool) {
+        let user_id = seed_identity_and_profile(&pool, "goals-effective-date").await;
+        let other_user_id = seed_identity_and_profile(&pool, "goals-effective-date-other").await;
+        let repository = PostgresGoalTargetRepository::new(pool.clone());
+
+        let february = GoalTarget::create(
+            user_id,
+            date(2026, 2, 1),
+            GoalTargets::new(
+                Decimal::from(2290),
+                Decimal::from(160),
+                Decimal::from(255),
+                Decimal::from(70),
+            )
+            .expect("valid goal targets"),
+            timestamp(date(2026, 2, 1), 8),
+        );
+        let other_user_goal = GoalTarget::create(
+            other_user_id,
+            date(2026, 1, 15),
+            GoalTargets::new(
+                Decimal::from(1560),
+                Decimal::from(120),
+                Decimal::from(180),
+                Decimal::from(40),
+            )
+            .expect("valid other-user goal targets"),
+            timestamp(date(2026, 1, 15), 8),
+        );
+        let january = GoalTarget::create(
+            user_id,
+            date(2026, 1, 1),
+            GoalTargets::defaults(),
+            timestamp(date(2026, 3, 1), 8),
+        );
+
+        // Insertion order (January before February) and created_at order
+        // (January later than February) both contradict effective-date order.
+        repository
+            .upsert(&january)
+            .await
+            .expect("upsert january goal");
+        repository
+            .upsert(&february)
+            .await
+            .expect("upsert february goal");
+        repository
+            .upsert(&other_user_goal)
+            .await
+            .expect("upsert other-user goal");
+
+        let before_first = repository
+            .find_effective_for_date(user_id, date(2025, 12, 31))
+            .await
+            .expect("find goal before first effective date");
+        assert!(before_first.is_none());
+
+        let on_january_effective_date = repository
+            .find_effective_for_date(user_id, date(2026, 1, 1))
+            .await
+            .expect("find january goal on its effective date")
+            .expect("january goal is effective on its own effective date");
+        assert_eq!(on_january_effective_date.effective_from, date(2026, 1, 1));
+        assert_eq!(
+            on_january_effective_date.targets.calorie_target,
+            Decimal::from(2100)
+        );
+
+        let on_february_effective_date = repository
+            .find_effective_for_date(user_id, date(2026, 2, 1))
+            .await
+            .expect("find february goal on its effective date")
+            .expect("february goal is effective on its own effective date");
+        assert_eq!(on_february_effective_date.effective_from, date(2026, 2, 1));
+        assert_eq!(
+            on_february_effective_date.targets.calorie_target,
+            Decimal::from(2290)
         );
         assert_eq!(
-            values.0.iter().count(),
-            3,
-            "expected user_id, requested_date, and limit binds: {sql}"
+            on_february_effective_date.targets.protein_target_g,
+            Decimal::from(160)
         );
         assert_eq!(
-            values.0.iter().nth(2),
-            Some(&sea_query::Value::BigUnsigned(Some(1))),
-            "find_effective_for_date must bind a limit of one row: {sql}"
+            on_february_effective_date.targets.carbs_target_g,
+            Decimal::from(255)
         );
+        assert_eq!(
+            on_february_effective_date.targets.fat_target_g,
+            Decimal::from(70)
+        );
+
+        let after_january = repository
+            .find_effective_for_date(user_id, date(2026, 2, 15))
+            .await
+            .expect("find february goal after its effective date")
+            .expect("february goal is effective after its effective date");
+        assert_eq!(after_january.effective_from, date(2026, 2, 1));
+        assert_eq!(after_january.targets.calorie_target, Decimal::from(2290));
+
+        let between = repository
+            .find_effective_for_date(user_id, date(2026, 1, 15))
+            .await
+            .expect("find january goal between effective dates")
+            .expect("january goal is effective between effective dates");
+        assert_eq!(
+            between.effective_from,
+            date(2026, 1, 1),
+            "another user's goal must not be selected"
+        );
+        assert_eq!(between.targets.calorie_target, Decimal::from(2100));
     }
 }
