@@ -54,7 +54,9 @@ backend/src/
     composition.rs
   nutrition/
     error.rs             # NutritionError
-    interfaces.rs        # shared HTTP error glue
+    interfaces/
+      mod.rs
+      http.rs            # shared HTTP error glue
     module.rs            # NutritionModule composition root
     catalog/
       domain/
@@ -77,7 +79,9 @@ backend/src/
             rows.rs
             children.rs
             tests.rs
-      interfaces.rs
+      interfaces/
+        mod.rs
+        http.rs
     food_log/
       domain.rs
       application/
@@ -88,35 +92,45 @@ backend/src/
       infrastructure/
         mod.rs
         postgres.rs
-      interfaces.rs
+      interfaces/
+        mod.rs
+        http.rs
     meal/
       domain.rs
       application.rs
       infrastructure/
         mod.rs
         postgres.rs
-      interfaces.rs
+      interfaces/
+        mod.rs
+        http.rs
     goals/
       domain.rs
       application.rs
       infrastructure/
         mod.rs
         postgres.rs
-      interfaces.rs
+      interfaces/
+        mod.rs
+        http.rs
     guidance/
       domain.rs
       application.rs
       infrastructure/
         mod.rs
         static_nutrient_guidance.rs
-      interfaces.rs
+      interfaces/
+        mod.rs
+        http.rs
     diary/
       domain.rs
       application.rs
       infrastructure/
         mod.rs
         postgres.rs
-      interfaces.rs
+      interfaces/
+        mod.rs
+        http.rs
 ```
 
 The tree is selective: `main.rs`, `config/`, and the context-root `mod.rs`
@@ -167,6 +181,21 @@ Catalog uses the multi-repository shape (`product/`, `nutrient_repository.rs`,
 `postgres/` for its four repositories plus the Argon2 adapter. Import, food
 logs, meals, goals, and diary preferences use the single-repository shape.
 Guidance keeps its static, non-Postgres adapter directly under `infrastructure/`.
+
+### Interface Layout
+
+`interfaces` is always a directory with a `mod.rs`.
+
+- A single HTTP transport file lives at `interfaces/http.rs`.
+- A large or multi-concern HTTP surface may use `interfaces/http/`, with a
+  `mod.rs` that wires the route entry point and private submodules for
+  handlers, DTOs, conversions, or route groups.
+- `interfaces/mod.rs` holds module wiring and interface-level types that are not
+  tied to one HTTP module, such as auth's `SessionCookieConfig`.
+- A context never uses a bare `interfaces.rs`.
+
+All current contexts use the single-file shape. Nutrition's shared HTTP glue
+lives at `nutrition/interfaces/http.rs`.
 
 ### Repository Ports
 

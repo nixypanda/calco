@@ -211,12 +211,13 @@ mod architecture_tests {
     #[test]
     fn nutrition_http_interfaces_do_not_reference_repositories() {
         let interfaces = [
-            ("catalog", include_str!("catalog/interfaces.rs")),
-            ("meal", include_str!("meal/interfaces.rs")),
-            ("food_log", include_str!("food_log/interfaces.rs")),
-            ("guidance", include_str!("guidance/interfaces.rs")),
-            ("diary", include_str!("diary/interfaces.rs")),
-            ("goals", include_str!("goals/interfaces.rs")),
+            ("catalog", include_str!("catalog/interfaces/http.rs")),
+            ("meal", include_str!("meal/interfaces/http.rs")),
+            ("food_log", include_str!("food_log/interfaces/http.rs")),
+            ("guidance", include_str!("guidance/interfaces/http.rs")),
+            ("diary", include_str!("diary/interfaces/http.rs")),
+            ("goals", include_str!("goals/interfaces/http.rs")),
+            ("shared", include_str!("interfaces/http.rs")),
         ];
 
         for (name, source) in interfaces {

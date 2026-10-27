@@ -32,7 +32,7 @@ pub fn meal_routes(state: AppState) -> Router {
         .with_state(state)
 }
 
-use crate::nutrition::interfaces::{
+use crate::nutrition::interfaces::http::{
     NutrientSummaryDto, internal_error, is_summary_nutrient_code, nutrient_summary_from_entries,
 };
 

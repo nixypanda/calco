@@ -252,7 +252,7 @@ pub struct UpdateLogRequest {
     pub notes: Option<Value>,
 }
 
-use crate::nutrition::interfaces::{
+use crate::nutrition::interfaces::http::{
     ErrorResponse, NutrientSummaryDto, error_response, internal_error, is_summary_nutrient_code,
     nutrient_summary_from_entries,
 };

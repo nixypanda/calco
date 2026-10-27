@@ -40,7 +40,7 @@ pub fn catalog_routes(state: AppState) -> Router {
 
 // ─── DTOs ──────────────────────────────────────────────────────
 
-use crate::nutrition::interfaces::{
+use crate::nutrition::interfaces::http::{
     NutrientSummaryDto, error_response, internal_error, nutrient_summary_from_entries,
 };
 

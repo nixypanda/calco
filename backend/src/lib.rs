@@ -18,12 +18,12 @@ use crate::auth::module::AuthModule;
 use crate::config::{AppConfig, ServerConfig};
 use crate::import::interfaces::http::import_routes;
 use crate::import::module::ImportModule;
-use crate::nutrition::catalog::interfaces::catalog_routes;
-use crate::nutrition::diary::interfaces::diary_preferences_routes;
-use crate::nutrition::food_log::interfaces::food_log_routes;
-use crate::nutrition::goals::interfaces::goal_target_routes;
-use crate::nutrition::guidance::interfaces::nutrition_details_routes;
-use crate::nutrition::meal::interfaces::meal_routes;
+use crate::nutrition::catalog::interfaces::http::catalog_routes;
+use crate::nutrition::diary::interfaces::http::diary_preferences_routes;
+use crate::nutrition::food_log::interfaces::http::food_log_routes;
+use crate::nutrition::goals::interfaces::http::goal_target_routes;
+use crate::nutrition::guidance::interfaces::http::nutrition_details_routes;
+use crate::nutrition::meal::interfaces::http::meal_routes;
 use crate::nutrition::module::NutritionModule;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -124,4 +124,60 @@ async fn health() -> &'static str {
 
 async fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+#[cfg(test)]
+mod architecture_tests {
+    use std::fs;
+    use std::path::Path;
+
+    #[test]
+    fn interfaces_are_directories_with_http_entrypoints() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut violations = Vec::new();
+        inspect(&src, &mut violations);
+        violations.sort();
+        assert!(
+            violations.is_empty(),
+            "interfaces layout violations:\n{}",
+            violations.join("\n")
+        );
+    }
+
+    fn inspect(dir: &Path, violations: &mut Vec<String>) {
+        for entry in fs::read_dir(dir).expect("read src tree") {
+            let path = entry.expect("read src entry").path();
+            let file_name = path.file_name().and_then(|name| name.to_str());
+
+            if path.is_dir() {
+                if file_name == Some("interfaces") {
+                    check_interfaces_dir(&path, violations);
+                }
+                inspect(&path, violations);
+            } else if file_name == Some("interfaces.rs") {
+                violations.push(format!(
+                    "{}: interfaces must be a directory, not a file",
+                    path.display()
+                ));
+            }
+        }
+    }
+
+    fn check_interfaces_dir(dir: &Path, violations: &mut Vec<String>) {
+        if !dir.join("mod.rs").is_file() {
+            violations.push(format!(
+                "{}: interfaces directory must contain mod.rs",
+                dir.display()
+            ));
+        }
+
+        let has_http_file = dir.join("http.rs").is_file();
+        let has_http_dir = dir.join("http").join("mod.rs").is_file();
+        if has_http_file == has_http_dir {
+            violations.push(format!(
+                "{}: interfaces directory must contain exactly one of http.rs or http/mod.rs",
+                dir.display()
+            ));
+        }
+    }
 }

@@ -14,6 +14,9 @@ This directory contains the Rust backend. Also read the repository root
   repository uses `infrastructure/postgres.rs`; multiple repositories use
   `infrastructure/postgres/` with one module per repository. Non-Postgres
   adapters live under `infrastructure/`.
+- `interfaces` is always a directory with `mod.rs`. A single HTTP surface uses
+  `interfaces/http.rs`; a split surface uses `interfaces/http/` with a `mod.rs`.
+  Bare `interfaces.rs` files are not allowed.
 - Normal dependency direction is:
 
 ```text
