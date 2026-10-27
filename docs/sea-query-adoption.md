@@ -44,21 +44,24 @@ locking and error-handling semantics.
 
 ### Catalog search
 
-`backend/src/nutrition/catalog/infrastructure.rs` — the three
-`ProductSearchScope` queries (`All`, `Custom`, `History`).
+`backend/src/nutrition/catalog/infrastructure.rs` — `search_catalog_candidates`
+(`All`/`Custom`) and `search_history_candidates` (`History`).
 
-The queries use PostgreSQL-specific search behavior: pg_trgm `%` and
-`similarity()`, `ILIKE`, `text[]` containment/overlap (`@>`, `&&`),
-`cardinality`, a history CTE, `GREATEST`, and CASE-based ranking. Expressing
-this in sea-query would require many `Expr::cust` fragments and hide the search
-semantics.
+Candidate SQL remains raw only for `text[]` containment/overlap (`@>`, `&&`),
+`cardinality`, and the `History` CTE. It contains no `ILIKE`, no pg_trgm `%` or
+`similarity()`, no `CASE` ranking, no `ORDER BY`, and no pre-ranking `LIMIT`.
+Matching and ranking are pure Rust in
+`nutrition/catalog/domain/search_ranking.rs`; the repository returns
+storage-filtered candidates only.
 
 ### Category suggestions
 
-`backend/src/nutrition/catalog/infrastructure.rs` — `list_categories`.
+`backend/src/nutrition/catalog/infrastructure.rs` — `category_counts`.
 
-Uses `CROSS JOIN LATERAL UNNEST(p.categories)`, `ILIKE`, `similarity()`,
-grouping, and custom ranking. Same rationale as catalog search.
+The count query remains raw only for `CROSS JOIN LATERAL UNNEST(p.categories)`.
+It has no `ILIKE`/pg_trgm matching, `CASE` ranking, `ORDER BY`, or pre-ranking
+`LIMIT`. `rank_category_suggestions` in
+`nutrition/catalog/domain/search_ranking.rs` owns matching and ordering.
 
 ### Catalog external upsert
 
@@ -115,7 +118,7 @@ to the query builder.
 
 Use sea-query where it clearly helps: dynamic predicates, CRUD, upserts, array
 binds, and ordering. Keep raw SQL where the statement is mostly a
-PostgreSQL-specific bulk, array, locking, or search construct.
+PostgreSQL-specific bulk, array, or locking construct.
 
 All remaining raw production SQL is parameterized; no user input is
 interpolated. The main future candidate for conversion is the import

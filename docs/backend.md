@@ -703,7 +703,28 @@ Important tables:
 - Diary preferences: `diary_preferences`
 - Imports: `imports`, `staging_products`, `staging_product_nutrients`, `staging_product_servings`, `import_errors`
 
-Search uses PostgreSQL full-text search and trigram indexes.
+Catalog search fetches storage-filtered candidate rows (scope and category
+filters) from the repository. Matching and ranking are pure Rust in
+`nutrition/catalog/domain/search_ranking.rs`.
+
+Product search orders by tier: barcode exact → barcode prefix → name prefix →
+name substring → brand prefix → brand substring → fuzzy, then similarity, then
+normalized name, then product ID. `History` orders by recency first. Category
+suggestions fetch counts and rank prefix → substring → fuzzy → count →
+similarity → name.
+
+Fuzzy matching uses pure-Rust trigram Jaccard similarity with
+`DEFAULT_FUZZY_THRESHOLD = 0.30`, closely matching PostgreSQL `pg_trgm`: text is
+split on non-alphanumeric characters, each word is padded and converted to
+character trigrams, and similarity is shared trigrams divided by union trigrams.
+Product name/brand/term fuzzy gates are inclusive (`>=`); category suggestion
+fuzzy gates are exclusive (`>`) to preserve the previous
+`similarity(...) > 0.30` behavior; similarity uses `f32` division so boundary
+values match pg_trgm's `real` return type. Search text is literal: `%` and `_`
+have no wildcard meaning. Text and barcodes are trimmed and case-folded before
+matching. An empty query returns catalog results with barcode-prefix matches
+first, while `History` keeps recency ordering. Tie-breaking uses Rust string
+ordering rather than the PostgreSQL database collation.
 
 ## Database Naming Conventions
 
