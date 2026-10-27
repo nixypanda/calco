@@ -9,7 +9,7 @@ module Page.Diary.Settings exposing
     )
 
 import Api.Client as Client
-import Data.DiaryPreferences exposing (DiaryPreferences)
+import Data.DiaryPrefs exposing (DiaryPrefs)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Element exposing (Element)
 import I18n
@@ -40,33 +40,33 @@ type SaveState
 
 
 type Msg
-    = PreferencesLoaded (Result Client.ApiError DiaryPreferences)
+    = PrefsLoaded (Result Client.ApiError DiaryPrefs)
     | SlotToggled MealSlot Bool
     | SaveClicked
-    | SaveCompleted (Result Client.ApiError DiaryPreferences)
+    | SaveCompleted (Result Client.ApiError DiaryPrefs)
     | RetryClicked
 
 
 type OutMsg
     = NoOp
-    | RequestPreferences
-    | RequestSave DiaryPreferences
+    | RequestPrefs
+    | RequestSave DiaryPrefs
     | SessionExpired
 
 
 init : ( Model, OutMsg )
 init =
-    ( Loading, RequestPreferences )
+    ( Loading, RequestPrefs )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        PreferencesLoaded result ->
+        PrefsLoaded result ->
             case result of
-                Ok preferences ->
+                Ok prefs ->
                     ( Ready
-                        { selected = canonical preferences.enabledMealSlots, saveState = Editing }
+                        { selected = canonical prefs.enabledMealSlots, saveState = Editing }
                     , Cmd.none
                     , NoOp
                     )
@@ -126,9 +126,9 @@ update msg model =
 
         SaveCompleted result ->
             case ( model, result ) of
-                ( Ready _, Ok preferences ) ->
+                ( Ready _, Ok prefs ) ->
                     ( Ready
-                        { selected = canonical preferences.enabledMealSlots, saveState = Saved }
+                        { selected = canonical prefs.enabledMealSlots, saveState = Saved }
                     , Cmd.none
                     , NoOp
                     )
@@ -148,7 +148,7 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
         RetryClicked ->
-            ( Loading, Cmd.none, RequestPreferences )
+            ( Loading, Cmd.none, RequestPrefs )
 
 
 canonical : List MealSlot -> List MealSlot

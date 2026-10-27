@@ -20,7 +20,7 @@ import Api.Logs as Logs
 import Data.BarcodeScan exposing (ScannerEvent)
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
-import Data.LocalContext exposing (LocalContext)
+import Data.LocalCtx exposing (LocalCtx)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
@@ -124,7 +124,7 @@ type AdHocSection
 
 type QuickAddState
     = QuickAddIdle
-    | QuickAddRequestingContext QuickAddTarget
+    | QuickAddRequestingCtx QuickAddTarget
     | QuickAddSubmitting QuickAddTarget
     | QuickAddFailed String
 
@@ -211,7 +211,7 @@ type Msg
     | RecentItemsLoaded (Maybe LocalDate) (Maybe MealSlot) RecentItemsResult
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
-    | LocalContextReceived LocalContext
+    | LocalCtxReceived LocalCtx
     | QuickAddCompleted (Result Client.ApiError FoodLog)
     | ClearRecentAdded String Ticket
     | ResultClicked String
@@ -231,7 +231,7 @@ type OutMsg
     | RequestBarcodeScanStart
     | RequestBarcodeScanStop
     | RequestCategorySuggestions Ticket Foods.CategorySuggestionRequest
-    | RequestLocalContext
+    | RequestLocalCtx
     | RequestCreateLog Logs.CreateLogRequest
     | LogCreated FoodLog
     | Navigate Route
@@ -564,10 +564,10 @@ update msg model =
             if canStartQuickAdd model.quickAdd then
                 ( { model
                     | quickAdd =
-                        QuickAddRequestingContext { item = item, quantity = quantity }
+                        QuickAddRequestingCtx { item = item, quantity = quantity }
                   }
                 , Cmd.none
-                , RequestLocalContext
+                , RequestLocalCtx
                 )
 
             else
@@ -587,9 +587,9 @@ update msg model =
                 FoodLog.AdHocLogItem _ ->
                     ( model, Cmd.none, NoOp )
 
-        LocalContextReceived context ->
+        LocalCtxReceived context ->
             case model.quickAdd of
-                QuickAddRequestingContext target ->
+                QuickAddRequestingCtx target ->
                     case quickAddRequest context model target of
                         Just request ->
                             ( { model | quickAdd = QuickAddSubmitting target }
@@ -616,7 +616,7 @@ update msg model =
                         key : Maybe String
                         key =
                             case model.quickAdd of
-                                QuickAddRequestingContext target ->
+                                QuickAddRequestingCtx target ->
                                     Just (quickAddTargetKey target)
 
                                 QuickAddSubmitting target ->
@@ -730,7 +730,7 @@ applyBarcodeScannerEvent event model =
             ( model, Cmd.none, NoOp )
 
 
-quickAddRequest : LocalContext -> Model -> QuickAddTarget -> Maybe Logs.CreateLogRequest
+quickAddRequest : LocalCtx -> Model -> QuickAddTarget -> Maybe Logs.CreateLogRequest
 quickAddRequest context model target =
     let
         resolvedDate : Maybe LocalDate
@@ -777,7 +777,7 @@ quickAddTargetKey target =
 quickAddIsAdding : String -> QuickAddState -> Bool
 quickAddIsAdding key quickAdd =
     case quickAdd of
-        QuickAddRequestingContext target ->
+        QuickAddRequestingCtx target ->
             quickAddTargetKey target == key
 
         QuickAddSubmitting target ->
@@ -793,7 +793,7 @@ quickAddIsAdding key quickAdd =
 canStartQuickAdd : QuickAddState -> Bool
 canStartQuickAdd quickAdd =
     case quickAdd of
-        QuickAddRequestingContext _ ->
+        QuickAddRequestingCtx _ ->
             False
 
         QuickAddSubmitting _ ->
@@ -1418,7 +1418,7 @@ recentsView env model =
             QuickAddIdle ->
                 Element.none
 
-            QuickAddRequestingContext _ ->
+            QuickAddRequestingCtx _ ->
                 Element.none
 
             QuickAddSubmitting _ ->

@@ -357,7 +357,7 @@ keyRow env key =
             [ Typography.mutedBodyParagraph env.theme
                 (I18n.t env.language (TidApiKeysHint key.tokenHint))
             , Typography.mutedCaptionParagraph env.theme
-                (keyMetadata env.language key)
+                (keyMeta env.language key)
             ]
         , trailing =
             [ Chip.badge env.theme (scopeLabel env.language key.scope)
@@ -381,8 +381,8 @@ keyRow env key =
         }
 
 
-keyMetadata : Language -> ApiKey -> String
-keyMetadata language key =
+keyMeta : Language -> ApiKey -> String
+keyMeta language key =
     Text.dotSeparated
         [ Just
             (I18n.t language

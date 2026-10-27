@@ -5,7 +5,7 @@ import Api.Foods as Foods exposing (ProductDetail, SearchResult)
 import Api.Logs as Logs
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
-import Data.LocalContext exposing (LocalContext)
+import Data.LocalCtx exposing (LocalCtx)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
@@ -590,18 +590,18 @@ tests =
                 )
                     |> Expect.equal
                         ( FoodSearch.Navigate (MealShow "meal-1")
-                        , FoodSearch.RequestLocalContext
+                        , FoodSearch.RequestLocalCtx
                         )
         , test "a quick add builds a create-log request from the diary date or the device date" <|
             \_ ->
                 let
-                    context : LocalContext
+                    context : LocalCtx
                     context =
                         { date = date "2026-06-01", timezone = "Asia/Kolkata" }
 
                     requestFor : FoodSearch.Model -> FoodSearch.OutMsg
                     requestFor model =
-                        out (FoodSearch.LocalContextReceived context)
+                        out (FoodSearch.LocalCtxReceived context)
                             (step
                                 quickAddRecent
                                 model
@@ -637,7 +637,7 @@ tests =
                             |> step
                                 quickAddRecent
                             |> step
-                                (FoodSearch.LocalContextReceived
+                                (FoodSearch.LocalCtxReceived
                                     { date = date "2026-06-01", timezone = "Asia/Kolkata" }
                                 )
 
@@ -672,7 +672,7 @@ tests =
                             |> step
                                 quickAddRecent
                             |> step
-                                (FoodSearch.LocalContextReceived
+                                (FoodSearch.LocalCtxReceived
                                     { date = date "2026-06-01", timezone = "Asia/Kolkata" }
                                 )
 
@@ -700,7 +700,7 @@ tests =
                 FoodSearch.init Nothing Nothing
                     |> step quickAddRecent
                     |> step
-                        (FoodSearch.LocalContextReceived
+                        (FoodSearch.LocalCtxReceived
                             { date = date "2026-06-01", timezone = "Asia/Kolkata" }
                         )
                     |> out
@@ -721,7 +721,7 @@ tests =
                             |> step
                                 quickAddRecent
                             |> step
-                                (FoodSearch.LocalContextReceived
+                                (FoodSearch.LocalCtxReceived
                                     { date = date "2026-06-01", timezone = "Asia/Kolkata" }
                                 )
                             |> step (FoodSearch.QuickAddCompleted (Ok productLog))

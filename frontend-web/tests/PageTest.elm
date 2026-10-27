@@ -333,7 +333,7 @@ routeFlowTests =
         , test "using a contextual diary promotes it to the main pane" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = DiaryDay (Just date) (Just month)
                         , today = Just today
@@ -349,7 +349,7 @@ routeFlowTests =
         , test "promoted diary navigation drops its calendar lineage" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = DiaryDay (Just date) (Just month)
                         , today = Just today
@@ -387,7 +387,7 @@ routeFlowTests =
         , test "quick-add success keeps the matching diary mounted for refresh" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = FoodSearch (Just date) (Just Lunch)
                         , today = Just today
@@ -432,7 +432,7 @@ routeFlowTests =
         , test "a rolled-over day reaches the diary pane already open on it" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = DiaryDay Nothing Nothing, today = Just today }
 
@@ -449,7 +449,7 @@ routeFlowTests =
                 in
                 ( nextDay mounted
                 , mounted
-                    |> Page.localContextReceived context
+                    |> Page.localCtxReceived context
                         { date = dateValue "2026-07-30", timezone = "Asia/Kolkata" }
                     |> Maybe.map first
                     |> Maybe.andThen nextDay
@@ -467,7 +467,7 @@ apiKeysPaneTests =
         [ test "a list load from a previous api-keys pane cannot replace the new pane" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = SettingsApiKeys, today = Just today }
 
@@ -518,7 +518,7 @@ apiKeysPaneTests =
         , test "a create completion from an old api-key-create pane is ignored" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = SettingsApiKeyCreate, today = Just today }
 
@@ -592,7 +592,7 @@ apiKeysPaneTests =
         , test "Done on the created api-key pane returns to the api-keys list" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = SettingsApiKeyCreate, today = Just today }
 
@@ -621,7 +621,7 @@ apiKeysPaneTests =
         , test "Copy on the created api-key pane sends the copy port request" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = SettingsApiKeyCreate, today = Just today }
 
@@ -659,7 +659,7 @@ apiKeysPaneTests =
         , test "navigating to api keys after creation drops the create pane and token" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = SettingsApiKeyCreate, today = Just today }
 
@@ -692,7 +692,7 @@ apiKeysPaneTests =
         , test "a stale copy result from an old api-key-create pane generation is ignored" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = SettingsApiKeyCreate, today = Just today }
 
@@ -794,7 +794,7 @@ apiKeysPaneTests =
         , test "clearStore keeps the api-key-create generation across re-entry" <|
             \_ ->
                 let
-                    context : Page.InitContext
+                    context : Page.InitCtx
                     context =
                         { route = SettingsApiKeyCreate, today = Just today }
 
@@ -893,20 +893,20 @@ paneKeysForRoute route =
         |> Page.paneKeys
 
 
-pageStep : Page.InitContext -> Page.Msg -> Page.Model -> Page.Model
+pageStep : Page.InitCtx -> Page.Msg -> Page.Model -> Page.Model
 pageStep context msg model =
     Page.update context msg model
         |> Maybe.map first
         |> Maybe.withDefault model
 
 
-pageOut : Page.InitContext -> Page.Msg -> Page.Model -> Maybe Page.OutMsg
+pageOut : Page.InitCtx -> Page.Msg -> Page.Model -> Maybe Page.OutMsg
 pageOut context msg model =
     Page.update context msg model
         |> Maybe.map third
 
 
-startApiKeyCreate : Page.InitContext -> Int -> String -> Page.Model -> Page.Model
+startApiKeyCreate : Page.InitCtx -> Int -> String -> Page.Model -> Page.Model
 startApiKeyCreate context generation name model =
     model
         |> pageStep context
@@ -916,7 +916,7 @@ startApiKeyCreate context generation name model =
 
 
 completeApiKeyCreate :
-    Page.InitContext
+    Page.InitCtx
     -> Int
     -> String
     -> CreatedApiKey

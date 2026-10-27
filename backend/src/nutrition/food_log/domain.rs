@@ -626,7 +626,7 @@ fn validate_ad_hoc_nutrients(snapshots: &[FoodLogNutrientSnapshot]) -> Result<()
 pub use crate::nutrition::error::NutritionError;
 
 #[async_trait]
-pub trait FoodLogRepository: Send + Sync {
+pub trait FoodLogRepo: Send + Sync {
     async fn create(&self, log: &FoodLog) -> Result<(), NutritionError>;
     async fn create_many(&self, logs: &[FoodLog]) -> Result<(), NutritionError>;
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, NutritionError>;

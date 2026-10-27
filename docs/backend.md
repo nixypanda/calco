@@ -12,49 +12,49 @@ backend/src/
   lib.rs                 # AppState, build_app_state, build_router
   auth/
     domain.rs
-    application/
+    app/
       api_key.rs
       ...
-    infrastructure/
+    infra/
       mod.rs
       argon2_credentials.rs
-      postgres/
+      pg/
         mod.rs
-        api_key_repository.rs
+        api_key_repo.rs
         ...
-    interfaces/
+    api/
       mod.rs
       http.rs
     module.rs
   import/
     domain.rs
-    application.rs
-    infrastructure/
+    app.rs
+    infra/
       mod.rs
-      postgres.rs
-    interfaces/
+      pg.rs
+    api/
       mod.rs
       http.rs
     module.rs
   assistant/
     domain.rs
-    application/
+    app/
       mod.rs
       food_draft.rs
-    infrastructure/
+    infra/
       mod.rs
-      request_admission.rs
-      nutrition_catalog.rs
+      admission.rs
+      catalog.rs
       images.rs
       food_draft/
       llm/
-    interfaces/
+    api/
       mod.rs
       http.rs
     composition.rs
   nutrition/
     error.rs             # NutritionError
-    interfaces/
+    api/
       mod.rs
       http.rs            # shared HTTP error glue
     module.rs            # NutritionModule composition root
@@ -64,71 +64,71 @@ backend/src/
         calculation.rs   # Quantity, CalculatedNutrition, NutritionCalculator
         units.rs         # UnitConverter
         search_ranking.rs
-      application.rs
-      infrastructure/
+      app.rs
+      infra/
         mod.rs
         open_food_facts.rs
-        postgres/
+        pg/
           mod.rs
           iden.rs
-          nutrient_repository.rs
-          unit_repository.rs
+          nutrient_repo.rs
+          unit_repo.rs
           product/
-            mod.rs       # PostgresProductRepository
+            mod.rs       # PgProductRepo
             statements.rs
             rows.rs
             children.rs
             tests.rs
-      interfaces/
+      api/
         mod.rs
         http.rs
     food_log/
       domain.rs
-      application/
+      app/
         mod.rs
         history.rs
         services.rs
         test_support.rs
-      infrastructure/
+      infra/
         mod.rs
-        postgres.rs
-      interfaces/
+        pg.rs
+      api/
         mod.rs
         http.rs
     meal/
       domain.rs
-      application.rs
-      infrastructure/
+      app.rs
+      infra/
         mod.rs
-        postgres.rs
-      interfaces/
+        pg.rs
+      api/
         mod.rs
         http.rs
     goals/
       domain.rs
-      application.rs
-      infrastructure/
+      app.rs
+      infra/
         mod.rs
-        postgres.rs
-      interfaces/
+        pg.rs
+      api/
         mod.rs
         http.rs
     guidance/
       domain.rs
-      application.rs
-      infrastructure/
+      app.rs
+      infra/
         mod.rs
-        static_nutrient_guidance.rs
-      interfaces/
+        static_guidance.rs
+      api/
         mod.rs
         http.rs
     diary/
       domain.rs
-      application.rs
-      infrastructure/
+      app.rs
+      infra/
         mod.rs
-        postgres.rs
-      interfaces/
+        pg.rs
+      api/
         mod.rs
         http.rs
 ```
@@ -137,9 +137,16 @@ The tree is selective: `main.rs`, `config/`, and the context-root `mod.rs`
 files are omitted for brevity.
 
 `AppState` is the app-wide composition root and lives in `lib.rs`. The
-`ReadUser` and `WriteUser` extractors live in `auth/interfaces/http.rs` and are
+`ReadUser` and `WriteUser` extractors live in `auth/api/http.rs` and are
 used by nutrition handlers — auth is a foundational dependency of nutrition, not
 the other way around.
+
+## Configuration
+
+Startup settings live under `config/`. `load_env` parses process variables into
+`EnvSourceConfig`; the optional TOML source supplies assistant settings. TOML
+`RawAuth` normalizes to `AssistantAuth` for `AssistantProviderConfig`, and the
+LLM adapter maps it to its private `ProviderAuth`.
 
 ## DDD Decisions
 
@@ -148,58 +155,58 @@ the other way around.
 The backend follows this dependency direction:
 
 ```text
-interfaces/http -> application -> domain
-infrastructure/postgres -> domain ports
+api/http -> app -> domain
+infra/pg -> domain ports
 ```
 
 Repository traits are defined in `domain`. PostgreSQL repositories implement
-them. The application layer composes domain operations and repositories into
-use cases without issuing SQL. Shared domain error enums currently contain
-`sqlx::Error` variants, so persistence is not yet fully absent from domain
-types; avoid extending that coupling.
+them. The app layer composes domain operations and repositories into use cases
+without issuing SQL. Shared domain error enums currently contain `sqlx::Error`
+variants, so persistence is not yet fully absent from domain types; avoid
+extending that coupling.
 
 ### Infrastructure Layout
 
-`infrastructure` is always a directory with a `mod.rs`.
+`infra` is always a directory with a `mod.rs`.
 
-- A context with one PostgreSQL repository uses `infrastructure/postgres.rs`.
-- A context with multiple PostgreSQL repositories uses
-  `infrastructure/postgres/`, with one module per repository and a `mod.rs` that
-  re-exports them.
-- A large repository may use `postgres/<repository>/` as a module directory:
-  `mod.rs` owns the repository implementation, while private helper modules hold
+- A context with one PostgreSQL repository uses `infra/pg.rs`.
+- A context with multiple PostgreSQL repositories uses `infra/pg/`, with one
+  module per repository and a `mod.rs` that re-exports them. Repository modules
+  use `*_repo.rs`, such as `api_key_repo.rs` and `nutrient_repo.rs`.
+- A large repository may use `pg/<repository>/` as a module directory: `mod.rs`
+  owns the repository implementation, while private helper modules hold
   statements, row mapping, child writes, and tests. The catalog `product/`
   module is the current example.
-- Schema identifiers shared by more than one repository live in
-  `postgres/iden.rs`; repository-local identifiers stay with their repository.
-- Non-PostgreSQL adapters live under `infrastructure/`. A single-file adapter is
-  a top-level file; an adapter family uses its own directory (`llm/`,
+- Schema identifiers shared by more than one repository live in `pg/iden.rs`;
+  repository-local identifiers stay with their repository.
+- Non-PostgreSQL adapters live under `infra/`. A single-file adapter is a
+  top-level file; an adapter family uses its own directory (`llm/`,
   `food_draft/`).
 
-Catalog uses the multi-repository shape (`product/`, `nutrient_repository.rs`,
-`unit_repository.rs`) plus the Open Food Facts adapter. Auth uses
-`postgres/` for its four repositories plus the Argon2 adapter. Import, food
-logs, meals, goals, and diary preferences use the single-repository shape.
-Guidance keeps its static, non-Postgres adapter directly under `infrastructure/`.
+Catalog uses the multi-repository shape (`product/`, `nutrient_repo.rs`,
+`unit_repo.rs`) plus the Open Food Facts adapter. Auth uses `pg/` for its four
+repositories plus the Argon2 adapter. Import, food logs, meals, goals, and diary
+preferences use the single-repository shape. Guidance keeps its static,
+non-Postgres adapter directly under `infra/`.
 
-### Interface Layout
+### API Layout
 
-`interfaces` is always a directory with a `mod.rs`.
+`api` is always a directory with a `mod.rs`.
 
-- A single HTTP transport file lives at `interfaces/http.rs`.
-- A large or multi-concern HTTP surface may use `interfaces/http/`, with a
-  `mod.rs` that wires the route entry point and private submodules for
-  handlers, DTOs, conversions, or route groups.
-- `interfaces/mod.rs` holds module wiring and interface-level types that are not
-  tied to one HTTP module, such as auth's `SessionCookieConfig`.
-- A context never uses a bare `interfaces.rs`.
+- A single HTTP transport file lives at `api/http.rs`.
+- A large or multi-concern HTTP surface may use `api/http/`, with a `mod.rs`
+  that wires the route entry point and private submodules for handlers, DTOs,
+  conversions, or route groups.
+- `api/mod.rs` holds module wiring and API-level types that are not tied to one
+  HTTP module, such as auth's `SessionCookieConfig`.
+- A context never uses a bare `api.rs`.
 
 All current contexts use the single-file shape. Nutrition's shared HTTP glue
-lives at `nutrition/interfaces/http.rs`.
+lives at `nutrition/api/http.rs`.
 
 ### Repository Ports
 
-Repositories are persistence and query ports, not business-action services. Domain and application code owns business decisions and state transitions, then hands already-decided state to the repository.
+Repositories are persistence and query ports, not business-action services. Domain and application code own business decisions and state transitions, then hand already-decided state to the repository.
 
 Single-entity write flow:
 
@@ -326,7 +333,7 @@ Current aggregate roots:
 - `FoodLog` for logged entries and nutrient snapshots.
 - `Meal` for reusable user-defined meals.
 - `GoalTarget` for user calorie and macro targets effective from a local date.
-- `DiaryPreferences` for a user's enabled diary meal slots.
+- `DiaryPrefs` for a user's enabled diary meal slots.
 - `ImportJob` for staging and committing external catalog data.
 
 Owned child values:
@@ -334,7 +341,7 @@ Owned child values:
 - `ProductNutrient` and `ProductServing` belong to `Product`.
 - `FoodLogNutrientSnapshot` belongs to `FoodLog`.
 - `MealComponent` belongs to `Meal`.
-- `EnabledMealSlots` belongs to `DiaryPreferences`.
+- `EnabledMealSlots` belongs to `DiaryPrefs`.
 - Staged product/nutrient/serving rows and import errors belong to `ImportJob`.
 
 Child values are not exposed as independently mutable resources. They are changed through their parent aggregate.
@@ -412,7 +419,8 @@ See [api-access.md](api-access.md) for the user-facing workflow and examples.
 `ReadUser` and `WriteUser` resolve authentication in this order:
 
 1. If an `Authorization` header is present, require a valid `Bearer <token>`
-   form. Authenticate through `ApiKeyService`. Do not fall back to a cookie.
+   form. Authenticate through `ApiKeyService`, which returns `ApiKeyAuth` with
+   the resolved identity, profile, and scope. Do not fall back to a cookie.
    Require a normal user role, an active identity, and a profile. Enforce the
    scope shown above.
 2. Otherwise, use the existing browser session path.
@@ -873,11 +881,12 @@ collation.
 
 ## Database Naming Conventions
 
-PostgreSQL adapter names should keep persistence-specific concepts visible without leaking them into application or domain layers.
+PostgreSQL adapter names should keep persistence-specific concepts visible without leaking them into app or domain layers.
 
 Type suffixes:
 
-- `Postgres*Repository`: public repository adapter implementing an application port.
+- `*Repo`: domain repository port trait.
+- `Pg*Repo`: public PostgreSQL repository adapter implementing a `*Repo` port.
 - `*Row`: private `sqlx::FromRow` query result type.
 
 Function naming rules:
@@ -913,6 +922,7 @@ Type suffixes:
 - `*Query`: URL query extractor.
 - `*Response`: top-level JSON response body.
 - `*Dto`: nested or reusable transport object.
+- `*MetaDto`: nested transport metadata object, such as `BarcodeLookupMetaDto`.
 - `*ItemDto`: element inside a list response.
 - `*RowDto`: import staging row payload.
 - `*Params` / `*RangeParams`: internal parsed handler data, not public API DTOs.
@@ -934,7 +944,7 @@ Function naming rules:
 
 Two kinds of backend tests:
 
-- Unit tests are inline under `#[cfg(test)] mod tests` in domain and application modules, using mocked repositories.
+- Unit tests are inline under `#[cfg(test)] mod tests` in domain and app modules, using mocked repositories.
 - Integration tests in `backend/tests/` drive the real Axum router against an isolated Postgres provisioned per-test by `#[sqlx::test]`.
 
 Run everything:

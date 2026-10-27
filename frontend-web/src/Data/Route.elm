@@ -228,13 +228,13 @@ routeToPath route =
                 ]
 
         AdHocLogCreate maybeDate maybeSlot ->
-            withFoodContext "/logs/new/ad-hoc" maybeDate maybeSlot
+            withFoodCtx "/logs/new/ad-hoc" maybeDate maybeSlot
 
         AiLogCreate maybeDate maybeSlot ->
-            withFoodContext "/logs/new/ai" maybeDate maybeSlot
+            withFoodCtx "/logs/new/ai" maybeDate maybeSlot
 
         FoodSearch maybeDate maybeSlot ->
-            withFoodContext "/search" maybeDate maybeSlot
+            withFoodCtx "/search" maybeDate maybeSlot
 
         FoodShow id maybeDate maybeSlot lookupNote ->
             withQueryParams ("/foods/" ++ id)
@@ -280,8 +280,8 @@ routeToPath route =
             "/"
 
 
-withFoodContext : String -> Maybe LocalDate -> Maybe MealSlot -> String
-withFoodContext path maybeDate maybeSlot =
+withFoodCtx : String -> Maybe LocalDate -> Maybe MealSlot -> String
+withFoodCtx path maybeDate maybeSlot =
     let
         params : List String
         params =

@@ -1,7 +1,7 @@
 use crate::common::*;
 use axum::http::{Method, StatusCode, header};
-use calco_backend::auth::domain::{SessionRepository, hash_session_token};
-use calco_backend::auth::infrastructure::postgres::PostgresSessionRepository;
+use calco_backend::auth::domain::{SessionRepo, hash_session_token};
+use calco_backend::auth::infra::pg::PgSessionRepo;
 use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -90,7 +90,7 @@ async fn session_heartbeat_after_logout_cannot_restore_the_session(pool: PgPool)
     .await
     .unwrap();
 
-    let repo = PostgresSessionRepository::new(pool.clone());
+    let repo = PgSessionRepo::new(pool.clone());
     let stale_session = repo
         .find_by_token_hash(&token_hash)
         .await

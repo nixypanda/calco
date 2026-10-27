@@ -17,7 +17,7 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest, RecentItemsResponse)
 import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog exposing (FoodLog)
-import Data.LocalContext exposing (LocalContext)
+import Data.LocalCtx exposing (LocalCtx)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
@@ -78,7 +78,7 @@ isSubmitting form =
 type OutMsg
     = NoOp
     | RequestInitialData String
-    | RequestLocalContext
+    | RequestLocalCtx
     | RequestCreateLog CreateLogRequest
     | LogCreated FoodLog Route
     | SessionExpired
@@ -109,7 +109,7 @@ type Msg
     | LastUsedLoaded String (Result Client.ApiError RecentItemsResponse)
     | FormMsg FoodLogForm.Msg
     | SubmitClicked
-    | LocalContextReceived LocalContext
+    | LocalCtxReceived LocalCtx
     | LogCompleted (Result Client.ApiError FoodLog)
 
 
@@ -226,17 +226,17 @@ update msg model =
                                         loaded.form
                             }
                         , Cmd.none
-                        , RequestLocalContext
+                        , RequestLocalCtx
                         )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
 
-        LocalContextReceived context ->
+        LocalCtxReceived context ->
             case model of
                 Loaded loaded ->
                     if isSubmitting loaded.form then
-                        createLogFromLocalContext context loaded
+                        createLogFromLocalCtx context loaded
 
                     else
                         ( model, Cmd.none, NoOp )
@@ -274,8 +274,8 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
 
-createLogFromLocalContext : LocalContext -> LoadedModel -> ( Model, Cmd Msg, OutMsg )
-createLogFromLocalContext context loaded =
+createLogFromLocalCtx : LocalCtx -> LoadedModel -> ( Model, Cmd Msg, OutMsg )
+createLogFromLocalCtx context loaded =
     case
         FoodLogForm.createProductLogRequest
             (Maybe.withDefault context.date loaded.logDate)

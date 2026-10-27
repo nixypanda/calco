@@ -1,5 +1,5 @@
 module Page.NutritionDetails exposing
-    ( DateContext
+    ( DateCtx
     , Model(..)
     , Msg(..)
     , OutMsg(..)
@@ -35,12 +35,12 @@ import Ui.Typography as Typography
 
 
 type Model
-    = Loading DateContext
-    | Loaded DateContext NutritionDetails (Set String)
-    | Failed DateContext String
+    = Loading DateCtx
+    | Loaded DateCtx NutritionDetails (Set String)
+    | Failed DateCtx String
 
 
-type alias DateContext =
+type alias DateCtx =
     { currentDate : LocalDate, today : LocalDate }
 
 
@@ -74,13 +74,13 @@ update msg model =
             else
                 case result of
                     Ok report ->
-                        ( Loaded (dateContext model) report Set.empty, Cmd.none, NoOp )
+                        ( Loaded (dateCtx model) report Set.empty, Cmd.none, NoOp )
 
                     Err error ->
                         Client.failure
                             { noOp = NoOp
                             , sessionExpired = SessionExpired
-                            , applyError = \message _ -> Failed (dateContext model) message
+                            , applyError = \message _ -> Failed (dateCtx model) message
                             }
                             error
                             model
@@ -120,7 +120,7 @@ toggleSetMember value values =
 withToday : LocalDate -> Model -> Model
 withToday changed model =
     let
-        context : DateContext
+        context : DateCtx
         context =
             { currentDate = currentDate model, today = changed }
     in
@@ -138,7 +138,7 @@ withToday changed model =
 navigateTo : LocalDate -> Model -> ( Model, Cmd Msg, OutMsg )
 navigateTo nextDate model =
     let
-        context : DateContext
+        context : DateCtx
         context =
             { currentDate = nextDate, today = today model }
     in
@@ -148,8 +148,8 @@ navigateTo nextDate model =
     )
 
 
-dateContext : Model -> DateContext
-dateContext model =
+dateCtx : Model -> DateCtx
+dateCtx model =
     case model of
         Loading context ->
             context
@@ -163,12 +163,12 @@ dateContext model =
 
 currentDate : Model -> LocalDate
 currentDate =
-    dateContext >> .currentDate
+    dateCtx >> .currentDate
 
 
 today : Model -> LocalDate
 today =
-    dateContext >> .today
+    dateCtx >> .today
 
 
 view : Env -> Model -> Element Msg

@@ -5,33 +5,28 @@ use sqlx::PgPool;
 
 use crate::AppState;
 use crate::BoxError;
-use crate::nutrition::catalog::application::ExternalProductCatalog;
-use crate::nutrition::catalog::application::{
-    CatalogReadPort, CatalogService, NutrientCatalogReadPort,
-};
+use crate::nutrition::catalog::app::ExternalProductCatalog;
+use crate::nutrition::catalog::app::{CatalogReadPort, CatalogService, NutrientCatalogReadPort};
 use crate::nutrition::catalog::domain::units::UnitConverter;
-use crate::nutrition::catalog::domain::{NutrientRepository, ProductRepository, UnitRepository};
-use crate::nutrition::catalog::infrastructure::{
-    OpenFoodFactsClient, PostgresNutrientRepository, PostgresProductRepository,
-    PostgresUnitRepository,
+use crate::nutrition::catalog::domain::{NutrientRepo, ProductRepo, UnitRepo};
+use crate::nutrition::catalog::infra::{
+    OpenFoodFactsClient, PgNutrientRepo, PgProductRepo, PgUnitRepo,
 };
-use crate::nutrition::diary::application::DiaryPreferencesService;
-use crate::nutrition::diary::domain::DiaryPreferencesRepository;
-use crate::nutrition::diary::infrastructure::PostgresDiaryPreferencesRepository;
-use crate::nutrition::food_log::application::{
-    FoodLogHistoryService, FoodLogQueryPort, FoodLogService,
-};
-use crate::nutrition::food_log::domain::FoodLogRepository;
-use crate::nutrition::food_log::infrastructure::PostgresFoodLogRepository;
-use crate::nutrition::goals::application::GoalTargetService;
-use crate::nutrition::goals::domain::GoalTargetRepository;
-use crate::nutrition::goals::infrastructure::PostgresGoalTargetRepository;
-use crate::nutrition::guidance::application::NutritionDetailsService;
-use crate::nutrition::guidance::domain::NutrientGuidanceRepository;
-use crate::nutrition::guidance::infrastructure::StaticNutrientGuidanceRepository;
-use crate::nutrition::meal::application::{MealReadPort, MealService};
-use crate::nutrition::meal::domain::MealRepository;
-use crate::nutrition::meal::infrastructure::PostgresMealRepository;
+use crate::nutrition::diary::app::DiaryPrefsService;
+use crate::nutrition::diary::domain::DiaryPrefsRepo;
+use crate::nutrition::diary::infra::PgDiaryPrefsRepo;
+use crate::nutrition::food_log::app::{FoodLogHistoryService, FoodLogQueryPort, FoodLogService};
+use crate::nutrition::food_log::domain::FoodLogRepo;
+use crate::nutrition::food_log::infra::PgFoodLogRepo;
+use crate::nutrition::goals::app::GoalTargetService;
+use crate::nutrition::goals::domain::GoalTargetRepo;
+use crate::nutrition::goals::infra::PgGoalTargetRepo;
+use crate::nutrition::guidance::app::NutritionDetailsService;
+use crate::nutrition::guidance::domain::NutrientGuidanceRepo;
+use crate::nutrition::guidance::infra::StaticGuidanceRepo;
+use crate::nutrition::meal::app::{MealReadPort, MealService};
+use crate::nutrition::meal::domain::MealRepo;
+use crate::nutrition::meal::infra::PgMealRepo;
 
 /// The catalog kernel: products, nutrients, units, and the unit converter.
 ///
@@ -84,11 +79,11 @@ impl FromRef<AppState> for GuidanceModule {
 }
 
 #[derive(Clone)]
-pub struct DiaryPreferencesModule {
-    pub diary_preferences_services: Arc<DiaryPreferencesService>,
+pub struct DiaryPrefsModule {
+    pub diary_prefs_services: Arc<DiaryPrefsService>,
 }
 
-impl FromRef<AppState> for DiaryPreferencesModule {
+impl FromRef<AppState> for DiaryPrefsModule {
     fn from_ref(app: &AppState) -> Self {
         app.nutrition.diary.clone()
     }
@@ -114,28 +109,23 @@ pub struct NutritionModule {
     pub meal: MealModule,
     pub food_log: FoodLogModule,
     pub guidance: GuidanceModule,
-    pub diary: DiaryPreferencesModule,
+    pub diary: DiaryPrefsModule,
     pub goals: GoalTargetModule,
 }
 
 impl NutritionModule {
     pub async fn build(pool: &PgPool) -> Result<Self, BoxError> {
-        let product_repo =
-            Arc::new(PostgresProductRepository::new(pool.clone())) as Arc<dyn ProductRepository>;
-        let nutrient_repo =
-            Arc::new(PostgresNutrientRepository::new(pool.clone())) as Arc<dyn NutrientRepository>;
-        let unit_repo =
-            Arc::new(PostgresUnitRepository::new(pool.clone())) as Arc<dyn UnitRepository>;
-        let meal_repo =
-            Arc::new(PostgresMealRepository::new(pool.clone())) as Arc<dyn MealRepository>;
-        let food_log_repo =
-            Arc::new(PostgresFoodLogRepository::new(pool.clone())) as Arc<dyn FoodLogRepository>;
-        let diary_preferences_repo = Arc::new(PostgresDiaryPreferencesRepository::new(pool.clone()))
-            as Arc<dyn DiaryPreferencesRepository>;
-        let goal_target_repo = Arc::new(PostgresGoalTargetRepository::new(pool.clone()))
-            as Arc<dyn GoalTargetRepository>;
-        let nutrient_guidance_repo = Arc::new(StaticNutrientGuidanceRepository::new())
-            as Arc<dyn NutrientGuidanceRepository>;
+        let product_repo = Arc::new(PgProductRepo::new(pool.clone())) as Arc<dyn ProductRepo>;
+        let nutrient_repo = Arc::new(PgNutrientRepo::new(pool.clone())) as Arc<dyn NutrientRepo>;
+        let unit_repo = Arc::new(PgUnitRepo::new(pool.clone())) as Arc<dyn UnitRepo>;
+        let meal_repo = Arc::new(PgMealRepo::new(pool.clone())) as Arc<dyn MealRepo>;
+        let food_log_repo = Arc::new(PgFoodLogRepo::new(pool.clone())) as Arc<dyn FoodLogRepo>;
+        let diary_prefs_repo =
+            Arc::new(PgDiaryPrefsRepo::new(pool.clone())) as Arc<dyn DiaryPrefsRepo>;
+        let goal_target_repo =
+            Arc::new(PgGoalTargetRepo::new(pool.clone())) as Arc<dyn GoalTargetRepo>;
+        let nutrient_guidance_repo =
+            Arc::new(StaticGuidanceRepo::new()) as Arc<dyn NutrientGuidanceRepo>;
         let external_catalog =
             Arc::new(OpenFoodFactsClient::new()?) as Arc<dyn ExternalProductCatalog>;
 
@@ -180,10 +170,8 @@ impl NutritionModule {
                 nutrient_guidance_repo,
             )),
         };
-        let diary = DiaryPreferencesModule {
-            diary_preferences_services: Arc::new(DiaryPreferencesService::new(
-                diary_preferences_repo,
-            )),
+        let diary = DiaryPrefsModule {
+            diary_prefs_services: Arc::new(DiaryPrefsService::new(diary_prefs_repo)),
         };
         let goals = GoalTargetModule {
             goal_target_services: Arc::new(GoalTargetService::new(goal_target_repo)),
@@ -209,23 +197,23 @@ impl FromRef<AppState> for NutritionModule {
 #[cfg(test)]
 mod architecture_tests {
     #[test]
-    fn nutrition_http_interfaces_do_not_reference_repositories() {
-        let interfaces = [
-            ("catalog", include_str!("catalog/interfaces/http.rs")),
-            ("meal", include_str!("meal/interfaces/http.rs")),
-            ("food_log", include_str!("food_log/interfaces/http.rs")),
-            ("guidance", include_str!("guidance/interfaces/http.rs")),
-            ("diary", include_str!("diary/interfaces/http.rs")),
-            ("goals", include_str!("goals/interfaces/http.rs")),
-            ("shared", include_str!("interfaces/http.rs")),
+    fn nutrition_http_api_does_not_reference_repos() {
+        let api = [
+            ("catalog", include_str!("catalog/api/http.rs")),
+            ("meal", include_str!("meal/api/http.rs")),
+            ("food_log", include_str!("food_log/api/http.rs")),
+            ("guidance", include_str!("guidance/api/http.rs")),
+            ("diary", include_str!("diary/api/http.rs")),
+            ("goals", include_str!("goals/api/http.rs")),
+            ("shared", include_str!("api/http.rs")),
         ];
 
-        for (name, source) in interfaces {
+        for (name, source) in api {
             assert!(
-                !source.contains("Repository")
+                !source.contains("Repo")
                     && !source.contains("_repo")
-                    && !source.contains("::infrastructure"),
-                "{name} HTTP interface crosses the application boundary"
+                    && !source.contains("::infra"),
+                "{name} HTTP API crosses the app boundary"
             );
         }
     }

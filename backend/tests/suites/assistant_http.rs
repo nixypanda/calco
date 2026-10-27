@@ -5,7 +5,7 @@ use crate::common::*;
 use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
-use calco_backend::assistant::application::{
+use calco_backend::assistant::app::{
     AssistantError, FoodDraftAcceptancePort, FoodDraftModel, FoodDraftModelRequest,
     FoodDraftResult, FoodDraftService, FoodVocabulary, FoodVocabularyPort, ModelUsage,
 };
@@ -13,9 +13,7 @@ use calco_backend::assistant::composition::AssistantComponents;
 use calco_backend::assistant::domain::{
     DraftNutrient, DraftServing, FoodDraft, FoodDraftBuilder, FoodDraftTurn,
 };
-use calco_backend::assistant::infrastructure::{
-    NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
-};
+use calco_backend::assistant::infra::{CatalogVocabularyAdapter, SafeImageSanitizer};
 use calco_backend::{build_app_state, build_router_from_state};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -51,7 +49,7 @@ fn fake_assistant_with_images(
         }),
         Arc::new(FakeVocabulary),
         Arc::new(FakeVocabulary),
-        Some(Arc::new(SafeFoodImageSanitizer::new())),
+        Some(Arc::new(SafeImageSanitizer::new())),
     )))
 }
 
@@ -97,7 +95,7 @@ async fn app_with_model_result_and_real_vocabulary(
         result: Ok(result),
         observed_vocabulary: Some(observed_vocabulary.clone()),
     });
-    let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(
+    let vocabulary = Arc::new(CatalogVocabularyAdapter::new(
         state.nutrition.catalog.services.clone(),
     ));
     state.assistant = AssistantComponents::from_food_draft_service(Arc::new(
@@ -305,7 +303,7 @@ async fn valid_photo_is_sanitized_and_reaches_the_model(pool: PgPool) {
         Arc::new(ImageObservingModel(observed.clone())),
         Arc::new(FakeVocabulary),
         Arc::new(FakeVocabulary),
-        Some(Arc::new(SafeFoodImageSanitizer::new())),
+        Some(Arc::new(SafeImageSanitizer::new())),
     ));
     let router =
         app_with_assistant(pool, AssistantComponents::from_food_draft_service(service)).await;

@@ -667,7 +667,7 @@ pub trait CredentialVerifier: Send + Sync {
 }
 
 #[async_trait]
-pub trait IdentityRepository: Send + Sync {
+pub trait IdentityRepo: Send + Sync {
     async fn find_by_username(&self, username: &str) -> Result<Option<Identity>, AuthError>;
     async fn find_by_id(&self, id: IdentityId) -> Result<Option<Identity>, AuthError>;
     async fn find_by_ids(&self, ids: &[IdentityId]) -> Result<Vec<Identity>, AuthError>;
@@ -677,14 +677,14 @@ pub trait IdentityRepository: Send + Sync {
 }
 
 #[async_trait]
-pub trait SessionRepository: Send + Sync {
+pub trait SessionRepo: Send + Sync {
     async fn create(&self, session: &Session) -> Result<(), AuthError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError>;
     async fn update(&self, session: &Session) -> Result<(), AuthError>;
 }
 
 #[async_trait]
-pub trait ApiKeyRepository: Send + Sync {
+pub trait ApiKeyRepo: Send + Sync {
     async fn create(&self, key: &ApiKey) -> Result<(), AuthError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<ApiKey>, AuthError>;
     async fn find_by_id(&self, id: ApiKeyId) -> Result<Option<ApiKey>, AuthError>;
@@ -698,7 +698,7 @@ pub trait ApiKeyRepository: Send + Sync {
 }
 
 #[async_trait]
-pub trait UserProfileRepository: Send + Sync {
+pub trait UserProfileRepo: Send + Sync {
     async fn find_by_identity_id(
         &self,
         identity_id: IdentityId,

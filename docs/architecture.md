@@ -43,16 +43,16 @@ The backend uses pragmatic DDD boundaries without heavy ceremony.
 Dependency direction:
 
 ```text
-interfaces/http -> application -> domain
-infrastructure/postgres -> domain ports
+api/http -> app -> domain
+infra/pg -> domain ports
 ```
 
 The domain layer owns business concepts, invariants, and repository ports. It
 does not own HTTP or JSON DTOs. Infrastructure implements the ports, and the
-application layer composes domain operations into use cases without issuing
-SQL directly. The shared domain error enums currently carry `sqlx::Error`
-variants as a pragmatic adapter leak; new domain behavior should not deepen
-that coupling.
+app layer composes domain operations into use cases without issuing SQL
+directly. The shared domain error enums currently carry `sqlx::Error` variants
+as a pragmatic adapter leak; new domain behavior should not deepen that
+coupling.
 
 Repository ports remain storage-shaped.
 
@@ -60,9 +60,9 @@ Repository ports remain storage-shaped.
 
 Four bounded contexts: `auth`, `nutrition`, `import`, and `assistant`. Each
 lives under its own top-level backend module. `auth`, `import`, and `assistant`
-nest the four layers (`domain`, `application`, `infrastructure`, `interfaces`)
-directly. `nutrition` is organized feature-first (see below): one folder per
-sub-context, each nesting the four layers inside.
+nest the four layers (`domain`, `app`, `infra`, `api`) directly. `nutrition` is
+organized feature-first (see below): one folder per sub-context, each nesting the
+four layers inside.
 
 Dependency direction between contexts:
 
@@ -71,7 +71,7 @@ import -> nutrition -> auth
 assistant -> nutrition (read-only catalog vocabulary)
 ```
 
-`auth` depends on nothing. `nutrition` depends on `auth` only at the interface edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or application. `import` depends on `nutrition` only through the catalog domain (`catalog::Category`). Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
+`auth` depends on nothing. `nutrition` depends on `auth` only at the API edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or app. `import` depends on `nutrition` only through the catalog domain (`catalog::Category`). Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
 
 ### Auth
 
@@ -106,7 +106,7 @@ Nutrition is one bounded context with five aggregate roots:
 - `Meal`: creator-owned for writes and globally visible to authenticated users. `MealComponent` values are edited through the aggregate; current components are product-only (no recursive meals). Nutrition is calculated from current components when previewing or logging.
 - `FoodLog`: user-owned. Records timestamp, meal slot, logged item, quantity, notes, and nutrient snapshots. `LoggedItem` supports `Product(ProductId)` and `Meal(MealId)`.
 - `GoalTarget`: user-owned. Stores calorie and macro targets effective from a local date, so diary views can resolve the latest saved target for any selected day while falling back to defaults if no saved row exists.
-- `DiaryPreferences`: user-owned. Stores the enabled meal slots that shape the
+- `DiaryPrefs`: user-owned. Stores the enabled meal slots that shape the
   diary while ensuring at least one known slot remains enabled.
 
 These aggregates share one error type (`NutritionError`) and application-level
@@ -114,10 +114,10 @@ read ports where one nutrition sub-context needs another. They are not separate
 bounded contexts: the shared ubiquitous language ("nutrient", "quantity",
 "unit"), shared lifecycle, and lack of concept translation at the seams
 motivated unifying them. Repository ports remain private dependencies of the
-application service that owns the aggregate; an HTTP interface or downstream
+application service that owns the aggregate; an HTTP API or downstream
 sub-context never receives another aggregate's repository.
 
-Within the context, the aggregates are organized feature-first: one folder per sub-context (`catalog`, `meal`, `food_log`, `guidance`, `diary`, `goals`), each nesting the four layers inside. `catalog` holds the shared kernel (`units`, `calculation`) in its domain layer; `NutritionError` and the shared HTTP glue live at the nutrition root (`error.rs`, `interfaces/http.rs`). The composition root stays in `nutrition/module.rs`. Their dependency direction is a DAG rooted at the catalog kernel:
+Within the context, the aggregates are organized feature-first: one folder per sub-context (`catalog`, `meal`, `food_log`, `guidance`, `diary`, `goals`), each nesting the four layers inside. `catalog` holds the shared kernel (`units`, `calculation`) in its domain layer; `NutritionError` and the shared HTTP glue live at the nutrition root (`error.rs`, `api/http.rs`). The composition root stays in `nutrition/module.rs`. Their dependency direction is a DAG rooted at the catalog kernel:
 
 ```text
 catalog                       (kernel — no deps)
@@ -137,12 +137,12 @@ goals                         (island)
 The concrete dependency graph is:
 
 ```text
-HTTP interfaces
+HTTP API
   -> catalog application service -> CatalogPolicy -> catalog repositories
-                                 \-> ExternalProductCatalog
-                                      -> OpenFoodFactsClient
+                                   \-> ExternalProductCatalog
+                                        -> OpenFoodFactsClient
   -> meal application service    -> MealPolicy    -> meal repository
-                                \-> CatalogReadPort
+                                 \-> CatalogReadPort
   -> food-log application service -> FoodLogPolicy -> food-log repository
                                     -> CatalogReadPort
                                     -> MealReadPort
@@ -192,6 +192,7 @@ data; the user must review and submit a draft through the existing custom-food
 API.
 
 Provider credentials are loaded once at startup only when AI is enabled.
+`AssistantAuth` from configuration becomes the LLM adapter's `ProviderAuth`.
 Requests are authenticated, size-bounded, rate-limited per user, and protected
 by a process-wide concurrency limit. Telemetry contains only user ID, latency,
 outcome, and provider token counts when present. Prompt and response content,

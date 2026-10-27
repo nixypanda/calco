@@ -91,7 +91,7 @@ tests =
                     submitted : GoalsSettings.Model
                     submitted =
                         step
-                            (GoalsSettings.LocalContextReceived
+                            (GoalsSettings.LocalCtxReceived
                                 { date = date "2026-06-16", timezone = "Asia/Kolkata" }
                             )
                             typedWhileWaiting
@@ -101,26 +101,26 @@ tests =
                 , typed = toScreen typedWhileWaiting
                 , save =
                     out
-                        (GoalsSettings.LocalContextReceived
+                        (GoalsSettings.LocalCtxReceived
                             { date = date "2026-06-16", timezone = "Asia/Kolkata" }
                         )
                         typedWhileWaiting
                 , submitted = saveState submitted
                 }
                     |> Expect.equal
-                        { request = GoalsSettings.RequestLocalContext
+                        { request = GoalsSettings.RequestLocalCtx
                         , awaiting =
                             { phase = "ready"
                             , fields = [ "2330", "170", "255", "70" ]
                             , status = Just { source = Default, effectiveFrom = Nothing }
-                            , save = Just (GoalsSettings.AwaitingLocalContext validatedTargets)
+                            , save = Just (GoalsSettings.AwaitingLocalCtx validatedTargets)
                             , error = Nothing
                             }
                         , typed =
                             { phase = "ready"
                             , fields = [ "abc", "170", "255", "70" ]
                             , status = Just { source = Default, effectiveFrom = Nothing }
-                            , save = Just (GoalsSettings.AwaitingLocalContext validatedTargets)
+                            , save = Just (GoalsSettings.AwaitingLocalCtx validatedTargets)
                             , error = Nothing
                             }
                         , save =
@@ -248,7 +248,7 @@ tests =
                 in
                 { request =
                     out
-                        (GoalsSettings.LocalContextReceived
+                        (GoalsSettings.LocalCtxReceived
                             { date = date "2026-06-16", timezone = "Asia/Kolkata" }
                         )
                         model
@@ -320,7 +320,7 @@ savingModel =
     loadedFrom defaultSnapshot
         |> step GoalsSettings.SaveClicked
         |> step
-            (GoalsSettings.LocalContextReceived
+            (GoalsSettings.LocalCtxReceived
                 { date = date "2026-06-16", timezone = "Asia/Kolkata" }
             )
 

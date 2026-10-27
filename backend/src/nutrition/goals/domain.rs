@@ -116,7 +116,7 @@ pub struct GoalTargetSnapshot {
 }
 
 #[async_trait]
-pub trait GoalTargetRepository: Send + Sync {
+pub trait GoalTargetRepo: Send + Sync {
     async fn find_effective_for_date(
         &self,
         user_id: Uuid,

@@ -2,8 +2,8 @@ use crate::common::*;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
-use calco_backend::auth::domain::{ApiKeyId, ApiKeyRepository, IdentityId, hash_api_key_token};
-use calco_backend::auth::infrastructure::postgres::PostgresApiKeyRepository;
+use calco_backend::auth::domain::{ApiKeyId, ApiKeyRepo, IdentityId, hash_api_key_token};
+use calco_backend::auth::infra::pg::PgApiKeyRepo;
 use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -819,7 +819,7 @@ async fn heartbeat_after_revoke_cannot_restore_a_key(pool: PgPool) {
     let key_id = created["id"].as_str().unwrap();
     let token = created["token"].as_str().unwrap().to_string();
     let id = ApiKeyId(Uuid::parse_str(key_id).unwrap());
-    let repo = PostgresApiKeyRepository::new(pool.clone());
+    let repo = PgApiKeyRepo::new(pool.clone());
 
     let stale_snapshot = repo.find_by_id(id).await.unwrap().unwrap();
     assert!(stale_snapshot.revoked_at.is_none());

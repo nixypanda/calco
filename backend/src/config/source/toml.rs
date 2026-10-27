@@ -6,7 +6,7 @@ use serde::Deserialize;
 use url::Url;
 
 use super::super::{
-    AssistantAuthentication, AssistantConfig, AssistantModel, AssistantProviderConfig, ConfigError,
+    AssistantAuth, AssistantConfig, AssistantModel, AssistantProviderConfig, ConfigError,
 };
 
 #[derive(Deserialize)]
@@ -23,20 +23,20 @@ struct RawAssistantConfig {
     model: Option<String>,
     #[serde(default)]
     supports_images: bool,
-    authentication: Option<RawAuthentication>,
+    authentication: Option<RawAuth>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawAuthentication {
-    kind: RawAuthenticationKind,
+struct RawAuth {
+    kind: RawAuthKind,
     api_key_file: Option<PathBuf>,
     header_name: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
-enum RawAuthenticationKind {
+enum RawAuthKind {
     None,
     Bearer,
     Header,
@@ -92,30 +92,30 @@ fn parse_model(value: String) -> Result<AssistantModel, &'static str> {
     Ok(AssistantModel::new(value.to_owned()))
 }
 
-impl RawAuthentication {
-    fn into_config(self) -> Result<AssistantAuthentication, &'static str> {
+impl RawAuth {
+    fn into_config(self) -> Result<AssistantAuth, &'static str> {
         match self.kind {
-            RawAuthenticationKind::None => {
+            RawAuthKind::None => {
                 if self.api_key_file.is_some() || self.header_name.is_some() {
                     return Err("none authentication cannot include API-key settings");
                 }
-                Ok(AssistantAuthentication::None)
+                Ok(AssistantAuth::None)
             }
-            RawAuthenticationKind::Bearer => {
+            RawAuthKind::Bearer => {
                 if self.header_name.is_some() {
                     return Err("bearer authentication cannot include a header name");
                 }
-                Ok(AssistantAuthentication::Bearer {
+                Ok(AssistantAuth::Bearer {
                     api_key_file: required_api_key_file(self.api_key_file)?,
                 })
             }
-            RawAuthenticationKind::Header => {
+            RawAuthKind::Header => {
                 let header_name = self
                     .header_name
                     .ok_or("header authentication requires a header name")?;
                 let header_name = HeaderName::from_str(header_name.trim())
                     .map_err(|_| "header authentication requires a valid header name")?;
-                Ok(AssistantAuthentication::Header {
+                Ok(AssistantAuth::Header {
                     header_name,
                     api_key_file: required_api_key_file(self.api_key_file)?,
                 })
@@ -149,7 +149,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use super::super::super::{AssistantAuthentication, AssistantConfig, ConfigError};
+    use super::super::super::{AssistantAuth, AssistantConfig, ConfigError};
     use super::load;
 
     static TEMP_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -284,7 +284,7 @@ api_key_file = "/run/secrets/provider-key"
         assert!(settings.supports_images);
         assert_eq!(
             settings.authentication,
-            AssistantAuthentication::Header {
+            AssistantAuth::Header {
                 header_name: "api-key".parse().unwrap(),
                 api_key_file: PathBuf::from("/run/secrets/provider-key"),
             }
@@ -336,7 +336,7 @@ model = "model"
 [assistant.authentication]
 kind = "none"
 "#,
-                AssistantAuthentication::None,
+                AssistantAuth::None,
             ),
             (
                 r#"[assistant]
@@ -348,7 +348,7 @@ model = "model"
 kind = "bearer"
 api_key_file = "/run/key"
 "#,
-                AssistantAuthentication::Bearer {
+                AssistantAuth::Bearer {
                     api_key_file: PathBuf::from("/run/key"),
                 },
             ),
@@ -363,7 +363,7 @@ kind = "header"
 header_name = "api-key"
 api_key_file = "/run/key"
 "#,
-                AssistantAuthentication::Header {
+                AssistantAuth::Header {
                     header_name: "api-key".parse().unwrap(),
                     api_key_file: PathBuf::from("/run/key"),
                 },
@@ -549,7 +549,7 @@ model = "model"
             assert!(settings.supports_images);
             assert_eq!(
                 settings.authentication,
-                AssistantAuthentication::Bearer {
+                AssistantAuth::Bearer {
                     api_key_file: PathBuf::from(api_key_file),
                 }
             );

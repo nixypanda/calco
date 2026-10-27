@@ -8,7 +8,7 @@ mod error;
 mod source;
 
 pub use app::{
-    AppConfig, AssistantAuthentication, AssistantConfig, AssistantModel, AssistantProviderConfig,
+    AppConfig, AssistantAuth, AssistantConfig, AssistantModel, AssistantProviderConfig,
     ServerConfig, SessionConfig,
 };
 pub use error::ConfigError;

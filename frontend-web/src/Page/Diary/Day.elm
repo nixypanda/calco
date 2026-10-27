@@ -20,7 +20,7 @@ module Page.Diary.Day exposing
 
 import Api.Client as Client
 import Api.Logs exposing (BatchLogResponse, CreateLogRequest, LatestSlotsResponse)
-import Data.DiaryPreferences as DiaryPreferences exposing (DiaryPreferences)
+import Data.DiaryPrefs as DiaryPrefs exposing (DiaryPrefs)
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.Goals exposing (GoalSnapshot, GoalTargets)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
@@ -81,7 +81,7 @@ type alias Model =
     , latestSlots : LatestSlotsState
     , copyState : CopyState
     , macroMode : MacroMode
-    , preferences : Maybe DiaryPreferences
+    , prefs : Maybe DiaryPrefs
     }
 
 
@@ -119,7 +119,7 @@ init args =
       , latestSlots = LatestSlotsLoading
       , copyState = CopyIdle
       , macroMode = Grams
-      , preferences = Nothing
+      , prefs = Nothing
       }
     , RequestDiaryData
     )
@@ -149,7 +149,7 @@ type Msg
     = SlotNoOp
     | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
     | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
-    | PreferencesLoaded (Result Client.ApiError DiaryPreferences)
+    | PrefsLoaded (Result Client.ApiError DiaryPrefs)
     | LatestSlotsReceived LocalDate (Result Client.ApiError LatestSlotsResponse)
     | CopyLatestClicked LatestSlotSource
     | CopyLatestCompleted LocalDate (Result Client.ApiError BatchLogResponse)
@@ -213,10 +213,10 @@ update msg model =
                     Err error ->
                         failure requestDate error model
 
-        PreferencesLoaded result ->
+        PrefsLoaded result ->
             case result of
-                Ok preferences ->
-                    ( { model | preferences = Just preferences }, Cmd.none, NoOp )
+                Ok prefs ->
+                    ( { model | prefs = Just prefs }, Cmd.none, NoOp )
 
                 Err error ->
                     failure model.currentDate error model
@@ -1000,7 +1000,7 @@ logGroupsView env model logs =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         ((MealSlot.all
             |> List.map (Just >> section)
-            |> List.filter (shouldShowSection model.preferences)
+            |> List.filter (shouldShowSection model.prefs)
          )
             ++ (if List.isEmpty unslotted.logs then
                     []
@@ -1012,10 +1012,10 @@ logGroupsView env model logs =
         )
 
 
-shouldShowSection : Maybe DiaryPreferences -> SlotSection -> Bool
-shouldShowSection maybePreferences section =
+shouldShowSection : Maybe DiaryPrefs -> SlotSection -> Bool
+shouldShowSection maybePrefs section =
     not (List.isEmpty section.logs)
-        || (Maybe.map2 DiaryPreferences.isEnabled section.slot maybePreferences
+        || (Maybe.map2 DiaryPrefs.isEnabled section.slot maybePrefs
                 |> Maybe.withDefault False
            )
 

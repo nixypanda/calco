@@ -5,26 +5,27 @@
 Two kinds of backend tests:
 
 ```text
-backend/src/**/*.rs       inline #[cfg(test)] unit tests (domain + application, mocked repos)
-backend/tests/*.rs        integration tests (real HTTP router, real Postgres)
-backend/tests/common/     shared harness (see below)
-frontend-web/tests/*.elm  Elm frontend unit tests
+backend/src/**/*.rs        inline #[cfg(test)] unit tests (domain + app, mocked repos)
+backend/tests/all.rs       integration test entry point
+backend/tests/suites/*.rs  integration tests (real HTTP router, real Postgres)
+backend/tests/common/      shared harness (see below)
+frontend-web/tests/*.elm   Elm frontend unit tests
 ```
 
 Integration tests cover the HTTP lifecycle of each entity end-to-end:
 
 ```text
-tests/product_lifecycle.rs   custom-food CRUD + search + auth required
-tests/search_lifecycle.rs    catalog ranking, scopes, filters, suggestions
-tests/product_repository.rs  external upsert + search-summary hydration
-tests/auth_lifecycle.rs      bootstrap, login, sessions + admin user management
-tests/diary_lifecycle.rs     food log CRUD, repeat/recent defaults + summary
-tests/diary_preferences_lifecycle.rs
-                             per-user enabled meal-slot preferences
-tests/goal_lifecycle.rs      goal defaults + save/overwrite flow
-tests/meal_lifecycle.rs      meal CRUD + /meals/{id}/nutrients
-tests/cross_entity.rs        product -> meal -> log -> summary wiring
-tests/import_lifecycle.rs    admin import flow + error path
+tests/suites/product_lifecycle.rs   custom-food CRUD + search + auth required
+tests/suites/search_lifecycle.rs    catalog ranking, scopes, filters, suggestions
+tests/suites/product_repo.rs        external upsert + search-summary hydration
+tests/suites/auth_lifecycle.rs      bootstrap, login, sessions + admin user management
+tests/suites/diary_lifecycle.rs     food log CRUD, repeat/recent defaults + summary
+tests/suites/diary_prefs_lifecycle.rs
+                                    per-user enabled meal-slot preferences
+tests/suites/goal_lifecycle.rs      goal defaults + save/overwrite flow
+tests/suites/meal_lifecycle.rs      meal CRUD + /meals/{id}/nutrients
+tests/suites/cross_entity.rs        product -> meal -> log -> summary wiring
+tests/suites/import_lifecycle.rs    admin import flow + error path
 ```
 
 ## What We Test
