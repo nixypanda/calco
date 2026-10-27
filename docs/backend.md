@@ -713,18 +713,39 @@ normalized name, then product ID. `History` orders by recency first. Category
 suggestions fetch counts and rank prefix → substring → fuzzy → count →
 similarity → name.
 
-Fuzzy matching uses pure-Rust trigram Jaccard similarity with
-`DEFAULT_FUZZY_THRESHOLD = 0.30`, closely matching PostgreSQL `pg_trgm`: text is
-split on non-alphanumeric characters, each word is padded and converted to
-character trigrams, and similarity is shared trigrams divided by union trigrams.
+Fuzzy matching uses trigram-containment similarity from `rust-fuzzy-search`
+(`rust_fuzzy_search::fuzzy_compare`) with `DEFAULT_FUZZY_THRESHOLD = 0.50`.
+Text is trimmed, whitespace-collapsed, and lowercased before comparison; the
+crate returns `f32` scores, bounded in `0.0..=1.0` by `Similarity`. The score is
+asymmetric: `fuzzy_compare(query, candidate)` measures how many of the query's
+trigram occurrences appear in the candidate, so query stays the first argument.
 Product name/brand/term fuzzy gates are inclusive (`>=`); category suggestion
-fuzzy gates are exclusive (`>`) to preserve the previous
-`similarity(...) > 0.30` behavior; similarity uses `f32` division so boundary
-values match pg_trgm's `real` return type. Search text is literal: `%` and `_`
-have no wildcard meaning. Text and barcodes are trimmed and case-folded before
-matching. An empty query returns catalog results with barcode-prefix matches
-first, while `History` keeps recency ordering. Tie-breaking uses Rust string
-ordering rather than the PostgreSQL database collation.
+fuzzy gates are exclusive (`>`), so exactly 0.5 passes the product gate
+(`chese` vs `Chase`) but not the category gate.
+
+The threshold was calibrated against a 30-case comparison, not the full
+production catalog. The crate is pinned to `=0.1.1`; upgrades change the scores
+and require recalibration. At 0.50:
+
+- Word-order matches work: `milk almond` vs `Almond Milk` scores about 0.8333,
+  and `yoghurt` vs `Greek Yogurt` scores 0.5 (accepted by the inclusive product
+  gate, rejected by the exclusive category gate).
+- Short near-misses mostly reject: `coke` vs `Cookies` and `rice` vs `rce` score
+  0.4, `granila` vs `Rani` 0.25, and `almnd` vs `Salmon` about 0.1667.
+- Some old matches are lost: `vegtable` vs `other-vegetables` scores about
+  0.4444 and `cheese` vs `chess` about 0.4286.
+- Some new fuzzy matches appear: `chiken` vs `Chicken Breast` scores about
+  0.7143 and `chiken` vs `Grilled Chicken Breast` about 0.5714.
+- Category suggestions inherit the raw metric: `vegtable` vs `vegetables`
+  scores about 0.6667 and matches, while `vegtable` vs `feta` scores 0.0.
+
+Search text is literal: `%` and `_` have no wildcard meaning, and `%` in
+`100% Juice` is classified as substring and bypasses the fuzzy gate (its
+similarity is still computed for tie-breaking). Text and barcodes are trimmed
+and case-folded before matching. An empty query returns catalog results with
+barcode-prefix matches first, while `History` keeps recency ordering.
+Tie-breaking uses Rust string ordering rather than the PostgreSQL database
+collation.
 
 ## Database Naming Conventions
 

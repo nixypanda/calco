@@ -4,7 +4,12 @@ use chrono::{DateTime, NaiveDate, Utc};
 
 use super::{Barcode, Brand, Category, CategorySuggestion, ProductId, ProductName};
 
-pub const DEFAULT_FUZZY_THRESHOLD: f64 = 0.30;
+/// Trigram-containment threshold for fuzzy catalog matches.
+///
+/// Exact, prefix, and substring matches bypass this gate. The underlying
+/// `rust_fuzzy_search` score is asymmetric: it measures how much of the query's
+/// trigrams appear in the candidate.
+pub const DEFAULT_FUZZY_THRESHOLD: f64 = 0.50;
 pub const PRODUCT_SEARCH_LIMIT: usize = 50;
 
 /// A validated fuzzy-match threshold.
@@ -30,8 +35,8 @@ impl Default for FuzzyThreshold {
     }
 }
 
-/// Fuzzy gates differ by call site: product matches use `>=` like pg_trgm,
-/// while category suggestions preserve the old `similarity(...) > 0.30`.
+/// Fuzzy gates differ by call site: product matches use `>=`, while category
+/// suggestions preserve the previous exclusive `> threshold` gate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ThresholdGate {
     Inclusive,
@@ -58,16 +63,6 @@ impl NormalizedText {
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-type Trigram = [char; 3];
-
-/// Text normalized and trigram-expanded once per candidate instead of once per
-/// comparison.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct PreparedText {
-    normalized: NormalizedText,
-    trigrams: Vec<Trigram>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -171,26 +166,16 @@ impl TextMatcher {
         NormalizedText(collapsed.to_lowercase())
     }
 
-    fn prepare(&self, text: &str) -> PreparedText {
-        let normalized = self.normalize(text);
-        let trigrams = trigrams(normalized.as_str());
-        PreparedText {
-            normalized,
-            trigrams,
-        }
-    }
-
-    fn prepare_optional(&self, value: Option<&str>) -> Option<PreparedText> {
+    fn normalize_optional(&self, value: Option<&str>) -> Option<NormalizedText> {
         value
             .filter(|value| !value.trim().is_empty())
-            .map(|value| self.prepare(value))
+            .map(|value| self.normalize(value))
     }
 
     #[cfg(test)]
     pub(crate) fn match_value(&self, query: &NormalizedText, value: &str) -> Option<ValueMatch> {
-        let query = self.prepare(query.as_str());
-        let value = self.prepare(value);
-        self.match_prepared_value(&query, &value, ThresholdGate::Inclusive)
+        let value = self.normalize(value);
+        self.match_value_normalized(query, &value, ThresholdGate::Inclusive)
     }
 
     #[cfg(test)]
@@ -199,48 +184,47 @@ impl TextMatcher {
         query: &NormalizedText,
         document: &SearchDocument<'_>,
     ) -> DocumentMatches {
-        let query = self.prepare(query.as_str());
-        let name = self.prepare(document.name);
-        let brand = self.prepare_optional(document.brand);
-        let identifier = self.prepare_optional(document.identifier);
+        let name = self.normalize(document.name);
+        let brand = self.normalize_optional(document.brand);
+        let identifier = self.normalize_optional(document.identifier);
         let terms = document
             .terms
             .iter()
-            .map(|term| self.prepare(term.0.as_str()))
+            .map(|term| self.normalize(term.0.as_str()))
             .collect::<Vec<_>>();
 
-        self.match_prepared_document(&query, &name, brand.as_ref(), identifier.as_ref(), &terms)
+        self.match_document_fields(query, &name, brand.as_ref(), identifier.as_ref(), &terms)
     }
 
-    fn match_prepared_document(
+    #[cfg(test)]
+    fn match_document_fields(
         &self,
-        query: &PreparedText,
-        name: &PreparedText,
-        brand: Option<&PreparedText>,
-        identifier: Option<&PreparedText>,
-        terms: &[PreparedText],
+        query: &NormalizedText,
+        name: &NormalizedText,
+        brand: Option<&NormalizedText>,
+        identifier: Option<&NormalizedText>,
+        terms: &[NormalizedText],
     ) -> DocumentMatches {
-        let mut matches = self.match_prepared_fields(query, name, brand, identifier);
+        let mut matches = self.match_fields(query, name, brand, identifier);
         // Term matches can never outrank a name, brand, or identifier match.
         if !matches.is_match() {
-            matches.term = self.match_prepared_terms(query, terms);
+            matches.term = self.match_terms(query, terms);
         }
         matches
     }
 
-    fn match_prepared_fields(
+    fn match_fields(
         &self,
-        query: &PreparedText,
-        name: &PreparedText,
-        brand: Option<&PreparedText>,
-        identifier: Option<&PreparedText>,
+        query: &NormalizedText,
+        name: &NormalizedText,
+        brand: Option<&NormalizedText>,
+        identifier: Option<&NormalizedText>,
     ) -> DocumentMatches {
-        let identifier_match =
-            identifier.and_then(|value| self.match_prepared_identifier(query, value));
+        let identifier_match = identifier.and_then(|value| self.match_identifier(query, value));
         let (name_match, name_similarity) =
-            self.match_prepared_value_scored(query, name, ThresholdGate::Inclusive);
+            self.match_value_scored(query, name, ThresholdGate::Inclusive);
         let (brand_match, brand_similarity) = brand
-            .map(|value| self.match_prepared_value_scored(query, value, ThresholdGate::Inclusive))
+            .map(|value| self.match_value_scored(query, value, ThresholdGate::Inclusive))
             .unwrap_or((None, Similarity::default()));
 
         DocumentMatches {
@@ -253,41 +237,37 @@ impl TextMatcher {
         }
     }
 
-    fn match_prepared_terms(
-        &self,
-        query: &PreparedText,
-        terms: &[PreparedText],
-    ) -> Option<ValueMatch> {
+    fn match_terms(&self, query: &NormalizedText, terms: &[NormalizedText]) -> Option<ValueMatch> {
         terms
             .iter()
-            .filter_map(|term| self.match_prepared_value(query, term, ThresholdGate::Inclusive))
+            .filter_map(|term| self.match_value_normalized(query, term, ThresholdGate::Inclusive))
             .fold(None, best_value_match)
     }
 
-    fn match_prepared_value(
+    fn match_value_normalized(
         &self,
-        query: &PreparedText,
-        value: &PreparedText,
+        query: &NormalizedText,
+        value: &NormalizedText,
         gate: ThresholdGate,
     ) -> Option<ValueMatch> {
-        self.match_prepared_value_scored(query, value, gate).0
+        self.match_value_scored(query, value, gate).0
     }
 
     /// Returns the accepted match (if any) together with the raw similarity.
     ///
     /// The similarity is needed for tie-breaking even when the fuzzy gate
     /// rejects the field, so the ranker never has to compute it twice.
-    fn match_prepared_value_scored(
+    fn match_value_scored(
         &self,
-        query: &PreparedText,
-        value: &PreparedText,
+        query: &NormalizedText,
+        value: &NormalizedText,
         gate: ThresholdGate,
     ) -> (Option<ValueMatch>, Similarity) {
-        let value_text = value.normalized.as_str();
+        let value_text = value.as_str();
         if value_text.is_empty() {
             return (None, Similarity::default());
         }
-        if query.normalized.as_str().is_empty() {
+        if query.as_str().is_empty() {
             return (
                 Some(ValueMatch {
                     kind: MatchKind::Prefix,
@@ -297,12 +277,12 @@ impl TextMatcher {
             );
         }
 
-        let similarity = prepared_similarity(query, value);
-        let kind = if value_text == query.normalized.as_str() {
+        let similarity = text_similarity(query, value);
+        let kind = if value_text == query.as_str() {
             MatchKind::Exact
-        } else if value_text.starts_with(query.normalized.as_str()) {
+        } else if value_text.starts_with(query.as_str()) {
             MatchKind::Prefix
-        } else if value_text.contains(query.normalized.as_str()) {
+        } else if value_text.contains(query.as_str()) {
             MatchKind::Substring
         } else if gate.accepts(similarity, self.threshold) {
             MatchKind::Fuzzy
@@ -313,34 +293,37 @@ impl TextMatcher {
         (Some(ValueMatch { kind, similarity }), similarity)
     }
 
-    fn match_prepared_identifier(
+    fn match_identifier(
         &self,
-        query: &PreparedText,
-        value: &PreparedText,
+        query: &NormalizedText,
+        value: &NormalizedText,
     ) -> Option<ValueMatch> {
-        let value_text = value.normalized.as_str();
+        let value_text = value.as_str();
         if value_text.is_empty() {
             return None;
         }
-        if query.normalized.as_str().is_empty() {
+        if query.as_str().is_empty() {
             return Some(ValueMatch {
                 kind: MatchKind::Prefix,
                 similarity: Similarity::default(),
             });
         }
 
-        let similarity = prepared_similarity(query, value);
-        let kind = if value_text == query.normalized.as_str() {
+        let kind = if value_text == query.as_str() {
             MatchKind::Exact
-        } else if value_text.starts_with(query.normalized.as_str()) {
+        } else if value_text.starts_with(query.as_str()) {
             MatchKind::Prefix
-        } else if value_text.contains(query.normalized.as_str()) {
+        } else if value_text.contains(query.as_str()) {
             MatchKind::Substring
         } else {
             return None;
         };
 
-        Some(ValueMatch { kind, similarity })
+        // Identifier similarity is not used by tiers or name/brand tie-breaking.
+        Some(ValueMatch {
+            kind,
+            similarity: Similarity::default(),
+        })
     }
 }
 
@@ -350,80 +333,11 @@ impl Default for TextMatcher {
     }
 }
 
-/// Character trigrams with pg_trgm-style word padding.
-fn trigrams(text: &str) -> Vec<Trigram> {
-    let mut grams = Vec::new();
-
-    for word in text.split(|character: char| !character.is_alphanumeric()) {
-        if word.is_empty() {
-            continue;
-        }
-        let mut padded = Vec::with_capacity(word.len() + 3);
-        padded.push(' ');
-        padded.push(' ');
-        padded.extend(word.chars());
-        padded.push(' ');
-        for window in padded.windows(3) {
-            grams.push([window[0], window[1], window[2]]);
-        }
-    }
-
-    grams.sort_unstable();
-    grams.dedup();
-    grams
-}
-
-fn shared_trigrams(left: &[Trigram], right: &[Trigram]) -> usize {
-    let mut left_index = 0;
-    let mut right_index = 0;
-    let mut shared = 0;
-
-    while left_index < left.len() && right_index < right.len() {
-        match left[left_index].cmp(&right[right_index]) {
-            Ordering::Less => left_index += 1,
-            Ordering::Greater => right_index += 1,
-            Ordering::Equal => {
-                shared += 1;
-                left_index += 1;
-                right_index += 1;
-            }
-        }
-    }
-
-    shared
-}
-
-fn prepared_similarity(left: &PreparedText, right: &PreparedText) -> Similarity {
-    if left.trigrams.is_empty() || right.trigrams.is_empty() {
-        return Similarity::default();
-    }
-
-    let shared = shared_trigrams(&left.trigrams, &right.trigrams);
-    let union = left.trigrams.len() + right.trigrams.len() - shared;
-    if union == 0 {
-        Similarity::default()
-    } else {
-        // pg_trgm returns `real`; use f32 division so exact-boundary cases
-        // such as 6/20 compare the same way PostgreSQL does.
-        Similarity::new((shared as f32 / union as f32) as f64)
-    }
-}
-
-#[cfg(test)]
-fn trigram_similarity(left: &str, right: &str) -> f64 {
-    let left = trigrams(left);
-    let right = trigrams(right);
-    if left.is_empty() || right.is_empty() {
-        return 0.0;
-    }
-
-    let shared = shared_trigrams(&left, &right);
-    let union = left.len() + right.len() - shared;
-    if union == 0 {
-        0.0
-    } else {
-        (shared as f32 / union as f32) as f64
-    }
+fn text_similarity(query: &NormalizedText, candidate: &NormalizedText) -> Similarity {
+    Similarity::new(f64::from(rust_fuzzy_search::fuzzy_compare(
+        query.as_str(),
+        candidate.as_str(),
+    )))
 }
 
 fn match_kind_priority(kind: MatchKind) -> u8 {
@@ -623,25 +537,24 @@ pub fn rank_catalog_candidates(
     limit: usize,
 ) -> Vec<ProductId> {
     let matcher = TextMatcher::default();
-    let query = matcher.prepare(query);
+    let query = matcher.normalize(query);
     rank_catalog_with(&matcher, &query, candidates, limit)
 }
 
 fn rank_catalog_with(
     matcher: &TextMatcher,
-    query: &PreparedText,
+    query: &NormalizedText,
     candidates: Vec<ProductSearchFields>,
     limit: usize,
 ) -> Vec<ProductId> {
     let mut ranked = Vec::with_capacity(candidates.len());
 
     for fields in candidates {
-        let name = matcher.prepare(fields.name().as_str());
-        let brand = matcher.prepare_optional(fields.brand().map(|brand| brand.0.as_str()));
+        let name = matcher.normalize(fields.name().as_str());
+        let brand = matcher.normalize_optional(fields.brand().map(|brand| brand.0.as_str()));
         let identifier =
-            matcher.prepare_optional(fields.barcode().map(|barcode| barcode.0.as_str()));
-        let matches =
-            matcher.match_prepared_document(query, &name, brand.as_ref(), identifier.as_ref(), &[]);
+            matcher.normalize_optional(fields.barcode().map(|barcode| barcode.0.as_str()));
+        let matches = matcher.match_fields(query, &name, brand.as_ref(), identifier.as_ref());
         let Some(tier) = product_tier(&matches) else {
             continue;
         };
@@ -650,7 +563,7 @@ fn rank_catalog_with(
             id: fields.id(),
             tier,
             similarity: matches.name_brand_similarity(),
-            normalized_name: name.normalized,
+            normalized_name: name,
         });
     }
 
@@ -675,37 +588,36 @@ pub fn rank_history_candidates(
     limit: usize,
 ) -> Vec<ProductId> {
     let matcher = TextMatcher::default();
-    let query = matcher.prepare(query);
+    let query = matcher.normalize(query);
     rank_history_with(&matcher, &query, candidates, limit)
 }
 
 fn rank_history_with(
     matcher: &TextMatcher,
-    query: &PreparedText,
+    query: &NormalizedText,
     candidates: Vec<HistorySearchCandidate>,
     limit: usize,
 ) -> Vec<ProductId> {
     let mut ranked = Vec::with_capacity(candidates.len());
 
     for candidate in candidates {
-        let name = matcher.prepare(candidate.fields().name().as_str());
+        let name = matcher.normalize(candidate.fields().name().as_str());
         let brand =
-            matcher.prepare_optional(candidate.fields().brand().map(|brand| brand.0.as_str()));
-        let identifier = matcher.prepare_optional(
+            matcher.normalize_optional(candidate.fields().brand().map(|brand| brand.0.as_str()));
+        let identifier = matcher.normalize_optional(
             candidate
                 .fields()
                 .barcode()
                 .map(|barcode| barcode.0.as_str()),
         );
-        let mut matches =
-            matcher.match_prepared_fields(query, &name, brand.as_ref(), identifier.as_ref());
+        let mut matches = matcher.match_fields(query, &name, brand.as_ref(), identifier.as_ref());
         if !matches.is_match() {
             let terms = candidate
                 .categories()
                 .iter()
-                .map(|term| matcher.prepare(term.0.as_str()))
+                .map(|term| matcher.normalize(term.0.as_str()))
                 .collect::<Vec<_>>();
-            matches.term = matcher.match_prepared_terms(query, &terms);
+            matches.term = matcher.match_terms(query, &terms);
         }
         let Some(tier) = product_tier(&matches) else {
             continue;
@@ -716,7 +628,7 @@ fn rank_history_with(
             recency: candidate.recency(),
             tier,
             similarity: matches.name_brand_similarity(),
-            normalized_name: name.normalized,
+            normalized_name: name,
         });
     }
 
@@ -753,13 +665,13 @@ fn rank_category_suggestions_with(
     counts: Vec<CategoryCount>,
     limit: usize,
 ) -> Vec<CategorySuggestion> {
-    let query = matcher.prepare(query);
+    let query = matcher.normalize(query);
     let mut ranked = Vec::with_capacity(counts.len());
 
     for count in counts {
-        let prepared = matcher.prepare(count.value().0.as_str());
+        let normalized = matcher.normalize(count.value().0.as_str());
         let Some(value_match) =
-            matcher.match_prepared_value(&query, &prepared, ThresholdGate::Exclusive)
+            matcher.match_value_normalized(&query, &normalized, ThresholdGate::Exclusive)
         else {
             continue;
         };
@@ -769,7 +681,7 @@ fn rank_category_suggestions_with(
             count: count.count(),
             tier: category_tier(value_match.kind),
             similarity: value_match.similarity,
-            normalized_value: prepared.normalized,
+            normalized_value: normalized,
         });
     }
 
@@ -835,6 +747,14 @@ mod tests {
 
     fn matcher(threshold: f64) -> TextMatcher {
         TextMatcher::new(FuzzyThreshold::new(threshold).expect("valid fuzzy threshold"))
+    }
+
+    fn assert_similarity_eq(actual: f64, expected: f64) {
+        const TOLERANCE: f64 = 1e-4;
+        assert!(
+            (actual - expected).abs() < TOLERANCE,
+            "expected similarity {expected}, got {actual}"
+        );
     }
 
     fn fields(
@@ -975,29 +895,79 @@ mod tests {
     }
 
     #[test]
-    fn trigram_similarity_matches_pg_trgm_examples() {
-        assert_eq!(trigram_similarity("broccoli, raw", "brocolli"), 0.375);
-        assert!((trigram_similarity("cheddar cheese", "chedar") - 0.461_538_46).abs() < 1e-6);
-        assert!((trigram_similarity("coke", "cookies") - 0.181_818_18).abs() < 1e-6);
-        assert!((trigram_similarity("rice", "rce") - 0.285_714_29).abs() < 1e-6);
-        assert!(trigram_similarity("other-vegetables", "vegtable") > 0.3);
+    fn fuzzy_similarity_uses_query_first_trigram_containment() {
+        let matcher = TextMatcher::default();
+        let query = matcher.normalize("chese");
+        let candidate = matcher.normalize("Cheese Cube");
+
+        // `milk almond` / `Almond Milk` happens to be symmetric in this crate,
+        // so use a pair whose containment differs to pin query-first behavior.
+        let forward = text_similarity(&query, &candidate);
+        let reverse = text_similarity(&candidate, &query);
+        assert_similarity_eq(forward.value(), 0.8333);
+        assert_similarity_eq(reverse.value(), 0.4167);
+        assert!(forward.value() > reverse.value());
+
+        let matched = matcher
+            .match_value(&query, "Cheese Cube")
+            .expect("chese should fuzzy-match Cheese Cube");
+        assert_eq!(matched.kind, MatchKind::Fuzzy);
+        assert_similarity_eq(matched.similarity.value(), forward.value());
     }
 
     #[test]
-    fn trigram_similarity_without_alphanumeric_trigrams_is_zero() {
-        assert_eq!(trigram_similarity("", "abc"), 0.0);
-        assert_eq!(trigram_similarity("!!!", "abc"), 0.0);
-        assert_eq!(trigram_similarity("---", "___"), 0.0);
+    fn rust_fuzzy_search_scores_match_documented_goldens() {
+        let matcher = TextMatcher::default();
+
+        // Orientation matters: `dairy` -> `dary` is exactly 0.5, while the
+        // reverse (`dary` -> `Dairy`) is 0.6.
+        for (query, candidate, expected) in [
+            ("chese", "Cheese Cube", 0.8333),
+            ("chese", "Chase", 0.5),
+            ("milk almond", "Almond Milk", 0.8333),
+            ("yoghurt", "Greek Yogurt", 0.5),
+            ("chiken", "Chicken Breast", 0.7143),
+            ("chiken", "Grilled Chicken Breast", 0.5714),
+            ("vegtable", "other-vegetables", 0.4444),
+            ("cheese", "chess", 0.4286),
+            ("coke", "Cookies", 0.4),
+            ("rice", "rce", 0.4),
+            ("almnd", "Salmon", 0.1667),
+            ("granila", "Rani", 0.25),
+            ("vegtable", "feta", 0.0),
+            ("dairy", "Cadbury", 0.1667),
+            ("chedar", "Mature Cheddar", 0.7143),
+            ("strawbery", "Ice Creams, Strawberry", 0.8),
+            ("choclate", "Almond Chocolate", 0.6667),
+            ("brocolli", "Broccoli, raw", 0.5556),
+            ("avacado", "Avocado", 0.625),
+            ("vegtable", "vegetables", 0.6667),
+            ("dairy", "dary", 0.5),
+            ("dary", "Dairy", 0.6),
+            ("abc124", "abc123", 0.7143),
+        ] {
+            let actual = text_similarity(&matcher.normalize(query), &matcher.normalize(candidate));
+            assert_similarity_eq(actual.value(), expected);
+        }
     }
 
     #[test]
-    fn known_typos_remain_product_fuzzy_matches() {
+    fn word_order_and_typo_queries_match_at_default_threshold() {
         for (query, name) in [
-            ("chedar", "Cheddar Cheese"),
             ("chese", "Cheese Cube"),
+            ("chese", "Chase"),
+            ("milk almond", "Almond Milk"),
+            ("yoghurt", "Greek Yogurt"),
+            ("chiken", "Chicken Breast"),
+            ("chiken", "Grilled Chicken Breast"),
+            ("chedar", "Mature Cheddar"),
+            ("strawbery", "Ice Creams, Strawberry"),
+            ("choclate", "Almond Chocolate"),
             ("brocolli", "Broccoli, raw"),
             ("avacado", "Avocado"),
             ("vegtable", "vegetables"),
+            ("dary", "Dairy"),
+            ("abc124", "abc123"),
         ] {
             assert_eq!(
                 rank_catalog(query, vec![fields(1, name, None, None)], 10),
@@ -1008,9 +978,66 @@ mod tests {
     }
 
     #[test]
+    fn documented_fuzzy_near_misses_are_rejected() {
+        let matcher = TextMatcher::default();
+
+        for (query, name) in [
+            ("vegtable", "other-vegetables"),
+            ("cheese", "chess"),
+            ("coke", "Cookies"),
+            ("rice", "rce"),
+            ("almnd", "Salmon"),
+            ("granila", "Rani"),
+            ("vegtable", "feta"),
+            ("dairy", "Cadbury"),
+        ] {
+            assert_eq!(
+                matcher.match_value(&matcher.normalize(query), name),
+                None,
+                "{query} should be rejected against {name}"
+            );
+            assert!(
+                rank_catalog(query, vec![fields(1, name, None, None)], 10).is_empty(),
+                "{query} should not be ranked against {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejected_near_miss_can_be_recovered_by_lower_threshold() {
+        let default_matcher = TextMatcher::default();
+        let query = default_matcher.normalize("vegtable");
+        assert_eq!(
+            default_matcher.match_value(&query, "other-vegetables"),
+            None
+        );
+
+        let lowered = matcher(0.44);
+        let matched = lowered
+            .match_value(&query, "other-vegetables")
+            .expect("lowered threshold should accept the old match");
+        assert_eq!(matched.kind, MatchKind::Fuzzy);
+        assert_similarity_eq(matched.similarity.value(), 0.4444);
+        assert!(matched.similarity.value() < DEFAULT_FUZZY_THRESHOLD);
+    }
+
+    #[test]
+    fn fuzzy_ranking_prefers_cheese_cube_over_brand_chase() {
+        let candidates = vec![
+            fields(1, "Plain base", Some("Chase"), None),
+            fields(2, "Cheese Cube", None, None),
+        ];
+
+        assert_eq!(
+            rank_catalog("chese", candidates, 10),
+            vec![product_id(2), product_id(1)]
+        );
+    }
+
+    #[test]
     fn short_unrelated_queries_do_not_match() {
-        assert!(rank_catalog("rice", vec![fields(1, "rce", None, None)], 10).is_empty());
-        assert!(rank_catalog("coke", vec![fields(1, "cookies", None, None)], 10).is_empty());
+        assert!(rank_catalog("rice", vec![fields(1, "beans", None, None)], 10).is_empty());
+        assert!(rank_catalog("coke", vec![fields(1, "milk", None, None)], 10).is_empty());
     }
 
     #[test]
@@ -1027,48 +1054,96 @@ mod tests {
     }
 
     #[test]
-    fn threshold_boundary_matches_pg_trgm_float4_behavior() {
-        let boundary = matcher(DEFAULT_FUZZY_THRESHOLD);
-        let product_match = boundary
-            .match_value(&boundary.normalize("cheese"), "chess")
-            .expect("0.30 similarity should pass the inclusive product gate");
+    fn category_suggestions_admit_trigram_near_miss_but_reject_old_match() {
+        let matcher = TextMatcher::default();
+        let query = matcher.normalize("vegtable");
+
+        assert_similarity_eq(
+            text_similarity(&query, &matcher.normalize("vegetables")).value(),
+            0.6667,
+        );
+        assert_similarity_eq(
+            text_similarity(&query, &matcher.normalize("other-vegetables")).value(),
+            0.4444,
+        );
+        assert_similarity_eq(
+            text_similarity(&query, &matcher.normalize("feta")).value(),
+            0.0,
+        );
+
+        let ranked = rank_category_suggestions(
+            "vegtable",
+            vec![
+                category_count("vegetables", 1),
+                category_count("other-vegetables", 1),
+                category_count("feta", 1),
+            ],
+            10,
+        );
+
+        assert_eq!(
+            ranked,
+            vec![CategorySuggestion {
+                value: "vegetables".into(),
+                count: 1,
+            }],
+            "the trigram near-miss passes; the old match and unrelated category are rejected"
+        );
+    }
+
+    #[test]
+    fn inclusive_and_exclusive_threshold_gates_use_trigram_containment() {
+        let default_matcher = TextMatcher::default();
+
+        let product_match = default_matcher
+            .match_value(&default_matcher.normalize("chese"), "Chase")
+            .expect("product fuzzy gate is inclusive at exactly 0.5");
         assert_eq!(product_match.kind, MatchKind::Fuzzy);
-        assert!(product_match.similarity.value() > 0.3);
+        assert_similarity_eq(product_match.similarity.value(), 0.5);
 
-        // pg_trgm returns float4, so 6/20 is slightly above 0.30 and passes
-        // the old `similarity(...) > 0.30` category predicate too.
-        let counts = vec![category_count("chess", 1)];
+        let counts = vec![category_count("chase", 1)];
+        assert!(
+            rank_category_suggestions_with(&default_matcher, "chese", counts.clone(), 10)
+                .is_empty(),
+            "category fuzzy gate is exclusive at exactly 0.5"
+        );
+
+        let below = matcher(DEFAULT_FUZZY_THRESHOLD - 0.000_001);
         assert_eq!(
-            rank_category_suggestions_with(&boundary, "cheese", counts.clone(), 10),
+            rank_category_suggestions_with(&below, "chese", counts, 10),
             vec![CategorySuggestion {
-                value: "chess".into(),
+                value: "chase".into(),
                 count: 1,
             }]
         );
 
-        assert_eq!(
+        let yoghurt_match = default_matcher
+            .match_value(&default_matcher.normalize("yoghurt"), "Greek Yogurt")
+            .expect("product fuzzy gate accepts the 0.5 word-order match");
+        assert_eq!(yoghurt_match.kind, MatchKind::Fuzzy);
+        assert_similarity_eq(yoghurt_match.similarity.value(), 0.5);
+
+        assert!(
             rank_category_suggestions_with(
-                &boundary,
-                "vegtable",
-                vec![category_count("other-vegetables", 1)],
-                10
-            ),
-            vec![CategorySuggestion {
-                value: "other-vegetables".into(),
-                count: 1,
-            }]
+                &default_matcher,
+                "yoghurt",
+                vec![category_count("greek yogurt", 1)],
+                10,
+            )
+            .is_empty(),
+            "category gate rejects the 0.5 word-order match"
         );
-
-        let strict = matcher(0.31);
-        assert_eq!(
-            strict.match_value(&strict.normalize("cheese"), "chess"),
-            None
-        );
-        assert!(rank_category_suggestions_with(&strict, "cheese", counts, 10).is_empty());
     }
 
     #[test]
     fn wildcard_characters_are_literal() {
+        let matcher = TextMatcher::default();
+        let percent = matcher
+            .match_value(&matcher.normalize("%"), "100% Juice")
+            .expect("literal '%' should match by substring");
+        assert_eq!(percent.kind, MatchKind::Substring);
+        assert_similarity_eq(percent.similarity.value(), 0.0);
+
         let candidates = vec![
             fields(1, "Zebra", None, None),
             fields(2, "100% Juice", None, None),
@@ -1181,6 +1256,30 @@ mod tests {
     }
 
     #[test]
+    fn identifier_matches_have_zero_similarity() {
+        let matcher = TextMatcher::default();
+
+        for (query, expected_kind) in [
+            ("abc123", MatchKind::Exact),
+            ("abc", MatchKind::Prefix),
+            ("bc1", MatchKind::Substring),
+        ] {
+            let query = matcher.normalize(query);
+            let document = SearchDocument {
+                name: "Plain base",
+                brand: None,
+                identifier: Some("abc123"),
+                terms: &[],
+            };
+
+            let matches = matcher.match_document(&query, &document);
+            let identifier = matches.identifier.expect("identifier should match");
+            assert_eq!(identifier.kind, expected_kind);
+            assert_eq!(identifier.similarity.value(), 0.0);
+        }
+    }
+
+    #[test]
     fn term_only_matches_are_found_and_rank_as_fuzzy() {
         let matcher = TextMatcher::default();
         let query = matcher.normalize("dairy");
@@ -1216,9 +1315,8 @@ mod tests {
         assert_eq!(matches.name, None);
         assert_eq!(matches.brand, None);
         assert_eq!(matches.term.unwrap().kind, MatchKind::Exact);
-        assert!(matches.name_similarity.value() > 0.4);
-        assert!(matches.name_similarity.value() < 0.5);
-        assert!(matches.brand_similarity.value() > 0.0);
+        assert_similarity_eq(matches.name_similarity.value(), 0.6667);
+        assert!(matches.brand_similarity.value() > 0.6);
     }
 
     #[test]
@@ -1336,10 +1434,42 @@ mod tests {
     }
 
     #[test]
+    fn empty_history_query_orders_by_recency() {
+        let older = history(1, "Zebra", None, None, &[], (2026, 1, 1), 12);
+        let newer = history(2, "Apple", None, None, &[], (2026, 1, 2), 12);
+        let same_day_early = history(3, "Mango", None, None, &[], (2026, 1, 3), 8);
+        let same_day_late = history(4, "Banana", None, None, &[], (2026, 1, 3), 20);
+
+        assert_eq!(
+            rank_history_candidates("   ", vec![older, newer, same_day_early, same_day_late], 10),
+            vec![product_id(4), product_id(3), product_id(2), product_id(1)]
+        );
+    }
+
+    #[test]
     fn history_category_only_match_is_returned() {
         let candidate = history(1, "Plain base", None, None, &["dairy"], (2026, 1, 1), 12);
 
         let ranked = rank_history_candidates("dairy", vec![candidate], 10);
+
+        assert_eq!(ranked, vec![product_id(1)]);
+    }
+
+    #[test]
+    fn history_category_term_match_uses_query_first_asymmetry() {
+        // Forward is `chese` -> `cheese cube` (~0.8333); reversed it would be
+        // ~0.4167 and fail the fuzzy gate.
+        let candidate = history(
+            1,
+            "Plain base",
+            None,
+            None,
+            &["Cheese Cube"],
+            (2026, 1, 1),
+            12,
+        );
+
+        let ranked = rank_history_candidates("chese", vec![candidate], 10);
 
         assert_eq!(ranked, vec![product_id(1)]);
     }
@@ -1352,12 +1482,16 @@ mod tests {
             category_count("dairy", 2),
             category_count("dairy free", 1),
             category_count("non dairy", 100),
+            category_count("daiiry", 50),
             category_count("dairi", 50),
             category_count("dary", 50),
         ];
 
         let ranked = rank_category_suggestions("dairy", counts, 10);
 
+        // `dary` scores exactly 0.5, so the exclusive category gate rejects it.
+        // The remaining fuzzy tier is ordered by `daiiry` (0.8333) then
+        // `dairi` (0.6667).
         assert_eq!(
             ranked,
             vec![
@@ -1382,11 +1516,11 @@ mod tests {
                     count: 100,
                 },
                 CategorySuggestion {
-                    value: "dairi".into(),
+                    value: "daiiry".into(),
                     count: 50,
                 },
                 CategorySuggestion {
-                    value: "dary".into(),
+                    value: "dairi".into(),
                     count: 50,
                 },
             ]

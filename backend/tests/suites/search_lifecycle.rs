@@ -628,11 +628,11 @@ async fn category_suggestions_rank_prefix_substring_fuzzy_and_count(pool: PgPool
         &user,
         "Veggie Probe",
         "Category Lab",
-        &["other-vegetables"],
+        &["vegetables"],
     )
     .await;
-    let boundary = category_suggestions(&router, &user, Some("vegtable")).await;
-    assert_eq!(boundary, vec![("other-vegetables".to_string(), 1)]);
+    let typo = category_suggestions(&router, &user, Some("vegtable")).await;
+    assert_eq!(typo, vec![("vegetables".to_string(), 1)]);
 }
 
 #[sqlx::test]
