@@ -432,7 +432,6 @@ impl AmountPer100g {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Product {
     pub id: ProductId,
     pub origin: ProductOrigin,
@@ -782,7 +781,6 @@ fn default_portion_parts(
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct ProductNutrient {
     pub nutrient_code: NutrientCode,
     pub amount_per_100g: AmountPer100g,

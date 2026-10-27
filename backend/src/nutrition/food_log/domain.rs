@@ -141,7 +141,6 @@ impl FoodLogItemSnapshot {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct FoodLogNutrientSnapshot {
     pub nutrient_code: NutrientCode,
     pub amount: Decimal,
@@ -149,7 +148,6 @@ pub struct FoodLogNutrientSnapshot {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct FoodLog {
     id: FoodLogId,
     user_id: Uuid,

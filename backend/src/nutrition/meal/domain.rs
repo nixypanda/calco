@@ -55,13 +55,11 @@ impl MealName {
 pub struct MealNotes(pub String);
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum MealComponentItem {
     Product(ProductId),
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct MealComponent {
     pub id: Uuid,
     pub item: MealComponentItem,
@@ -82,7 +80,6 @@ impl MealComponent {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Meal {
     pub id: MealId,
     pub user_id: Uuid,
