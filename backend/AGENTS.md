@@ -9,7 +9,11 @@ This directory contains the Rust backend. Also read the repository root
 - `src/lib.rs` is the app composition root (`AppState`, `build_app_state`,
   `build_router`).
 - Code is organized by bounded context first, then layer:
-  `auth/`, `nutrition/`, and `import/`.
+  `auth/`, `nutrition/`, `import/`, and `assistant/`.
+- `infrastructure` is always a directory with `mod.rs`. One PostgreSQL
+  repository uses `infrastructure/postgres.rs`; multiple repositories use
+  `infrastructure/postgres/` with one module per repository. Non-Postgres
+  adapters live under `infrastructure/`.
 - Normal dependency direction is:
 
 ```text
@@ -20,7 +24,7 @@ infrastructure/postgres -> domain ports
 ## Domain Rules
 
 - Keep repository traits in `domain`; PostgreSQL implementations belong under
-  `infrastructure/postgres`.
+  `infrastructure/postgres.rs` or `infrastructure/postgres/`.
 - Repositories are persistence/query ports, not business-action services. Use
   storage-shaped names such as `create`, `find_by_*`, `list_by_*`, `update`,
   and `delete`.

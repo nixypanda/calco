@@ -1,0 +1,3 @@
+mod static_nutrient_guidance;
+
+pub use static_nutrient_guidance::StaticNutrientGuidanceRepository;

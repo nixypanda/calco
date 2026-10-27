@@ -45,7 +45,8 @@ locking and error-handling semantics.
 
 ### Catalog external upsert
 
-`backend/src/nutrition/catalog/infrastructure.rs` — `upsert_external_many`.
+`backend/src/nutrition/catalog/infrastructure/postgres/product/mod.rs` —
+`upsert_external_many`.
 
 Two pieces remain raw:
 
@@ -60,7 +61,7 @@ The insert and identity-resolve parts of the same method do use sea-query.
 
 ### Catalog UNNEST child helpers
 
-`backend/src/nutrition/catalog/infrastructure.rs`
+`backend/src/nutrition/catalog/infrastructure/postgres/product/children.rs`
 
 Functions: `insert_product_nutrients`, `insert_product_servings`,
 `replace_product_nutrients`, `replace_product_servings`.
@@ -72,7 +73,8 @@ performance.
 
 ### Food-log UNNEST nutrient helper
 
-`backend/src/nutrition/food_log/infrastructure.rs` — `insert_food_log_nutrients`.
+`backend/src/nutrition/food_log/infrastructure/postgres.rs` —
+`insert_food_log_nutrients`.
 
 Uses `WITH ins AS (INSERT ... SELECT ... FROM UNNEST(...) RETURNING 1) SELECT
 COUNT(*)` plus unknown-code validation. Same rationale as the catalog UNNEST

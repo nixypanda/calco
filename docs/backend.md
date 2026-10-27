@@ -2,7 +2,10 @@
 
 ## Overview
 
-The backend is a Rust service built with axum and sqlx. The code is organized by bounded context first, then by layer:
+The backend is a Rust service built with axum and sqlx. The code is organized
+by bounded context first. `auth`, `import`, and `assistant` nest their layers
+directly; `nutrition` is feature-first, with one folder per sub-context, each
+nesting its own layers:
 
 ```text
 backend/src/
@@ -12,44 +15,112 @@ backend/src/
     application/
       api_key.rs
       ...
-    infrastructure/postgres/
-      api_key_repository.rs
-      ...
-    interfaces/http.rs
+    infrastructure/
+      mod.rs
+      argon2_credentials.rs
+      postgres/
+        mod.rs
+        api_key_repository.rs
+        ...
+    interfaces/
+      mod.rs
+      http.rs
+    module.rs
   import/
     domain.rs
     application.rs
-    infrastructure/postgres.rs
-    interfaces/http.rs
-  nutrition/
-    domain/
-      calculation.rs     # Quantity, CalculatedNutrition, NutritionCalculator
-      error.rs           # NutritionError
-      units.rs           # UnitConverter
-      catalog.rs
-      diary_preferences.rs
-      goal_target.rs
-      meal.rs
-      food_log.rs
+    infrastructure/
+      mod.rs
+      postgres.rs
+    interfaces/
+      mod.rs
+      http.rs
+    module.rs
+  assistant/
+    domain.rs
     application/
-      diary_preferences.rs
-      goal_target.rs
-      meal.rs
-      food_log/
-    infrastructure/postgres/
-      catalog.rs
-      diary_preferences.rs
-      goal_target.rs
-      meal.rs
-      food_log.rs
-    interfaces/http/
-      mod.rs             # NutritionError -> IntoResponse, error_response, internal_error
-      catalog.rs
-      diary_preferences.rs
-      goal_target.rs
-      meal.rs
-      food_log.rs
+      mod.rs
+      food_draft.rs
+    infrastructure/
+      mod.rs
+      request_admission.rs
+      nutrition_catalog.rs
+      images.rs
+      food_draft/
+      llm/
+    interfaces/
+      mod.rs
+      http.rs
+    composition.rs
+  nutrition/
+    error.rs             # NutritionError
+    interfaces.rs        # shared HTTP error glue
+    module.rs            # NutritionModule composition root
+    catalog/
+      domain/
+        mod.rs
+        calculation.rs   # Quantity, CalculatedNutrition, NutritionCalculator
+        units.rs         # UnitConverter
+        search_ranking.rs
+      application.rs
+      infrastructure/
+        mod.rs
+        open_food_facts.rs
+        postgres/
+          mod.rs
+          iden.rs
+          nutrient_repository.rs
+          unit_repository.rs
+          product/
+            mod.rs       # PostgresProductRepository
+            statements.rs
+            rows.rs
+            children.rs
+            tests.rs
+      interfaces.rs
+    food_log/
+      domain.rs
+      application/
+        mod.rs
+        history.rs
+        services.rs
+        test_support.rs
+      infrastructure/
+        mod.rs
+        postgres.rs
+      interfaces.rs
+    meal/
+      domain.rs
+      application.rs
+      infrastructure/
+        mod.rs
+        postgres.rs
+      interfaces.rs
+    goals/
+      domain.rs
+      application.rs
+      infrastructure/
+        mod.rs
+        postgres.rs
+      interfaces.rs
+    guidance/
+      domain.rs
+      application.rs
+      infrastructure/
+        mod.rs
+        static_nutrient_guidance.rs
+      interfaces.rs
+    diary/
+      domain.rs
+      application.rs
+      infrastructure/
+        mod.rs
+        postgres.rs
+      interfaces.rs
 ```
+
+The tree is selective: `main.rs`, `config/`, and the context-root `mod.rs`
+files are omitted for brevity.
 
 `AppState` is the app-wide composition root and lives in `lib.rs`. The
 `ReadUser` and `WriteUser` extractors live in `auth/interfaces/http.rs` and are
@@ -72,6 +143,30 @@ them. The application layer composes domain operations and repositories into
 use cases without issuing SQL. Shared domain error enums currently contain
 `sqlx::Error` variants, so persistence is not yet fully absent from domain
 types; avoid extending that coupling.
+
+### Infrastructure Layout
+
+`infrastructure` is always a directory with a `mod.rs`.
+
+- A context with one PostgreSQL repository uses `infrastructure/postgres.rs`.
+- A context with multiple PostgreSQL repositories uses
+  `infrastructure/postgres/`, with one module per repository and a `mod.rs` that
+  re-exports them.
+- A large repository may use `postgres/<repository>/` as a module directory:
+  `mod.rs` owns the repository implementation, while private helper modules hold
+  statements, row mapping, child writes, and tests. The catalog `product/`
+  module is the current example.
+- Schema identifiers shared by more than one repository live in
+  `postgres/iden.rs`; repository-local identifiers stay with their repository.
+- Non-PostgreSQL adapters live under `infrastructure/`. A single-file adapter is
+  a top-level file; an adapter family uses its own directory (`llm/`,
+  `food_draft/`).
+
+Catalog uses the multi-repository shape (`product/`, `nutrient_repository.rs`,
+`unit_repository.rs`) plus the Open Food Facts adapter. Auth uses
+`postgres/` for its four repositories plus the Argon2 adapter. Import, food
+logs, meals, goals, and diary preferences use the single-repository shape.
+Guidance keeps its static, non-Postgres adapter directly under `infrastructure/`.
 
 ### Repository Ports
 
