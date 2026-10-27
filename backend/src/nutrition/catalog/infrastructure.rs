@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use sea_query::extension::postgres::PgExpr;
 use sea_query::{
@@ -12,6 +12,9 @@ use sqlx::{Postgres, QueryBuilder};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
+use crate::nutrition::catalog::domain::search_ranking::{
+    CategoryCount, HistorySearchCandidate, ProductSearchFields, SearchRecency,
+};
 use crate::nutrition::catalog::domain::*;
 
 mod open_food_facts;
@@ -22,6 +25,45 @@ pub use open_food_facts::OpenFoodFactsClient;
 const SEARCH_NUTRIENT_CODES: [&str; 5] =
     ["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G"];
 const PRODUCT_UPSERT_CHUNK_SIZE: usize = 1_000;
+
+// Ranking lives in `domain/search_ranking.rs`. These candidate queries only
+// apply storage filters; they intentionally contain no text matching, ranking,
+// ordering, or pre-ranking limit.
+const CATALOG_SEARCH_CANDIDATES_SQL: &str = r#"
+    SELECT id, name, brand, barcode
+    FROM products
+    WHERE deleted_at IS NULL
+      AND (cardinality($1::text[]) = 0 OR categories @> $1::text[])
+      AND (cardinality($2::text[]) = 0 OR NOT categories && $2::text[])
+"#;
+
+const CUSTOM_SEARCH_CANDIDATES_SQL: &str = r#"
+    SELECT id, name, brand, barcode
+    FROM products
+    WHERE deleted_at IS NULL
+      AND source = 'USER'
+      AND (cardinality($1::text[]) = 0 OR categories @> $1::text[])
+      AND (cardinality($2::text[]) = 0 OR NOT categories && $2::text[])
+"#;
+
+const HISTORY_SEARCH_CANDIDATES_SQL: &str = r#"
+    WITH latest_logs AS (
+        SELECT item_product_id AS product_id,
+               MAX(log_date) AS last_log_date,
+               MAX(created_at) AS last_logged_at
+        FROM food_logs
+        WHERE user_id = $1
+          AND item_product_id IS NOT NULL
+        GROUP BY item_product_id
+    )
+    SELECT p.id, p.name, p.brand, p.barcode, p.categories,
+           l.last_log_date, l.last_logged_at
+    FROM products p
+    JOIN latest_logs l ON l.product_id = p.id
+    WHERE p.deleted_at IS NULL
+      AND (cardinality($2::text[]) = 0 OR p.categories @> $2::text[])
+      AND (cardinality($3::text[]) = 0 OR NOT p.categories && $3::text[])
+"#;
 
 #[derive(Iden)]
 enum Products {
@@ -211,6 +253,15 @@ fn find_product_statement(id: Uuid) -> SelectStatement {
         .columns(product_columns())
         .from(Products::Table)
         .and_where(Expr::col(Products::Id).eq(id))
+        .and_where(Expr::col(Products::DeletedAt).is_null())
+        .to_owned()
+}
+
+fn find_search_summaries_statement(product_ids: Vec<Uuid>) -> SelectStatement {
+    Query::select()
+        .columns(product_columns())
+        .from(Products::Table)
+        .and_where(Expr::col(Products::Id).eq_any(product_ids))
         .and_where(Expr::col(Products::DeletedAt).is_null())
         .to_owned()
 }
@@ -587,227 +638,131 @@ impl PostgresProductRepository {
 
 #[async_trait]
 impl ProductRepository for PostgresProductRepository {
-    async fn search(
+    async fn search_catalog_candidates(
         &self,
-        query: ProductSearchSpec,
-        scope: ProductSearchScope,
-        user_id: Option<Uuid>,
-    ) -> Result<Vec<Product>, NutritionError> {
-        let include: Vec<String> = query
+        spec: &ProductSearchSpec,
+        scope: CatalogSearchScope,
+    ) -> Result<Vec<ProductSearchFields>, NutritionError> {
+        let include: Vec<String> = spec
             .include_categories
             .iter()
-            .map(|c| c.0.clone())
+            .map(|category| category.0.clone())
             .collect();
-        let exclude: Vec<String> = query
+        let exclude: Vec<String> = spec
             .exclude_categories
             .iter()
-            .map(|c| c.0.clone())
+            .map(|category| category.0.clone())
             .collect();
-
-        // The three search queries stay raw: they rely on pg_trgm similarity,
-        // text[] containment/overlap, and a history CTE with per-scope
-        // parameter numbering. Rebuilding them in sea-query would obscure the
-        // ranking logic without changing the Postgres-only SQL.
-        let rows = match scope {
-            ProductSearchScope::All => {
-                sqlx::query_as::<_, ProductRow>(
-                    r#"
-                    SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                           categories, default_quantity, default_unit,
-                           created_at, updated_at
-                    FROM products
-                    WHERE deleted_at IS NULL
-                      AND ($1 = ''
-                           OR name ILIKE '%' || $1 || '%'
-                           OR brand ILIKE '%' || $1 || '%'
-                           OR barcode ILIKE '%' || $1 || '%'
-                           OR lower(name) % lower($1)
-                           OR (brand IS NOT NULL AND lower(brand) % lower($1)))
-                      AND (cardinality($2::text[]) = 0 OR categories @> $2::text[])
-                      AND (cardinality($3::text[]) = 0 OR NOT categories && $3::text[])
-                    ORDER BY
-                        CASE
-                            WHEN barcode = $1 THEN 0
-                            WHEN barcode ILIKE $1 || '%' THEN 1
-                            WHEN name ILIKE $1 || '%' THEN 2
-                            WHEN name ILIKE '%' || $1 || '%' THEN 3
-                            WHEN brand ILIKE $1 || '%' THEN 4
-                            WHEN brand ILIKE '%' || $1 || '%' THEN 5
-                            ELSE 6
-                        END,
-                        GREATEST(
-                            similarity(lower(name), lower($1)),
-                            similarity(lower(COALESCE(brand, '')), lower($1))
-                        ) DESC,
-                        lower(name)
-                    LIMIT 50
-                    "#,
-                )
-                .bind(&query.text)
-                .bind(&include)
-                .bind(&exclude)
-                .fetch_all(&self.pool)
-                .await?
-            }
-            ProductSearchScope::Custom => {
-                sqlx::query_as::<_, ProductRow>(
-                    r#"
-                    SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                           categories, default_quantity, default_unit,
-                           created_at, updated_at
-                    FROM products
-                    WHERE deleted_at IS NULL
-                      AND source = 'USER'
-                      AND ($1 = ''
-                           OR name ILIKE '%' || $1 || '%'
-                           OR brand ILIKE '%' || $1 || '%'
-                           OR barcode ILIKE '%' || $1 || '%'
-                           OR lower(name) % lower($1)
-                           OR (brand IS NOT NULL AND lower(brand) % lower($1)))
-                      AND (cardinality($2::text[]) = 0 OR categories @> $2::text[])
-                      AND (cardinality($3::text[]) = 0 OR NOT categories && $3::text[])
-                    ORDER BY
-                        CASE
-                            WHEN barcode = $1 THEN 0
-                            WHEN barcode ILIKE $1 || '%' THEN 1
-                            WHEN name ILIKE $1 || '%' THEN 2
-                            WHEN name ILIKE '%' || $1 || '%' THEN 3
-                            WHEN brand ILIKE $1 || '%' THEN 4
-                            WHEN brand ILIKE '%' || $1 || '%' THEN 5
-                            ELSE 6
-                        END,
-                        GREATEST(
-                            similarity(lower(name), lower($1)),
-                            similarity(lower(COALESCE(brand, '')), lower($1))
-                        ) DESC,
-                        lower(name)
-                    LIMIT 50
-                    "#,
-                )
-                .bind(&query.text)
-                .bind(&include)
-                .bind(&exclude)
-                .fetch_all(&self.pool)
-                .await?
-            }
-            ProductSearchScope::History => {
-                sqlx::query_as::<_, ProductRow>(
-                    r#"
-                    WITH latest_logs AS (
-                        SELECT item_product_id AS product_id,
-                               MAX(log_date) AS last_log_date,
-                               MAX(created_at) AS last_logged_at
-                        FROM food_logs
-                        WHERE user_id = $2
-                          AND item_product_id IS NOT NULL
-                        GROUP BY item_product_id
-                    )
-                    SELECT p.id, p.source, p.source_id, p.user_id, p.visibility, p.barcode,
-                           p.name, p.brand, p.categories, p.default_quantity, p.default_unit,
-                           p.created_at, p.updated_at
-                    FROM products p
-                    JOIN latest_logs l ON l.product_id = p.id
-                    WHERE p.deleted_at IS NULL
-                      AND ($1 = ''
-                           OR p.name ILIKE '%' || $1 || '%'
-                           OR p.brand ILIKE '%' || $1 || '%'
-                           OR p.barcode ILIKE '%' || $1 || '%'
-                           OR EXISTS (
-                               SELECT 1 FROM unnest(p.categories) AS category
-                               WHERE category ILIKE '%' || $1 || '%'
-                                  OR lower(category) % lower($1)
-                           )
-                           OR lower(p.name) % lower($1)
-                           OR (p.brand IS NOT NULL AND lower(p.brand) % lower($1)))
-                      AND (cardinality($3::text[]) = 0 OR p.categories @> $3::text[])
-                      AND (cardinality($4::text[]) = 0 OR NOT p.categories && $4::text[])
-                    ORDER BY
-                        l.last_log_date DESC,
-                        l.last_logged_at DESC,
-                        CASE
-                            WHEN p.barcode = $1 THEN 0
-                            WHEN p.barcode ILIKE $1 || '%' THEN 1
-                            WHEN p.name ILIKE $1 || '%' THEN 2
-                            WHEN p.name ILIKE '%' || $1 || '%' THEN 3
-                            WHEN p.brand ILIKE $1 || '%' THEN 4
-                            WHEN p.brand ILIKE '%' || $1 || '%' THEN 5
-                            ELSE 6
-                        END,
-                        GREATEST(
-                            similarity(lower(p.name), lower($1)),
-                            similarity(lower(COALESCE(p.brand, '')), lower($1))
-                        ) DESC,
-                        lower(p.name)
-                    LIMIT 50
-                    "#,
-                )
-                .bind(&query.text)
-                .bind(user_id)
-                .bind(&include)
-                .bind(&exclude)
-                .fetch_all(&self.pool)
-                .await?
-            }
+        let sql = match scope {
+            CatalogSearchScope::All => CATALOG_SEARCH_CANDIDATES_SQL,
+            CatalogSearchScope::Custom => CUSTOM_SEARCH_CANDIDATES_SQL,
         };
+        let rows = sqlx::query_as::<_, ProductSearchCandidateRow>(sql)
+            .bind(&include)
+            .bind(&exclude)
+            .fetch_all(&self.pool)
+            .await?;
 
-        let product_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-        let summary_nutrients_by_product = self.load_summary_nutrients(&product_ids).await?;
-
-        rows.into_iter()
-            .map(|r| {
-                let nutrients = summary_nutrients_by_product
-                    .get(&r.id)
-                    .cloned()
-                    .unwrap_or_default();
-                product_row_to_product(r, nutrients, vec![])
-            })
-            .collect()
+        Ok(rows
+            .into_iter()
+            .filter_map(product_search_fields_from_row)
+            .collect())
     }
 
-    async fn list_categories(
+    async fn search_history_candidates(
         &self,
-        query: &str,
-        _user_id: Option<Uuid>,
-        limit: i64,
-    ) -> Result<Vec<CategorySuggestion>, NutritionError> {
-        // Raw by design: category search uses UNNEST plus pg_trgm similarity,
-        // which sea-query does not model with enough clarity to justify a
-        // rewrite.
-        let rows = sqlx::query_as::<_, CategorySuggestionRow>(
+        spec: &ProductSearchSpec,
+        user_id: Uuid,
+    ) -> Result<Vec<HistorySearchCandidate>, NutritionError> {
+        let include: Vec<String> = spec
+            .include_categories
+            .iter()
+            .map(|category| category.0.clone())
+            .collect();
+        let exclude: Vec<String> = spec
+            .exclude_categories
+            .iter()
+            .map(|category| category.0.clone())
+            .collect();
+        let rows = sqlx::query_as::<_, HistorySearchCandidateRow>(HISTORY_SEARCH_CANDIDATES_SQL)
+            .bind(user_id)
+            .bind(&include)
+            .bind(&exclude)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .filter_map(history_search_candidate_from_row)
+            .collect())
+    }
+
+    async fn category_counts(&self) -> Result<Vec<CategoryCount>, NutritionError> {
+        // Ranking lives in `domain/search_ranking.rs`; only storage aggregation
+        // remains here.
+        let rows = sqlx::query_as::<_, CategoryCountRow>(
             r#"
             SELECT category AS value, COUNT(*)::BIGINT AS count
             FROM products p
             CROSS JOIN LATERAL UNNEST(p.categories) AS category
             WHERE p.deleted_at IS NULL
-              AND ($1 = ''
-                   OR category ILIKE $1 || '%'
-                   OR category ILIKE '%' || $1 || '%'
-                   OR similarity(lower(category), lower($1)) > 0.30)
+              AND btrim(p.name) <> ''
             GROUP BY category
-            ORDER BY
-                CASE
-                    WHEN category ILIKE $1 || '%' THEN 0
-                    WHEN category ILIKE '%' || $1 || '%' THEN 1
-                    ELSE 2
-                END,
-                COUNT(*) DESC,
-                similarity(lower(category), lower($1)) DESC,
-                category
-            LIMIT $2
             "#,
         )
-        .bind(query)
-        .bind(limit)
         .fetch_all(&self.pool)
         .await?;
 
         Ok(rows
             .into_iter()
-            .map(|r| CategorySuggestion {
-                value: r.value,
-                count: r.count,
+            .filter_map(|row| {
+                let Some(value) = Category::new(&row.value) else {
+                    tracing::warn!(
+                        category = %row.value,
+                        "skipping blank stored category count"
+                    );
+                    return None;
+                };
+                let Some(count) = CategoryCount::new(value, row.count) else {
+                    tracing::warn!(
+                        category = %row.value,
+                        count = row.count,
+                        "skipping category count with a negative count"
+                    );
+                    return None;
+                };
+                Some(count)
             })
             .collect())
+    }
+
+    async fn find_search_summaries(
+        &self,
+        ids: &[ProductId],
+    ) -> Result<Vec<Product>, NutritionError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let product_ids: Vec<Uuid> = ids.iter().map(|id| id.0).collect();
+        let (sql, values) =
+            find_search_summaries_statement(product_ids.clone()).build_sqlx(PostgresQueryBuilder);
+        let rows =
+            sqlx::query_as_with::<_, ProductRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .fetch_all(&self.pool)
+                .await?;
+
+        let summary_nutrients_by_product = self.load_summary_nutrients(&product_ids).await?;
+
+        rows.into_iter()
+            .map(|row| {
+                let nutrients = summary_nutrients_by_product
+                    .get(&row.id)
+                    .cloned()
+                    .unwrap_or_default();
+                product_row_to_product(row, nutrients, vec![])
+            })
+            .collect()
     }
 
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError> {
@@ -1168,9 +1123,86 @@ struct ProductServingWithProductRow {
 }
 
 #[derive(sqlx::FromRow)]
-struct CategorySuggestionRow {
+struct ProductSearchCandidateRow {
+    id: Uuid,
+    name: String,
+    brand: Option<String>,
+    barcode: Option<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct HistorySearchCandidateRow {
+    id: Uuid,
+    name: String,
+    brand: Option<String>,
+    barcode: Option<String>,
+    categories: Vec<String>,
+    last_log_date: NaiveDate,
+    last_logged_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct CategoryCountRow {
     value: String,
     count: i64,
+}
+
+fn product_search_fields_from_row(row: ProductSearchCandidateRow) -> Option<ProductSearchFields> {
+    let id = ProductId(row.id);
+    let name = match ProductName::new(&row.name) {
+        Ok(name) => name,
+        Err(error) => {
+            tracing::warn!(
+                product_id = %id.0,
+                error = %error,
+                "skipping search candidate with an invalid stored name"
+            );
+            return None;
+        }
+    };
+
+    Some(ProductSearchFields::new(id, name, row.brand, row.barcode))
+}
+
+fn history_search_candidate_from_row(
+    row: HistorySearchCandidateRow,
+) -> Option<HistorySearchCandidate> {
+    let HistorySearchCandidateRow {
+        id,
+        name,
+        brand,
+        barcode,
+        categories,
+        last_log_date,
+        last_logged_at,
+    } = row;
+    let fields = product_search_fields_from_row(ProductSearchCandidateRow {
+        id,
+        name,
+        brand,
+        barcode,
+    })?;
+    let product_id = fields.id().0;
+    let categories: Vec<Category> = categories
+        .into_iter()
+        .filter_map(|value| match Category::new(&value) {
+            Some(category) => Some(category),
+            None => {
+                tracing::warn!(
+                    product_id = %product_id,
+                    category = %value,
+                    "skipping blank stored category on history candidate"
+                );
+                None
+            }
+        })
+        .collect();
+
+    Some(HistorySearchCandidate::new(
+        fields,
+        categories,
+        SearchRecency::new(last_log_date, last_logged_at),
+    ))
 }
 
 fn product_row_to_product(
