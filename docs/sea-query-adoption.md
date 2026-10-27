@@ -19,8 +19,9 @@ Dependencies:
 - Goals and diary preferences: all repository queries.
 - Meals: parent and component create/read/list/update/delete.
 - Catalog: product CRUD, nutrient/serving loads, `existing_ids`,
-  barcode/custom-product queries, the external-upsert insert and identity
-  resolve, nutrient-ID lookup, and nutrient/unit repositories.
+  barcode/custom-product queries, search candidate queries, category counts,
+  the external-upsert insert and identity resolve, nutrient-ID lookup, and
+  nutrient/unit repositories.
 
 Every converted query is built with `sea-query`, rendered with
 `PostgresQueryBuilder`, and executed through parameterized `sqlx` calls using
@@ -41,24 +42,6 @@ It relies on per-row staging upserts, row-level error recording,
 `SELECT ... FOR UPDATE` locking, status transitions, and transaction-heavy
 commit logic. Sea-query would not remove that complexity and could obscure the
 locking and error-handling semantics.
-
-### Catalog search
-
-`backend/src/nutrition/catalog/infrastructure.rs` — the three
-`ProductSearchScope` queries (`All`, `Custom`, `History`).
-
-The queries use PostgreSQL-specific search behavior: pg_trgm `%` and
-`similarity()`, `ILIKE`, `text[]` containment/overlap (`@>`, `&&`),
-`cardinality`, a history CTE, `GREATEST`, and CASE-based ranking. Expressing
-this in sea-query would require many `Expr::cust` fragments and hide the search
-semantics.
-
-### Category suggestions
-
-`backend/src/nutrition/catalog/infrastructure.rs` — `list_categories`.
-
-Uses `CROSS JOIN LATERAL UNNEST(p.categories)`, `ILIKE`, `similarity()`,
-grouping, and custom ranking. Same rationale as catalog search.
 
 ### Catalog external upsert
 
@@ -113,9 +96,14 @@ to the query builder.
 
 ## Boundary rule
 
-Use sea-query where it clearly helps: dynamic predicates, CRUD, upserts, array
-binds, and ordering. Keep raw SQL where the statement is mostly a
-PostgreSQL-specific bulk, array, locking, or search construct.
+Use sea-query where it clearly helps: dynamic predicates, CRUD, upserts,
+PostgreSQL array binds, and ordering. Keep raw SQL only for bulk, locking, or
+import workflows where builder indirection would obscure the transactional
+semantics.
+
+Fixed PostgreSQL function names such as `unnest` and `btrim` still use
+`Func::cust` because sea-query has no first-class helper; these are static
+identifiers, not interpolated user input.
 
 All remaining raw production SQL is parameterized; no user input is
 interpolated. The main future candidate for conversion is the import

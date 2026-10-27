@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -5,6 +6,14 @@ use async_trait::async_trait;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+#[cfg(test)]
+use crate::nutrition::catalog::domain::search_ranking::{
+    CategoryCount, HistorySearchCandidate, ProductSearchFields,
+};
+use crate::nutrition::catalog::domain::search_ranking::{
+    PRODUCT_SEARCH_LIMIT, rank_catalog_candidates, rank_category_suggestions,
+    rank_history_candidates,
+};
 use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::*;
 
@@ -95,18 +104,48 @@ impl CatalogService {
         spec: ProductSearchSpec,
         scope: ProductSearchScope,
     ) -> Result<Vec<Product>, NutritionError> {
-        self.product_repo.search(spec, scope, Some(actor_id)).await
+        let ids = match scope.catalog_scope() {
+            Some(catalog_scope) => {
+                let candidates = self
+                    .product_repo
+                    .search_catalog_candidates(&spec, catalog_scope)
+                    .await?;
+                rank_catalog_candidates(&spec.text, candidates, PRODUCT_SEARCH_LIMIT)
+            }
+            None => {
+                let candidates = self
+                    .product_repo
+                    .search_history_candidates(&spec, actor_id)
+                    .await?;
+                rank_history_candidates(&spec.text, candidates, PRODUCT_SEARCH_LIMIT)
+            }
+        };
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let products = self.product_repo.find_search_summaries(&ids).await?;
+        if products.len() != ids.len() {
+            tracing::warn!(
+                requested = ids.len(),
+                found = products.len(),
+                "search summary hydration returned a partial result"
+            );
+        }
+        Ok(order_products_by_ids(products, &ids))
     }
 
     pub async fn list_categories(
         &self,
-        actor_id: Uuid,
+        _actor_id: Uuid,
         query: &str,
         limit: i64,
     ) -> Result<Vec<CategorySuggestion>, NutritionError> {
-        self.product_repo
-            .list_categories(query, Some(actor_id), limit)
-            .await
+        let counts = self.product_repo.category_counts().await?;
+        Ok(rank_category_suggestions(
+            query,
+            counts,
+            category_limit(limit),
+        ))
     }
 
     pub async fn list_custom_foods(&self, actor_id: Uuid) -> Result<Vec<Product>, NutritionError> {
@@ -285,6 +324,22 @@ impl CatalogService {
     }
 }
 
+fn order_products_by_ids(products: Vec<Product>, ids: &[ProductId]) -> Vec<Product> {
+    let mut products_by_id: HashMap<ProductId, Product> = products
+        .into_iter()
+        .map(|product| (product.id, product))
+        .collect();
+    ids.iter()
+        .filter_map(|id| products_by_id.remove(id))
+        .collect()
+}
+
+/// Category suggestions are capped at 50. The HTTP handler separately clamps
+/// to `1..=50`; the service allows `0` so non-HTTP callers can request none.
+fn category_limit(limit: i64) -> usize {
+    usize::try_from(limit.clamp(0, 50)).unwrap_or_default()
+}
+
 #[async_trait]
 impl ExternalProductWritePort for CatalogService {
     async fn upsert_external_many(
@@ -343,21 +398,30 @@ mod tests {
 
     #[async_trait]
     impl ProductRepository for MockProductRepository {
-        async fn search(
+        async fn search_catalog_candidates(
             &self,
-            _spec: ProductSearchSpec,
-            _scope: ProductSearchScope,
-            _user_id: Option<Uuid>,
-        ) -> Result<Vec<Product>, NutritionError> {
+            _spec: &ProductSearchSpec,
+            _scope: CatalogSearchScope,
+        ) -> Result<Vec<ProductSearchFields>, NutritionError> {
+            Ok(Vec::new())
+        }
+
+        async fn search_history_candidates(
+            &self,
+            _spec: &ProductSearchSpec,
+            _user_id: Uuid,
+        ) -> Result<Vec<HistorySearchCandidate>, NutritionError> {
+            Ok(Vec::new())
+        }
+
+        async fn category_counts(&self) -> Result<Vec<CategoryCount>, NutritionError> {
             Ok(vec![])
         }
 
-        async fn list_categories(
+        async fn find_search_summaries(
             &self,
-            _query: &str,
-            _user_id: Option<Uuid>,
-            _limit: i64,
-        ) -> Result<Vec<CategorySuggestion>, NutritionError> {
+            _ids: &[ProductId],
+        ) -> Result<Vec<Product>, NutritionError> {
             Ok(vec![])
         }
 
@@ -679,5 +743,40 @@ mod tests {
 
         assert_eq!(result.created, 1);
         assert_eq!(repo.upserted.lock().unwrap().len(), 1);
+    }
+
+    fn product_with_id(value: u128) -> Product {
+        let mut product = external_product_for_write();
+        product.id = ProductId(Uuid::from_u128(value));
+        product
+    }
+
+    #[test]
+    fn order_products_by_ids_preserves_rank_and_skips_missing_and_duplicate_ids() {
+        let first = product_with_id(1);
+        let second = product_with_id(2);
+        let third = product_with_id(3);
+        let missing = ProductId(Uuid::from_u128(99));
+        let ranked_ids = vec![third.id, missing, first.id, third.id, second.id];
+
+        let ordered = order_products_by_ids(vec![second, first, third], &ranked_ids);
+
+        assert_eq!(
+            ordered.iter().map(|product| product.id).collect::<Vec<_>>(),
+            vec![
+                ProductId(Uuid::from_u128(3)),
+                ProductId(Uuid::from_u128(1)),
+                ProductId(Uuid::from_u128(2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn category_limit_clamps_to_http_contract() {
+        assert_eq!(category_limit(-1), 0);
+        assert_eq!(category_limit(0), 0);
+        assert_eq!(category_limit(10), 10);
+        assert_eq!(category_limit(100), 50);
+        assert_eq!(category_limit(i64::MAX), 50);
     }
 }

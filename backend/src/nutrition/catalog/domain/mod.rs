@@ -1,4 +1,5 @@
 pub mod calculation;
+pub mod search_ranking;
 pub mod units;
 
 use async_trait::async_trait;
@@ -10,6 +11,9 @@ use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::calculation::{
     CalculatedNutrition, NutritionCalculator, Quantity,
+};
+use crate::nutrition::catalog::domain::search_ranking::{
+    CategoryCount, HistorySearchCandidate, ProductSearchFields,
 };
 use crate::nutrition::catalog::domain::units::UnitConverter;
 
@@ -51,6 +55,14 @@ pub enum ProductSearchScope {
     History,
 }
 
+/// Catalog-only search scopes. History candidates have a different shape, so
+/// they cannot be requested through the catalog repository method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CatalogSearchScope {
+    All,
+    Custom,
+}
+
 impl ProductSearchScope {
     pub fn parse(input: Option<&str>) -> Result<Self, NutritionError> {
         match input.unwrap_or("all") {
@@ -60,6 +72,14 @@ impl ProductSearchScope {
             other => Err(NutritionError::Validation(format!(
                 "unknown food search scope: {other}"
             ))),
+        }
+    }
+
+    pub fn catalog_scope(self) -> Option<CatalogSearchScope> {
+        match self {
+            Self::All => Some(CatalogSearchScope::All),
+            Self::Custom => Some(CatalogSearchScope::Custom),
+            Self::History => None,
         }
     }
 }
@@ -967,18 +987,23 @@ pub struct ProductUpsertResult {
 
 #[async_trait]
 pub trait ProductRepository: Send + Sync {
-    async fn search(
+    async fn search_catalog_candidates(
         &self,
-        spec: ProductSearchSpec,
-        scope: ProductSearchScope,
-        user_id: Option<Uuid>,
+        spec: &ProductSearchSpec,
+        scope: CatalogSearchScope,
+    ) -> Result<Vec<ProductSearchFields>, NutritionError>;
+    async fn search_history_candidates(
+        &self,
+        spec: &ProductSearchSpec,
+        user_id: Uuid,
+    ) -> Result<Vec<HistorySearchCandidate>, NutritionError>;
+    async fn category_counts(&self) -> Result<Vec<CategoryCount>, NutritionError>;
+    /// Loads search-result product summaries by ID. The caller owns the
+    /// ranked ordering; the returned order is unspecified.
+    async fn find_search_summaries(
+        &self,
+        ids: &[ProductId],
     ) -> Result<Vec<Product>, NutritionError>;
-    async fn list_categories(
-        &self,
-        query: &str,
-        user_id: Option<Uuid>,
-        limit: i64,
-    ) -> Result<Vec<CategorySuggestion>, NutritionError>;
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError>;
     async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, NutritionError>;
     async fn find_by_barcode(
@@ -1064,6 +1089,19 @@ mod tests {
             ProductSearchScope::parse(Some("private")),
             Err(NutritionError::Validation(_))
         ));
+    }
+
+    #[test]
+    fn product_search_scope_maps_catalog_scopes_and_rejects_history() {
+        assert_eq!(
+            ProductSearchScope::All.catalog_scope(),
+            Some(CatalogSearchScope::All)
+        );
+        assert_eq!(
+            ProductSearchScope::Custom.catalog_scope(),
+            Some(CatalogSearchScope::Custom)
+        );
+        assert_eq!(ProductSearchScope::History.catalog_scope(), None);
     }
 
     #[test]
