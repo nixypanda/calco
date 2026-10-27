@@ -16,33 +16,33 @@ const app = Elm.Main.init({
 // few browser effects it cannot perform directly.
 let lastSentDate = null;
 
-function sendLocalContext() {
+function sendLocalCtx() {
     const date = new Date().toLocaleDateString("en-CA");
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     lastSentDate = date;
-    app.ports.localContextReceived.send({ date, timezone });
+    app.ports.localCtxReceived.send({ date, timezone });
 }
 
-app.ports.requestLocalContext.subscribe(sendLocalContext);
+app.ports.requestLocalCtx.subscribe(sendLocalCtx);
 
 // Elm blocks its first render until it knows the date, and a command sent from
 // `init` would have been dispatched before the line above subscribed.
-sendLocalContext();
+sendLocalCtx();
 
 // A tab can outlive the day it booted on, and nothing else tells Elm the date
 // moved. Only push on an actual rollover: an unsolicited context is a no-op for
 // the save paths, but there is no reason to wake every pane once a minute.
-function sendLocalContextIfDayChanged() {
+function sendLocalCtxIfDayChanged() {
     if (new Date().toLocaleDateString("en-CA") !== lastSentDate) {
-        sendLocalContext();
+        sendLocalCtx();
     }
 }
 
-setInterval(sendLocalContextIfDayChanged, 60000);
+setInterval(sendLocalCtxIfDayChanged, 60000);
 
 document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-        sendLocalContextIfDayChanged();
+        sendLocalCtxIfDayChanged();
     }
 });
 

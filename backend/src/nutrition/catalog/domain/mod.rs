@@ -986,7 +986,7 @@ pub struct ProductUpsertResult {
 }
 
 #[async_trait]
-pub trait ProductRepository: Send + Sync {
+pub trait ProductRepo: Send + Sync {
     async fn search_catalog_candidates(
         &self,
         spec: &ProductSearchSpec,
@@ -1055,13 +1055,13 @@ impl CatalogPolicy {
 }
 
 #[async_trait]
-pub trait NutrientRepository: Send + Sync {
+pub trait NutrientRepo: Send + Sync {
     async fn list_all(&self) -> Result<Vec<Nutrient>, NutritionError>;
     async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, NutritionError>;
 }
 
 #[async_trait]
-pub trait UnitRepository: Send + Sync {
+pub trait UnitRepo: Send + Sync {
     async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, NutritionError>;
     async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, NutritionError>;
 }

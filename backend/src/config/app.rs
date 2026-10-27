@@ -5,7 +5,7 @@ use axum::http::{HeaderName, HeaderValue};
 use url::Url;
 
 use super::ConfigError;
-use super::source::{load_environment, load_toml};
+use super::source::{load_env, load_toml};
 
 /// All startup settings required by application composition.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,7 +56,7 @@ pub struct AssistantProviderConfig {
     pub endpoint: Url,
     pub model: AssistantModel,
     pub supports_images: bool,
-    pub authentication: AssistantAuthentication,
+    pub authentication: AssistantAuth,
 }
 
 /// A non-empty, trimmed provider model identifier.
@@ -73,12 +73,12 @@ impl AssistantModel {
     }
 }
 
-/// Authentication metadata for an enabled assistant deployment.
+/// Auth metadata for an enabled assistant deployment.
 ///
 /// Credential paths are retained as deployment metadata. Configuration loading
 /// deliberately does not access their contents.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AssistantAuthentication {
+pub enum AssistantAuth {
     None,
     Bearer {
         api_key_file: PathBuf,
@@ -98,10 +98,10 @@ impl AppConfig {
     }
 
     fn from_sources(
-        environment_lookup: impl Fn(&str) -> Option<String>,
+        env_lookup: impl Fn(&str) -> Option<String>,
         config_file: Option<&Path>,
     ) -> Result<Self, ConfigError> {
-        let environment = load_environment(environment_lookup)?;
+        let environment = load_env(env_lookup)?;
         let assistant = load_toml(config_file)?;
 
         Ok(Self {

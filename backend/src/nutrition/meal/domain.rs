@@ -271,7 +271,7 @@ fn validate_meal_components(components: &[MealComponent]) -> Result<(), Nutritio
 pub use crate::nutrition::error::NutritionError;
 
 #[async_trait]
-pub trait MealRepository: Send + Sync {
+pub trait MealRepo: Send + Sync {
     async fn create(&self, meal: &Meal) -> Result<(), NutritionError>;
     async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, NutritionError>;
     async fn list_all(&self) -> Result<Vec<Meal>, NutritionError>;

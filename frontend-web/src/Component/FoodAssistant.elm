@@ -5,7 +5,7 @@ module Component.FoodAssistant exposing
     , Model(..)
     , Msg(..)
     , OutMsg(..)
-    , PhotoMetadata
+    , PhotoMeta
     , RequestState(..)
     , init
     , modalView
@@ -13,7 +13,7 @@ module Component.FoodAssistant exposing
     , removeAt
     , update
     , updateFor
-    , validatePhotoMetadata
+    , validatePhotoMeta
     , view
     , viewFor
     )
@@ -82,7 +82,7 @@ type alias ChatModel =
     }
 
 
-type alias PhotoMetadata =
+type alias PhotoMeta =
     { mimeType : String, size : Int }
 
 
@@ -516,9 +516,9 @@ addSelectedPhotos files model =
 
             else
                 case
-                    validatePhotoMetadata
-                        (List.map photoMetadata chat.photos)
-                        (List.map photoMetadata files)
+                    validatePhotoMeta
+                        (List.map photoMeta chat.photos)
+                        (List.map photoMeta files)
                 of
                     Err message ->
                         ( Enabled { chat | photoError = Just message }, Cmd.none, NoOutMsg )
@@ -559,15 +559,15 @@ canAddPhotos chat =
     chat.supportsImages && chat.request /= Sending && List.length chat.photos < maxPhotoCount
 
 
-photoMetadata : File -> PhotoMetadata
-photoMetadata photo =
+photoMeta : File -> PhotoMeta
+photoMeta photo =
     { mimeType = File.mime photo, size = File.size photo }
 
 
-validatePhotoMetadata : List PhotoMetadata -> List PhotoMetadata -> Result String ()
-validatePhotoMetadata existingPhotos selectedPhotos =
+validatePhotoMeta : List PhotoMeta -> List PhotoMeta -> Result String ()
+validatePhotoMeta existingPhotos selectedPhotos =
     let
-        photos : List PhotoMetadata
+        photos : List PhotoMeta
         photos =
             existingPhotos ++ selectedPhotos
     in

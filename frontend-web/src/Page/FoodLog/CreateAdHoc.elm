@@ -21,7 +21,7 @@ import Api.Foods
 import Api.Logs exposing (CreateAdHocLogRequest, CreateLogRequest)
 import Component.FoodEditor as Editor
 import Data.FoodLog exposing (FoodLog)
-import Data.LocalContext exposing (LocalContext)
+import Data.LocalCtx exposing (LocalCtx)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Element)
 import I18n
@@ -45,7 +45,7 @@ type alias Model =
 
 type SubmitState
     = SubmitIdle
-    | AwaitingLocalContext
+    | AwaitingLocalCtx
     | LoggingAdHoc
     | SavingCustomFood
     | LoggingSavedFood String
@@ -69,7 +69,7 @@ type Msg
     | FormMsg Editor.Msg
     | CategorySuggestionsLoaded Ticket (Result Client.ApiError CategorySuggestionResponse)
     | SubmitClicked
-    | LocalContextReceived LocalContext
+    | LocalCtxReceived LocalCtx
     | AdHocLogCompleted (Result Client.ApiError FoodLog)
     | CustomFoodCompleted (Result Client.ApiError CreateFoodResponse)
     | ProductLogCompleted (Result Client.ApiError FoodLog)
@@ -77,7 +77,7 @@ type Msg
 
 type OutMsg
     = NoOp
-    | RequestLocalContext
+    | RequestLocalCtx
     | RequestAdHocLog CreateAdHocLogRequest
     | RequestCreateFood CreateFoodRequest
     | RequestCategorySuggestions Ticket Api.Foods.CategorySuggestionRequest
@@ -120,12 +120,12 @@ update msg model =
         SubmitClicked ->
             submit model
 
-        LocalContextReceived context ->
-            if model.submit == AwaitingLocalContext then
+        LocalCtxReceived ctx ->
+            if model.submit == AwaitingLocalCtx then
                 startSubmission
                     { model
-                        | form = setDateIfBlank context.date model.form
-                        , deviceTimezone = Just context.timezone
+                        | form = setDateIfBlank ctx.date model.form
+                        , deviceTimezone = Just ctx.timezone
                     }
 
             else
@@ -193,33 +193,33 @@ submit model =
             requestProductLog saved.productId model
 
         SubmitIdle ->
-            submitWithContext model
+            submitWithCtx model
 
         SubmitFailed _ ->
-            submitWithContext model
+            submitWithCtx model
 
         _ ->
             ( model, Cmd.none, NoOp )
 
 
-submitWithContext : Model -> ( Model, Cmd Msg, OutMsg )
-submitWithContext model =
-    case model.form.context of
-        Editor.FoodLogContext logFields _ ->
+submitWithCtx : Model -> ( Model, Cmd Msg, OutMsg )
+submitWithCtx model =
+    case model.form.ctx of
+        Editor.FoodLogCtx logFields _ ->
             if String.isEmpty (String.trim logFields.date) then
-                ( { model | submit = AwaitingLocalContext }, Cmd.none, RequestLocalContext )
+                ( { model | submit = AwaitingLocalCtx }, Cmd.none, RequestLocalCtx )
 
             else
                 startSubmission model
 
-        Editor.CustomFoodContext ->
+        Editor.CustomFoodCtx ->
             validationFailure (I18n.en TidFoodEditorErrorNotConfigured) model
 
 
 startSubmission : Model -> ( Model, Cmd Msg, OutMsg )
 startSubmission model =
-    case model.form.context of
-        Editor.FoodLogContext _ Editor.LogAdHocOnly ->
+    case model.form.ctx of
+        Editor.FoodLogCtx _ Editor.LogAdHocOnly ->
             case Editor.toAdHocLogRequest model.deviceTimezone model.form of
                 Ok request ->
                     ( { model | submit = LoggingAdHoc }, Cmd.none, RequestAdHocLog request )
@@ -227,7 +227,7 @@ startSubmission model =
                 Err message ->
                     validationFailure message model
 
-        Editor.FoodLogContext _ (Editor.SaveCustomFoodThenLog _) ->
+        Editor.FoodLogCtx _ (Editor.SaveCustomFoodThenLog _) ->
             case Editor.toCustomFoodFromLogRequest model.form of
                 Ok request ->
                     ( { model | submit = SavingCustomFood }, Cmd.none, RequestCreateFood request )
@@ -235,7 +235,7 @@ startSubmission model =
                 Err message ->
                     validationFailure message model
 
-        Editor.CustomFoodContext ->
+        Editor.CustomFoodCtx ->
             validationFailure (I18n.en TidFoodEditorErrorNotConfigured) model
 
 
@@ -251,12 +251,12 @@ requestProductLog productId model =
 
 setDateIfBlank : LocalDate -> Editor.FormModel -> Editor.FormModel
 setDateIfBlank date form =
-    case form.context of
-        Editor.FoodLogContext logFields persistence ->
+    case form.ctx of
+        Editor.FoodLogCtx logFields persistence ->
             if String.isEmpty (String.trim logFields.date) then
                 { form
-                    | context =
-                        Editor.FoodLogContext
+                    | ctx =
+                        Editor.FoodLogCtx
                             { logFields | date = LocalDate.format date }
                             persistence
                 }
@@ -264,7 +264,7 @@ setDateIfBlank date form =
             else
                 form
 
-        Editor.CustomFoodContext ->
+        Editor.CustomFoodCtx ->
             form
 
 
@@ -343,7 +343,7 @@ viewForAi env showOptional model =
             SubmitIdle ->
                 Element.none
 
-            AwaitingLocalContext ->
+            AwaitingLocalCtx ->
                 Element.none
 
             LoggingAdHoc ->
@@ -378,7 +378,7 @@ viewForAi env showOptional model =
 isSubmitting : SubmitState -> Bool
 isSubmitting state =
     case state of
-        AwaitingLocalContext ->
+        AwaitingLocalCtx ->
             True
 
         LoggingAdHoc ->

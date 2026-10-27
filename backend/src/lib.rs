@@ -9,21 +9,21 @@ use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
+use crate::assistant::api::http::assistant_routes;
 use crate::assistant::composition::AssistantComponents;
-use crate::assistant::interfaces::http::assistant_routes;
+use crate::auth::api::SessionCookieConfig;
+use crate::auth::api::http::auth_routes;
 use crate::auth::domain::SessionPolicy;
-use crate::auth::interfaces::SessionCookieConfig;
-use crate::auth::interfaces::http::auth_routes;
 use crate::auth::module::AuthModule;
 use crate::config::{AppConfig, ServerConfig};
-use crate::import::interfaces::http::import_routes;
+use crate::import::api::http::import_routes;
 use crate::import::module::ImportModule;
-use crate::nutrition::catalog::interfaces::catalog_routes;
-use crate::nutrition::diary::interfaces::diary_preferences_routes;
-use crate::nutrition::food_log::interfaces::food_log_routes;
-use crate::nutrition::goals::interfaces::goal_target_routes;
-use crate::nutrition::guidance::interfaces::nutrition_details_routes;
-use crate::nutrition::meal::interfaces::meal_routes;
+use crate::nutrition::catalog::api::http::catalog_routes;
+use crate::nutrition::diary::api::http::diary_prefs_routes;
+use crate::nutrition::food_log::api::http::food_log_routes;
+use crate::nutrition::goals::api::http::goal_target_routes;
+use crate::nutrition::guidance::api::http::nutrition_details_routes;
+use crate::nutrition::meal::api::http::meal_routes;
 use crate::nutrition::module::NutritionModule;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -82,7 +82,7 @@ pub fn build_router_from_state(auth_state: AppState) -> Router {
         .merge(auth_routes(auth_state.auth.clone()))
         .merge(catalog_routes(auth_state.clone()))
         .merge(food_log_routes(auth_state.clone()))
-        .merge(diary_preferences_routes(auth_state.clone()))
+        .merge(diary_prefs_routes(auth_state.clone()))
         .merge(nutrition_details_routes(auth_state.clone()))
         .merge(meal_routes(auth_state.clone()))
         .merge(goal_target_routes(auth_state.clone()))
@@ -124,4 +124,60 @@ async fn health() -> &'static str {
 
 async fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+#[cfg(test)]
+mod architecture_tests {
+    use std::fs;
+    use std::path::Path;
+
+    #[test]
+    fn api_directories_have_http_entrypoints() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut violations = Vec::new();
+        inspect(&src, &mut violations);
+        violations.sort();
+        assert!(
+            violations.is_empty(),
+            "api layout violations:\n{}",
+            violations.join("\n")
+        );
+    }
+
+    fn inspect(dir: &Path, violations: &mut Vec<String>) {
+        for entry in fs::read_dir(dir).expect("read src tree") {
+            let path = entry.expect("read src entry").path();
+            let file_name = path.file_name().and_then(|name| name.to_str());
+
+            if path.is_dir() {
+                if file_name == Some("api") {
+                    check_api_dir(&path, violations);
+                }
+                inspect(&path, violations);
+            } else if file_name == Some("api.rs") {
+                violations.push(format!(
+                    "{}: api must be a directory, not a file",
+                    path.display()
+                ));
+            }
+        }
+    }
+
+    fn check_api_dir(dir: &Path, violations: &mut Vec<String>) {
+        if !dir.join("mod.rs").is_file() {
+            violations.push(format!(
+                "{}: api directory must contain mod.rs",
+                dir.display()
+            ));
+        }
+
+        let has_http_file = dir.join("http.rs").is_file();
+        let has_http_dir = dir.join("http").join("mod.rs").is_file();
+        if has_http_file == has_http_dir {
+            violations.push(format!(
+                "{}: api directory must contain exactly one of http.rs or http/mod.rs",
+                dir.display()
+            ));
+        }
+    }
 }

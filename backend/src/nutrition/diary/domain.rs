@@ -42,12 +42,12 @@ impl EnabledMealSlots {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DiaryPreferences {
+pub struct DiaryPrefs {
     pub user_id: Uuid,
     pub enabled_meal_slots: EnabledMealSlots,
 }
 
-impl DiaryPreferences {
+impl DiaryPrefs {
     pub fn defaults_for(user_id: Uuid) -> Self {
         Self {
             user_id,
@@ -64,11 +64,8 @@ impl DiaryPreferences {
 }
 
 #[async_trait]
-pub trait DiaryPreferencesRepository: Send + Sync {
-    async fn find_by_user_id(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Option<DiaryPreferences>, NutritionError>;
+pub trait DiaryPrefsRepo: Send + Sync {
+    async fn find_by_user_id(&self, user_id: Uuid) -> Result<Option<DiaryPrefs>, NutritionError>;
 
-    async fn save(&self, preferences: &DiaryPreferences) -> Result<(), NutritionError>;
+    async fn save(&self, prefs: &DiaryPrefs) -> Result<(), NutritionError>;
 }

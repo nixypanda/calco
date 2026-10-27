@@ -162,7 +162,7 @@ pub enum ImportCommitOutcome {
 }
 
 #[async_trait]
-pub trait ImportRepository: Send + Sync {
+pub trait ImportRepo: Send + Sync {
     async fn create_job(&self, job: &ImportJob) -> Result<(), ImportError>;
     async fn find_job(&self, id: ImportId) -> Result<Option<ImportJob>, ImportError>;
     async fn stage_foods(

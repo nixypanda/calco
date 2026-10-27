@@ -72,7 +72,7 @@ tests =
                 validModel
                     |> step (CreateAdHoc.FormMsg (Editor.LogDateChanged ""))
                     |> out CreateAdHoc.SubmitClicked
-                    |> Expect.equal CreateAdHoc.RequestLocalContext
+                    |> Expect.equal CreateAdHoc.RequestLocalCtx
         ]
 
 

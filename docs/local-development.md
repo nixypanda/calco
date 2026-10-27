@@ -60,6 +60,9 @@ SESSION_TTL_SECONDS=604800
 CORS_ALLOWED_ORIGINS=http://localhost:1234
 ```
 
+The backend parses these variables through `load_env` into `EnvSourceConfig`
+(`backend/src/config/source/env.rs`).
+
 Barcode misses require outbound HTTPS access to
 `https://world.openfoodfacts.org`. The endpoint is currently fixed in the
 backend; no API key or additional environment variable is required. Requests
@@ -186,7 +189,7 @@ Frontend copy is translated at compile time via
 `en_US` is the only locale. `generated/` is a second Elm source directory and is
 excluded from `elm-format` and `elm-review`; `src`/`tests` stay formatted normal
 Elm. Assistant output language is handled separately in the backend system
-prompt (`backend/src/assistant/infrastructure/food_draft/prompt.rs`), not by
+prompt (`backend/src/assistant/infra/food_draft/prompt.rs`), not by
 this pipeline.
 
 ## Verification

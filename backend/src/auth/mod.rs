@@ -1,5 +1,5 @@
-pub mod application;
+pub mod api;
+pub mod app;
 pub mod domain;
-pub mod infrastructure;
-pub mod interfaces;
+pub mod infra;
 pub mod module;

@@ -84,7 +84,7 @@ type OutMsg
     | RequestAssistantStatus
     | RequestFoodDraft FoodDraftPurpose Conversation (List File)
     | RevokePhotoPreviewUrls (List String)
-    | RequestLocalContext
+    | RequestLocalCtx
     | RequestAdHocLog CreateAdHocLogRequest
     | RequestCreateFood CreateFoodRequest
     | RequestCategorySuggestions Ticket CategorySuggestionRequest
@@ -267,8 +267,8 @@ mapReviewOutMsg outMsg =
         Review.NoOp ->
             NoOp
 
-        Review.RequestLocalContext ->
-            RequestLocalContext
+        Review.RequestLocalCtx ->
+            RequestLocalCtx
 
         Review.RequestAdHocLog request ->
             RequestAdHocLog request

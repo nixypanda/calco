@@ -29,7 +29,7 @@ tests =
                     loaded : Settings.Model
                     loaded =
                         step
-                            (Settings.PreferencesLoaded
+                            (Settings.PrefsLoaded
                                 (Ok { enabledMealSlots = [ LateNightSnack, Breakfast ] })
                             )
                             loading
@@ -56,7 +56,7 @@ tests =
                 , saved = toScreen saved
                 }
                     |> Expect.equal
-                        { initial = Settings.RequestPreferences
+                        { initial = Settings.RequestPrefs
                         , loaded =
                             { phase = "ready"
                             , selected = [ Breakfast, LateNightSnack ]
@@ -81,7 +81,7 @@ tests =
                         Settings.init
                             |> Tuple.first
                             |> step
-                                (Settings.PreferencesLoaded
+                                (Settings.PrefsLoaded
                                     (Ok { enabledMealSlots = [ Breakfast ] })
                                 )
                             |> step (Settings.SlotToggled Breakfast False)
@@ -106,7 +106,7 @@ tests =
                         Settings.init
                             |> Tuple.first
                             |> step
-                                (Settings.PreferencesLoaded
+                                (Settings.PrefsLoaded
                                     (Ok { enabledMealSlots = [ Breakfast, Lunch ] })
                                 )
                             |> step Settings.SaveClicked
@@ -145,14 +145,14 @@ tests =
                         Settings.init
                             |> Tuple.first
                             |> step
-                                (Settings.PreferencesLoaded
+                                (Settings.PrefsLoaded
                                     (Ok { enabledMealSlots = [ Breakfast ] })
                                 )
                             |> step Settings.SaveClicked
                 in
                 { load =
                     Settings.update
-                        (Settings.PreferencesLoaded
+                        (Settings.PrefsLoaded
                             (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                         )
                         Settings.Loading
@@ -174,7 +174,7 @@ tests =
                 let
                     failed : Settings.Model
                     failed =
-                        step (Settings.PreferencesLoaded (Err Client.NetworkError)) Settings.Loading
+                        step (Settings.PrefsLoaded (Err Client.NetworkError)) Settings.Loading
                 in
                 { failed = toScreen failed
                 , retryRequest = out Settings.RetryClicked failed
@@ -187,7 +187,7 @@ tests =
                             , saveState = Nothing
                             , error = Just networkErrorMessage
                             }
-                        , retryRequest = Settings.RequestPreferences
+                        , retryRequest = Settings.RequestPrefs
                         , retrying =
                             { phase = "loading"
                             , selected = []

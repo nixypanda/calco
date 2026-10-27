@@ -4,18 +4,11 @@ use axum::extract::FromRef;
 use sqlx::PgPool;
 
 use crate::AppState;
-use crate::auth::application::{
-    AdminUserService, ApiKeyService, AuthBootstrapService, AuthSessionService,
-};
-use crate::auth::domain::{
-    ApiKeyRepository, IdentityRepository, SessionPolicy, SessionRepository, UserProfileRepository,
-};
-use crate::auth::infrastructure::argon2_credentials::Argon2Credentials;
-use crate::auth::infrastructure::postgres::{
-    PostgresApiKeyRepository, PostgresIdentityRepository, PostgresSessionRepository,
-    PostgresUserProfileRepository,
-};
-use crate::auth::interfaces::SessionCookieConfig;
+use crate::auth::api::SessionCookieConfig;
+use crate::auth::app::{AdminUserService, ApiKeyService, AuthBootstrapService, AuthSessionService};
+use crate::auth::domain::{ApiKeyRepo, IdentityRepo, SessionPolicy, SessionRepo, UserProfileRepo};
+use crate::auth::infra::argon2_credentials::Argon2Credentials;
+use crate::auth::infra::pg::{PgApiKeyRepo, PgIdentityRepo, PgSessionRepo, PgUserProfileRepo};
 
 #[derive(Clone)]
 pub struct AuthModule {
@@ -33,14 +26,11 @@ impl AuthModule {
         cookie_config: SessionCookieConfig,
         session_policy: SessionPolicy,
     ) -> Self {
-        let identity_repo =
-            Arc::new(PostgresIdentityRepository::new(pool.clone())) as Arc<dyn IdentityRepository>;
-        let session_repo =
-            Arc::new(PostgresSessionRepository::new(pool.clone())) as Arc<dyn SessionRepository>;
-        let profile_repo = Arc::new(PostgresUserProfileRepository::new(pool.clone()))
-            as Arc<dyn UserProfileRepository>;
-        let api_key_repo =
-            Arc::new(PostgresApiKeyRepository::new(pool.clone())) as Arc<dyn ApiKeyRepository>;
+        let identity_repo = Arc::new(PgIdentityRepo::new(pool.clone())) as Arc<dyn IdentityRepo>;
+        let session_repo = Arc::new(PgSessionRepo::new(pool.clone())) as Arc<dyn SessionRepo>;
+        let profile_repo =
+            Arc::new(PgUserProfileRepo::new(pool.clone())) as Arc<dyn UserProfileRepo>;
+        let api_key_repo = Arc::new(PgApiKeyRepo::new(pool.clone())) as Arc<dyn ApiKeyRepo>;
         let credentials = Arc::new(Argon2Credentials);
 
         let bootstrap = AuthBootstrapService::new(

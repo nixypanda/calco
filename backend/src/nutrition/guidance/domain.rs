@@ -155,7 +155,7 @@ impl NutrientGuidanceSet {
     }
 }
 
-pub trait NutrientGuidanceRepository: Send + Sync {
+pub trait NutrientGuidanceRepo: Send + Sync {
     fn current(&self) -> NutrientGuidanceSet;
 }
 

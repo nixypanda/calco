@@ -14,7 +14,7 @@ module Page.Goals.Settings exposing
 import Api.Client as Client
 import Api.Goals exposing (SaveGoalRequest)
 import Data.Goals as Goals exposing (GoalSnapshot, GoalSource(..), GoalStatus, GoalTargets)
-import Data.LocalContext exposing (LocalContext)
+import Data.LocalCtx exposing (LocalCtx)
 import Element exposing (Element)
 import I18n
 import Lib.Date as LocalDate
@@ -57,7 +57,7 @@ type FormState
 type SaveState
     = Idle
     | ValidationFailed String
-    | AwaitingLocalContext GoalTargets
+    | AwaitingLocalCtx GoalTargets
     | Saving
     | SaveFailed String
 
@@ -65,7 +65,7 @@ type SaveState
 type OutMsg
     = NoOp
     | RequestGoal
-    | RequestLocalContext
+    | RequestLocalCtx
     | RequestSaveGoal SaveGoalRequest
     | SessionExpired
 
@@ -86,7 +86,7 @@ type Msg
     | CarbsTargetChanged String
     | FatTargetChanged String
     | SaveClicked
-    | LocalContextReceived LocalContext
+    | LocalCtxReceived LocalCtx
     | SaveCompleted (Result Client.ApiError GoalSnapshot)
     | RetryClicked
 
@@ -144,11 +144,11 @@ update msg model =
                         Ok targets ->
                             ( Ready
                                 { ready
-                                    | save = AwaitingLocalContext targets
+                                    | save = AwaitingLocalCtx targets
                                     , formState = Pristine
                                 }
                             , Cmd.none
-                            , RequestLocalContext
+                            , RequestLocalCtx
                             )
 
                         Err message ->
@@ -157,11 +157,11 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
-        LocalContextReceived context ->
+        LocalCtxReceived context ->
             case model of
                 Ready ready ->
                     case ready.save of
-                        AwaitingLocalContext targets ->
+                        AwaitingLocalCtx targets ->
                             ( Ready { ready | save = Saving }
                             , Cmd.none
                             , RequestSaveGoal
@@ -341,7 +341,7 @@ view env model =
                     ValidationFailed _ ->
                         Element.none
 
-                    AwaitingLocalContext _ ->
+                    AwaitingLocalCtx _ ->
                         Element.none
 
                     Saving ->
@@ -389,7 +389,7 @@ view env model =
                             Idle ->
                                 Element.none
 
-                            AwaitingLocalContext _ ->
+                            AwaitingLocalCtx _ ->
                                 Element.none
 
                             Saving ->
@@ -435,7 +435,7 @@ statusMessage language status =
 isSaving : SaveState -> Bool
 isSaving save =
     case save of
-        AwaitingLocalContext _ ->
+        AwaitingLocalCtx _ ->
             True
 
         Saving ->

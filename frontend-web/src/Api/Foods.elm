@@ -1,5 +1,5 @@
 module Api.Foods exposing
-    ( BarcodeLookupMetadata
+    ( BarcodeLookupMeta
     , BarcodeLookupOrigin(..)
     , BarcodeLookupResponse
     , CategorySuggestion
@@ -57,10 +57,10 @@ type alias ProductDetail =
 
 
 type alias BarcodeLookupResponse =
-    { product : ProductDetail, lookup : BarcodeLookupMetadata }
+    { product : ProductDetail, lookup : BarcodeLookupMeta }
 
 
-type alias BarcodeLookupMetadata =
+type alias BarcodeLookupMeta =
     { origin : BarcodeLookupOrigin, note : Maybe String }
 
 
@@ -317,12 +317,12 @@ barcodeLookupResponseDecoder : Decoder BarcodeLookupResponse
 barcodeLookupResponseDecoder =
     Decode.map2 BarcodeLookupResponse
         productDetailDecoder
-        (Decode.field "lookup" barcodeLookupMetadataDecoder)
+        (Decode.field "lookup" barcodeLookupMetaDecoder)
 
 
-barcodeLookupMetadataDecoder : Decoder BarcodeLookupMetadata
-barcodeLookupMetadataDecoder =
-    Decode.map2 BarcodeLookupMetadata
+barcodeLookupMetaDecoder : Decoder BarcodeLookupMeta
+barcodeLookupMetaDecoder =
+    Decode.map2 BarcodeLookupMeta
         (Decode.field "origin" barcodeLookupOriginDecoder)
         (Decode.field "note" (Decode.nullable Decode.string))
 

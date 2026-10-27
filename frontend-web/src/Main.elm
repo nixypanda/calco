@@ -19,7 +19,7 @@ import Browser.Navigation as Nav
 import Chrome
 import Data.Auth as Auth exposing (Session)
 import Data.BarcodeScan exposing (ScannerEvent)
-import Data.LocalContext as LocalContext exposing (LocalContext, RawLocalContext)
+import Data.LocalCtx as LocalCtx exposing (LocalCtx, RawLocalCtx)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Background as Background
@@ -126,7 +126,7 @@ type Msg
     | LogoutCompleted
     | WindowResized Int Int
     | GotPageMsg Page.Msg
-    | GotLocalContext RawLocalContext
+    | GotLocalCtx RawLocalCtx
     | GotBarcodeScannerEvent ScannerEvent
     | GotCopyTextResult CopyTextResult
     | GotChromeMsg Chrome.Msg
@@ -189,8 +189,8 @@ update msg model =
                 Version.ReloadPage ->
                     ( { model | version = newVersion }, reloadPage () )
 
-        GotLocalContext raw ->
-            case LocalContext.fromRaw raw of
+        GotLocalCtx raw ->
+            case LocalCtx.fromRaw raw of
                 Nothing ->
                     ( model, Cmd.none )
 
@@ -201,20 +201,20 @@ update msg model =
 
                         ( final, contextCmd ) =
                             stepPageUpdate
-                                (Page.localContextReceived (pageContext dated) context dated.page)
+                                (Page.localCtxReceived (pageCtx dated) context dated.page)
                                 dated
                     in
                     ( final, Cmd.batch [ dateCmd, contextCmd ] )
 
         GotBarcodeScannerEvent event ->
             stepPageUpdate
-                (Page.barcodeScannerEventReceived (pageContext model) event model.page)
+                (Page.barcodeScannerEventReceived (pageCtx model) event model.page)
                 model
 
         GotCopyTextResult result ->
             stepPageUpdate
                 (Page.update
-                    (pageContext model)
+                    (pageCtx model)
                     (Page.CopyTextResult
                         result.generation
                         result.requestId
@@ -225,7 +225,7 @@ update msg model =
                 model
 
         GotPageMsg pageMsg ->
-            stepPageUpdate (Page.update (pageContext model) pageMsg model.page) model
+            stepPageUpdate (Page.update (pageCtx model) pageMsg model.page) model
 
         GotChromeMsg chromeMsg ->
             stepChromeUpdate (Chrome.update chromeMsg model.chrome) model
@@ -435,7 +435,7 @@ stepPageResult ( page, pageCmd, outMsg ) model =
 panes: a diary route with no date param keys off `today`, so it becomes a new
 pane for the new day, while an explicitly dated route keeps the one it has.
 -}
-adoptToday : LocalContext -> Model -> ( Model, Cmd Msg )
+adoptToday : LocalCtx -> Model -> ( Model, Cmd Msg )
 adoptToday context model =
     case model.today of
         Just current ->
@@ -449,8 +449,8 @@ adoptToday context model =
             changeRouteTo model.route { model | today = Just context.date }
 
 
-pageContext : Model -> Page.InitContext
-pageContext model =
+pageCtx : Model -> Page.InitCtx
+pageCtx model =
     { route = model.route, today = model.today }
 
 
@@ -472,8 +472,8 @@ applyPageOutMsg outMsg model =
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
 
-        Page.RequestLocalContext ->
-            ( model, requestLocalContext () )
+        Page.RequestLocalCtx ->
+            ( model, requestLocalCtx () )
 
         Page.RequestBarcodeScanStart ->
             ( model, requestBarcodeScanStart () )
@@ -716,7 +716,7 @@ isBootstrapped bootstrap =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ localContextReceived GotLocalContext
+        [ localCtxReceived GotLocalCtx
         , barcodeScannerEvent GotBarcodeScannerEvent
         , copyTextResult GotCopyTextResult
         , Browser.Events.onResize WindowResized
@@ -728,10 +728,10 @@ subscriptions _ =
 -- PORTS
 
 
-port requestLocalContext : () -> Cmd msg
+port requestLocalCtx : () -> Cmd msg
 
 
-port localContextReceived : (RawLocalContext -> msg) -> Sub msg
+port localCtxReceived : (RawLocalCtx -> msg) -> Sub msg
 
 
 port requestBarcodeScanStart : () -> Cmd msg

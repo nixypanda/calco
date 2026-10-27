@@ -2,14 +2,14 @@ module Page exposing
     ( DiaryGoalResult
     , DiaryLogsResult
     , DiaryPaneId
-    , InitContext
+    , InitCtx
     , LatestSlotsResult
     , Model
     , Msg(..)
     , NutrientsResult
     , OutMsg(..)
     , Pane(..)
-    , PreferencesResult
+    , PrefsResult
     , UnitsResult
     , barcodeScannerEventReceived
     , clearStore
@@ -17,7 +17,7 @@ module Page exposing
     , initPreserving
     , isLoading
     , loading
-    , localContextReceived
+    , localCtxReceived
     , modalView
     , paneKeys
     , photoPreviewUrls
@@ -30,7 +30,7 @@ import Api.Admin
 import Api.ApiKeys
 import Api.Auth
 import Api.Client
-import Api.DiaryPreferences
+import Api.DiaryPrefs
 import Api.FoodAssistant
 import Api.Foods
 import Api.Goals
@@ -41,11 +41,11 @@ import Component.FoodAssistant as FoodAssistantUi
 import Component.Meal.Form as MealForm
 import Data.Auth as Auth
 import Data.BarcodeScan exposing (ScannerEvent)
-import Data.DiaryPreferences
+import Data.DiaryPrefs
 import Data.FoodLog
 import Data.Goals
 import Data.ItemRef as ItemRef
-import Data.LocalContext exposing (LocalContext)
+import Data.LocalCtx exposing (LocalCtx)
 import Data.LogSummary as LogSummary
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
@@ -140,7 +140,7 @@ type alias ReconcileResult pane effect =
     { panes : List pane, effects : List effect, initializedKeys : List String }
 
 
-type alias InitContext =
+type alias InitCtx =
     { route : Route, today : Maybe LocalDate }
 
 
@@ -148,7 +148,7 @@ type OutMsg
     = NoOutMsg
     | Navigate Route
     | SessionExpired
-    | RequestLocalContext
+    | RequestLocalCtx
     | RequestBarcodeScanStart
     | RequestBarcodeScanStop
     | RevokePhotoPreviewUrls (List String)
@@ -299,7 +299,7 @@ goalsSettingsPaneKey date =
     "goals-settings:" ++ LocalDate.format date
 
 
-init : InitContext -> ( Model, Cmd Msg, OutMsg )
+init : InitCtx -> ( Model, Cmd Msg, OutMsg )
 init context =
     initPreserving context
         { panes = []
@@ -309,7 +309,7 @@ init context =
         }
 
 
-initPreserving : InitContext -> Model -> ( Model, Cmd Msg, OutMsg )
+initPreserving : InitCtx -> Model -> ( Model, Cmd Msg, OutMsg )
 initPreserving context current =
     let
         generation : Int
@@ -384,7 +384,7 @@ initDesiredPane (DesiredPane _ initialize) =
 
 
 finishReconcile :
-    InitContext
+    InitCtx
     -> Store
     -> Int
     -> ReconcileResult Pane ( Cmd Msg, OutMsg )
@@ -438,7 +438,7 @@ hydrateShared store pane =
     pane
         |> hydrateWith hydrateUnits (Store.cached Store.units store)
         |> hydrateWith hydrateNutrients (Store.cached Store.nutrients store)
-        |> hydrateWith hydratePreferences (Store.cached Store.preferences store)
+        |> hydrateWith hydratePrefs (Store.cached Store.prefs store)
 
 
 hydrateWith :
@@ -580,15 +580,15 @@ hydrateNutrients result pane =
             pane
 
 
-hydratePreferences : PreferencesResult -> Pane -> Pane
-hydratePreferences result pane =
+hydratePrefs : PrefsResult -> Pane -> Pane
+hydratePrefs result pane =
     case pane of
         DiaryPane paneId model ->
-            DiaryPane paneId (modelOnly (DiaryDay.update (DiaryDay.PreferencesLoaded result) model))
+            DiaryPane paneId (modelOnly (DiaryDay.update (DiaryDay.PrefsLoaded result) model))
 
         DiarySettingsPane model ->
             DiarySettingsPane
-                (modelOnly (DiarySettings.update (DiarySettings.PreferencesLoaded result) model))
+                (modelOnly (DiarySettings.update (DiarySettings.PrefsLoaded result) model))
 
         _ ->
             pane
@@ -631,11 +631,11 @@ nutrientsResource =
     }
 
 
-preferencesResource : SharedResource Data.DiaryPreferences.DiaryPreferences
-preferencesResource =
-    { access = Store.preferences
-    , fetch = \token -> Api.DiaryPreferences.get (SharedPreferencesLoaded token)
-    , hydrate = hydratePreferences
+prefsResource : SharedResource Data.DiaryPrefs.DiaryPrefs
+prefsResource =
+    { access = Store.prefs
+    , fetch = \token -> Api.DiaryPrefs.get (SharedPrefsLoaded token)
+    , hydrate = hydratePrefs
     }
 
 
@@ -694,10 +694,10 @@ ensureSharedData panes store =
             ( withNutrients, nutrientsCmd ) =
                 ensureShared nutrientsResource withUnits
 
-            ( withPreferences, preferencesCmd ) =
-                ensureShared preferencesResource withNutrients
+            ( withPrefs, prefsCmd ) =
+                ensureShared prefsResource withNutrients
         in
-        ( withPreferences, Cmd.batch [ unitsCmd, nutrientsCmd, preferencesCmd ] )
+        ( withPrefs, Cmd.batch [ unitsCmd, nutrientsCmd, prefsCmd ] )
 
     else
         ( store, Cmd.none )
@@ -886,7 +886,7 @@ retargetSearch dateParam mealSlot panes =
     ( List.map Tuple.first results, results |> List.map Tuple.second |> Cmd.batch )
 
 
-panesForRoute : InitContext -> Int -> List Pane -> Maybe (List DesiredPane)
+panesForRoute : InitCtx -> Int -> List Pane -> Maybe (List DesiredPane)
 panesForRoute context generation existing =
     case context.route of
         AuthLogin ->
@@ -1010,10 +1010,10 @@ simpleDesired key pane =
 
 
 fromInit :
-    InitContext
+    InitCtx
     -> String
     -> (subModel -> Pane)
-    -> (InitContext -> outMsg -> ( Cmd Msg, OutMsg ))
+    -> (InitCtx -> outMsg -> ( Cmd Msg, OutMsg ))
     -> (() -> ( subModel, outMsg ))
     -> DesiredPane
 fromInit context key toPane applyOut initialize =
@@ -1030,12 +1030,12 @@ fromInit context key toPane applyOut initialize =
         )
 
 
-adminDesired : InitContext -> DesiredPane
+adminDesired : InitCtx -> DesiredPane
 adminDesired context =
     fromInit context "admin-users" AdminPane applyAdminOutMsg (\_ -> AdminDashboard.init)
 
 
-adminEditDesired : InitContext -> String -> DesiredPane
+adminEditDesired : InitCtx -> String -> DesiredPane
 adminEditDesired context userId =
     fromInit context
         ("admin-edit-user:" ++ userId)
@@ -1044,7 +1044,7 @@ adminEditDesired context userId =
         (\_ -> AdminEditUser.init userId)
 
 
-diaryDesired : InitContext -> LocalDate -> Maybe LocalDate -> Maybe String -> DesiredPane
+diaryDesired : InitCtx -> LocalDate -> Maybe LocalDate -> Maybe String -> DesiredPane
 diaryDesired context today dateParam calendarMonth =
     let
         paneId : DiaryPaneId
@@ -1066,7 +1066,7 @@ dateFromParam today dateParam =
         |> LocalDate.clampTo today
 
 
-calendarDesired : InitContext -> LocalDate -> Maybe String -> DesiredPane
+calendarDesired : InitCtx -> LocalDate -> Maybe String -> DesiredPane
 calendarDesired context today monthParam =
     let
         key : String
@@ -1080,7 +1080,7 @@ calendarDesired context today monthParam =
         (\_ -> DiaryCalendar.init { monthParam = monthParam, today = today })
 
 
-nutritionDesired : InitContext -> LocalDate -> Maybe LocalDate -> DesiredPane
+nutritionDesired : InitCtx -> LocalDate -> Maybe LocalDate -> DesiredPane
 nutritionDesired context today dateParam =
     let
         date : LocalDate
@@ -1094,7 +1094,7 @@ nutritionDesired context today dateParam =
         (\_ -> NutritionDetails.init { date = date, today = today })
 
 
-goalsDesired : InitContext -> LocalDate -> DesiredPane
+goalsDesired : InitCtx -> LocalDate -> DesiredPane
 goalsDesired context today =
     fromInit context
         (goalsSettingsPaneKey today)
@@ -1103,7 +1103,7 @@ goalsDesired context today =
         (\_ -> GoalsSettings.init)
 
 
-diarySettingsDesired : InitContext -> DesiredPane
+diarySettingsDesired : InitCtx -> DesiredPane
 diarySettingsDesired context =
     fromInit context
         "diary-settings"
@@ -1112,7 +1112,7 @@ diarySettingsDesired context =
         (\_ -> DiarySettings.init)
 
 
-apiKeysDesired : InitContext -> Int -> DesiredPane
+apiKeysDesired : InitCtx -> Int -> DesiredPane
 apiKeysDesired context generation =
     DesiredPane "api-keys"
         (\_ ->
@@ -1127,7 +1127,7 @@ apiKeysDesired context generation =
         )
 
 
-apiKeyCreateDesired : InitContext -> Int -> DesiredPane
+apiKeyCreateDesired : InitCtx -> Int -> DesiredPane
 apiKeyCreateDesired context generation =
     DesiredPane "api-key-create"
         (\_ ->
@@ -1142,7 +1142,7 @@ apiKeyCreateDesired context generation =
         )
 
 
-searchDesired : InitContext -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
+searchDesired : InitCtx -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
 searchDesired _ dateParam mealSlot =
     DesiredPane "food-search"
         (\_ ->
@@ -1154,7 +1154,7 @@ searchDesired _ dateParam mealSlot =
 
 
 searchWorkspaceDesired :
-    InitContext
+    InitCtx
     -> List Pane
     -> Maybe LocalDate
     -> Maybe MealSlot
@@ -1172,7 +1172,7 @@ searchWorkspaceDesired context existing dateParam mealSlot =
 
 
 foodWorkspaceDesired :
-    InitContext
+    InitCtx
     -> List Pane
     -> String
     -> Maybe LocalDate
@@ -1194,7 +1194,7 @@ foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote =
 
 
 foodDetailDesired :
-    InitContext
+    InitCtx
     -> String
     -> Maybe LocalDate
     -> Maybe MealSlot
@@ -1226,7 +1226,7 @@ foodDetailDesired context productId dateParam mealSlot lookupNote =
         (\_ -> FoodShow.init productId dateParam mealSlot lookupNote)
 
 
-foodLogDetailDesired : InitContext -> String -> DesiredPane
+foodLogDetailDesired : InitCtx -> String -> DesiredPane
 foodLogDetailDesired context logId =
     fromInit context
         ("log-detail:" ++ logId)
@@ -1235,12 +1235,12 @@ foodLogDetailDesired context logId =
         (\_ -> FoodLogEntry.init logId)
 
 
-createAdHocLogDesired : InitContext -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
+createAdHocLogDesired : InitCtx -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
 createAdHocLogDesired _ dateParam mealSlot =
     simpleDesired "create-ad-hoc-log" (CreateAdHocLogPane (CreateAdHocLog.init dateParam mealSlot))
 
 
-createWithAiLogDesired : InitContext -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
+createWithAiLogDesired : InitCtx -> Maybe LocalDate -> Maybe MealSlot -> DesiredPane
 createWithAiLogDesired context dateParam mealSlot =
     fromInit context
         "create-ai-log"
@@ -1268,7 +1268,7 @@ contextualWorkspace existing fallbackMain contextual =
             fallbackMain ++ [ contextual ]
 
 
-customFoodListDesired : InitContext -> DesiredPane
+customFoodListDesired : InitCtx -> DesiredPane
 customFoodListDesired context =
     fromInit context
         "custom-food-list"
@@ -1278,7 +1278,7 @@ customFoodListDesired context =
 
 
 customFoodCreatePaneDesired :
-    InitContext
+    InitCtx
     -> ( CustomFoodCreate.Model, CustomFoodCreate.OutMsg )
     -> DesiredPane
 customFoodCreatePaneDesired context createInit =
@@ -1289,7 +1289,7 @@ customFoodCreatePaneDesired context createInit =
         (\_ -> createInit)
 
 
-customFoodEditDesired : InitContext -> String -> DesiredPane
+customFoodEditDesired : InitCtx -> String -> DesiredPane
 customFoodEditDesired context productId =
     fromInit context
         ("custom-food-edit:" ++ productId)
@@ -1298,7 +1298,7 @@ customFoodEditDesired context productId =
         (\_ -> CustomFoodEdit.init productId)
 
 
-customFoodShowDesired : InitContext -> String -> DesiredPane
+customFoodShowDesired : InitCtx -> String -> DesiredPane
 customFoodShowDesired context productId =
     fromInit context
         ("custom-food-detail:" ++ productId)
@@ -1307,17 +1307,17 @@ customFoodShowDesired context productId =
         (\_ -> CustomFoodShow.init productId)
 
 
-mealListDesired : InitContext -> DesiredPane
+mealListDesired : InitCtx -> DesiredPane
 mealListDesired context =
     fromInit context "meal-list" MealListPane applyMealsOutMsg (\_ -> MealList.init)
 
 
-mealCreateDesired : InitContext -> DesiredPane
+mealCreateDesired : InitCtx -> DesiredPane
 mealCreateDesired context =
     fromInit context "meal-create" MealCreatePane applyMealCreateOutMsg (\_ -> MealCreate.init)
 
 
-mealEditDesired : InitContext -> String -> DesiredPane
+mealEditDesired : InitCtx -> String -> DesiredPane
 mealEditDesired context mealId =
     fromInit context
         ("meal-edit:" ++ mealId)
@@ -1326,7 +1326,7 @@ mealEditDesired context mealId =
         (\_ -> MealEdit.init mealId)
 
 
-mealDetailDesired : InitContext -> String -> DesiredPane
+mealDetailDesired : InitCtx -> String -> DesiredPane
 mealDetailDesired context mealId =
     fromInit context
         ("meal-detail:" ++ mealId)
@@ -1391,8 +1391,8 @@ type alias NutrientsResult =
     Result Api.Client.ApiError Api.Foods.NutrientListResponse
 
 
-type alias PreferencesResult =
-    Result Api.Client.ApiError Data.DiaryPreferences.DiaryPreferences
+type alias PrefsResult =
+    Result Api.Client.ApiError Data.DiaryPrefs.DiaryPrefs
 
 
 type alias DiaryLogsResult =
@@ -1410,7 +1410,7 @@ type alias LatestSlotsResult =
 type Msg
     = SharedUnitsLoaded Store.RequestToken UnitsResult
     | SharedNutrientsLoaded Store.RequestToken NutrientsResult
-    | SharedPreferencesLoaded Store.RequestToken PreferencesResult
+    | SharedPrefsLoaded Store.RequestToken PrefsResult
     | DiaryLogsStoreLoaded Store.RequestToken LocalDate DiaryLogsResult
     | DiaryGoalStoreLoaded Store.RequestToken LocalDate DiaryGoalResult
     | LatestSlotsStoreLoaded Store.RequestToken LocalDate LatestSlotsResult
@@ -1442,7 +1442,7 @@ type Msg
     | GotMealDetailMsg MealShow.Msg
 
 
-update : InitContext -> Msg -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
+update : InitCtx -> Msg -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
 update context msg model =
     let
         activeModel : Model
@@ -1495,7 +1495,7 @@ isDiaryOperation msg =
                 DiaryDay.GoalLoaded _ _ ->
                     False
 
-                DiaryDay.PreferencesLoaded _ ->
+                DiaryDay.PrefsLoaded _ ->
                     False
 
                 DiaryDay.LatestSlotsReceived _ _ ->
@@ -1523,8 +1523,8 @@ updateSharedMessage msg model =
         SharedNutrientsLoaded token result ->
             Just (settleShared nutrientsResource token result model)
 
-        SharedPreferencesLoaded token result ->
-            Just (settleShared preferencesResource token result model)
+        SharedPrefsLoaded token result ->
+            Just (settleShared prefsResource token result model)
 
         DiaryLogsStoreLoaded token date result ->
             Just (settleDate diaryLogsResource token date result model)
@@ -1640,7 +1640,7 @@ type Mutation
     | RefreshDiaryAndCalendar LocalDate
     | RefreshCalendar LocalDate
     | RefreshGoals
-    | PreferencesSaved Data.DiaryPreferences.DiaryPreferences
+    | PrefsSaved Data.DiaryPrefs.DiaryPrefs
 
 
 type alias PaneUpdate pane =
@@ -1685,7 +1685,7 @@ updateFirst updateOne panes =
                             )
 
 
-updatePane : List Pane -> InitContext -> Msg -> Pane -> Maybe (PaneUpdate Pane)
+updatePane : List Pane -> InitCtx -> Msg -> Pane -> Maybe (PaneUpdate Pane)
 updatePane allPanes context msg pane =
     case ( msg, pane ) of
         ( GotLoginMsg subMsg, LoginPane sub ) ->
@@ -1787,8 +1787,8 @@ updatePane allPanes context msg pane =
                 mutation : Mutation
                 mutation =
                     case subMsg of
-                        DiarySettings.SaveCompleted (Ok preferences) ->
-                            PreferencesSaved preferences
+                        DiarySettings.SaveCompleted (Ok prefs) ->
+                            PrefsSaved prefs
 
                         _ ->
                             NoMutation
@@ -2050,10 +2050,10 @@ updatePane allPanes context msg pane =
 
 
 stepPane :
-    InitContext
+    InitCtx
     -> (subModel -> Pane)
     -> (subMsg -> Msg)
-    -> (InitContext -> outMsg -> ( Cmd Msg, OutMsg ))
+    -> (InitCtx -> outMsg -> ( Cmd Msg, OutMsg ))
     -> Mutation
     -> ( subModel, Cmd subMsg, outMsg )
     -> Maybe (PaneUpdate Pane)
@@ -2082,8 +2082,8 @@ applyMutation mutation panes store =
         RefreshCalendar date ->
             refreshAfterLogMutation False date panes store
 
-        PreferencesSaved preferences ->
-            ( panes, Store.seed Store.preferences preferences store, Cmd.none )
+        PrefsSaved prefs ->
+            ( panes, Store.seed Store.prefs prefs store, Cmd.none )
 
         RefreshGoals ->
             let
@@ -2181,61 +2181,61 @@ third ( _, _, value ) =
     value
 
 
-localContextReceived : InitContext -> LocalContext -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
-localContextReceived pageContext context model =
+localCtxReceived : InitCtx -> LocalCtx -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
+localCtxReceived pageCtx context model =
     updateAll
         (\pane ->
             case pane of
                 FoodDetailPane _ _ ->
                     updatePane model.panes
-                        pageContext
-                        (GotFoodDetailMsg (FoodShow.LocalContextReceived context))
+                        pageCtx
+                        (GotFoodDetailMsg (FoodShow.LocalCtxReceived context))
                         pane
 
                 FoodSearchPane _ ->
                     updatePane model.panes
-                        pageContext
-                        (GotFoodSearchMsg (FoodSearch.LocalContextReceived context))
+                        pageCtx
+                        (GotFoodSearchMsg (FoodSearch.LocalCtxReceived context))
                         pane
 
                 CreateAdHocLogPane _ ->
                     updatePane model.panes
-                        pageContext
-                        (GotCreateAdHocLogMsg (CreateAdHocLog.LocalContextReceived context))
+                        pageCtx
+                        (GotCreateAdHocLogMsg (CreateAdHocLog.LocalCtxReceived context))
                         pane
 
                 CreateWithAiLogPane _ ->
                     updatePane model.panes
-                        pageContext
+                        pageCtx
                         (GotCreateWithAiLogMsg
                             (CreateWithAiLog.ReviewMsg
-                                (CreateAdHocLog.LocalContextReceived context)
+                                (CreateAdHocLog.LocalCtxReceived context)
                             )
                         )
                         pane
 
                 GoalsSettingsPane _ _ ->
                     updatePane model.panes
-                        pageContext
-                        (GotGoalsSettingsMsg (GoalsSettings.LocalContextReceived context))
+                        pageCtx
+                        (GotGoalsSettingsMsg (GoalsSettings.LocalCtxReceived context))
                         pane
 
                 DiaryPane _ _ ->
-                    todayChangedIn pageContext
+                    todayChangedIn pageCtx
                         model
                         context
                         pane
                         (GotDiaryMsg << DiaryDay.TodayChanged)
 
                 DiaryCalendarPane _ _ ->
-                    todayChangedIn pageContext
+                    todayChangedIn pageCtx
                         model
                         context
                         pane
                         (GotDiaryCalendarMsg << DiaryCalendar.TodayChanged)
 
                 NutritionDetailsPane _ _ ->
-                    todayChangedIn pageContext
+                    todayChangedIn pageCtx
                         model
                         context
                         pane
@@ -2252,28 +2252,28 @@ left open overnight, so the panes that clamp navigation against "today" take it
 from the same context the save paths already ask for.
 -}
 todayChangedIn :
-    InitContext
+    InitCtx
     -> Model
-    -> LocalContext
+    -> LocalCtx
     -> Pane
     -> (LocalDate -> Msg)
     -> Maybe (PaneUpdate Pane)
-todayChangedIn pageContext model context pane toMsg =
-    updatePane model.panes pageContext (toMsg context.date) pane
+todayChangedIn pageCtx model context pane toMsg =
+    updatePane model.panes pageCtx (toMsg context.date) pane
 
 
 barcodeScannerEventReceived :
-    InitContext
+    InitCtx
     -> ScannerEvent
     -> Model
     -> Maybe ( Model, Cmd Msg, OutMsg )
-barcodeScannerEventReceived pageContext event model =
+barcodeScannerEventReceived pageCtx event model =
     updateAll
         (\pane ->
             case pane of
                 FoodSearchPane _ ->
                     updatePane model.panes
-                        pageContext
+                        pageCtx
                         (GotFoodSearchMsg (FoodSearch.BarcodeScannerEventReceived event))
                         pane
 
@@ -2328,7 +2328,7 @@ updateAll updateOne model =
         Nothing
 
 
-applyLoginOutMsg : InitContext -> AuthLogin.OutMsg -> ( Cmd Msg, OutMsg )
+applyLoginOutMsg : InitCtx -> AuthLogin.OutMsg -> ( Cmd Msg, OutMsg )
 applyLoginOutMsg _ outMsg =
     case outMsg of
         AuthLogin.NoOp ->
@@ -2341,7 +2341,7 @@ applyLoginOutMsg _ outMsg =
             ( Cmd.none, LoginSucceeded loginSession )
 
 
-applySetupOutMsg : InitContext -> BootstrapSetup.OutMsg -> ( Cmd Msg, OutMsg )
+applySetupOutMsg : InitCtx -> BootstrapSetup.OutMsg -> ( Cmd Msg, OutMsg )
 applySetupOutMsg _ outMsg =
     case outMsg of
         BootstrapSetup.NoOp ->
@@ -2357,7 +2357,7 @@ applySetupOutMsg _ outMsg =
             ( Cmd.none, SetupSucceeded loginSession )
 
 
-applyAdminOutMsg : InitContext -> AdminDashboard.OutMsg -> ( Cmd Msg, OutMsg )
+applyAdminOutMsg : InitCtx -> AdminDashboard.OutMsg -> ( Cmd Msg, OutMsg )
 applyAdminOutMsg _ outMsg =
     case outMsg of
         AdminDashboard.NoOp ->
@@ -2373,7 +2373,7 @@ applyAdminOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyAdminCreateUserOutMsg : InitContext -> AdminCreateUser.OutMsg -> ( Cmd Msg, OutMsg )
+applyAdminCreateUserOutMsg : InitCtx -> AdminCreateUser.OutMsg -> ( Cmd Msg, OutMsg )
 applyAdminCreateUserOutMsg _ outMsg =
     case outMsg of
         AdminCreateUser.NoOp ->
@@ -2392,7 +2392,7 @@ applyAdminCreateUserOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyAdminEditUserOutMsg : InitContext -> AdminEditUser.OutMsg -> ( Cmd Msg, OutMsg )
+applyAdminEditUserOutMsg : InitCtx -> AdminEditUser.OutMsg -> ( Cmd Msg, OutMsg )
 applyAdminEditUserOutMsg _ outMsg =
     case outMsg of
         AdminEditUser.NoOp ->
@@ -2428,7 +2428,7 @@ applyAdminEditUserOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyDiaryOutMsg : InitContext -> DiaryDay.OutMsg -> ( Cmd Msg, OutMsg )
+applyDiaryOutMsg : InitCtx -> DiaryDay.OutMsg -> ( Cmd Msg, OutMsg )
 applyDiaryOutMsg _ outMsg =
     case outMsg of
         DiaryDay.NoOp ->
@@ -2459,7 +2459,7 @@ applyDiaryOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyDiaryCalendarOutMsg : InitContext -> DiaryCalendar.OutMsg -> ( Cmd Msg, OutMsg )
+applyDiaryCalendarOutMsg : InitCtx -> DiaryCalendar.OutMsg -> ( Cmd Msg, OutMsg )
 applyDiaryCalendarOutMsg _ outMsg =
     case outMsg of
         DiaryCalendar.NoOp ->
@@ -2486,7 +2486,7 @@ applyDiaryCalendarOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyNutritionDetailsOutMsg : InitContext -> NutritionDetails.OutMsg -> ( Cmd Msg, OutMsg )
+applyNutritionDetailsOutMsg : InitCtx -> NutritionDetails.OutMsg -> ( Cmd Msg, OutMsg )
 applyNutritionDetailsOutMsg _ outMsg =
     case outMsg of
         NutritionDetails.NoOp ->
@@ -2506,17 +2506,17 @@ applyNutritionDetailsOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyDiarySettingsOutMsg : InitContext -> DiarySettings.OutMsg -> ( Cmd Msg, OutMsg )
+applyDiarySettingsOutMsg : InitCtx -> DiarySettings.OutMsg -> ( Cmd Msg, OutMsg )
 applyDiarySettingsOutMsg _ outMsg =
     case outMsg of
         DiarySettings.NoOp ->
             ( Cmd.none, NoOutMsg )
 
-        DiarySettings.RequestPreferences ->
+        DiarySettings.RequestPrefs ->
             ( Cmd.none, NoOutMsg )
 
-        DiarySettings.RequestSave preferences ->
-            ( Api.DiaryPreferences.put preferences
+        DiarySettings.RequestSave prefs ->
+            ( Api.DiaryPrefs.put prefs
                 (GotDiarySettingsMsg << DiarySettings.SaveCompleted)
             , NoOutMsg
             )
@@ -2525,7 +2525,7 @@ applyDiarySettingsOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyApiKeysOutMsg : InitContext -> Int -> SettingsApiKeys.OutMsg -> ( Cmd Msg, OutMsg )
+applyApiKeysOutMsg : InitCtx -> Int -> SettingsApiKeys.OutMsg -> ( Cmd Msg, OutMsg )
 applyApiKeysOutMsg _ generation outMsg =
     case outMsg of
         SettingsApiKeys.NoOp ->
@@ -2553,7 +2553,7 @@ applyApiKeysOutMsg _ generation outMsg =
 
 
 applyApiKeyCreateOutMsg :
-    InitContext
+    InitCtx
     -> Int
     -> SettingsApiKeyCreate.OutMsg
     -> ( Cmd Msg, OutMsg )
@@ -2580,7 +2580,7 @@ applyApiKeyCreateOutMsg _ generation outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyGoalsSettingsOutMsg : InitContext -> GoalsSettings.OutMsg -> ( Cmd Msg, OutMsg )
+applyGoalsSettingsOutMsg : InitCtx -> GoalsSettings.OutMsg -> ( Cmd Msg, OutMsg )
 applyGoalsSettingsOutMsg _ outMsg =
     case outMsg of
         GoalsSettings.NoOp ->
@@ -2589,8 +2589,8 @@ applyGoalsSettingsOutMsg _ outMsg =
         GoalsSettings.RequestGoal ->
             ( Cmd.none, NoOutMsg )
 
-        GoalsSettings.RequestLocalContext ->
-            ( Cmd.none, RequestLocalContext )
+        GoalsSettings.RequestLocalCtx ->
+            ( Cmd.none, RequestLocalCtx )
 
         GoalsSettings.RequestSaveGoal request ->
             ( Api.Goals.saveGoal request
@@ -2602,7 +2602,7 @@ applyGoalsSettingsOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyFoodSearchOutMsg : InitContext -> FoodSearch.OutMsg -> ( Cmd Msg, OutMsg )
+applyFoodSearchOutMsg : InitCtx -> FoodSearch.OutMsg -> ( Cmd Msg, OutMsg )
 applyFoodSearchOutMsg _ outMsg =
     case outMsg of
         FoodSearch.NoOp ->
@@ -2632,8 +2632,8 @@ applyFoodSearchOutMsg _ outMsg =
             , NoOutMsg
             )
 
-        FoodSearch.RequestLocalContext ->
-            ( Cmd.none, RequestLocalContext )
+        FoodSearch.RequestLocalCtx ->
+            ( Cmd.none, RequestLocalCtx )
 
         FoodSearch.RequestBarcodeScanStart ->
             ( Cmd.none, RequestBarcodeScanStart )
@@ -2657,7 +2657,7 @@ applyFoodSearchOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyFoodDetailOutMsg : InitContext -> FoodShow.OutMsg -> ( Cmd Msg, OutMsg )
+applyFoodDetailOutMsg : InitCtx -> FoodShow.OutMsg -> ( Cmd Msg, OutMsg )
 applyFoodDetailOutMsg context outMsg =
     case outMsg of
         FoodShow.NoOp ->
@@ -2672,8 +2672,8 @@ applyFoodDetailOutMsg context outMsg =
             , NoOutMsg
             )
 
-        FoodShow.RequestLocalContext ->
-            ( Cmd.none, RequestLocalContext )
+        FoodShow.RequestLocalCtx ->
+            ( Cmd.none, RequestLocalCtx )
 
         FoodShow.RequestCreateLog request ->
             ( Api.Logs.createLog request (GotFoodDetailMsg << FoodShow.LogCompleted), NoOutMsg )
@@ -2685,14 +2685,14 @@ applyFoodDetailOutMsg context outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyCreateAdHocLogOutMsg : InitContext -> CreateAdHocLog.OutMsg -> ( Cmd Msg, OutMsg )
+applyCreateAdHocLogOutMsg : InitCtx -> CreateAdHocLog.OutMsg -> ( Cmd Msg, OutMsg )
 applyCreateAdHocLogOutMsg _ outMsg =
     case outMsg of
         CreateAdHocLog.NoOp ->
             ( Cmd.none, NoOutMsg )
 
-        CreateAdHocLog.RequestLocalContext ->
-            ( Cmd.none, RequestLocalContext )
+        CreateAdHocLog.RequestLocalCtx ->
+            ( Cmd.none, RequestLocalCtx )
 
         CreateAdHocLog.RequestAdHocLog request ->
             ( Api.Logs.createAdHocLog request
@@ -2725,7 +2725,7 @@ applyCreateAdHocLogOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyCreateWithAiLogOutMsg : InitContext -> CreateWithAiLog.OutMsg -> ( Cmd Msg, OutMsg )
+applyCreateWithAiLogOutMsg : InitCtx -> CreateWithAiLog.OutMsg -> ( Cmd Msg, OutMsg )
 applyCreateWithAiLogOutMsg _ outMsg =
     case outMsg of
         CreateWithAiLog.NoOp ->
@@ -2754,8 +2754,8 @@ applyCreateWithAiLogOutMsg _ outMsg =
         CreateWithAiLog.RevokePhotoPreviewUrls urls ->
             ( Cmd.none, RevokePhotoPreviewUrls urls )
 
-        CreateWithAiLog.RequestLocalContext ->
-            ( Cmd.none, RequestLocalContext )
+        CreateWithAiLog.RequestLocalCtx ->
+            ( Cmd.none, RequestLocalCtx )
 
         CreateWithAiLog.RequestAdHocLog request ->
             ( Api.Logs.createAdHocLog request
@@ -2800,7 +2800,7 @@ applyCreateWithAiLogOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyFoodLogDetailOutMsg : InitContext -> FoodLogEntry.OutMsg -> ( Cmd Msg, OutMsg )
+applyFoodLogDetailOutMsg : InitCtx -> FoodLogEntry.OutMsg -> ( Cmd Msg, OutMsg )
 applyFoodLogDetailOutMsg context outMsg =
     case outMsg of
         FoodLogEntry.NoOp ->
@@ -2850,7 +2850,7 @@ applyFoodLogDetailOutMsg context outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyCustomFoodCreateOutMsg : InitContext -> CustomFoodCreate.OutMsg -> ( Cmd Msg, OutMsg )
+applyCustomFoodCreateOutMsg : InitCtx -> CustomFoodCreate.OutMsg -> ( Cmd Msg, OutMsg )
 applyCustomFoodCreateOutMsg _ outMsg =
     case outMsg of
         CustomFoodCreate.NoOp ->
@@ -2909,7 +2909,7 @@ applyCustomFoodCreateOutMsg _ outMsg =
 
 applyCustomFoodCreateOutMsgForPanes :
     List Pane
-    -> InitContext
+    -> InitCtx
     -> CustomFoodCreate.OutMsg
     -> ( Cmd Msg, OutMsg )
 applyCustomFoodCreateOutMsgForPanes panes context outMsg =
@@ -2936,7 +2936,7 @@ foodSearchModel panes =
         |> List.head
 
 
-applyCustomFoodEditOutMsg : InitContext -> CustomFoodEdit.OutMsg -> ( Cmd Msg, OutMsg )
+applyCustomFoodEditOutMsg : InitCtx -> CustomFoodEdit.OutMsg -> ( Cmd Msg, OutMsg )
 applyCustomFoodEditOutMsg _ outMsg =
     case outMsg of
         CustomFoodEdit.NoOp ->
@@ -2968,7 +2968,7 @@ applyCustomFoodEditOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyCustomFoodsOutMsg : InitContext -> CustomFoodList.OutMsg -> ( Cmd Msg, OutMsg )
+applyCustomFoodsOutMsg : InitCtx -> CustomFoodList.OutMsg -> ( Cmd Msg, OutMsg )
 applyCustomFoodsOutMsg _ outMsg =
     case outMsg of
         CustomFoodList.NoOp ->
@@ -2987,7 +2987,7 @@ applyCustomFoodsOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyCustomFoodShowOutMsg : InitContext -> CustomFoodShow.OutMsg -> ( Cmd Msg, OutMsg )
+applyCustomFoodShowOutMsg : InitCtx -> CustomFoodShow.OutMsg -> ( Cmd Msg, OutMsg )
 applyCustomFoodShowOutMsg _ outMsg =
     case outMsg of
         CustomFoodShow.NoOp ->
@@ -3012,7 +3012,7 @@ applyCustomFoodShowOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyMealsOutMsg : InitContext -> MealList.OutMsg -> ( Cmd Msg, OutMsg )
+applyMealsOutMsg : InitCtx -> MealList.OutMsg -> ( Cmd Msg, OutMsg )
 applyMealsOutMsg _ outMsg =
     case outMsg of
         MealList.NoOp ->
@@ -3028,7 +3028,7 @@ applyMealsOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyMealCreateOutMsg : InitContext -> MealCreate.OutMsg -> ( Cmd Msg, OutMsg )
+applyMealCreateOutMsg : InitCtx -> MealCreate.OutMsg -> ( Cmd Msg, OutMsg )
 applyMealCreateOutMsg _ outMsg =
     case outMsg of
         MealCreate.NoOp ->
@@ -3050,7 +3050,7 @@ applyMealCreateOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyMealEditOutMsg : InitContext -> MealEdit.OutMsg -> ( Cmd Msg, OutMsg )
+applyMealEditOutMsg : InitCtx -> MealEdit.OutMsg -> ( Cmd Msg, OutMsg )
 applyMealEditOutMsg _ outMsg =
     case outMsg of
         MealEdit.NoOp ->
@@ -3131,7 +3131,7 @@ applyMealFormOutMsg { toPageMsg } outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyMealDetailOutMsg : InitContext -> MealShow.OutMsg -> ( Cmd Msg, OutMsg )
+applyMealDetailOutMsg : InitCtx -> MealShow.OutMsg -> ( Cmd Msg, OutMsg )
 applyMealDetailOutMsg _ outMsg =
     case outMsg of
         MealShow.NoOp ->

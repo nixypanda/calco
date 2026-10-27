@@ -3,22 +3,20 @@ use std::sync::Arc;
 use axum::extract::FromRef;
 
 use crate::AppState;
-use crate::assistant::application::{AssistantError, FoodDraftService, FoodImageSanitizer};
-use crate::assistant::infrastructure::llm::{
-    Authentication, ChatError, OpenAiCompatibleClient, OpenAiCompatibleConfig,
+use crate::assistant::app::{AssistantError, FoodDraftService, FoodImageSanitizer};
+use crate::assistant::infra::llm::{Auth, ChatError, OpenAiClient, OpenAiConfig};
+use crate::assistant::infra::{
+    AdmissionService, CatalogVocabularyAdapter, DEFAULT_MAX_CONCURRENT_REQUESTS,
+    DEFAULT_MAX_TRACKED_USERS, DEFAULT_RATE_LIMIT_WINDOW, DEFAULT_REQUESTS_PER_WINDOW,
+    FoodDraftLlmAdapter, SafeImageSanitizer,
 };
-use crate::assistant::infrastructure::{
-    DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MAX_TRACKED_USERS, DEFAULT_RATE_LIMIT_WINDOW,
-    DEFAULT_REQUESTS_PER_WINDOW, FoodDraftLlmAdapter, NutritionCatalogVocabularyAdapter,
-    RequestAdmissionService, SafeFoodImageSanitizer,
-};
-use crate::config::{AssistantAuthentication, AssistantConfig};
+use crate::config::{AssistantAuth, AssistantConfig};
 use crate::nutrition::module::CatalogModule;
 
 #[derive(Clone)]
 pub struct AssistantComponents {
     food_draft_service: Option<Arc<FoodDraftService>>,
-    pub(crate) request_admission: Arc<RequestAdmissionService>,
+    pub(crate) request_admission: Arc<AdmissionService>,
 }
 
 impl AssistantComponents {
@@ -29,34 +27,32 @@ impl AssistantComponents {
         let food_draft_service = match config {
             AssistantConfig::Disabled => None,
             AssistantConfig::Enabled(config) => {
-                let authentication = match &config.authentication {
-                    AssistantAuthentication::None => Authentication::None,
-                    AssistantAuthentication::Bearer { api_key_file } => {
-                        Authentication::BearerFile(api_key_file.clone())
+                let auth = match &config.authentication {
+                    AssistantAuth::None => Auth::None,
+                    AssistantAuth::Bearer { api_key_file } => {
+                        Auth::BearerFile(api_key_file.clone())
                     }
-                    AssistantAuthentication::Header {
+                    AssistantAuth::Header {
                         header_name,
                         api_key_file,
-                    } => Authentication::HeaderFile {
+                    } => Auth::HeaderFile {
                         name: header_name.clone(),
                         path: api_key_file.clone(),
                     },
                 };
                 let chat = Arc::new(
-                    OpenAiCompatibleClient::new(OpenAiCompatibleConfig {
+                    OpenAiClient::new(OpenAiConfig {
                         endpoint: config.endpoint.clone(),
                         model: config.model.as_str().to_owned(),
-                        authentication,
+                        auth,
                     })
                     .map_err(map_chat_startup_error)?,
                 );
                 let model = Arc::new(FoodDraftLlmAdapter::new(chat));
-                let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(
-                    catalog.services.clone(),
-                ));
-                let images = config.supports_images.then(|| {
-                    Arc::new(SafeFoodImageSanitizer::new()) as Arc<dyn FoodImageSanitizer>
-                });
+                let vocabulary = Arc::new(CatalogVocabularyAdapter::new(catalog.services.clone()));
+                let images = config
+                    .supports_images
+                    .then(|| Arc::new(SafeImageSanitizer::new()) as Arc<dyn FoodImageSanitizer>);
                 Some(Arc::new(FoodDraftService::new(
                     model,
                     vocabulary.clone(),
@@ -80,7 +76,7 @@ impl AssistantComponents {
     fn new(food_draft_service: Option<Arc<FoodDraftService>>) -> Self {
         Self {
             food_draft_service,
-            request_admission: Arc::new(RequestAdmissionService::new(
+            request_admission: Arc::new(AdmissionService::new(
                 DEFAULT_REQUESTS_PER_WINDOW,
                 DEFAULT_RATE_LIMIT_WINDOW,
                 DEFAULT_MAX_CONCURRENT_REQUESTS,

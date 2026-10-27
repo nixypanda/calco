@@ -86,6 +86,7 @@ component used by multiple page categories lives directly under `Component`;
 components reused only within one category remain in a matching subdirectory.
 Components may use API request and response types, but pages retain ownership
 of executing HTTP commands and interpreting navigation or session effects.
+`Component.FoodAssistant` keeps browser photo metadata in `PhotoMeta`.
 
 `Store.elm` owns session-scoped server data and date-keyed diary data. It lives
 at the top level because cached failures use `Api.Client.ApiError`; putting that
@@ -124,7 +125,9 @@ mechanism.
 errors. They do not own business interpretation beyond transport concerns.
 
 `Data.*` modules own domain-facing frontend types and pure helpers. They should
-be safe to test in isolation without HTTP or page wiring.
+be safe to test in isolation without HTTP or page wiring. `Data.LocalCtx`
+carries the browser's local date and timezone, while `Data.DiaryPrefs` owns the
+enabled meal-slot shape; `Api.DiaryPrefs` owns the matching transport calls.
 
 The `Ui.*` module family and `View.*` own shared presentation primitives. Pages
 compose them, but should not copy their look-and-feel logic locally unless the
@@ -442,7 +445,7 @@ API modules live in `frontend-web/src/Api/`:
 - `Admin.elm`
 - `ApiKeys.elm`
 - `Foods.elm`
-- `DiaryPreferences.elm`
+- `DiaryPrefs.elm`
 - `Goals.elm`
 - `Logs.elm`
 - `Meals.elm`
@@ -612,10 +615,11 @@ Food search supports manual barcode lookup and camera scanning on compatible
 devices. Both use the same local-first API: a local match opens immediately,
 while a catalog miss is fetched from Open Food Facts, persisted, and then
 opened. The food detail page displays the API-provided import note for a newly
-fetched product. If neither source has the barcode, the existing not-found
-state offers custom-food creation. A `404` gets a barcode-specific not-found
-message; other failures retain the API error message in the error banner, while
-the custom-food action remains available.
+fetched product. Barcode lookup responses decode to
+`Api.Foods.BarcodeLookupMeta`. If neither source has the barcode, the existing
+not-found state offers custom-food creation. A `404` gets a barcode-specific
+not-found message; other failures retain the API error message in the error
+banner, while the custom-food action remains available.
 
 ### Logs
 

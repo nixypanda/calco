@@ -11,7 +11,7 @@ module Store exposing
     , invalidate
     , latestSlotsAt
     , nutrients
-    , preferences
+    , prefs
     , request
     , reset
     , seed
@@ -22,7 +22,7 @@ module Store exposing
 import Api.Client exposing (ApiError)
 import Api.Foods exposing (NutrientListResponse, UnitListResponse)
 import Api.Logs exposing (LatestSlotsResponse)
-import Data.DiaryPreferences exposing (DiaryPreferences)
+import Data.DiaryPrefs exposing (DiaryPrefs)
 import Data.FoodLog exposing (FoodLog)
 import Data.Goals exposing (GoalSnapshot)
 import Dict exposing (Dict)
@@ -43,7 +43,7 @@ type alias Fields =
     , diaryLogs : Dict String (Entry (List FoodLog))
     , diaryGoals : Dict String (Entry GoalSnapshot)
     , latestSlots : Dict String (Entry LatestSlotsResponse)
-    , preferences : Entry DiaryPreferences
+    , prefs : Entry DiaryPrefs
     , units : Entry UnitListResponse
     , nutrients : Entry NutrientListResponse
     }
@@ -83,7 +83,7 @@ empty =
         , diaryLogs = Dict.empty
         , diaryGoals = Dict.empty
         , latestSlots = Dict.empty
-        , preferences = NotRequested
+        , prefs = NotRequested
         , units = NotRequested
         , nutrients = NotRequested
         }
@@ -126,9 +126,9 @@ latestSlotsAt date =
         (\entries fields -> { fields | latestSlots = entries })
 
 
-preferences : Access DiaryPreferences
-preferences =
-    slotAccess .preferences (\entry fields -> { fields | preferences = entry })
+prefs : Access DiaryPrefs
+prefs =
+    slotAccess .prefs (\entry fields -> { fields | prefs = entry })
 
 
 units : Access UnitListResponse

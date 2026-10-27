@@ -92,7 +92,7 @@ tests =
                     |> Expect.equal
                         { blankRequest = FoodShow.NoOp
                         , blankError = Just "Amount is required."
-                        , validRequest = FoodShow.RequestLocalContext
+                        , validRequest = FoodShow.RequestLocalCtx
                         , inFlight = Just FoodLogForm.SubmitSubmitting
                         , duplicateRequest = FoodShow.NoOp
                         }
@@ -105,7 +105,7 @@ tests =
 
                     requestFor : FoodShow.Model -> FoodShow.OutMsg
                     requestFor model =
-                        out (FoodShow.LocalContextReceived context)
+                        out (FoodShow.LocalCtxReceived context)
                             (step FoodShow.SubmitClicked model)
                 in
                 { selectedDate = requestFor loadedModel

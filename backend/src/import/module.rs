@@ -4,14 +4,14 @@ use axum::extract::FromRef;
 use sqlx::PgPool;
 
 use crate::AppState;
-use crate::import::application::ImportService;
-use crate::import::domain::ImportRepository;
-use crate::import::infrastructure::postgres::PostgresImportRepository;
-use crate::nutrition::catalog::application::{ExternalProductWritePort, NutrientCatalogReadPort};
+use crate::import::app::ImportService;
+use crate::import::domain::ImportRepo;
+use crate::import::infra::pg::PgImportRepo;
+use crate::nutrition::catalog::app::{ExternalProductWritePort, NutrientCatalogReadPort};
 
 #[derive(Clone)]
 pub struct ImportModule {
-    pub repo: Arc<dyn ImportRepository>,
+    pub repo: Arc<dyn ImportRepo>,
     pub service: ImportService,
 }
 
@@ -21,8 +21,7 @@ impl ImportModule {
         external_product_writer: Arc<dyn ExternalProductWritePort>,
         nutrient_catalog_reader: Arc<dyn NutrientCatalogReadPort>,
     ) -> Self {
-        let repo =
-            Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;
+        let repo = Arc::new(PgImportRepo::new(pool.clone())) as Arc<dyn ImportRepo>;
         let service = ImportService::new(
             repo.clone(),
             external_product_writer,
@@ -41,18 +40,18 @@ impl FromRef<AppState> for ImportModule {
 #[cfg(test)]
 mod architecture_tests {
     #[test]
-    fn import_application_uses_catalog_application_ports_for_product_writes() {
-        let source = include_str!("application.rs");
+    fn import_app_uses_catalog_app_ports_for_product_writes() {
+        let source = include_str!("app.rs");
 
-        assert!(!source.contains("ProductRepository"));
-        assert!(!source.contains("NutrientRepository"));
+        assert!(!source.contains("ProductRepo"));
+        assert!(!source.contains("NutrientRepo"));
         assert!(source.contains("ExternalProductWritePort"));
         assert!(source.contains("NutrientCatalogReadPort"));
     }
 
     #[test]
-    fn postgres_import_repository_does_not_write_catalog_tables() {
-        let source = include_str!("infrastructure/postgres.rs");
+    fn pg_import_repo_does_not_write_catalog_tables() {
+        let source = include_str!("infra/pg.rs");
         let forbidden = [
             "INSERT INTO products ",
             "UPDATE products ",
@@ -72,7 +71,7 @@ mod architecture_tests {
         for statement in forbidden {
             assert!(
                 !source.contains(statement),
-                "import repository crosses the catalog persistence boundary: {statement}"
+                "import repo crosses the catalog persistence boundary: {statement}"
             );
         }
     }

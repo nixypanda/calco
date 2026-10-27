@@ -292,7 +292,7 @@ tests =
                         ]
         , test "photo metadata accepts supported files at the limits" <|
             \_ ->
-                Assistant.validatePhotoMetadata
+                Assistant.validatePhotoMeta
                     [ { mimeType = "image/jpeg", size = 15 * 1024 * 1024 }
                     , { mimeType = "image/png", size = 15 * 1024 * 1024 }
                     ]
@@ -303,17 +303,17 @@ tests =
         , test "photo metadata rejects unsupported, oversized, and over-limit selections" <|
             \_ ->
                 { unsupported =
-                    Assistant.validatePhotoMetadata []
+                    Assistant.validatePhotoMeta []
                         [ { mimeType = "image/gif", size = 1 } ]
                 , oversized =
-                    Assistant.validatePhotoMetadata []
+                    Assistant.validatePhotoMeta []
                         [ { mimeType = "image/png", size = 15 * 1024 * 1024 + 1 } ]
                 , tooMany =
-                    Assistant.validatePhotoMetadata
+                    Assistant.validatePhotoMeta
                         (List.repeat 4 { mimeType = "image/jpeg", size = 1 })
                         [ { mimeType = "image/png", size = 1 } ]
                 , totalTooLarge =
-                    Assistant.validatePhotoMetadata
+                    Assistant.validatePhotoMeta
                         [ { mimeType = "image/jpeg", size = 15 * 1024 * 1024 }
                         , { mimeType = "image/png", size = 15 * 1024 * 1024 }
                         ]

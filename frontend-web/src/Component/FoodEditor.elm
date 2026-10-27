@@ -1,6 +1,6 @@
 module Component.FoodEditor exposing
     ( CategoryInput
-    , Context(..)
+    , Ctx(..)
     , FormModel
     , LogFields
     , LogPersistence(..)
@@ -96,13 +96,13 @@ type alias FormModel =
     , servings : List ServingRow
     , submit : SubmitState
     , openDropdown : OpenDropdown
-    , context : Context
+    , ctx : Ctx
     }
 
 
-type Context
-    = CustomFoodContext
-    | FoodLogContext LogFields LogPersistence
+type Ctx
+    = CustomFoodCtx
+    | FoodLogCtx LogFields LogPersistence
 
 
 type alias LogFields =
@@ -227,7 +227,7 @@ emptyForm =
     , servings = []
     , submit = Idle
     , openDropdown = NoneOpen
-    , context = CustomFoodContext
+    , ctx = CustomFoodCtx
     }
 
 
@@ -240,8 +240,8 @@ emptyLogForm maybeDate maybeMealSlot =
             , { code = "CARBS_G", amount = "", unit = "g" }
             , { code = "FAT_G", amount = "", unit = "g" }
             ]
-        , context =
-            FoodLogContext
+        , ctx =
+            FoodLogCtx
                 { date =
                     Maybe.map LocalDate.format maybeDate
                         |> Maybe.withDefault ""
@@ -328,11 +328,11 @@ applyAiLogDraft catalog draft suggested form =
                 categoryInput =
                     form.categoryInput
 
-                context : Context
-                context =
-                    case form.context of
-                        FoodLogContext logFields persistence ->
-                            FoodLogContext
+                ctx : Ctx
+                ctx =
+                    case form.ctx of
+                        FoodLogCtx logFields persistence ->
+                            FoodLogCtx
                                 { logFields
                                     | quantity = suggested.amount
                                     , unit = suggested.unit
@@ -341,8 +341,8 @@ applyAiLogDraft catalog draft suggested form =
                                 }
                                 persistence
 
-                        CustomFoodContext ->
-                            CustomFoodContext
+                        CustomFoodCtx ->
+                            CustomFoodCtx
             in
             { form
                 | name = draft.name
@@ -362,7 +362,7 @@ applyAiLogDraft catalog draft suggested form =
                             { unit = serving.unit, gramsPerUnit = serving.gramsPerUnit }
                         )
                         draft.servings
-                , context = context
+                , ctx = ctx
             }
         )
         (positiveNumber
@@ -417,39 +417,39 @@ requireCoreNutrients rows =
 
 changeLogQuantity : String -> FormModel -> FormModel
 changeLogQuantity rawQuantity form =
-    case form.context of
-        FoodLogContext logFields persistence ->
+    case form.ctx of
+        FoodLogCtx logFields persistence ->
             case ( String.toFloat logFields.quantity, String.toFloat rawQuantity ) of
                 ( Just oldQuantity, Just newQuantity ) ->
                     if oldQuantity > 0 && newQuantity > 0 then
                         scaleLogPortion (newQuantity / oldQuantity)
                             { form
-                                | context =
-                                    FoodLogContext
+                                | ctx =
+                                    FoodLogCtx
                                         { logFields | quantity = rawQuantity }
                                         persistence
                             }
 
                     else
                         { form
-                            | context =
-                                FoodLogContext { logFields | quantity = rawQuantity } persistence
+                            | ctx =
+                                FoodLogCtx { logFields | quantity = rawQuantity } persistence
                         }
 
                 _ ->
                     { form
-                        | context =
-                            FoodLogContext { logFields | quantity = rawQuantity } persistence
+                        | ctx =
+                            FoodLogCtx { logFields | quantity = rawQuantity } persistence
                     }
 
-        CustomFoodContext ->
+        CustomFoodCtx ->
             form
 
 
 changeLogUnit : FoodDraft -> String -> FormModel -> FormModel
 changeLogUnit draft unit form =
-    case form.context of
-        FoodLogContext logFields persistence ->
+    case form.ctx of
+        FoodLogCtx logFields persistence ->
             case
                 ( String.toFloat logFields.quantity
                 , gramsPerLogUnit draft unit
@@ -461,8 +461,8 @@ changeLogUnit draft unit form =
                         changed : FormModel
                         changed =
                             { form
-                                | context =
-                                    FoodLogContext { logFields | unit = unit } persistence
+                                | ctx =
+                                    FoodLogCtx { logFields | unit = unit } persistence
                             }
                     in
                     if quantity > 0 && grams > 0 && oldWeight > 0 then
@@ -472,9 +472,9 @@ changeLogUnit draft unit form =
                         changed
 
                 _ ->
-                    { form | context = FoodLogContext { logFields | unit = unit } persistence }
+                    { form | ctx = FoodLogCtx { logFields | unit = unit } persistence }
 
-        CustomFoodContext ->
+        CustomFoodCtx ->
             form
 
 
@@ -483,10 +483,10 @@ scaleLogPortion ratio form =
     { form
         | nutrients =
             List.map (\row -> { row | amount = scaleNumberString ratio row.amount }) form.nutrients
-        , context =
-            case form.context of
-                FoodLogContext logFields persistence ->
-                    FoodLogContext
+        , ctx =
+            case form.ctx of
+                FoodLogCtx logFields persistence ->
+                    FoodLogCtx
                         { logFields | nutrition = scalePortionNutrition ratio logFields.nutrition }
                         (scalePersistenceWeight ratio persistence)
 
@@ -565,18 +565,18 @@ allowedLogUnitCodes draft =
 
 foodLogFields : FormModel -> Maybe LogFields
 foodLogFields form =
-    case form.context of
-        FoodLogContext fields _ ->
+    case form.ctx of
+        FoodLogCtx fields _ ->
             Just fields
 
-        CustomFoodContext ->
+        CustomFoodCtx ->
             Nothing
 
 
 logPortionWeight : FormModel -> Maybe String
 logPortionWeight form =
-    case form.context of
-        FoodLogContext fields persistence ->
+    case form.ctx of
+        FoodLogCtx fields persistence ->
             case fields.nutrition of
                 DerivedPortion details ->
                     Just details.weightGrams
@@ -589,7 +589,7 @@ logPortionWeight form =
                         LogAdHocOnly ->
                             Nothing
 
-        CustomFoodContext ->
+        CustomFoodCtx ->
             Nothing
 
 
@@ -750,11 +750,11 @@ toInitialCreateFoodRequest form =
 
 validateLog : FormModel -> Result String ValidatedLog
 validateLog form =
-    case form.context of
-        CustomFoodContext ->
+    case form.ctx of
+        CustomFoodCtx ->
             Err (I18n.en TidFoodEditorErrorNotConfigured)
 
-        FoodLogContext logFields persistence ->
+        FoodLogCtx logFields persistence ->
             let
                 enteredRows : List NutrientRow
                 enteredRows =
@@ -1413,21 +1413,21 @@ update msg formIn =
 
         LogPersistenceToggled ->
             ( { form
-                | context =
-                    case form.context of
-                        FoodLogContext logFields LogAdHocOnly ->
-                            FoodLogContext logFields
+                | ctx =
+                    case form.ctx of
+                        FoodLogCtx logFields LogAdHocOnly ->
+                            FoodLogCtx logFields
                                 (SaveCustomFoodThenLog
                                     { portionWeight =
                                         portionWeightFromNutrition logFields.nutrition
                                     }
                                 )
 
-                        FoodLogContext logFields (SaveCustomFoodThenLog _) ->
-                            FoodLogContext logFields LogAdHocOnly
+                        FoodLogCtx logFields (SaveCustomFoodThenLog _) ->
+                            FoodLogCtx logFields LogAdHocOnly
 
-                        CustomFoodContext ->
-                            CustomFoodContext
+                        CustomFoodCtx ->
+                            CustomFoodCtx
               }
             , Cmd.none
             , NoOutMsg
@@ -1439,21 +1439,21 @@ update msg formIn =
 
 mapLogFields : (LogFields -> LogFields) -> FormModel -> FormModel
 mapLogFields transform form =
-    case form.context of
-        FoodLogContext logFields persistence ->
-            { form | context = FoodLogContext (transform logFields) persistence }
+    case form.ctx of
+        FoodLogCtx logFields persistence ->
+            { form | ctx = FoodLogCtx (transform logFields) persistence }
 
-        CustomFoodContext ->
+        CustomFoodCtx ->
             form
 
 
 setPortionWeight : String -> FormModel -> FormModel
 setPortionWeight value form =
-    case form.context of
-        FoodLogContext logFields (SaveCustomFoodThenLog details) ->
+    case form.ctx of
+        FoodLogCtx logFields (SaveCustomFoodThenLog details) ->
             { form
-                | context =
-                    FoodLogContext
+                | ctx =
+                    FoodLogCtx
                         { logFields
                             | nutrition =
                                 case logFields.nutrition of
@@ -1618,11 +1618,11 @@ viewForLog :
     -> FormModel
     -> Element Msg
 viewForLog env visibility nutrients units form =
-    case form.context of
-        CustomFoodContext ->
+    case form.ctx of
+        CustomFoodCtx ->
             Element.none
 
-        FoodLogContext logFields persistence ->
+        FoodLogCtx logFields persistence ->
             let
                 saving : Bool
                 saving =
