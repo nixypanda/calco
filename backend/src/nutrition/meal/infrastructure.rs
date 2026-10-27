@@ -1,11 +1,165 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use sea_query::{
+    DeleteStatement, Expr, ExprTrait, Iden, InsertStatement, Order, PostgresQueryBuilder, Query,
+    SelectStatement, UpdateStatement,
+};
+use sea_query_sqlx::SqlxBinder;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::meal::domain::*;
+
+#[derive(Iden)]
+enum Meals {
+    Table,
+    Id,
+    UserId,
+    Name,
+    Notes,
+    TotalQuantityAmount,
+    TotalQuantityUnit,
+    CreatedAt,
+    UpdatedAt,
+}
+
+#[derive(Iden)]
+enum MealComponents {
+    Table,
+    Id,
+    MealId,
+    ComponentProductId,
+    ComponentMealId,
+    Quantity,
+    Unit,
+    CreatedAt,
+}
+
+fn meal_columns() -> [Meals; 8] {
+    [
+        Meals::Id,
+        Meals::UserId,
+        Meals::Name,
+        Meals::Notes,
+        Meals::TotalQuantityAmount,
+        Meals::TotalQuantityUnit,
+        Meals::CreatedAt,
+        Meals::UpdatedAt,
+    ]
+}
+
+fn load_components_statement(meal_id: Uuid) -> SelectStatement {
+    Query::select()
+        .columns([
+            MealComponents::Id,
+            MealComponents::ComponentProductId,
+            MealComponents::ComponentMealId,
+            MealComponents::Quantity,
+            MealComponents::Unit,
+        ])
+        .from(MealComponents::Table)
+        .and_where(Expr::col(MealComponents::MealId).eq(meal_id))
+        .order_by(MealComponents::CreatedAt, Order::Asc)
+        .to_owned()
+}
+
+fn find_meal_statement(id: Uuid) -> SelectStatement {
+    Query::select()
+        .columns(meal_columns())
+        .from(Meals::Table)
+        .and_where(Expr::col(Meals::Id).eq(id))
+        .to_owned()
+}
+
+fn list_all_meals_statement() -> SelectStatement {
+    Query::select()
+        .columns(meal_columns())
+        .from(Meals::Table)
+        .order_by(Meals::CreatedAt, Order::Desc)
+        .to_owned()
+}
+
+fn insert_meal_statement(meal: &Meal) -> InsertStatement {
+    Query::insert()
+        .into_table(Meals::Table)
+        .columns(meal_columns())
+        .values_panic([
+            meal.id.0.into(),
+            meal.user_id.into(),
+            meal.name.as_str().into(),
+            meal.notes.as_ref().map(|notes| notes.0.as_str()).into(),
+            meal.total_quantity_amount.into(),
+            meal.total_quantity_unit
+                .as_ref()
+                .map(|unit| unit.0.as_str())
+                .into(),
+            meal.created_at.into(),
+            meal.updated_at.into(),
+        ])
+        .to_owned()
+}
+
+fn insert_component_statement(meal_id: Uuid, component: &MealComponent) -> InsertStatement {
+    let (product_id, component_meal_id) = match &component.item {
+        MealComponentItem::Product(pid) => (Some(pid.0), None::<Uuid>),
+    };
+
+    Query::insert()
+        .into_table(MealComponents::Table)
+        .columns([
+            MealComponents::Id,
+            MealComponents::MealId,
+            MealComponents::ComponentProductId,
+            MealComponents::ComponentMealId,
+            MealComponents::Quantity,
+            MealComponents::Unit,
+        ])
+        .values_panic([
+            component.id.into(),
+            meal_id.into(),
+            product_id.into(),
+            component_meal_id.into(),
+            component.quantity_amount.into(),
+            component.quantity_unit.0.as_str().into(),
+        ])
+        .to_owned()
+}
+
+fn update_meal_statement(meal: &Meal) -> UpdateStatement {
+    Query::update()
+        .table(Meals::Table)
+        .value(Meals::Name, meal.name.as_str())
+        .value(
+            Meals::Notes,
+            meal.notes.as_ref().map(|notes| notes.0.as_str()),
+        )
+        .value(Meals::TotalQuantityAmount, meal.total_quantity_amount)
+        .value(
+            Meals::TotalQuantityUnit,
+            meal.total_quantity_unit
+                .as_ref()
+                .map(|unit| unit.0.as_str()),
+        )
+        .value(Meals::UpdatedAt, Expr::current_timestamp())
+        .and_where(Expr::col(Meals::Id).eq(meal.id.0))
+        .to_owned()
+}
+
+fn delete_meal_components_statement(meal_id: Uuid) -> DeleteStatement {
+    Query::delete()
+        .from_table(MealComponents::Table)
+        .and_where(Expr::col(MealComponents::MealId).eq(meal_id))
+        .to_owned()
+}
+
+fn delete_meal_statement(id: Uuid) -> DeleteStatement {
+    Query::delete()
+        .from_table(Meals::Table)
+        .and_where(Expr::col(Meals::Id).eq(id))
+        .to_owned()
+}
 
 #[derive(Clone)]
 pub struct PostgresMealRepository {
@@ -18,13 +172,11 @@ impl PostgresMealRepository {
     }
 
     async fn load_components(&self, meal_id: Uuid) -> Result<Vec<MealComponent>, NutritionError> {
-        let rows = sqlx::query_as::<_, MealComponentRow>(
-            r#"
-            SELECT id, component_product_id, component_meal_id, quantity, unit
-            FROM meal_components WHERE meal_id = $1 ORDER BY created_at
-            "#,
+        let (sql, values) = load_components_statement(meal_id).build_sqlx(PostgresQueryBuilder);
+        let rows = sqlx::query_as_with::<_, MealComponentRow, _>(
+            sqlx::AssertSqlSafe(sql.as_str()),
+            values,
         )
-        .bind(meal_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -74,42 +226,17 @@ impl MealRepository for PostgresMealRepository {
     async fn create(&self, meal: &Meal) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query(
-            r#"
-            INSERT INTO meals (id, user_id, name, notes, total_quantity_amount, total_quantity_unit, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            "#,
-        )
-        .bind(meal.id.0)
-        .bind(meal.user_id)
-        .bind(meal.name.as_str())
-        .bind(meal.notes.as_ref().map(|n| n.0.as_str()))
-        .bind(meal.total_quantity_amount)
-        .bind(meal.total_quantity_unit.as_ref().map(|u| u.0.as_str()))
-        .bind(meal.created_at)
-        .bind(meal.updated_at)
-        .execute(&mut *tx)
-        .await?;
-
-        for component in &meal.components {
-            let (product_id, meal_id) = match &component.item {
-                MealComponentItem::Product(pid) => (Some(pid.0), None::<Uuid>),
-            };
-
-            sqlx::query(
-                r#"
-                INSERT INTO meal_components (id, meal_id, component_product_id, component_meal_id, quantity, unit)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                "#,
-            )
-            .bind(component.id)
-            .bind(meal.id.0)
-            .bind(product_id)
-            .bind(meal_id)
-            .bind(component.quantity_amount)
-            .bind(&component.quantity_unit.0)
+        let (sql, values) = insert_meal_statement(meal).build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&mut *tx)
             .await?;
+
+        for component in &meal.components {
+            let (sql, values) =
+                insert_component_statement(meal.id.0, component).build_sqlx(PostgresQueryBuilder);
+            sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .execute(&mut *tx)
+                .await?;
         }
 
         tx.commit().await?;
@@ -117,16 +244,10 @@ impl MealRepository for PostgresMealRepository {
     }
 
     async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, NutritionError> {
-        let row = sqlx::query_as::<_, MealRow>(
-            r#"
-            SELECT id, user_id, name, notes, total_quantity_amount, total_quantity_unit,
-                   created_at, updated_at
-            FROM meals WHERE id = $1
-            "#,
-        )
-        .bind(id.0)
-        .fetch_optional(&self.pool)
-        .await?;
+        let (sql, values) = find_meal_statement(id.0).build_sqlx(PostgresQueryBuilder);
+        let row = sqlx::query_as_with::<_, MealRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .fetch_optional(&self.pool)
+            .await?;
 
         match row {
             Some(r) => {
@@ -138,16 +259,10 @@ impl MealRepository for PostgresMealRepository {
     }
 
     async fn list_all(&self) -> Result<Vec<Meal>, NutritionError> {
-        let rows = sqlx::query_as::<_, MealRow>(
-            r#"
-            SELECT id, user_id, name, notes, total_quantity_amount, total_quantity_unit,
-                   created_at, updated_at
-            FROM meals
-            ORDER BY created_at DESC
-            "#,
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let (sql, values) = list_all_meals_statement().build_sqlx(PostgresQueryBuilder);
+        let rows = sqlx::query_as_with::<_, MealRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .fetch_all(&self.pool)
+            .await?;
 
         let mut results = Vec::new();
         for r in rows {
@@ -160,45 +275,23 @@ impl MealRepository for PostgresMealRepository {
     async fn update(&self, meal: &Meal) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query(
-            r#"
-            UPDATE meals SET name=$2, notes=$3, total_quantity_amount=$4, total_quantity_unit=$5,
-                             updated_at=now()
-            WHERE id=$1
-            "#,
-        )
-        .bind(meal.id.0)
-        .bind(meal.name.as_str())
-        .bind(meal.notes.as_ref().map(|n| n.0.as_str()))
-        .bind(meal.total_quantity_amount)
-        .bind(meal.total_quantity_unit.as_ref().map(|u| u.0.as_str()))
-        .execute(&mut *tx)
-        .await?;
+        let (sql, values) = update_meal_statement(meal).build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&mut *tx)
+            .await?;
 
-        sqlx::query("DELETE FROM meal_components WHERE meal_id = $1")
-            .bind(meal.id.0)
+        let (sql, values) =
+            delete_meal_components_statement(meal.id.0).build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&mut *tx)
             .await?;
 
         for component in &meal.components {
-            let (product_id, meal_id) = match &component.item {
-                MealComponentItem::Product(pid) => (Some(pid.0), None::<Uuid>),
-            };
-
-            sqlx::query(
-                r#"
-                INSERT INTO meal_components (id, meal_id, component_product_id, component_meal_id, quantity, unit)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                "#,
-            )
-            .bind(component.id)
-            .bind(meal.id.0)
-            .bind(product_id)
-            .bind(meal_id)
-            .bind(component.quantity_amount)
-            .bind(&component.quantity_unit.0)
-            .execute(&mut *tx)
-            .await?;
+            let (sql, values) =
+                insert_component_statement(meal.id.0, component).build_sqlx(PostgresQueryBuilder);
+            sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .execute(&mut *tx)
+                .await?;
         }
 
         tx.commit().await?;
@@ -206,8 +299,8 @@ impl MealRepository for PostgresMealRepository {
     }
 
     async fn delete(&self, id: MealId) -> Result<(), NutritionError> {
-        sqlx::query("DELETE FROM meals WHERE id = $1")
-            .bind(id.0)
+        let (sql, values) = delete_meal_statement(id.0).build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;
         Ok(())

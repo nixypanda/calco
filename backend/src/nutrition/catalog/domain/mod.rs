@@ -798,6 +798,7 @@ pub struct ProductNutrientInput {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct ProductServing {
     pub unit: UnitCode,
     pub grams_per_unit: Decimal,

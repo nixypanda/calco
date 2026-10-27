@@ -1,9 +1,27 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use sea_query::{
+    Condition, Expr, ExprTrait, Iden, InsertStatement, PostgresQueryBuilder, Query,
+    SelectStatement, UpdateStatement,
+};
+use sea_query_sqlx::SqlxBinder;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::domain::*;
+
+#[derive(Iden)]
+enum Sessions {
+    Table,
+    Id,
+    IdentityId,
+    IdentitySecurityStamp,
+    SessionTokenHash,
+    CreatedAt,
+    LastSeenAt,
+    ExpiresAt,
+    RevokedAt,
+}
 
 #[derive(Clone)]
 pub struct PostgresSessionRepository {
@@ -15,54 +33,99 @@ impl PostgresSessionRepository {
     }
 }
 
+fn session_columns() -> [Sessions; 8] {
+    [
+        Sessions::Id,
+        Sessions::IdentityId,
+        Sessions::IdentitySecurityStamp,
+        Sessions::SessionTokenHash,
+        Sessions::CreatedAt,
+        Sessions::LastSeenAt,
+        Sessions::ExpiresAt,
+        Sessions::RevokedAt,
+    ]
+}
+
+fn create_statement(session: &Session) -> InsertStatement {
+    Query::insert()
+        .into_table(Sessions::Table)
+        .columns(session_columns())
+        .values_panic([
+            session.id.into(),
+            session.identity_id.0.into(),
+            session.identity_security_stamp.0.into(),
+            session.session_token_hash.0.as_str().into(),
+            session.created_at.into(),
+            session.last_seen_at.into(),
+            session.expires_at.into(),
+            session.revoked_at.into(),
+        ])
+        .to_owned()
+}
+
+fn find_by_token_hash_statement(token_hash: &str) -> SelectStatement {
+    Query::select()
+        .columns(session_columns())
+        .from(Sessions::Table)
+        .and_where(Expr::col(Sessions::SessionTokenHash).eq(token_hash))
+        .to_owned()
+}
+
+fn update_statement(session: &Session) -> UpdateStatement {
+    Query::update()
+        .table(Sessions::Table)
+        .values([
+            (Sessions::IdentityId, session.identity_id.0.into()),
+            (
+                Sessions::IdentitySecurityStamp,
+                session.identity_security_stamp.0.into(),
+            ),
+            (
+                Sessions::SessionTokenHash,
+                session.session_token_hash.0.as_str().into(),
+            ),
+            (Sessions::CreatedAt, session.created_at.into()),
+            (Sessions::LastSeenAt, session.last_seen_at.into()),
+            (Sessions::ExpiresAt, session.expires_at.into()),
+            (Sessions::RevokedAt, session.revoked_at.into()),
+        ])
+        .and_where(Expr::col(Sessions::Id).eq(session.id))
+        .and_where(
+            Condition::any()
+                .add(Expr::col(Sessions::RevokedAt).is_null())
+                .add(Expr::val(session.revoked_at).is_not_null())
+                .into(),
+        )
+        .to_owned()
+}
+
 #[async_trait]
 impl SessionRepository for PostgresSessionRepository {
     async fn create(&self, session: &Session) -> Result<(), AuthError> {
-        sqlx::query(
-            "INSERT INTO sessions (id, identity_id, identity_security_stamp, session_token_hash, created_at, last_seen_at, expires_at, revoked_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-        )
-        .bind(session.id)
-        .bind(session.identity_id.0)
-        .bind(session.identity_security_stamp.0)
-        .bind(&session.session_token_hash.0)
-        .bind(session.created_at)
-        .bind(session.last_seen_at)
-        .bind(session.expires_at)
-        .bind(session.revoked_at)
-        .execute(&self.pool)
-        .await?;
+        let (sql, values) = create_statement(session).build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
 
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError> {
-        let row = sqlx::query_as::<_, SessionRow>(
-            "SELECT id, identity_id, identity_security_stamp, session_token_hash, created_at, last_seen_at, expires_at, revoked_at \
-             FROM sessions WHERE session_token_hash = $1",
-        )
-        .bind(token_hash)
-        .fetch_optional(&self.pool)
-        .await?;
+        let (sql, values) =
+            find_by_token_hash_statement(token_hash).build_sqlx(PostgresQueryBuilder);
+        let row =
+            sqlx::query_as_with::<_, SessionRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .fetch_optional(&self.pool)
+                .await?;
 
         Ok(row.map(session_row_to_session))
     }
 
     async fn update(&self, session: &Session) -> Result<(), AuthError> {
-        sqlx::query(
-            "UPDATE sessions SET identity_id = $1, identity_security_stamp = $2, session_token_hash = $3, created_at = $4, \
-             last_seen_at = $5, expires_at = $6, revoked_at = $7 WHERE id = $8 AND (revoked_at IS NULL OR $7 IS NOT NULL)",
-        )
-        .bind(session.identity_id.0)
-        .bind(session.identity_security_stamp.0)
-        .bind(&session.session_token_hash.0)
-        .bind(session.created_at)
-        .bind(session.last_seen_at)
-        .bind(session.expires_at)
-        .bind(session.revoked_at)
-        .bind(session.id)
-        .execute(&self.pool)
-        .await?;
+        let (sql, values) = update_statement(session).build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }

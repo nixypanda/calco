@@ -4,8 +4,12 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 
 async fn seed_product(router: &axum::Router, user: &str) -> String {
+    seed_named_product(router, user, "Diary Test Apple").await
+}
+
+async fn seed_named_product(router: &axum::Router, user: &str, name: &str) -> String {
     let payload = json!({
-        "name": "Diary Test Apple",
+        "name": name,
         "brand": "Orchard Lab",
         "categories": ["fruit"],
         "default_quantity": 1,
@@ -43,6 +47,24 @@ async fn seed_meal(router: &axum::Router, user: &str, product_id: &str) -> Strin
         ]
     });
     let created: Value = post_json(router, "/api/meals", user, &payload, StatusCode::CREATED).await;
+    created["id"].as_str().unwrap().to_string()
+}
+
+async fn post_product_log(
+    router: &axum::Router,
+    user: &str,
+    product_id: &str,
+    log_date: &str,
+    meal_slot: &str,
+    amount: i64,
+) -> String {
+    let payload = json!({
+        "log_date": log_date,
+        "meal_slot": meal_slot,
+        "item": { "type": "product", "id": product_id },
+        "quantity": { "amount": amount, "unit": "g" }
+    });
+    let created: Value = post_json(router, "/api/logs", user, &payload, StatusCode::CREATED).await;
     created["id"].as_str().unwrap().to_string()
 }
 
@@ -179,12 +201,149 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn log_list_orders_by_meal_slot_then_created_at(pool: PgPool) {
+    let router = app(pool.clone()).await;
+    let (admin, user) = bootstrap_and_user(&router).await;
+    let other_user = create_user_session(&router, &admin, "other", "otherpassword").await;
+    let product_id = seed_product(&router, &user).await;
+    let other_product_id = seed_product(&router, &other_user).await;
+
+    // Create the logs in a deliberately scrambled order. The older breakfast
+    // log is created first, so a missing secondary sort or an updated_at sort
+    // would put the older one first.
+    let dinner = post_product_log(&router, &user, &product_id, "2026-06-01", "dinner", 100).await;
+    let older_breakfast =
+        post_product_log(&router, &user, &product_id, "2026-06-01", "breakfast", 100).await;
+    let snack = post_product_log(&router, &user, &product_id, "2026-06-01", "snack", 100).await;
+    let newer_breakfast =
+        post_product_log(&router, &user, &product_id, "2026-06-01", "breakfast", 100).await;
+    let late_night_snack = post_product_log(
+        &router,
+        &user,
+        &product_id,
+        "2026-06-01",
+        "late_night_snack",
+        100,
+    )
+    .await;
+    let lunch = post_product_log(&router, &user, &product_id, "2026-06-01", "lunch", 100).await;
+    let adjacent_date =
+        post_product_log(&router, &user, &product_id, "2026-06-02", "breakfast", 100).await;
+    let other_user_log = post_product_log(
+        &router,
+        &other_user,
+        &other_product_id,
+        "2026-06-01",
+        "breakfast",
+        100,
+    )
+    .await;
+
+    for (log_id, created_at) in [
+        (&older_breakfast, "2026-06-01 08:00:00+00"),
+        (&newer_breakfast, "2026-06-01 09:00:00+00"),
+    ] {
+        sqlx::query("UPDATE food_logs SET created_at = $1::timestamptz WHERE id = $2")
+            .bind(created_at)
+            .bind(uuid::Uuid::parse_str(log_id).unwrap())
+            .execute(&pool)
+            .await
+            .expect("set deterministic log created_at");
+    }
+
+    for (log_id, updated_at) in [
+        (&older_breakfast, "2026-06-01 10:00:00+00"),
+        (&newer_breakfast, "2026-06-01 07:00:00+00"),
+    ] {
+        sqlx::query("UPDATE food_logs SET updated_at = $1::timestamptz WHERE id = $2")
+            .bind(updated_at)
+            .bind(uuid::Uuid::parse_str(log_id).unwrap())
+            .execute(&pool)
+            .await
+            .expect("set deterministic log updated_at");
+    }
+
+    let listed: Value = get_json(&router, "/api/logs?log_date=2026-06-01", &user).await;
+    let listed_ids: Vec<String> = listed["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_string())
+        .collect();
+
+    assert_eq!(
+        listed_ids,
+        vec![
+            newer_breakfast,
+            older_breakfast,
+            lunch,
+            dinner,
+            snack,
+            late_night_snack,
+        ],
+        "logs must be ordered by meal-slot rank, then newest created_at first"
+    );
+    assert!(!listed_ids.contains(&adjacent_date));
+    assert!(!listed_ids.contains(&other_user_log));
+}
+
+#[sqlx::test]
+async fn latest_slots_excludes_logs_on_before_date(pool: PgPool) {
+    let router = app(pool).await;
+    let (admin, user) = bootstrap_and_user(&router).await;
+    let other_user = create_user_session(&router, &admin, "other", "otherpassword").await;
+    let product_id = seed_product(&router, &user).await;
+    let other_product_id = seed_product(&router, &other_user).await;
+
+    let breakfast_on_ninth =
+        post_product_log(&router, &user, &product_id, "2026-06-09", "breakfast", 100).await;
+    post_product_log(&router, &user, &product_id, "2026-06-10", "breakfast", 100).await;
+    // Ten days before `before`: inside the 30-day default window, outside 7.
+    post_product_log(&router, &user, &product_id, "2026-05-31", "lunch", 100).await;
+    post_product_log(
+        &router,
+        &other_user,
+        &other_product_id,
+        "2026-06-09",
+        "breakfast",
+        100,
+    )
+    .await;
+
+    let latest: Value = get_json(
+        &router,
+        "/api/logs/latest-slots?before=2026-06-10&lookback_days=7",
+        &user,
+    )
+    .await;
+    let slots = latest["slots"].as_array().unwrap();
+    assert_eq!(
+        slots.len(),
+        1,
+        "only the requested user's breakfast has a log inside the seven-day window"
+    );
+    assert_eq!(slots[0]["meal_slot"], "breakfast");
+    assert_eq!(slots[0]["source_date"], "2026-06-09");
+
+    let items = slots[0]["items"].as_array().unwrap();
+    assert_eq!(
+        items.len(),
+        1,
+        "the before date is exclusive and the lunch log is outside the lookback"
+    );
+    assert_eq!(items[0]["id"], breakfast_on_ninth);
+}
+
+#[sqlx::test]
 async fn recent_items_and_last_used_defaults(pool: PgPool) {
     let router = app(pool).await;
     let (_admin, user) = bootstrap_and_user(&router).await;
 
     let product_id = seed_product(&router, &user).await;
     let meal_id = seed_meal(&router, &user, &product_id).await;
+    let product_e_id = seed_named_product(&router, &user, "Diary Test Egg").await;
+    let product_f_id = seed_named_product(&router, &user, "Diary Test Fig").await;
+    let product_d_id = seed_named_product(&router, &user, "Diary Test Dosa").await;
 
     let first_product_log = json!({
         "log_date": "2026-06-01",
@@ -224,6 +383,27 @@ async fn recent_items_and_last_used_defaults(pool: PgPool) {
     });
     let _: Value = post_json(&router, "/api/logs", &user, &meal_log, StatusCode::CREATED).await;
 
+    post_product_log(
+        &router,
+        &user,
+        &product_f_id,
+        "2026-05-31",
+        "breakfast",
+        100,
+    )
+    .await;
+    post_product_log(
+        &router,
+        &user,
+        &product_e_id,
+        "2026-06-01",
+        "breakfast",
+        100,
+    )
+    .await;
+    post_product_log(&router, &user, &product_id, "2026-06-04", "breakfast", 130).await;
+    post_product_log(&router, &user, &product_d_id, "2026-06-02", "lunch", 100).await;
+
     let recent: Value = get_json(
         &router,
         "/api/logs/recent-items?from_date=2026-06-01&to_date=2026-06-03&meal_slot=breakfast",
@@ -231,11 +411,29 @@ async fn recent_items_and_last_used_defaults(pool: PgPool) {
     )
     .await;
     let recent_items = recent["items"].as_array().unwrap();
-    assert_eq!(recent_items.len(), 2);
+    assert_eq!(recent_items.len(), 3);
+    assert!(
+        recent_items
+            .iter()
+            .any(|item| item["item"]["type"] == "product" && item["item"]["id"] == product_e_id),
+        "product E logged on the inclusive lower bound must appear in recent items"
+    );
+    assert!(
+        !recent_items
+            .iter()
+            .any(|item| item["item"]["type"] == "product" && item["item"]["id"] == product_f_id),
+        "product F logged before the lower bound must not appear in recent items"
+    );
+    assert!(
+        !recent_items
+            .iter()
+            .any(|item| item["item"]["type"] == "product" && item["item"]["id"] == product_d_id),
+        "wrong-slot product D must not appear in breakfast recent items"
+    );
 
     let product_recent = recent_items
         .iter()
-        .find(|item| item["item"]["type"] == "product")
+        .find(|item| item["item"]["type"] == "product" && item["item"]["id"] == product_id)
         .expect("recent product missing");
     assert_eq!(product_recent["item"]["id"], product_id);
     assert_eq!(product_recent["last_used_date"], "2026-06-03");
@@ -272,6 +470,14 @@ async fn recent_items_and_last_used_defaults(pool: PgPool) {
     .await;
     let defaults = last_used["items"].as_array().unwrap();
     assert_eq!(defaults.len(), 2);
+    for unrequested in [&product_e_id, &product_f_id, &product_d_id] {
+        assert!(
+            !defaults.iter().any(|item| {
+                item["item"]["type"] == "product" && item["item"]["id"] == unrequested.as_str()
+            }),
+            "last-used must only return explicitly requested items"
+        );
+    }
     assert!(
         defaults.iter().any(|item| {
             item["item"]["type"] == "product" && item["quantity"]["amount"] == "175"

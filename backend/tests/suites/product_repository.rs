@@ -292,10 +292,12 @@ async fn external_upsert_table_locks_block_writers_but_allow_reads(pool: PgPool)
         .enumerate()
     {
         let mut blocker = pool.begin().await.unwrap();
-        sqlx::query(&format!("LOCK TABLE {table} IN ROW EXCLUSIVE MODE"))
-            .execute(&mut *blocker)
-            .await
-            .unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "LOCK TABLE {table} IN ROW EXCLUSIVE MODE"
+        )))
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
 
         let repository = PostgresProductRepository::new(pool.clone());
         let product =
@@ -453,4 +455,73 @@ async fn concurrent_overlapping_upserts_leave_one_complete_aggregate(pool: PgPoo
         }
         other => panic!("unexpected final product version: {other}"),
     }
+}
+
+#[sqlx::test]
+async fn external_upsert_handles_more_than_one_chunk(pool: PgPool) {
+    let repository = PostgresProductRepository::new(pool.clone());
+    let source_ids: Vec<String> = (0..=1_000)
+        .map(|index| format!("chunk-{index:04}"))
+        .collect();
+
+    let first_batch = external_batch(
+        source_ids
+            .iter()
+            .map(|source_id| external_product(source_id, None, "Chunk product", &[], &[]))
+            .collect(),
+    );
+    let first = repository
+        .upsert_external_many(&first_batch)
+        .await
+        .expect("first chunked upsert");
+    assert_eq!(first.created, 1_001);
+    assert_eq!(first.updated, 0);
+
+    let stored_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = ANY($1)",
+    )
+    .bind(&source_ids)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored_count, 1_001, "every product must be persisted");
+
+    let replacement_batch = external_batch(
+        source_ids
+            .iter()
+            .enumerate()
+            .map(|(index, source_id)| {
+                let name = if index == 0 {
+                    "Renamed first chunk product"
+                } else if index == source_ids.len() - 1 {
+                    "Renamed last chunk product"
+                } else {
+                    "Chunk product"
+                };
+                external_product(source_id, None, name, &[], &[])
+            })
+            .collect(),
+    );
+    let replacement = repository
+        .upsert_external_many(&replacement_batch)
+        .await
+        .expect("second chunked upsert");
+    assert_eq!(replacement.created, 0);
+    assert_eq!(replacement.updated, 2);
+
+    let first_name: String =
+        sqlx::query_scalar("SELECT name FROM products WHERE source = 'OFF' AND source_id = $1")
+            .bind(&source_ids[0])
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(first_name, "Renamed first chunk product");
+
+    let last_name: String =
+        sqlx::query_scalar("SELECT name FROM products WHERE source = 'OFF' AND source_id = $1")
+            .bind(source_ids.last().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(last_name, "Renamed last chunk product");
 }

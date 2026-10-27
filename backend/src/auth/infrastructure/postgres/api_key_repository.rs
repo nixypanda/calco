@@ -1,9 +1,30 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use sea_query::{
+    Condition, Expr, ExprTrait, Iden, InsertStatement, Order, PostgresQueryBuilder, Query,
+    SelectStatement, UpdateStatement,
+};
+use sea_query_sqlx::SqlxBinder;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::domain::*;
+
+#[derive(Iden)]
+enum ApiKeys {
+    Table,
+    Id,
+    IdentityId,
+    IdentitySecurityStamp,
+    Name,
+    TokenHash,
+    TokenHint,
+    Scope,
+    CreatedAt,
+    LastUsedAt,
+    ExpiresAt,
+    RevokedAt,
+}
 
 #[derive(Clone)]
 pub struct PostgresApiKeyRepository {
@@ -16,50 +37,131 @@ impl PostgresApiKeyRepository {
     }
 }
 
+fn api_key_columns() -> [ApiKeys; 11] {
+    [
+        ApiKeys::Id,
+        ApiKeys::IdentityId,
+        ApiKeys::IdentitySecurityStamp,
+        ApiKeys::Name,
+        ApiKeys::TokenHash,
+        ApiKeys::TokenHint,
+        ApiKeys::Scope,
+        ApiKeys::CreatedAt,
+        ApiKeys::LastUsedAt,
+        ApiKeys::ExpiresAt,
+        ApiKeys::RevokedAt,
+    ]
+}
+
+fn create_statement(key: &ApiKey) -> InsertStatement {
+    Query::insert()
+        .into_table(ApiKeys::Table)
+        .columns(api_key_columns())
+        .values_panic([
+            key.id.0.into(),
+            key.identity_id.0.into(),
+            key.identity_security_stamp.0.into(),
+            key.name.as_str().into(),
+            key.token_hash.0.as_str().into(),
+            key.token_hint.as_str().into(),
+            key.scope.as_str().into(),
+            key.created_at.into(),
+            key.last_used_at.into(),
+            key.expires_at.into(),
+            key.revoked_at.into(),
+        ])
+        .to_owned()
+}
+
+fn find_by_token_hash_statement(token_hash: &str) -> SelectStatement {
+    Query::select()
+        .columns(api_key_columns())
+        .from(ApiKeys::Table)
+        .and_where(Expr::col(ApiKeys::TokenHash).eq(token_hash))
+        .to_owned()
+}
+
+fn find_by_id_statement(id: ApiKeyId) -> SelectStatement {
+    Query::select()
+        .columns(api_key_columns())
+        .from(ApiKeys::Table)
+        .and_where(Expr::col(ApiKeys::Id).eq(id.0))
+        .to_owned()
+}
+
+fn find_by_id_and_identity_id_statement(id: ApiKeyId, identity_id: IdentityId) -> SelectStatement {
+    Query::select()
+        .columns(api_key_columns())
+        .from(ApiKeys::Table)
+        .and_where(Expr::col(ApiKeys::Id).eq(id.0))
+        .and_where(Expr::col(ApiKeys::IdentityId).eq(identity_id.0))
+        .to_owned()
+}
+
+fn list_by_identity_id_statement(identity_id: IdentityId) -> SelectStatement {
+    Query::select()
+        .columns(api_key_columns())
+        .from(ApiKeys::Table)
+        .and_where(Expr::col(ApiKeys::IdentityId).eq(identity_id.0))
+        .order_by(ApiKeys::CreatedAt, Order::Desc)
+        .to_owned()
+}
+
+fn update_statement(key: &ApiKey) -> UpdateStatement {
+    Query::update()
+        .table(ApiKeys::Table)
+        .values([
+            (ApiKeys::IdentityId, key.identity_id.0.into()),
+            (
+                ApiKeys::IdentitySecurityStamp,
+                key.identity_security_stamp.0.into(),
+            ),
+            (ApiKeys::Name, key.name.as_str().into()),
+            (ApiKeys::TokenHash, key.token_hash.0.as_str().into()),
+            (ApiKeys::TokenHint, key.token_hint.as_str().into()),
+            (ApiKeys::Scope, key.scope.as_str().into()),
+            (ApiKeys::CreatedAt, key.created_at.into()),
+            (ApiKeys::LastUsedAt, key.last_used_at.into()),
+            (ApiKeys::ExpiresAt, key.expires_at.into()),
+            (ApiKeys::RevokedAt, key.revoked_at.into()),
+        ])
+        .and_where(Expr::col(ApiKeys::Id).eq(key.id.0))
+        .and_where(Expr::col(ApiKeys::IdentityId).eq(key.identity_id.0))
+        .and_where(
+            Condition::any()
+                .add(Expr::col(ApiKeys::RevokedAt).is_null())
+                .add(Expr::val(key.revoked_at).is_not_null())
+                .into(),
+        )
+        .to_owned()
+}
+
 #[async_trait]
 impl ApiKeyRepository for PostgresApiKeyRepository {
     async fn create(&self, key: &ApiKey) -> Result<(), AuthError> {
-        sqlx::query(
-            "INSERT INTO api_keys (id, identity_id, identity_security_stamp, name, token_hash, token_hint, scope, created_at, last_used_at, expires_at, revoked_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
-        )
-        .bind(key.id.0)
-        .bind(key.identity_id.0)
-        .bind(key.identity_security_stamp.0)
-        .bind(key.name.as_str())
-        .bind(&key.token_hash.0)
-        .bind(&key.token_hint)
-        .bind(key.scope.as_str())
-        .bind(key.created_at)
-        .bind(key.last_used_at)
-        .bind(key.expires_at)
-        .bind(key.revoked_at)
-        .execute(&self.pool)
-        .await?;
+        let (sql, values) = create_statement(key).build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
 
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<ApiKey>, AuthError> {
-        let row = sqlx::query_as::<_, ApiKeyRow>(
-            "SELECT id, identity_id, identity_security_stamp, name, token_hash, token_hint, scope, created_at, last_used_at, expires_at, revoked_at \
-             FROM api_keys WHERE token_hash = $1",
-        )
-        .bind(token_hash)
-        .fetch_optional(&self.pool)
-        .await?;
+        let (sql, values) =
+            find_by_token_hash_statement(token_hash).build_sqlx(PostgresQueryBuilder);
+        let row = sqlx::query_as_with::<_, ApiKeyRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .fetch_optional(&self.pool)
+            .await?;
 
         row.map(api_key_row_to_api_key).transpose()
     }
 
     async fn find_by_id(&self, id: ApiKeyId) -> Result<Option<ApiKey>, AuthError> {
-        let row = sqlx::query_as::<_, ApiKeyRow>(
-            "SELECT id, identity_id, identity_security_stamp, name, token_hash, token_hint, scope, created_at, last_used_at, expires_at, revoked_at \
-             FROM api_keys WHERE id = $1",
-        )
-        .bind(id.0)
-        .fetch_optional(&self.pool)
-        .await?;
+        let (sql, values) = find_by_id_statement(id).build_sqlx(PostgresQueryBuilder);
+        let row = sqlx::query_as_with::<_, ApiKeyRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .fetch_optional(&self.pool)
+            .await?;
 
         row.map(api_key_row_to_api_key).transpose()
     }
@@ -69,48 +171,30 @@ impl ApiKeyRepository for PostgresApiKeyRepository {
         id: ApiKeyId,
         identity_id: IdentityId,
     ) -> Result<Option<ApiKey>, AuthError> {
-        let row = sqlx::query_as::<_, ApiKeyRow>(
-            "SELECT id, identity_id, identity_security_stamp, name, token_hash, token_hint, scope, created_at, last_used_at, expires_at, revoked_at \
-             FROM api_keys WHERE id = $1 AND identity_id = $2",
-        )
-        .bind(id.0)
-        .bind(identity_id.0)
-        .fetch_optional(&self.pool)
-        .await?;
+        let (sql, values) =
+            find_by_id_and_identity_id_statement(id, identity_id).build_sqlx(PostgresQueryBuilder);
+        let row = sqlx::query_as_with::<_, ApiKeyRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .fetch_optional(&self.pool)
+            .await?;
 
         row.map(api_key_row_to_api_key).transpose()
     }
 
     async fn list_by_identity_id(&self, id: IdentityId) -> Result<Vec<ApiKey>, AuthError> {
-        let rows = sqlx::query_as::<_, ApiKeyRow>(
-            "SELECT id, identity_id, identity_security_stamp, name, token_hash, token_hint, scope, created_at, last_used_at, expires_at, revoked_at \
-             FROM api_keys WHERE identity_id = $1 ORDER BY created_at DESC",
-        )
-        .bind(id.0)
-        .fetch_all(&self.pool)
-        .await?;
+        let (sql, values) = list_by_identity_id_statement(id).build_sqlx(PostgresQueryBuilder);
+        let rows =
+            sqlx::query_as_with::<_, ApiKeyRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .fetch_all(&self.pool)
+                .await?;
 
         rows.into_iter().map(api_key_row_to_api_key).collect()
     }
 
     async fn update(&self, key: &ApiKey) -> Result<(), AuthError> {
-        sqlx::query(
-            "UPDATE api_keys SET identity_id = $1, identity_security_stamp = $2, name = $3, token_hash = $4, token_hint = $5, scope = $6, created_at = $7, last_used_at = $8, expires_at = $9, revoked_at = $10 WHERE id = $11 AND identity_id = $12 AND (revoked_at IS NULL OR $10 IS NOT NULL)",
-        )
-        .bind(key.identity_id.0)
-        .bind(key.identity_security_stamp.0)
-        .bind(key.name.as_str())
-        .bind(&key.token_hash.0)
-        .bind(&key.token_hint)
-        .bind(key.scope.as_str())
-        .bind(key.created_at)
-        .bind(key.last_used_at)
-        .bind(key.expires_at)
-        .bind(key.revoked_at)
-        .bind(key.id.0)
-        .bind(key.identity_id.0)
-        .execute(&self.pool)
-        .await?;
+        let (sql, values) = update_statement(key).build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
