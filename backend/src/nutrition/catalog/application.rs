@@ -334,8 +334,8 @@ fn order_products_by_ids(products: Vec<Product>, ids: &[ProductId]) -> Vec<Produ
         .collect()
 }
 
-/// Category suggestions follow the HTTP contract's `0..=50` limit. Clamping
-/// here keeps non-HTTP callers from bypassing it.
+/// Category suggestions are capped at 50. The HTTP handler separately clamps
+/// to `1..=50`; the service allows `0` so non-HTTP callers can request none.
 fn category_limit(limit: i64) -> usize {
     usize::try_from(limit.clamp(0, 50)).unwrap_or_default()
 }
