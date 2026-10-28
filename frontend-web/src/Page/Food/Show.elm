@@ -5,7 +5,6 @@ module Page.Food.Show exposing
     , Msg(..)
     , OutMsg(..)
     , contentView
-    , foodNutrientsForDisplay
     , init
     , loadId
     , modelId

@@ -5,111 +5,129 @@ import Data.Auth as Auth
 import Expect
 import I18n
 import Page.Users.CreateUser as CreateUser
+import Support.Fixtures as Fixtures
+import Support.Story exposing (runStepsResult)
 import Test exposing (Test, describe, test)
 import Translations.Ids exposing (TranslationId(..))
-
-
-unauthorized : Client.ApiError
-unauthorized =
-    Client.BadStatus 401 "unauthorized" "Unauthorized"
-
-
-serverError : Client.ApiError
-serverError =
-    Client.BadStatus 400 "bad" "Bad request"
 
 
 tests : Test
 tests =
     describe "Page.Users.CreateUser"
-        [ test "submitting a new user trims the fields and emits the create request" <|
+        [ test "each required field is reported, then a failed create retries" <|
             \_ ->
                 let
+                    blank : CreateUser.Model
+                    blank =
+                        step CreateUser.Submitted CreateUser.init
+
+                    named : CreateUser.Model
+                    named =
+                        step (CreateUser.UsernameChanged " alice ") blank
+
+                    noDisplayName : CreateUser.Model
+                    noDisplayName =
+                        step CreateUser.Submitted named
+
+                    displayed : CreateUser.Model
+                    displayed =
+                        step (CreateUser.DisplayNameChanged " Alice ") noDisplayName
+
+                    noPassword : CreateUser.Model
+                    noPassword =
+                        step CreateUser.Submitted displayed
+
                     filled : CreateUser.Model
                     filled =
-                        CreateUser.init
-                            |> step (CreateUser.UsernameChanged " alice ")
-                            |> step (CreateUser.DisplayNameChanged " Alice ")
-                            |> step (CreateUser.PasswordChanged "secret")
+                        step (CreateUser.PasswordChanged "secret") noPassword
 
-                    submitting : CreateUser.Model
-                    submitting =
+                    submitted : CreateUser.Model
+                    submitted =
                         step CreateUser.Submitted filled
+
+                    failed : CreateUser.Model
+                    failed =
+                        step (CreateUser.Completed (Err Client.NetworkError)) submitted
+
+                    retried : CreateUser.Model
+                    retried =
+                        step CreateUser.Submitted failed
+
+                    succeeded : CreateUser.Model
+                    succeeded =
+                        step (CreateUser.Completed (Ok loginSession)) retried
                 in
-                { request = out CreateUser.Submitted filled
-                , screen = toScreen submitting
+                { blankError = (toScreen blank).error
+                , displayNameError = (toScreen noDisplayName).error
+                , passwordError = (toScreen noPassword).error
+                , request = out CreateUser.Submitted filled
+                , failedError = (toScreen failed).error
+                , retryRequest = out CreateUser.Submitted failed
+                , finalOut =
+                    out (CreateUser.Completed (Ok loginSession)) retried
+                , final = toScreen succeeded
                 }
                     |> Expect.equal
-                        { request =
+                        { blankError = Just (I18n.en TidCommonUsernameRequired)
+                        , displayNameError = Just (I18n.en TidUsersDisplayNameRequired)
+                        , passwordError = Just (I18n.en TidUsersInitialPasswordRequired)
+                        , request =
                             CreateUser.RequestCreateUser
                                 { username = "alice"
                                 , displayName = "Alice"
                                 , initialPassword = "secret"
                                 }
-                        , screen =
-                            { phase = "submitting"
-                            , username = " alice "
-                            , displayName = " Alice "
-                            , error = Nothing
-                            }
+                        , failedError = Just Fixtures.networkErrorMessage
+                        , retryRequest =
+                            CreateUser.RequestCreateUser
+                                { username = "alice"
+                                , displayName = "Alice"
+                                , initialPassword = "secret"
+                                }
+                        , finalOut = CreateUser.CreateSucceeded
+                        , final = { error = Nothing }
                         }
-        , test "submitting incomplete credentials shows the required error and editing clears it" <|
+        , test "blank submit fails validation, then a filled 401 expires the session" <|
             \_ ->
                 let
-                    empty : CreateUser.Model
-                    empty =
-                        CreateUser.init
+                    ( blank, blankOut ) =
+                        stepOnce CreateUser.Submitted CreateUser.init
 
-                    invalid : CreateUser.Model
-                    invalid =
-                        step CreateUser.Submitted empty
+                    filled : Result String ( CreateUser.Model, List CreateUser.OutMsg )
+                    filled =
+                        runStepsResult stepWithOut
+                            [ CreateUser.UsernameChanged " alice "
+                            , CreateUser.DisplayNameChanged " Alice "
+                            , CreateUser.PasswordChanged "secret"
+                            , CreateUser.Submitted
+                            ]
+                            blank
                 in
-                { invalid = toScreen invalid
-                , invalidOut = out CreateUser.Submitted empty
-                , cleared = toScreen (step (CreateUser.UsernameChanged "alice") invalid)
-                }
-                    |> Expect.equal
-                        { invalid =
-                            { phase = "invalid"
-                            , username = ""
-                            , displayName = ""
-                            , error = Just (I18n.en TidCommonUsernameRequired)
-                            }
-                        , invalidOut = CreateUser.NoOp
-                        , cleared =
-                            { phase = "editing"
-                            , username = "alice"
-                            , displayName = ""
-                            , error = Nothing
-                            }
+                case filled of
+                    Ok ( submitted, [ _, _, _, submitOut ] ) ->
+                        { blankError = (toScreen blank).error
+                        , blankOut = blankOut
+                        , submitOut = submitOut
+                        , finalOut =
+                            out (CreateUser.Completed (Err Fixtures.unauthorized)) submitted
                         }
-        , test "create completion: success, 401 expiry, and server error" <|
-            \_ ->
-                let
-                    submitting : CreateUser.Model
-                    submitting =
-                        CreateUser.init
-                            |> step (CreateUser.UsernameChanged "alice")
-                            |> step (CreateUser.DisplayNameChanged "Alice")
-                            |> step (CreateUser.PasswordChanged "secret")
-                            |> step CreateUser.Submitted
-                in
-                { success = out (CreateUser.Completed (Ok loginSession)) submitting
-                , unauthorized = out (CreateUser.Completed (Err unauthorized)) submitting
-                , failed = toScreen (step (CreateUser.Completed (Err serverError)) submitting)
-                , failedOut = out (CreateUser.Completed (Err serverError)) submitting
-                }
-                    |> Expect.equal
-                        { success = CreateUser.CreateSucceeded
-                        , unauthorized = CreateUser.SessionExpired
-                        , failed =
-                            { phase = "failed"
-                            , username = "alice"
-                            , displayName = "Alice"
-                            , error = Just "Bad request"
-                            }
-                        , failedOut = CreateUser.NoOp
-                        }
+                            |> Expect.equal
+                                { blankError = Just (I18n.en TidCommonUsernameRequired)
+                                , blankOut = CreateUser.NoOp
+                                , submitOut =
+                                    CreateUser.RequestCreateUser
+                                        { username = "alice"
+                                        , displayName = "Alice"
+                                        , initialPassword = "secret"
+                                        }
+                                , finalOut = CreateUser.SessionExpired
+                                }
+
+                    Ok _ ->
+                        Expect.fail "the filled submit should be the only request"
+
+                    Err message ->
+                        Expect.fail message
         ]
 
 
@@ -118,50 +136,28 @@ tests =
 
 
 type alias Screen =
-    { phase : String
-    , username : String
-    , displayName : String
-    , error : Maybe String
-    }
+    { error : Maybe String }
 
 
 toScreen : CreateUser.Model -> Screen
 toScreen model =
-    case model of
-        CreateUser.Editing form ->
-            { phase = "editing"
-            , username = form.username
-            , displayName = form.displayName
-            , error = Nothing
-            }
+    { error =
+        case model of
+            CreateUser.Invalid _ problem ->
+                Just (problemMessage problem)
 
-        CreateUser.Invalid form problem ->
-            { phase = "invalid"
-            , username = form.username
-            , displayName = form.displayName
-            , error = Just (problemMessage problem)
-            }
+            CreateUser.Failed _ message ->
+                Just message
 
-        CreateUser.Submitting form ->
-            { phase = "submitting"
-            , username = form.username
-            , displayName = form.displayName
-            , error = Nothing
-            }
+            CreateUser.Editing _ ->
+                Nothing
 
-        CreateUser.Failed form message ->
-            { phase = "failed"
-            , username = form.username
-            , displayName = form.displayName
-            , error = Just message
-            }
+            CreateUser.Submitting _ ->
+                Nothing
 
-        CreateUser.Succeeded ->
-            { phase = "succeeded"
-            , username = ""
-            , displayName = ""
-            , error = Nothing
-            }
+            CreateUser.Succeeded ->
+                Nothing
+    }
 
 
 problemMessage : CreateUser.Problem -> String
@@ -183,26 +179,38 @@ problemMessage problem =
 
 step : CreateUser.Msg -> CreateUser.Model -> CreateUser.Model
 step msg model =
-    first (CreateUser.update msg model)
+    Fixtures.tupleFirst (CreateUser.update msg model)
+
+
+stepOnce : CreateUser.Msg -> CreateUser.Model -> ( CreateUser.Model, CreateUser.OutMsg )
+stepOnce msg model =
+    let
+        ( next, _, outMsg ) =
+            CreateUser.update msg model
+    in
+    ( next, outMsg )
+
+
+stepWithOut : CreateUser.Msg -> CreateUser.Model -> Maybe ( CreateUser.Model, CreateUser.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, outMsg ) =
+            stepOnce msg model
+    in
+    if next == model && outMsg == CreateUser.NoOp then
+        Nothing
+
+    else
+        Just ( next, outMsg )
 
 
 out : CreateUser.Msg -> CreateUser.Model -> CreateUser.OutMsg
 out msg model =
-    third (CreateUser.update msg model)
+    Fixtures.tupleThird (CreateUser.update msg model)
 
 
 loginSession : Auth.LoginSession
 loginSession =
-    { identity = { id = "admin", username = "admin", role = Auth.Admin }
+    { identity = { id = "alice", username = "alice", role = Auth.User }
     , profile = Nothing
     }
-
-
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value

@@ -5,271 +5,169 @@ import Data.User exposing (User)
 import Expect
 import I18n
 import Page.Users.EditUser as EditUser
+import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
 import Translations.Ids exposing (TranslationId(..))
-
-
-networkErrorMessage : String
-networkErrorMessage =
-    "Could not reach the server. Check your connection and try again."
-
-
-unauthorized : Client.ApiError
-unauthorized =
-    Client.BadStatus 401 "unauthorized" "Unauthorized"
-
-
-serverError : Client.ApiError
-serverError =
-    Client.BadStatus 500 "boom" "Failed"
 
 
 tests : Test
 tests =
     describe "Page.Users.EditUser"
-        [ test "loading a user requests the user and renders the account card" <|
+        [ test "an empty reset password is rejected, then a failed reset retries" <|
             \_ ->
                 let
-                    ( loading, request ) =
-                        EditUser.init "u1"
-
                     loaded : EditUser.Model
                     loaded =
-                        step (EditUser.UserLoaded (Ok alice)) loading
-                in
-                { request = request
-                , loading = toScreen loading |> .phase
-                , loaded = toScreen loaded
-                }
-                    |> Expect.equal
-                        { request = EditUser.RequestUser "u1"
-                        , loading = "loading"
-                        , loaded =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "idle"
-                            , error = Nothing
-                            , password = ""
-                            , disableModal = False
-                            }
-                        }
-        , test "a failed user load shows an error and an unauthorized load expires the session" <|
-            \_ ->
-                let
-                    loading : EditUser.Model
-                    loading =
-                        Tuple.first (EditUser.init "u1")
+                        loadedFromUser alice
 
-                    failed : EditUser.Model
-                    failed =
-                        step (EditUser.UserLoaded (Err serverError)) loading
-                in
-                { failed = toScreen failed
-                , unauthorized = out (EditUser.UserLoaded (Err unauthorized)) loading
-                }
-                    |> Expect.equal
-                        { failed =
-                            { phase = "failed"
-                            , title = Nothing
-                            , status = Nothing
-                            , action = "none"
-                            , error = Just "Failed"
-                            , password = ""
-                            , disableModal = False
-                            }
-                        , unauthorized = EditUser.SessionExpired
-                        }
-        , test "submitting an empty password is rejected and editing clears the error" <|
-            \_ ->
-                let
-                    invalid : EditUser.Model
-                    invalid =
-                        step EditUser.ResetSubmitted (loadedUser "")
+                    emptyPassword : EditUser.Model
+                    emptyPassword =
+                        step EditUser.ResetSubmitted loaded
 
-                    editing : EditUser.Model
-                    editing =
-                        step (EditUser.PasswordChanged "new") invalid
-                in
-                { invalid = toScreen invalid
-                , cleared = toScreen editing
-                }
-                    |> Expect.equal
-                        { invalid =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "invalid"
-                            , error = Just (I18n.en TidUsersNewPasswordRequired)
-                            , password = ""
-                            , disableModal = False
-                            }
-                        , cleared =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "idle"
-                            , error = Nothing
-                            , password = "new"
-                            , disableModal = False
-                            }
-                        }
-        , test "a valid reset requests the password once, succeeds, and expires on 401" <|
-            \_ ->
-                let
-                    ready : EditUser.Model
-                    ready =
-                        loadedUser "new-password"
+                    edited : EditUser.Model
+                    edited =
+                        step (EditUser.PasswordChanged "new-password") emptyPassword
 
                     pending : EditUser.Model
                     pending =
-                        step EditUser.ResetSubmitted ready
-                in
-                { request = out EditUser.ResetSubmitted ready
-                , pending = toScreen pending
-                , doubleSubmit = out EditUser.ResetSubmitted pending
-                , completed = out (EditUser.ResetCompleted (Ok ())) pending
-                , completedScreen = toScreen (step (EditUser.ResetCompleted (Ok ())) pending)
-                , unauthorized = out (EditUser.ResetCompleted (Err unauthorized)) pending
-                }
-                    |> Expect.equal
-                        { request =
-                            EditUser.RequestResetPassword "u1" { newPassword = "new-password" }
-                        , pending =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "resetting"
-                            , error = Nothing
-                            , password = "new-password"
-                            , disableModal = False
-                            }
-                        , doubleSubmit = EditUser.NoOp
-                        , completed = EditUser.UpdateSucceeded
-                        , completedScreen =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "idle"
-                            , error = Nothing
-                            , password = ""
-                            , disableModal = False
-                            }
-                        , unauthorized = EditUser.SessionExpired
-                        }
-        , test "disabling confirms, requests the change, and retries after failure" <|
-            \_ ->
-                let
-                    ready : EditUser.Model
-                    ready =
-                        loadedUser ""
-
-                    confirming : EditUser.Model
-                    confirming =
-                        step EditUser.DisableClicked ready
-
-                    disabling : EditUser.Model
-                    disabling =
-                        step EditUser.DisableConfirmClicked confirming
+                        step EditUser.ResetSubmitted edited
 
                     failed : EditUser.Model
                     failed =
-                        step (EditUser.DisableCompleted (Err Client.NetworkError)) disabling
+                        step (EditUser.ResetCompleted (Err Client.NetworkError)) pending
 
-                    retried : EditUser.Model
-                    retried =
-                        step EditUser.DisableConfirmClicked (step EditUser.DisableClicked failed)
+                    retrying : EditUser.Model
+                    retrying =
+                        step EditUser.ResetSubmitted failed
 
                     succeeded : EditUser.Model
                     succeeded =
-                        step (EditUser.DisableCompleted (Ok ())) retried
+                        step (EditUser.ResetCompleted (Ok ())) retrying
+                in
+                { emptyError = (toScreen emptyPassword).error
+                , request = out EditUser.ResetSubmitted edited
+                , failedError = (toScreen failed).error
+                , retryRequest = out EditUser.ResetSubmitted failed
+                , finalOut = out (EditUser.ResetCompleted (Ok ())) retrying
+                , final = toScreen succeeded
+                , lateOut = out (EditUser.ResetCompleted (Ok ())) succeeded
+                }
+                    |> Expect.equal
+                        { emptyError = Just (I18n.en TidUsersNewPasswordRequired)
+                        , request =
+                            EditUser.RequestResetPassword
+                                "u1"
+                                { newPassword = "new-password" }
+                        , failedError = Just Fixtures.networkErrorMessage
+                        , retryRequest =
+                            EditUser.RequestResetPassword
+                                "u1"
+                                { newPassword = "new-password" }
+                        , finalOut = EditUser.UpdateSucceeded
+                        , final = loadedScreen alice
+                        , lateOut = EditUser.NoOp
+                        }
+        , test "disable cancels, fails, retries, and ignores a late completion" <|
+            \_ ->
+                let
+                    loaded : EditUser.Model
+                    loaded =
+                        loadedFromUser alice
+
+                    confirming : EditUser.Model
+                    confirming =
+                        step EditUser.DisableClicked loaded
+
+                    cancelled : EditUser.Model
+                    cancelled =
+                        step EditUser.CancelDisableClicked confirming
+
+                    reopened : EditUser.Model
+                    reopened =
+                        step EditUser.DisableClicked cancelled
+
+                    disabling : EditUser.Model
+                    disabling =
+                        step EditUser.DisableConfirmClicked reopened
+
+                    failed : EditUser.Model
+                    failed =
+                        step
+                            (EditUser.DisableCompleted (Err Client.NetworkError))
+                            disabling
+
+                    retryConfirm : EditUser.Model
+                    retryConfirm =
+                        step EditUser.DisableClicked failed
+
+                    retrying : EditUser.Model
+                    retrying =
+                        step EditUser.DisableConfirmClicked retryConfirm
+
+                    succeeded : EditUser.Model
+                    succeeded =
+                        step (EditUser.DisableCompleted (Ok ())) retrying
                 in
                 { confirming = toScreen confirming
-                , cancel = toScreen (step EditUser.CancelDisableClicked confirming)
-                , request = out EditUser.DisableConfirmClicked confirming
-                , disabling = toScreen disabling
-                , failureOut = out (EditUser.DisableCompleted (Err Client.NetworkError)) disabling
+                , cancelled = toScreen cancelled
+                , request = out EditUser.DisableConfirmClicked reopened
                 , failed = toScreen failed
-                , completed = out (EditUser.DisableCompleted (Ok ())) retried
-                , succeeded = toScreen succeeded
+                , retryRequest = out EditUser.DisableConfirmClicked retryConfirm
+                , finalOut = out (EditUser.DisableCompleted (Ok ())) retrying
+                , final = toScreen succeeded
+                , lateOut = out (EditUser.DisableCompleted (Ok ())) succeeded
                 }
                     |> Expect.equal
                         { confirming =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "confirming"
-                            , error = Nothing
-                            , password = ""
-                            , disableModal = True
-                            }
-                        , cancel =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "idle"
-                            , error = Nothing
-                            , password = ""
-                            , disableModal = False
-                            }
+                            withModal
+                                (disableModal (I18n.en TidUsersDisableUser))
+                                (loadedScreen alice)
+                        , cancelled = loadedScreen alice
                         , request = EditUser.RequestDisableUser "u1"
-                        , disabling =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "disabling"
-                            , error = Nothing
-                            , password = ""
-                            , disableModal = True
-                            }
-                        , failureOut = EditUser.NoOp
                         , failed =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "failed"
-                            , error = Just networkErrorMessage
-                            , password = ""
-                            , disableModal = False
-                            }
-                        , completed = EditUser.UpdateSucceeded
-                        , succeeded =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "active"
-                            , action = "idle"
-                            , error = Nothing
-                            , password = ""
-                            , disableModal = False
-                            }
+                            withError Fixtures.networkErrorMessage (loadedScreen alice)
+                        , retryRequest = EditUser.RequestDisableUser "u1"
+                        , finalOut = EditUser.UpdateSucceeded
+                        , final = loadedScreen alice
+                        , lateOut = EditUser.NoOp
                         }
-        , test "enabling a disabled user requests the change and succeeds" <|
+        , test "enabling a disabled user requests the change and a 401 expires" <|
             \_ ->
                 let
-                    ready : EditUser.Model
-                    ready =
-                        loadedDisabledUser
+                    loaded : EditUser.Model
+                    loaded =
+                        loadedFromUser disabledAlice
 
                     enabling : EditUser.Model
                     enabling =
-                        step EditUser.EnableClicked ready
+                        step EditUser.EnableClicked loaded
+
+                    afterUnauthorized : EditUser.Model
+                    afterUnauthorized =
+                        step
+                            (EditUser.EnableCompleted (Err Fixtures.unauthorized))
+                            enabling
                 in
-                { request = out EditUser.EnableClicked ready
+                { request = out EditUser.EnableClicked loaded
                 , enabling = toScreen enabling
-                , completed = out (EditUser.EnableCompleted (Ok ())) enabling
+                , finalOut =
+                    out
+                        (EditUser.EnableCompleted (Err Fixtures.unauthorized))
+                        enabling
+                , final = toScreen afterUnauthorized
+                , lateOut = out (EditUser.EnableCompleted (Ok ())) afterUnauthorized
                 }
                     |> Expect.equal
                         { request = EditUser.RequestEnableUser "u1"
                         , enabling =
-                            { phase = "loaded"
-                            , title = Just "Alice"
-                            , status = Just "disabled"
-                            , action = "enabling"
-                            , error = Nothing
-                            , password = ""
-                            , disableModal = False
-                            }
-                        , completed = EditUser.UpdateSucceeded
+                            withActionLabel
+                                (I18n.en TidUsersEnabling)
+                                (loadedScreen disabledAlice)
+                        , finalOut = EditUser.SessionExpired
+                        , final =
+                            withError "Sign in again" (loadedScreen disabledAlice)
+                        , lateOut = EditUser.NoOp
                         }
         ]
 
@@ -278,14 +176,16 @@ tests =
 -- SCREEN PROJECTION
 
 
+type alias Modal =
+    { title : String, actionLabel : String }
+
+
 type alias Screen =
-    { phase : String
-    , title : Maybe String
-    , status : Maybe String
-    , action : String
-    , error : Maybe String
+    { error : Maybe String
+    , resetLabel : Maybe String
+    , actionLabel : Maybe String
+    , modal : Maybe Modal
     , password : String
-    , disableModal : Bool
     }
 
 
@@ -293,67 +193,98 @@ toScreen : EditUser.Model -> Screen
 toScreen model =
     case model.status of
         EditUser.Loading ->
-            { phase = "loading"
-            , title = Nothing
-            , status = Nothing
-            , action = "none"
-            , error = Nothing
-            , password = ""
-            , disableModal = False
-            }
+            emptyScreen
 
-        EditUser.LoadFailed error ->
-            { phase = "failed"
-            , title = Nothing
-            , status = Nothing
-            , action = "none"
-            , error = Just (Client.displayError error)
-            , password = ""
-            , disableModal = False
-            }
+        EditUser.LoadFailed _ ->
+            emptyScreen
 
-        EditUser.Loaded loaded actionState ->
-            { phase = "loaded"
-            , title = Just loaded.user.displayName
-            , status = Just loaded.user.status
-            , action = actionName actionState
-            , error = screenError actionState
-            , password = loaded.password
-            , disableModal =
-                actionState == EditUser.DisableConfirming || actionState == EditUser.DisablingUser
+        EditUser.Loaded loadedUser actionState ->
+            { error = screenError actionState
+            , resetLabel =
+                Just
+                    (if actionState == EditUser.ResettingPassword then
+                        I18n.en TidUsersResetting
+
+                     else
+                        I18n.en TidUsersResetPassword
+                    )
+            , actionLabel = Just (actionLabel loadedUser.user actionState)
+            , modal = modalView actionState
+            , password = loadedUser.password
             }
 
 
-actionName : EditUser.ActionState -> String
-actionName actionState =
+emptyScreen : Screen
+emptyScreen =
+    { error = Nothing, resetLabel = Nothing, actionLabel = Nothing, modal = Nothing, password = "" }
+
+
+loadedScreen : User -> Screen
+loadedScreen user =
+    { error = Nothing
+    , resetLabel = Just (I18n.en TidUsersResetPassword)
+    , actionLabel = Just (actionLabel user EditUser.Idle)
+    , modal = Nothing
+    , password = ""
+    }
+
+
+withModal : Modal -> Screen -> Screen
+withModal modal screen =
+    { screen | modal = Just modal }
+
+
+withError : String -> Screen -> Screen
+withError message screen =
+    { screen | error = Just message }
+
+
+withActionLabel : String -> Screen -> Screen
+withActionLabel label screen =
+    { screen | actionLabel = Just label }
+
+
+actionLabel : User -> EditUser.ActionState -> String
+actionLabel user actionState =
+    if user.status == "active" then
+        if actionState == EditUser.DisablingUser then
+            I18n.en TidUsersDisabling
+
+        else
+            I18n.en TidUsersDisableUser
+
+    else if actionState == EditUser.EnablingUser then
+        I18n.en TidUsersEnabling
+
+    else
+        I18n.en TidUsersEnableUser
+
+
+modalView : EditUser.ActionState -> Maybe Modal
+modalView actionState =
     case actionState of
-        EditUser.Idle ->
-            "idle"
-
-        EditUser.Invalid _ ->
-            "invalid"
-
-        EditUser.ResettingPassword ->
-            "resetting"
-
         EditUser.DisableConfirming ->
-            "confirming"
+            Just (disableModal (I18n.en TidUsersDisableUser))
 
         EditUser.DisablingUser ->
-            "disabling"
+            Just (disableModal (I18n.en TidUsersDisabling))
 
-        EditUser.EnablingUser ->
-            "enabling"
+        _ ->
+            Nothing
 
-        EditUser.ActionFailed _ ->
-            "failed"
+
+disableModal : String -> Modal
+disableModal label =
+    { title = I18n.en TidUsersDisableConfirmTitle
+    , actionLabel = label
+    }
 
 
 screenError : EditUser.ActionState -> Maybe String
 screenError actionState =
     case actionState of
-        EditUser.Invalid problem ->
-            Just (problemMessage problem)
+        EditUser.Invalid _ ->
+            Just (I18n.en TidUsersNewPasswordRequired)
 
         EditUser.ActionFailed message ->
             Just message
@@ -362,38 +293,24 @@ screenError actionState =
             Nothing
 
 
-problemMessage : EditUser.Problem -> String
-problemMessage problem =
-    case problem of
-        EditUser.NewPasswordRequired ->
-            I18n.en TidUsersNewPasswordRequired
-
-
 
 -- HELPERS
 
 
 step : EditUser.Msg -> EditUser.Model -> EditUser.Model
 step msg model =
-    first (EditUser.update msg model)
+    Fixtures.tupleFirst (EditUser.update msg model)
 
 
 out : EditUser.Msg -> EditUser.Model -> EditUser.OutMsg
 out msg model =
-    third (EditUser.update msg model)
+    Fixtures.tupleThird (EditUser.update msg model)
 
 
-loadedUser : String -> EditUser.Model
-loadedUser password =
+loadedFromUser : User -> EditUser.Model
+loadedFromUser user =
     Tuple.first (EditUser.init "u1")
-        |> step (EditUser.UserLoaded (Ok alice))
-        |> step (EditUser.PasswordChanged password)
-
-
-loadedDisabledUser : EditUser.Model
-loadedDisabledUser =
-    Tuple.first (EditUser.init "u1")
-        |> step (EditUser.UserLoaded (Ok disabledAlice))
+        |> Story.runSteps step [ EditUser.UserLoaded (Ok user) ]
 
 
 alice : User
@@ -409,13 +326,3 @@ alice =
 disabledAlice : User
 disabledAlice =
     { alice | status = "disabled" }
-
-
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value

@@ -1,262 +1,213 @@
 module Page.Goals.SettingsTest exposing (tests)
 
+{-| Goal-settings stories.
+
+The first story loads, refreshes fields, keeps edits across a refresh, and saves
+all four targets. The second covers every validation branch. The third keeps
+edits through a failed save, retries, and expires the session on a later 401.
+
+-}
+
 import Api.Client as Client
-import Data.Goals exposing (GoalSnapshot, GoalSource(..), GoalStatus, GoalTargets)
+import Data.Goals exposing (GoalSnapshot, GoalSource(..), GoalStatus)
+import Data.LocalCtx exposing (LocalCtx)
 import Expect
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
-import Page.Goals.Settings as GoalsSettings
+import Page.Goals.Settings as S
+import Support.Fixtures as Fixtures
+import Support.Story exposing (runSteps)
 import Test exposing (Test, describe, test)
-
-
-macroErrorMessage : String
-macroErrorMessage =
-    "Calories must equal protein*4 + carbs*4 + fat*9."
-
-
-invalidNumbersMessage : String
-invalidNumbersMessage =
-    "Enter valid numbers for all goal fields."
-
-
-positiveCaloriesMessage : String
-positiveCaloriesMessage =
-    "Calories must be greater than 0."
+import Translations.Ids exposing (TranslationId(..))
 
 
 tests : Test
 tests =
     describe "Page.Goals.Settings"
-        [ test "opening the settings loads targets and a refresh replaces a pristine form" <|
+        [ test "a failed load retries, refreshes fields, keeps edits, and saves four targets" <|
             \_ ->
                 let
-                    loaded : GoalsSettings.Model
+                    failed : S.Model
+                    failed =
+                        S.init
+                            |> Tuple.first
+                            |> step (S.GoalLoaded (Err Client.NetworkError))
+
+                    ( retrying, retryOut ) =
+                        stepOnce S.RetryClicked failed
+
+                    loaded : S.Model
+                    loaded =
+                        step (S.GoalLoaded (Ok defaultSnapshot)) retrying
+
+                    pristine : S.Model
+                    pristine =
+                        step (S.GoalLoaded (Ok pristineSnapshot)) loaded
+
+                    edited : S.Model
+                    edited =
+                        edits
+                            [ S.CalorieTargetChanged "2150"
+                            , S.ProteinTargetChanged "170"
+                            , S.CarbsTargetChanged "210"
+                            , S.FatTargetChanged "70"
+                            ]
+                            pristine
+
+                    refreshed : S.Model
+                    refreshed =
+                        step (S.GoalLoaded (Ok editedRefreshSnapshot)) edited
+
+                    ( awaiting, saveClickOut ) =
+                        stepOnce S.SaveClicked refreshed
+
+                    ( submitting, ctxOut ) =
+                        stepOnce (S.LocalCtxReceived context) awaiting
+
+                    ( saved, finalOut ) =
+                        stepOnce (S.SaveCompleted (Ok savedSnapshot)) submitting
+                in
+                { retryOut = retryOut
+                , loaded = ( fieldsOf loaded, statusOf loaded )
+                , pristine = ( fieldsOf pristine, statusOf pristine )
+                , editedFields = fieldsOf edited
+                , refreshed = ( fieldsOf refreshed, statusOf refreshed )
+                , saveClickOut = saveClickOut
+                , awaiting = toScreen awaiting
+                , saveRequest = request ctxOut
+                , finalOut = finalOut
+                , final = toScreen saved
+                }
+                    |> Expect.equal
+                        { retryOut = S.RequestGoal
+                        , loaded = ( [ "2290", "160", "255", "70" ], Just defaultStatus )
+                        , pristine = ( [ "2250", "150", "255", "70" ], Just savedToday )
+                        , editedFields = [ "2150", "170", "210", "70" ]
+                        , refreshed =
+                            ( [ "2150", "170", "210", "70" ], Just savedYesterday )
+                        , saveClickOut = S.RequestLocalCtx
+                        , awaiting =
+                            { readyScreen
+                                | fields = [ "2150", "170", "210", "70" ]
+                                , statusLabel = Just savedYesterday
+                                , submit = Just ( savingLabel, True )
+                            }
+                        , saveRequest = Just (saveTargets [ 2150, 170, 210, 70 ])
+                        , finalOut = S.NoOp
+                        , final =
+                            { readyScreen
+                                | fields = [ "2150", "170", "210", "70" ]
+                                , statusLabel = Just savedToday
+                            }
+                        }
+        , test "each invalid target shape blocks save with its own message" <|
+            \_ ->
+                let
+                    loaded : S.Model
                     loaded =
                         loadedFrom defaultSnapshot
 
-                    refreshed : GoalsSettings.Model
-                    refreshed =
-                        step (GoalsSettings.GoalLoaded (Ok savedSnapshot)) loaded
+                    ( afterInvalidNumbers, invalidNumbersOut ) =
+                        validationAttempt [ S.ProteinTargetChanged "abc" ] loaded
+
+                    ( afterImbalance, imbalanceOut ) =
+                        validationAttempt
+                            [ S.ProteinTargetChanged "160"
+                            , S.CalorieTargetChanged "2200"
+                            ]
+                            afterInvalidNumbers
+
+                    ( afterMacros, macrosOut ) =
+                        validationAttempt
+                            [ S.ProteinTargetChanged "-1" ]
+                            afterImbalance
+
+                    ( afterCalories, caloriesOut ) =
+                        validationAttempt
+                            [ S.ProteinTargetChanged "160"
+                            , S.CalorieTargetChanged "-1"
+                            ]
+                            afterMacros
+
+                    fixed : S.Model
+                    fixed =
+                        edits
+                            [ S.CalorieTargetChanged "2150"
+                            , S.ProteinTargetChanged "170"
+                            , S.CarbsTargetChanged "210"
+                            , S.FatTargetChanged "70"
+                            ]
+                            afterCalories
+
+                    ( awaiting, saveOut ) =
+                        stepOnce S.SaveClicked fixed
+
+                    ( _, ctxOut ) =
+                        stepOnce (S.LocalCtxReceived context) awaiting
                 in
-                { request = Tuple.second GoalsSettings.init
-                , loaded = toScreen loaded
-                , refreshed = toScreen refreshed
+                { invalidNumbers = ( (toScreen afterInvalidNumbers).error, invalidNumbersOut )
+                , imbalance = ( (toScreen afterImbalance).error, imbalanceOut )
+                , macros = ( (toScreen afterMacros).error, macrosOut )
+                , calories = ( (toScreen afterCalories).error, caloriesOut )
+                , fixedFields = fieldsOf fixed
+                , saveOut = saveOut
+                , finalOut = request ctxOut
                 }
                     |> Expect.equal
-                        { request = GoalsSettings.RequestGoal
-                        , loaded =
-                            { phase = "ready"
-                            , fields = [ "2290", "160", "255", "70" ]
-                            , status = Just { source = Default, effectiveFrom = Nothing }
-                            , save = Just GoalsSettings.Idle
-                            , error = Nothing
-                            }
-                        , refreshed =
-                            { phase = "ready"
-                            , fields = [ "2100", "150", "240", "60" ]
-                            , status = Just { source = Saved, effectiveFrom = Just today }
-                            , save = Just GoalsSettings.Idle
-                            , error = Nothing
-                            }
+                        { invalidNumbers = ( Just invalidNumbersMessage, S.NoOp )
+                        , imbalance = ( Just imbalanceMessage, S.NoOp )
+                        , macros = ( Just macrosMessage, S.NoOp )
+                        , calories = ( Just caloriesMessage, S.NoOp )
+                        , fixedFields = [ "2150", "170", "210", "70" ]
+                        , saveOut = S.RequestLocalCtx
+                        , finalOut = Just (saveTargets [ 2150, 170, 210, 70 ])
                         }
-        , test "an incoming refresh leaves edits the user has not saved untouched" <|
-            \_ ->
-                loadedFrom defaultSnapshot
-                    |> step (GoalsSettings.CalorieTargetChanged "2300")
-                    |> step (GoalsSettings.GoalLoaded (Ok savedSnapshot))
-                    |> toScreen
-                    |> Expect.equal
-                        { phase = "ready"
-                        , fields = [ "2300", "160", "255", "70" ]
-                        , status = Just { source = Saved, effectiveFrom = Just today }
-                        , save = Just GoalsSettings.Idle
-                        , error = Nothing
-                        }
-        , test "a valid save waits for local context and submits the targets validated at submit" <|
+        , test "a failed save keeps the edits, retries, and a later 401 expires the session" <|
             \_ ->
                 let
-                    edited : GoalsSettings.Model
+                    edited : S.Model
                     edited =
                         loadedFrom defaultSnapshot
-                            |> step (GoalsSettings.CalorieTargetChanged "2330")
-                            |> step (GoalsSettings.ProteinTargetChanged "170")
+                            |> edits
+                                [ S.CalorieTargetChanged "2150"
+                                , S.ProteinTargetChanged "170"
+                                , S.CarbsTargetChanged "210"
+                                , S.FatTargetChanged "70"
+                                ]
 
-                    awaiting : GoalsSettings.Model
-                    awaiting =
-                        step GoalsSettings.SaveClicked edited
+                    ( failed, failedOut ) =
+                        saveAndComplete (Err Client.NetworkError) edited
 
-                    typedWhileWaiting : GoalsSettings.Model
-                    typedWhileWaiting =
-                        step (GoalsSettings.CalorieTargetChanged "abc") awaiting
+                    ( retrying, retryOut ) =
+                        stepOnce S.SaveClicked failed
 
-                    submitted : GoalsSettings.Model
-                    submitted =
-                        step
-                            (GoalsSettings.LocalCtxReceived
-                                { date = date "2026-06-16", timezone = "Asia/Kolkata" }
-                            )
-                            typedWhileWaiting
-                in
-                { request = out GoalsSettings.SaveClicked edited
-                , awaiting = toScreen awaiting
-                , typed = toScreen typedWhileWaiting
-                , save =
-                    out
-                        (GoalsSettings.LocalCtxReceived
-                            { date = date "2026-06-16", timezone = "Asia/Kolkata" }
-                        )
-                        typedWhileWaiting
-                , submitted = saveState submitted
-                }
-                    |> Expect.equal
-                        { request = GoalsSettings.RequestLocalCtx
-                        , awaiting =
-                            { phase = "ready"
-                            , fields = [ "2330", "170", "255", "70" ]
-                            , status = Just { source = Default, effectiveFrom = Nothing }
-                            , save = Just (GoalsSettings.AwaitingLocalCtx validatedTargets)
-                            , error = Nothing
-                            }
-                        , typed =
-                            { phase = "ready"
-                            , fields = [ "abc", "170", "255", "70" ]
-                            , status = Just { source = Default, effectiveFrom = Nothing }
-                            , save = Just (GoalsSettings.AwaitingLocalCtx validatedTargets)
-                            , error = Nothing
-                            }
-                        , save =
-                            GoalsSettings.RequestSaveGoal
-                                { localDate = date "2026-06-16"
-                                , deviceTimezone = "Asia/Kolkata"
-                                , targets = validatedTargets
-                                }
-                        , submitted = Just GoalsSettings.Saving
-                        }
-        , test "a calorie and macro imbalance blocks save" <|
-            \_ ->
-                let
-                    imbalanced : GoalsSettings.Model
-                    imbalanced =
-                        loadedFrom defaultSnapshot
-                            |> step (GoalsSettings.CalorieTargetChanged "2200")
-                in
-                { request = out GoalsSettings.SaveClicked imbalanced
-                , screen = toScreen (step GoalsSettings.SaveClicked imbalanced)
-                }
-                    |> Expect.equal
-                        { request = GoalsSettings.NoOp
-                        , screen =
-                            { phase = "ready"
-                            , fields = [ "2200", "160", "255", "70" ]
-                            , status = Just { source = Default, effectiveFrom = Nothing }
-                            , save = Just (GoalsSettings.ValidationFailed macroErrorMessage)
-                            , error = Just macroErrorMessage
-                            }
-                        }
-        , test "invalid or non-positive numbers block save" <|
-            \_ ->
-                let
-                    nonNumeric : GoalsSettings.Model
-                    nonNumeric =
-                        loadedFrom defaultSnapshot
-                            |> step (GoalsSettings.ProteinTargetChanged "abc")
+                    ( retryingWithCtx, retryRequestOut ) =
+                        stepOnce (S.LocalCtxReceived context) retrying
 
-                    nonPositive : GoalsSettings.Model
-                    nonPositive =
-                        loadedFrom defaultSnapshot
-                            |> step (GoalsSettings.CalorieTargetChanged "-1")
+                    finalOut : S.OutMsg
+                    finalOut =
+                        stepOnce
+                            (S.SaveCompleted (Err Fixtures.unauthorized))
+                            retryingWithCtx
+                            |> Tuple.second
                 in
-                { invalid =
-                    toScreen (step GoalsSettings.SaveClicked nonNumeric) |> .error
-                , nonPositive =
-                    toScreen (step GoalsSettings.SaveClicked nonPositive) |> .error
+                { failed = toScreen failed
+                , failedOut = failedOut
+                , retryOut = retryOut
+                , retryRequest = request retryRequestOut
+                , finalOut = finalOut
                 }
                     |> Expect.equal
-                        { invalid = Just invalidNumbersMessage
-                        , nonPositive = Just positiveCaloriesMessage
-                        }
-        , test "a save completion outside saving state is ignored" <|
-            \_ ->
-                let
-                    edited : GoalsSettings.Model
-                    edited =
-                        loadedFrom defaultSnapshot
-                            |> step (GoalsSettings.CalorieTargetChanged "2300")
-                in
-                { request =
-                    out (GoalsSettings.SaveCompleted (Err Client.NetworkError)) edited
-                , screen = saveState (step (GoalsSettings.SaveCompleted (Ok savedSnapshot)) edited)
-                }
-                    |> Expect.equal
-                        { request = GoalsSettings.NoOp
-                        , screen = Just GoalsSettings.Idle
-                        }
-        , test "an unauthorized refresh or save expires the session" <|
-            \_ ->
-                { refresh =
-                    out
-                        (GoalsSettings.GoalLoaded
-                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                        )
-                        (loadedFrom defaultSnapshot)
-                , save =
-                    out
-                        (GoalsSettings.SaveCompleted
-                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                        )
-                        savingModel
-                }
-                    |> Expect.equal
-                        { refresh = GoalsSettings.SessionExpired
-                        , save = GoalsSettings.SessionExpired
-                        }
-        , test "typing during a save keeps the text and the completion refreshes the status" <|
-            \_ ->
-                let
-                    typed : GoalsSettings.Model
-                    typed =
-                        step (GoalsSettings.CalorieTargetChanged "2300") savingModel
-
-                    completed : GoalsSettings.Model
-                    completed =
-                        step (GoalsSettings.SaveCompleted (Ok savedSnapshot)) typed
-                in
-                { during = toScreen typed
-                , completed = toScreen completed
-                }
-                    |> Expect.equal
-                        { during =
-                            { phase = "ready"
-                            , fields = [ "2300", "160", "255", "70" ]
-                            , status = Just { source = Default, effectiveFrom = Nothing }
-                            , save = Just GoalsSettings.Saving
-                            , error = Nothing
+                        { failed =
+                            { readyScreen
+                                | fields = [ "2150", "170", "210", "70" ]
+                                , statusLabel = Just defaultStatus
+                                , error = Just Fixtures.networkErrorMessage
                             }
-                        , completed =
-                            { phase = "ready"
-                            , fields = [ "2300", "160", "255", "70" ]
-                            , status = Just { source = Saved, effectiveFrom = Just today }
-                            , save = Just GoalsSettings.Idle
-                            , error = Nothing
-                            }
-                        }
-        , test "a local context that arrives outside the waiting state is ignored" <|
-            \_ ->
-                let
-                    model : GoalsSettings.Model
-                    model =
-                        loadedFrom defaultSnapshot
-                in
-                { request =
-                    out
-                        (GoalsSettings.LocalCtxReceived
-                            { date = date "2026-06-16", timezone = "Asia/Kolkata" }
-                        )
-                        model
-                , save = saveState model
-                }
-                    |> Expect.equal
-                        { request = GoalsSettings.NoOp
-                        , save = Just GoalsSettings.Idle
+                        , failedOut = S.NoOp
+                        , retryOut = S.RequestLocalCtx
+                        , retryRequest = Just (saveTargets [ 2150, 170, 210, 70 ])
+                        , finalOut = S.SessionExpired
                         }
         ]
 
@@ -266,153 +217,286 @@ tests =
 
 
 type alias Screen =
-    { phase : String
-    , fields : List String
-    , status : Maybe GoalStatus
-    , save : Maybe GoalsSettings.SaveState
+    { fields : List String
+    , statusLabel : Maybe String
     , error : Maybe String
+    , submit : Maybe ( String, Bool )
     }
 
 
-toScreen : GoalsSettings.Model -> Screen
+toScreen : S.Model -> Screen
 toScreen model =
     case model of
-        GoalsSettings.Loading ->
-            { phase = "loading", fields = [], status = Nothing, save = Nothing, error = Nothing }
+        S.Loading ->
+            loadingScreen
 
-        GoalsSettings.Failed message ->
-            { phase = "failed"
-            , fields = []
-            , status = Nothing
-            , save = Nothing
-            , error = Just message
-            }
+        S.Failed message ->
+            { loadingScreen | error = Just message }
 
-        GoalsSettings.Ready ready ->
-            { phase = "ready"
-            , fields =
+        S.Ready ready ->
+            { fields =
                 [ ready.form.calorieTarget
                 , ready.form.proteinTargetG
                 , ready.form.carbsTargetG
                 , ready.form.fatTargetG
                 ]
-            , status = Just ready.status
-            , save = Just ready.save
-            , error = saveError ready.save
+            , statusLabel = Just (statusText ready.status)
+            , error =
+                case ready.save of
+                    S.ValidationFailed message ->
+                        Just message
+
+                    S.SaveFailed message ->
+                        Just message
+
+                    _ ->
+                        Nothing
+            , submit =
+                if isSaving ready.save then
+                    Just ( savingLabel, True )
+
+                else
+                    Just ( saveLabel, False )
             }
 
 
-saveError : GoalsSettings.SaveState -> Maybe String
-saveError save =
-    case save of
-        GoalsSettings.ValidationFailed message ->
-            Just message
+fieldsOf : S.Model -> List String
+fieldsOf model =
+    (toScreen model).fields
 
-        GoalsSettings.SaveFailed message ->
-            Just message
+
+statusOf : S.Model -> Maybe String
+statusOf model =
+    (toScreen model).statusLabel
+
+
+statusText : GoalStatus -> String
+statusText status =
+    case ( status.source, status.effectiveFrom ) of
+        ( Default, Nothing ) ->
+            defaultStatus
+
+        ( Default, Just effectiveFrom ) ->
+            I18n.en
+                (TidGoalSettingsStatusDefaultAfter
+                    (LocalDate.display I18n.defaultLanguage effectiveFrom)
+                )
+
+        ( Saved, Nothing ) ->
+            I18n.en TidGoalSettingsStatusSavedActive
+
+        ( Saved, Just effectiveFrom ) ->
+            I18n.en
+                (TidGoalSettingsStatusSavedFrom
+                    (LocalDate.display I18n.defaultLanguage effectiveFrom)
+                )
+
+
+isSaving : S.SaveState -> Bool
+isSaving save =
+    case save of
+        S.AwaitingLocalCtx _ ->
+            True
+
+        S.Saving ->
+            True
+
+        _ ->
+            False
+
+
+loadingScreen : Screen
+loadingScreen =
+    { fields = [], statusLabel = Nothing, error = Nothing, submit = Nothing }
+
+
+readyScreen : Screen
+readyScreen =
+    { fields = []
+    , statusLabel = Nothing
+    , error = Nothing
+    , submit = Just ( saveLabel, False )
+    }
+
+
+
+-- HELPERS
+
+
+loadedFrom : GoalSnapshot -> S.Model
+loadedFrom goalSnapshot =
+    S.init
+        |> Tuple.first
+        |> step (S.GoalLoaded (Ok goalSnapshot))
+
+
+edits : List S.Msg -> S.Model -> S.Model
+edits messages model =
+    runSteps step messages model
+
+
+validationAttempt :
+    List S.Msg
+    -> S.Model
+    -> ( S.Model, S.OutMsg )
+validationAttempt changes model =
+    stepOnce S.SaveClicked (edits changes model)
+
+
+saveAndComplete :
+    Result Client.ApiError GoalSnapshot
+    -> S.Model
+    -> ( S.Model, S.OutMsg )
+saveAndComplete result model =
+    let
+        ( awaiting, _ ) =
+            stepOnce S.SaveClicked model
+
+        ( submitting, _ ) =
+            stepOnce (S.LocalCtxReceived context) awaiting
+    in
+    stepOnce (S.SaveCompleted result) submitting
+
+
+step : S.Msg -> S.Model -> S.Model
+step msg model =
+    Tuple.first (stepOnce msg model)
+
+
+stepOnce :
+    S.Msg
+    -> S.Model
+    -> ( S.Model, S.OutMsg )
+stepOnce msg model =
+    let
+        ( next, _, outMsg ) =
+            S.update msg model
+    in
+    ( next, outMsg )
+
+
+type alias SaveRequest =
+    { date : String
+    , timezone : String
+    , targets : List Float
+    }
+
+
+request : S.OutMsg -> Maybe SaveRequest
+request outMsg =
+    case outMsg of
+        S.RequestSaveGoal saveRequest ->
+            Just
+                { date = LocalDate.format saveRequest.localDate
+                , timezone = saveRequest.deviceTimezone
+                , targets =
+                    [ saveRequest.targets.calorieTarget
+                    , saveRequest.targets.proteinTargetG
+                    , saveRequest.targets.carbsTargetG
+                    , saveRequest.targets.fatTargetG
+                    ]
+                }
 
         _ ->
             Nothing
 
 
-savingModel : GoalsSettings.Model
-savingModel =
-    loadedFrom defaultSnapshot
-        |> step GoalsSettings.SaveClicked
-        |> step
-            (GoalsSettings.LocalCtxReceived
-                { date = date "2026-06-16", timezone = "Asia/Kolkata" }
-            )
+saveTargets : List Float -> SaveRequest
+saveTargets targets =
+    { date = "2026-06-16", timezone = "Asia/Kolkata", targets = targets }
 
 
-loadedFrom : GoalSnapshot -> GoalsSettings.Model
-loadedFrom snapshot =
-    GoalsSettings.init
-        |> Tuple.first
-        |> step (GoalsSettings.GoalLoaded (Ok snapshot))
+context : LocalCtx
+context =
+    { date = today, timezone = "Asia/Kolkata" }
 
 
-saveState : GoalsSettings.Model -> Maybe GoalsSettings.SaveState
-saveState model =
-    (toScreen model).save
-
-
-step : GoalsSettings.Msg -> GoalsSettings.Model -> GoalsSettings.Model
-step msg model =
-    first (GoalsSettings.update msg model)
-
-
-out : GoalsSettings.Msg -> GoalsSettings.Model -> GoalsSettings.OutMsg
-out msg model =
-    third (GoalsSettings.update msg model)
-
-
-savedTargets : GoalTargets
-savedTargets =
-    { calorieTarget = 2290
-    , proteinTargetG = 160
-    , carbsTargetG = 255
-    , fatTargetG = 70
-    }
-
-
-validatedTargets : GoalTargets
-validatedTargets =
-    { calorieTarget = 2330
-    , proteinTargetG = 170
-    , carbsTargetG = 255
-    , fatTargetG = 70
+snapshot : GoalSource -> Maybe LocalDate -> Float -> Float -> Float -> Float -> GoalSnapshot
+snapshot source effective calories protein carbs fat =
+    { requestedDate = today
+    , effectiveFrom = effective
+    , source = source
+    , targets =
+        { calorieTarget = calories
+        , proteinTargetG = protein
+        , carbsTargetG = carbs
+        , fatTargetG = fat
+        }
     }
 
 
 defaultSnapshot : GoalSnapshot
 defaultSnapshot =
-    { requestedDate = today
-    , effectiveFrom = Nothing
-    , source = Default
-    , targets = savedTargets
-    }
+    snapshot Default Nothing 2290 160 255 70
+
+
+pristineSnapshot : GoalSnapshot
+pristineSnapshot =
+    snapshot Saved (Just today) 2250 150 255 70
+
+
+editedRefreshSnapshot : GoalSnapshot
+editedRefreshSnapshot =
+    snapshot Saved (Just yesterday) 1905 120 210 65
 
 
 savedSnapshot : GoalSnapshot
 savedSnapshot =
-    { requestedDate = today
-    , effectiveFrom = Just today
-    , source = Saved
-    , targets =
-        { calorieTarget = 2100
-        , proteinTargetG = 150
-        , carbsTargetG = 240
-        , fatTargetG = 60
-        }
-    }
+    snapshot Saved (Just today) 2150 170 210 70
 
 
 today : LocalDate
 today =
-    date "2026-06-16"
+    Fixtures.date "2026-06-16"
 
 
-date : String -> LocalDate
-date raw =
-    case LocalDate.fromString raw of
-        Just value ->
-            value
-
-        Nothing ->
-            case LocalDate.fromParts 1970 1 1 of
-                Just fallback ->
-                    fallback
-
-                Nothing ->
-                    date "1970-01-01"
+yesterday : LocalDate
+yesterday =
+    Fixtures.date "2026-06-15"
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
+defaultStatus : String
+defaultStatus =
+    I18n.en TidGoalSettingsStatusDefaultForDate
 
 
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
+savedToday : String
+savedToday =
+    I18n.en
+        (TidGoalSettingsStatusSavedFrom (LocalDate.display I18n.defaultLanguage today))
+
+
+savedYesterday : String
+savedYesterday =
+    I18n.en
+        (TidGoalSettingsStatusSavedFrom (LocalDate.display I18n.defaultLanguage yesterday))
+
+
+saveLabel : String
+saveLabel =
+    I18n.en TidGoalSettingsSave
+
+
+savingLabel : String
+savingLabel =
+    I18n.en TidCommonSaving
+
+
+invalidNumbersMessage : String
+invalidNumbersMessage =
+    I18n.en TidGoalSettingsErrorInvalidNumbers
+
+
+imbalanceMessage : String
+imbalanceMessage =
+    I18n.en TidGoalSettingsErrorCaloriesMacros
+
+
+macrosMessage : String
+macrosMessage =
+    I18n.en TidGoalSettingsErrorMacrosNonNegative
+
+
+caloriesMessage : String
+caloriesMessage =
+    I18n.en TidGoalSettingsErrorCaloriesPositive

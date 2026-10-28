@@ -8,7 +8,6 @@ module Page.Meal.Show exposing
     , loadId
     , modalView
     , modelId
-    , uniqueProductIds
     , update
     , view
     )

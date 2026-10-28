@@ -1,87 +1,71 @@
 module Page.Users.DashboardTest exposing (tests)
 
+{-| The dashboard has no retry message; a remount or refresh is modelled by a
+second load completion, which is how Main recovers from a failed request.
+-}
+
 import Api.Client as Client
 import Data.Route exposing (Route(..))
 import Data.User exposing (User)
 import Expect
 import Page.Users.Dashboard as AdminDashboard
+import Support.Fixtures as Fixtures
 import Test exposing (Test, describe, test)
-
-
-networkErrorMessage : String
-networkErrorMessage =
-    "Could not reach the server. Check your connection and try again."
-
-
-unauthorized : Client.ApiError
-unauthorized =
-    Client.BadStatus 401 "unauthorized" "Unauthorized"
 
 
 tests : Test
 tests =
     describe "Page.Users.Dashboard"
-        [ test "loading the user list requests users and renders one row per user" <|
+        [ test "loaded users expose rows and both admin routes open" <|
             \_ ->
                 let
-                    ( loading, request ) =
-                        AdminDashboard.init
-
                     loaded : AdminDashboard.Model
                     loaded =
                         step (AdminDashboard.UsersLoaded (Ok [ alice, bob ])) loading
                 in
-                { request = request
-                , loading = toScreen loading |> .phase
-                , loaded = toScreen loaded
+                { initOut = Tuple.second AdminDashboard.init
+                , rows = (toScreen loaded).rows
+                , createOut = out AdminDashboard.NavigateCreateUser loaded
+                , editOut = out (AdminDashboard.NavigateEditUser "u1") loaded
                 }
                     |> Expect.equal
-                        { request = AdminDashboard.RequestUsers
-                        , loading = "loading"
-                        , loaded =
-                            { phase = "loaded"
-                            , rows =
-                                [ { username = "alice"
-                                  , displayName = "Alice"
-                                  , status = "active"
-                                  }
-                                , { username = "bob"
-                                  , displayName = "Bob"
-                                  , status = "disabled"
-                                  }
-                                ]
-                            , error = Nothing
-                            }
+                        { initOut = AdminDashboard.RequestUsers
+                        , rows = expectedRows
+                        , createOut = AdminDashboard.Navigate AdminCreateUser
+                        , editOut = AdminDashboard.Navigate (AdminEditUser "u1")
                         }
-        , test "a failed load shows an error and an unauthorized load expires the session" <|
+        , test "a failed load retries, create opens, then a 401 on refresh expires" <|
             \_ ->
                 let
-                    loading : AdminDashboard.Model
-                    loading =
-                        Tuple.first AdminDashboard.init
+                    failed : AdminDashboard.Model
+                    failed =
+                        step (AdminDashboard.UsersLoaded (Err Client.NetworkError)) loading
+
+                    retried : AdminDashboard.Model
+                    retried =
+                        step (AdminDashboard.UsersLoaded (Ok [ alice, bob ])) failed
                 in
-                { failed =
-                    toScreen
-                        (step (AdminDashboard.UsersLoaded (Err Client.NetworkError)) loading)
-                , unauthorized = out (AdminDashboard.UsersLoaded (Err unauthorized)) loading
+                { failedError = (toScreen failed).error
+                , retriedRows = (toScreen retried).rows
+                , createOut = out AdminDashboard.NavigateCreateUser retried
+                , finalOut =
+                    out
+                        (AdminDashboard.UsersLoaded (Err Fixtures.unauthorized))
+                        retried
+                , finalRows =
+                    (toScreen
+                        (step
+                            (AdminDashboard.UsersLoaded (Err Fixtures.unauthorized))
+                            retried
+                        )
+                    ).rows
                 }
                     |> Expect.equal
-                        { failed = { phase = "failed", rows = [], error = Just networkErrorMessage }
-                        , unauthorized = AdminDashboard.SessionExpired
-                        }
-        , test "a row opens the edit page and the create action opens the create page" <|
-            \_ ->
-                let
-                    loading : AdminDashboard.Model
-                    loading =
-                        Tuple.first AdminDashboard.init
-                in
-                { edit = out (AdminDashboard.NavigateEditUser "u1") loading
-                , create = out AdminDashboard.NavigateCreateUser loading
-                }
-                    |> Expect.equal
-                        { edit = AdminDashboard.Navigate (AdminEditUser "u1")
-                        , create = AdminDashboard.Navigate AdminCreateUser
+                        { failedError = Just Fixtures.networkErrorMessage
+                        , retriedRows = expectedRows
+                        , createOut = AdminDashboard.Navigate AdminCreateUser
+                        , finalOut = AdminDashboard.SessionExpired
+                        , finalRows = expectedRows
                         }
         ]
 
@@ -95,8 +79,7 @@ type alias Row =
 
 
 type alias Screen =
-    { phase : String
-    , rows : List Row
+    { rows : List Row
     , error : Maybe String
     }
 
@@ -105,19 +88,13 @@ toScreen : AdminDashboard.Model -> Screen
 toScreen model =
     case model of
         AdminDashboard.Loading ->
-            { phase = "loading", rows = [], error = Nothing }
+            { rows = [], error = Nothing }
 
         AdminDashboard.LoadFailed error ->
-            { phase = "failed"
-            , rows = []
-            , error = Just (Client.displayError error)
-            }
+            { rows = [], error = Just (Client.displayError error) }
 
         AdminDashboard.Loaded users ->
-            { phase = "loaded"
-            , rows = List.map row users
-            , error = Nothing
-            }
+            { rows = List.map row users, error = Nothing }
 
 
 row : User -> Row
@@ -132,14 +109,26 @@ row user =
 -- HELPERS
 
 
+loading : AdminDashboard.Model
+loading =
+    Tuple.first AdminDashboard.init
+
+
 step : AdminDashboard.Msg -> AdminDashboard.Model -> AdminDashboard.Model
 step msg model =
-    first (AdminDashboard.update msg model)
+    Fixtures.tupleFirst (AdminDashboard.update msg model)
 
 
 out : AdminDashboard.Msg -> AdminDashboard.Model -> AdminDashboard.OutMsg
 out msg model =
-    third (AdminDashboard.update msg model)
+    Fixtures.tupleThird (AdminDashboard.update msg model)
+
+
+expectedRows : List Row
+expectedRows =
+    [ { username = "alice", displayName = "Alice", status = "active" }
+    , { username = "bob", displayName = "Bob", status = "disabled" }
+    ]
 
 
 alice : User
@@ -160,13 +149,3 @@ bob =
     , status = "disabled"
     , createdAt = "2026-06-05"
     }
-
-
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value

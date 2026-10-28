@@ -14,7 +14,6 @@ module Page.Diary.Day exposing
     , contentView
     , currentLogs
     , init
-    , slotCalories
     , update
     )
 
@@ -513,14 +512,6 @@ toggleMacroMode mode =
 
         Percent ->
             Grams
-
-
-slotCalories : MealSlot -> List FoodLog -> Float
-slotCalories slot logs =
-    logs
-        |> FoodLog.logsForSlot (Just slot)
-        |> List.map (.nutrients >> Nutrition.caloriesFrom)
-        |> List.sum
 
 
 

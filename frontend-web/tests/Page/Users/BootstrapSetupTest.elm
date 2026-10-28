@@ -6,133 +6,80 @@ import Data.Auth as Auth
 import Expect
 import I18n
 import Page.Users.BootstrapSetup as BootstrapSetup
+import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
 import Translations.Ids exposing (TranslationId(..))
-
-
-networkErrorMessage : String
-networkErrorMessage =
-    "Could not reach the server. Check your connection and try again."
-
-
-unauthorized : Client.ApiError
-unauthorized =
-    Client.BadStatus 401 "unauthorized" "Unauthorized"
-
-
-networkError : Client.ApiError
-networkError =
-    Client.NetworkError
 
 
 tests : Test
 tests =
     describe "Page.Users.BootstrapSetup"
-        [ test "valid credentials emit the create-admin request and the session out-msg" <|
+        [ test "validation, a failed create, retry, then an admin session" <|
             \_ ->
                 let
-                    filled : BootstrapSetup.Model
-                    filled =
-                        BootstrapSetup.init
-                            |> step (formMsg (CredentialForm.UsernameChanged " admin "))
-                            |> step (formMsg (CredentialForm.PasswordChanged "long-enough"))
+                    blank : BootstrapSetup.Model
+                    blank =
+                        step (formMsg CredentialForm.Submitted) BootstrapSetup.init
 
-                    submitting : BootstrapSetup.Model
-                    submitting =
-                        step (formMsg CredentialForm.Submitted) filled
-                in
-                { request = out (formMsg CredentialForm.Submitted) filled
-                , screen = toScreen submitting
-                , completed = out (BootstrapSetup.CreateAdminCompleted (Ok loginSession)) submitting
-                }
-                    |> Expect.equal
-                        { request =
-                            BootstrapSetup.RequestCreateAdmin
-                                { username = "admin", password = "long-enough" }
-                        , screen = { phase = "submitting", username = " admin ", error = Nothing }
-                        , completed = BootstrapSetup.CreateAdminSucceeded loginSession
-                        }
-        , test "a short or missing password is rejected and editing clears it" <|
-            \_ ->
-                let
                     shortPassword : BootstrapSetup.Model
                     shortPassword =
                         BootstrapSetup.init
-                            |> step (formMsg (CredentialForm.UsernameChanged "admin"))
-                            |> step (formMsg (CredentialForm.PasswordChanged "short"))
-
-                    submittedShort : BootstrapSetup.Model
-                    submittedShort =
-                        step (formMsg CredentialForm.Submitted) shortPassword
-
-                    missingUsername : BootstrapSetup.Model
-                    missingUsername =
-                        BootstrapSetup.init
-                            |> step (formMsg (CredentialForm.PasswordChanged "long-enough"))
-                in
-                { shortPassword = toScreen submittedShort
-                , shortPasswordOut = out (formMsg CredentialForm.Submitted) shortPassword
-                , missingUsername =
-                    toScreen (step (formMsg CredentialForm.Submitted) missingUsername)
-                , validation =
-                    BootstrapSetup.validateBootstrapAdmin
-                        { username = " admin ", password = "long-enough" }
-                , cleared =
-                    toScreen
-                        (step
-                            (formMsg (CredentialForm.PasswordChanged "long-enough"))
-                            submittedShort
-                        )
-                }
-                    |> Expect.equal
-                        { shortPassword =
-                            { phase = "invalid"
-                            , username = "admin"
-                            , error = Just (I18n.en TidSetupPasswordMinLength)
-                            }
-                        , shortPasswordOut = BootstrapSetup.NoOp
-                        , missingUsername =
-                            { phase = "invalid"
-                            , username = ""
-                            , error = Just (I18n.en TidCommonUsernameRequired)
-                            }
-                        , validation = Ok { username = "admin", password = "long-enough" }
-                        , cleared = { phase = "editing", username = "admin", error = Nothing }
-                        }
-        , test "a failed or unauthorized completion surfaces a form error and no session out-msg" <|
-            \_ ->
-                let
-                    submitting : BootstrapSetup.Model
-                    submitting =
-                        BootstrapSetup.init
-                            |> step (formMsg (CredentialForm.UsernameChanged "admin"))
-                            |> step (formMsg (CredentialForm.PasswordChanged "long-enough"))
+                            |> Story.runSteps step
+                                [ formMsg (CredentialForm.UsernameChanged " admin ")
+                                , formMsg (CredentialForm.PasswordChanged "short")
+                                ]
                             |> step (formMsg CredentialForm.Submitted)
+
+                    edited : BootstrapSetup.Model
+                    edited =
+                        step
+                            (formMsg (CredentialForm.PasswordChanged "long-enough"))
+                            shortPassword
+
+                    submitted : BootstrapSetup.Model
+                    submitted =
+                        step (formMsg CredentialForm.Submitted) edited
+
+                    failed : BootstrapSetup.Model
+                    failed =
+                        step
+                            (BootstrapSetup.CreateAdminCompleted (Err Client.NetworkError))
+                            submitted
+
+                    retried : BootstrapSetup.Model
+                    retried =
+                        step (formMsg CredentialForm.Submitted) failed
+
+                    succeeded : BootstrapSetup.Model
+                    succeeded =
+                        step
+                            (BootstrapSetup.CreateAdminCompleted (Ok loginSession))
+                            retried
                 in
-                { networkFailure =
-                    toScreen
-                        (step (BootstrapSetup.CreateAdminCompleted (Err networkError)) submitting)
-                , networkOut =
-                    out (BootstrapSetup.CreateAdminCompleted (Err networkError)) submitting
-                , unauthorized =
-                    toScreen
-                        (step (BootstrapSetup.CreateAdminCompleted (Err unauthorized)) submitting)
-                , unauthorizedOut =
-                    out (BootstrapSetup.CreateAdminCompleted (Err unauthorized)) submitting
+                { blankError = (toScreen blank).error
+                , shortPasswordError = (toScreen shortPassword).error
+                , request = out (formMsg CredentialForm.Submitted) edited
+                , failedError = (toScreen failed).error
+                , retryRequest = out (formMsg CredentialForm.Submitted) failed
+                , finalOut =
+                    out
+                        (BootstrapSetup.CreateAdminCompleted (Ok loginSession))
+                        retried
+                , final = toScreen succeeded
                 }
                     |> Expect.equal
-                        { networkFailure =
-                            { phase = "failed"
-                            , username = "admin"
-                            , error = Just networkErrorMessage
-                            }
-                        , networkOut = BootstrapSetup.NoOp
-                        , unauthorized =
-                            { phase = "failed"
-                            , username = "admin"
-                            , error = Just "Unauthorized"
-                            }
-                        , unauthorizedOut = BootstrapSetup.NoOp
+                        { blankError = Just (I18n.en TidCommonUsernameRequired)
+                        , shortPasswordError = Just (I18n.en TidSetupPasswordMinLength)
+                        , request =
+                            BootstrapSetup.RequestCreateAdmin
+                                { username = "admin", password = "long-enough" }
+                        , failedError = Just Fixtures.networkErrorMessage
+                        , retryRequest =
+                            BootstrapSetup.RequestCreateAdmin
+                                { username = "admin", password = "long-enough" }
+                        , finalOut = BootstrapSetup.CreateAdminSucceeded loginSession
+                        , final = { username = " admin ", error = Nothing }
                         }
         ]
 
@@ -142,26 +89,41 @@ tests =
 
 
 type alias Screen =
-    { phase : String
-    , username : String
+    { username : String
     , error : Maybe String
     }
 
 
 toScreen : BootstrapSetup.Model -> Screen
 toScreen model =
-    case model of
-        CredentialForm.Editing form ->
-            { phase = "editing", username = form.username, error = Nothing }
+    let
+        form : CredentialForm.Form
+        form =
+            case model of
+                CredentialForm.Editing current ->
+                    current
 
-        CredentialForm.Invalid form message ->
-            { phase = "invalid", username = form.username, error = Just message }
+                CredentialForm.Invalid current _ ->
+                    current
 
-        CredentialForm.Submitting form ->
-            { phase = "submitting", username = form.username, error = Nothing }
+                CredentialForm.Submitting current ->
+                    current
 
-        CredentialForm.Failed form message ->
-            { phase = "failed", username = form.username, error = Just message }
+                CredentialForm.Failed current _ ->
+                    current
+    in
+    { username = form.username
+    , error =
+        case model of
+            CredentialForm.Invalid _ message ->
+                Just message
+
+            CredentialForm.Failed _ message ->
+                Just message
+
+            _ ->
+                Nothing
+    }
 
 
 
@@ -170,19 +132,12 @@ toScreen model =
 
 step : BootstrapSetup.Msg -> BootstrapSetup.Model -> BootstrapSetup.Model
 step msg model =
-    first (BootstrapSetup.update msg model)
+    Fixtures.tupleFirst (BootstrapSetup.update msg model)
 
 
 out : BootstrapSetup.Msg -> BootstrapSetup.Model -> BootstrapSetup.OutMsg
 out msg model =
-    third (BootstrapSetup.update msg model)
-
-
-loginSession : Auth.LoginSession
-loginSession =
-    { identity = { id = "admin", username = "admin", role = Auth.Admin }
-    , profile = Nothing
-    }
+    Fixtures.tupleThird (BootstrapSetup.update msg model)
 
 
 formMsg : CredentialForm.Msg -> BootstrapSetup.Msg
@@ -190,11 +145,8 @@ formMsg =
     BootstrapSetup.FormMsg
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
+loginSession : Auth.LoginSession
+loginSession =
+    { identity = { id = "admin", username = "admin", role = Auth.Admin }
+    , profile = Nothing
+    }

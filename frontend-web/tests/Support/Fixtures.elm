@@ -1,13 +1,17 @@
 module Support.Fixtures exposing
-    ( today
+    ( date
+    , networkErrorMessage
+    , today
+    , tupleFirst
+    , tupleThird
     , unauthorized
     )
 
 {-| Small, non page-specific values shared by tests.
 
 Page-specific model builders stay next to their page tests. This module only
-holds dates and a canonical API error that several tests need to name
-identically.
+holds dates, canonical API errors, and tuple helpers that several tests need to
+name identically.
 
 -}
 
@@ -43,3 +47,22 @@ today =
 unauthorized : ApiError
 unauthorized =
     Client.BadStatus 401 "unauthorized" "Sign in again"
+
+
+{-| A literal copy of the English network-error string. It must not call
+`I18n.en`: a translation regression has to change actual output while leaving
+this expected value alone, otherwise the assertion could never fail.
+-}
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
+tupleFirst : ( a, b, c ) -> a
+tupleFirst ( value, _, _ ) =
+    value
+
+
+tupleThird : ( a, b, c ) -> c
+tupleThird ( _, _, value ) =
+    value

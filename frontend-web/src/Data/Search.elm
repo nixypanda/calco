@@ -17,7 +17,6 @@ module Data.Search exposing
     , setCategorySuggestions
     , withCategoryToken
     , withQuery
-    , withSearchToken
     )
 
 import Lib.Text as Text
@@ -161,11 +160,6 @@ setCategorySuggestions token suggestions state =
 withQuery : String -> QueryState -> QueryState
 withQuery query state =
     { state | query = query }
-
-
-withSearchToken : Ticket -> QueryState -> QueryState
-withSearchToken token state =
-    { state | searchToken = token }
 
 
 withCategoryToken : Ticket -> QueryState -> QueryState

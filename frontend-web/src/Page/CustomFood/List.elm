@@ -3,7 +3,6 @@ module Page.CustomFood.List exposing
     , Msg(..)
     , OutMsg(..)
     , contentView
-    , foodSummaryText
     , init
     , update
     )

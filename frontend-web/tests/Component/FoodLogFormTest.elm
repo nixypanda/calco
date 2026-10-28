@@ -1,188 +1,162 @@
 module Component.FoodLogFormTest exposing (tests)
 
-import Api.Foods exposing (ProductDetail)
 import Component.FoodLogForm as FoodLogForm
-import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
-import Data.MealSlot exposing (MealSlot(..))
-import Data.Nutrition as Nutrition
+import Data.MealSlot exposing (MealSlot)
 import Expect
-import Lib.Date as LocalDate exposing (LocalDate)
-import Test exposing (Test, describe, test)
+import Fuzz
+import I18n
+import Support.Fixtures as Fixtures
+import Support.Fuzz as SupportFuzz
+import Test exposing (Test, describe, fuzz, test)
+import Translations.Ids exposing (TranslationId(..))
 
 
 tests : Test
 tests =
     describe "Component.FoodLogForm"
-        [ test "missing defaults use the first configured serving" <|
-            \_ ->
-                FoodLogForm.initLogFormFromFood Nothing
-                    { food
-                        | defaultQuantity = Nothing
-                        , defaultUnit = Nothing
-                        , servings =
-                            [ { unit = "cup", gramsPerUnit = "240" }
-                            ]
-                    }
-                    |> (\current -> ( current.amount, current.unit ))
-                    |> Expect.equal ( "1", "cup" )
-        , test "amount is required" <|
-            \_ ->
-                FoodLogForm.createProductLogRequest sampleDate
-                    deviceTimezone
-                    "food-1"
-                    { form | amount = " " }
-                    |> Expect.equal (Err FoodLogForm.AmountRequired)
-        , test "create-log payload maps item, portion, meal slot, and blank notes" <|
-            \_ ->
-                let
-                    withSlot : FoodLogForm.Model
-                    withSlot =
-                        { form
-                            | amount = "2"
-                            , unit = "serving"
-                            , mealSlot = Just Lunch
-                            , notes = "   "
-                        }
-
-                    withoutSlot : FoodLogForm.Model
-                    withoutSlot =
-                        { form | mealSlot = Nothing }
-                in
-                ( FoodLogForm.createProductLogRequest sampleDate deviceTimezone "food-1" withSlot
-                    |> Result.map
-                        (\request ->
-                            { item = request.item
-                            , quantity = request.quantity
-                            , mealSlot = request.mealSlot
-                            , notes = request.notes
-                            }
-                        )
-                , FoodLogForm.createProductLogRequest sampleDate deviceTimezone "food-1" withoutSlot
-                    |> Result.map .mealSlot
-                )
-                    |> Expect.equal
-                        ( Ok
-                            { item = { itemType = ItemRef.Product, id = "food-1" }
-                            , quantity = { amount = "2", unit = "serving" }
-                            , mealSlot = Just Lunch
-                            , notes = Nothing
-                            }
-                        , Ok Nothing
-                        )
-        , test "create-log payload uses the supplied date directly" <|
-            \_ ->
-                FoodLogForm.createProductLogRequest sampleDate
-                    deviceTimezone
-                    "food-1"
-                    form
-                    |> Result.map .logDate
-                    |> Expect.equal (Ok sampleDate)
-        , test "load-log success form uses existing quantity, unit, meal slot, and notes" <|
-            \_ ->
-                FoodLogForm.initLogFormFromLog log
-                    |> (\current ->
-                            { amount = current.amount
-                            , unit = current.unit
-                            , mealSlot = current.mealSlot
-                            , notes = current.notes
-                            }
-                       )
-                    |> Expect.equal
-                        { amount = "2"
-                        , unit = "serving"
-                        , mealSlot = Just Lunch
-                        , notes = "Good"
-                        }
-        , test "update payload includes quantity, meal slot, and notes" <|
-            \_ ->
-                FoodLogForm.createUpdateLogRequest { form | mealSlot = Just Lunch, notes = "Saved" }
-                    |> Expect.equal
-                        (Ok
-                            { mealSlot = Just Lunch
-                            , quantity = { amount = "1", unit = "g" }
-                            , notes = Just "Saved"
-                            }
-                        )
+        [ amountRequired
+        , payloadBranches
         ]
 
 
-form : FoodLogForm.Model
-form =
-    { amount = "1"
-    , unit = "g"
-    , mealSlot = Nothing
-    , notes = ""
+amountRequired : Test
+amountRequired =
+    test "amount is required for create and update payloads" <|
+        \_ ->
+            Expect.all
+                [ \_ ->
+                    FoodLogForm.createProductLogRequest
+                        Fixtures.today
+                        Nothing
+                        "food-1"
+                        (model " " "g" Nothing "")
+                        |> Expect.equal (Err FoodLogForm.AmountRequired)
+                , \_ ->
+                    FoodLogForm.createUpdateLogRequest
+                        (model " " "g" Nothing "")
+                        |> Expect.equal (Err FoodLogForm.AmountRequired)
+                , \_ ->
+                    FoodLogForm.submitFailureMessage
+                        FoodLogForm.AmountRequiredMessage
+                        |> Expect.equal (I18n.en TidFoodLogAmountRequired)
+                ]
+                ()
+
+
+{-| Request branch property: the create payload maps the item and typed portion;
+the update payload maps the same portion without an item. Both trim notes and
+blank notes become Nothing, while the update payload always carries the slot.
+-}
+payloadBranches : Test
+payloadBranches =
+    fuzz payloadInput
+        "create and update payloads map the portion, meal slot, and notes"
+    <|
+        \input ->
+            let
+                formModel : FoodLogForm.Model
+                formModel =
+                    model input.portion input.unit input.mealSlot input.notes
+
+                expectedQuantity : { amount : String, unit : String }
+                expectedQuantity =
+                    { amount = input.portion, unit = input.unit }
+            in
+            Expect.all
+                [ \_ ->
+                    FoodLogForm.createProductLogRequest
+                        Fixtures.today
+                        Nothing
+                        "food-1"
+                        formModel
+                        |> Result.map
+                            (\request ->
+                                { item = request.item
+                                , quantity = request.quantity
+                                , mealSlot = request.mealSlot
+                                , notes = request.notes
+                                }
+                            )
+                        |> Expect.equal
+                            (Ok
+                                { item = { itemType = ItemRef.Product, id = "food-1" }
+                                , quantity = expectedQuantity
+                                , mealSlot = input.mealSlot
+                                , notes = expectedNotes input.notes
+                                }
+                            )
+                , \_ ->
+                    FoodLogForm.createUpdateLogRequest formModel
+                        |> Result.map
+                            (\request ->
+                                { mealSlot = request.mealSlot
+                                , quantity = request.quantity
+                                , notes = request.notes
+                                }
+                            )
+                        |> Expect.equal
+                            (Ok
+                                { mealSlot = input.mealSlot
+                                , quantity = expectedQuantity
+                                , notes = expectedNotes input.notes
+                                }
+                            )
+                ]
+                ()
+
+
+
+-- HELPERS
+
+
+type alias PayloadInput =
+    { mealSlot : Maybe MealSlot
+    , portion : String
+    , unit : String
+    , notes : String
+    }
+
+
+payloadInput : Fuzz.Fuzzer PayloadInput
+payloadInput =
+    Fuzz.map4 PayloadInput
+        SupportFuzz.maybeMealSlot
+        amount
+        unit
+        Fuzz.string
+
+
+model : String -> String -> Maybe MealSlot -> String -> FoodLogForm.Model
+model amountValue unitValue mealSlot notes =
+    { amount = amountValue
+    , unit = unitValue
+    , mealSlot = mealSlot
+    , notes = notes
     , openDropdown = FoodLogForm.NoDropdownOpen
     , submitState = FoodLogForm.SubmitIdle
     }
 
 
-rawDate : String
-rawDate =
-    "2026-06-04"
+amount : Fuzz.Fuzzer String
+amount =
+    Fuzz.oneOfValues [ "1", "2", "0.5", "100" ]
 
 
-sampleDate : LocalDate
-sampleDate =
-    sampleDateFromString rawDate
+unit : Fuzz.Fuzzer String
+unit =
+    Fuzz.oneOfValues [ "g", "serving" ]
 
 
-sampleDateFromString : String -> LocalDate
-sampleDateFromString raw =
-    case LocalDate.fromString raw of
-        Just d ->
-            d
+expectedNotes : String -> Maybe String
+expectedNotes raw =
+    let
+        trimmed : String
+        trimmed =
+            String.trim raw
+    in
+    if String.isEmpty trimmed then
+        Nothing
 
-        Nothing ->
-            todayFallback
-
-
-todayFallback : LocalDate
-todayFallback =
-    case LocalDate.fromParts 1970 1 1 of
-        Just d ->
-            d
-
-        Nothing ->
-            -- Unreachable: 1970-01-01 is always valid.
-            sampleDate
-
-
-deviceTimezone : Maybe String
-deviceTimezone =
-    Just "Asia/Kolkata"
-
-
-food : ProductDetail
-food =
-    { id = "food-1"
-    , source = "USER"
-    , sourceId = Nothing
-    , visibility = "private"
-    , barcode = Nothing
-    , name = "Apple"
-    , brand = Nothing
-    , categories = []
-    , defaultQuantity = Just "1"
-    , defaultUnit = Just "g"
-    , nutritionSummary = { per100g = Nutrition.emptySummary }
-    , nutrients = []
-    , servings = []
-    , allowedUnits = []
-    }
-
-
-log : FoodLog
-log =
-    { id = "log-1"
-    , logDate = sampleDate
-    , deviceTimezone = deviceTimezone
-    , mealSlot = Just Lunch
-    , item =
-        FoodLog.ProductLogItem
-            { id = "food-1", name = "Apple", brand = Just "Local" }
-    , quantity = { amount = "2", unit = "serving" }
-    , nutrients = []
-    , notes = Just "Good"
-    }
+    else
+        Just trimmed

@@ -4,7 +4,6 @@ module Page.Users.BootstrapSetup exposing
     , OutMsg(..)
     , init
     , update
-    , validateBootstrapAdmin
     , view
     )
 

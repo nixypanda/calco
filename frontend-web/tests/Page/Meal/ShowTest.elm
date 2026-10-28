@@ -3,371 +3,408 @@ module Page.Meal.ShowTest exposing (tests)
 import Api.Client as Client
 import Api.Foods exposing (ProductDetail, UnitItem)
 import Api.Meals exposing (Meal, MealNutritionResponse)
-import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
+import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
-import I18n
 import Page.Meal.Show as MealShow
+import Support.Fixtures as Fixtures
+import Support.Story exposing (runSteps)
 import Test exposing (Test, describe, test)
-import Translations.Ids exposing (TranslationId(..))
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
+import Translations.Util as Util
+import Ui.Theme as Theme
 import View.DeleteModal exposing (DeleteState(..))
-import View.Nutrients exposing (NutritionState(..), nutritionInput)
-
-
-networkErrorMessage : String
-networkErrorMessage =
-    "Could not reach the server. Check your connection and try again."
-
-
-unauthorized : Client.ApiError
-unauthorized =
-    Client.BadStatus 401 "unauthorized" "Sign in again"
+import View.Nutrients exposing (NutritionState(..))
 
 
 tests : Test
 tests =
     describe "Page.Meal.Show"
-        [ test "loading a meal falls back to default units and requests the first product" <|
+        [ test "fallback units, stale previews, component names, edit, then a 401 expires" <|
             \_ ->
                 let
-                    ( loading, initial ) =
-                        MealShow.init "meal-1"
-
-                    withUnits : MealShow.Model
-                    withUnits =
-                        step (MealShow.UnitsLoaded (Ok { items = [] })) loading
-
-                    loaded : MealShow.Model
-                    loaded =
-                        step
-                            (MealShow.MealLoaded "meal-1" (Ok repeatedProductMeal))
-                            withUnits
-
-                    request : MealShow.OutMsg
-                    request =
-                        out
-                            (MealShow.MealLoaded "meal-1" (Ok repeatedProductMeal))
-                            withUnits
-                in
-                { initial = initial
-                , uniqueIds = MealShow.uniqueProductIds repeatedProductMeal
-                , units = toScreen withUnits |> .units
-                , phase = toScreen loaded |> .phase
-                , request = request
-                }
-                    |> Expect.equal
-                        { initial = MealShow.RequestInitialData "meal-1"
-                        , uniqueIds = [ "food-1" ]
-                        , units = Just [ fallbackGram ]
-                        , phase = "loaded"
-                        , request = MealShow.RequestProductDetail "food-1"
-                        }
-        , test "the product-name chain records a failed lookup and continues to the last" <|
-            \_ ->
-                let
-                    loading : MealShow.Model
-                    loading =
+                    withFallbackUnits : MealShow.Model
+                    withFallbackUnits =
                         Tuple.first (MealShow.init "meal-1")
+                            |> step (MealShow.UnitsLoaded (Err Client.NetworkError))
 
-                    loaded : MealShow.Model
-                    loaded =
-                        step (MealShow.MealLoaded "meal-1" (Ok twoProductMeal)) loading
+                    ( loaded, productRequestOut ) =
+                        stepWithOut
+                            (MealShow.MealLoaded "meal-1" (Ok twoProductMeal))
+                            withFallbackUnits
 
-                    afterFailure : MealShow.Model
-                    afterFailure =
-                        step
-                            (MealShow.ProductDetailLoaded "food-1" (Err Client.NetworkError))
+                    ( withFirstProduct, secondProductRequestOut ) =
+                        stepWithOut
+                            (MealShow.ProductDetailLoaded "food-1" (Ok appleProduct))
                             loaded
 
-                    afterLast : MealShow.Model
-                    afterLast =
-                        step (MealShow.ProductDetailLoaded "food-2" (Ok banana)) afterFailure
-                in
-                { failedName = nameFor "food-1" afterFailure
-                , continueRequest =
-                    out (MealShow.ProductDetailLoaded "food-1" (Err Client.NetworkError)) loaded
-                , chainEnd =
-                    out (MealShow.ProductDetailLoaded "food-2" (Ok banana)) afterFailure
-                , lastName = nameFor "food-2" afterLast
-                }
-                    |> Expect.equal
-                        { failedName = I18n.en TidMealUnknownFood
-                        , continueRequest = MealShow.RequestProductDetail "food-2"
-                        , chainEnd = MealShow.NoOp
-                        , lastName = "Banana"
-                        }
-        , test "a response for another meal and a late success after failure are ignored" <|
-            \_ ->
-                let
-                    loading : MealShow.Model
-                    loading =
-                        Tuple.first (MealShow.init "meal-1")
-
-                    afterOther : MealShow.Model
-                    afterOther =
-                        step (MealShow.MealLoaded "other" (Ok meal)) loading
-
-                    failed : MealShow.Model
-                    failed =
-                        step (MealShow.MealLoaded "meal-1" (Err Client.NetworkError)) loading
-
-                    afterLateSuccess : MealShow.Model
-                    afterLateSuccess =
-                        step (MealShow.MealLoaded "meal-1" (Ok meal)) failed
-                in
-                { otherPhase = toScreen afterOther |> .phase
-                , otherRequest = out (MealShow.MealLoaded "other" (Ok meal)) loading
-                , lateSuccessPhase = toScreen afterLateSuccess |> .phase
-                , lateSuccessError = toScreen afterLateSuccess |> .error
-                }
-                    |> Expect.equal
-                        { otherPhase = "loading"
-                        , otherRequest = MealShow.NoOp
-                        , lateSuccessPhase = "failed"
-                        , lateSuccessError = Just networkErrorMessage
-                        }
-        , test "an unauthorized meal load or preview expires the session" <|
-            \_ ->
-                let
-                    loading : MealShow.Model
-                    loading =
-                        Tuple.first (MealShow.init "meal-1")
-                in
-                ( out (MealShow.MealLoaded "meal-1" (Err unauthorized)) loading
-                , out (MealShow.NutrientPreviewLoaded "meal-1" (Err unauthorized)) loadedMealModel
-                )
-                    |> Expect.equal ( MealShow.SessionExpired, MealShow.SessionExpired )
-        , test "changing amount or unit updates the shown totals and ignores stale responses" <|
-            \_ ->
-                let
-                    afterAmount : MealShow.Model
-                    afterAmount =
-                        step (MealShow.AmountChanged "150") nutritionLoadedModel
-
-                    staleIgnored : MealShow.Model
-                    staleIgnored =
-                        applyPreview "100" "g" [ nutrient ] afterAmount
-
-                    amountApplied : MealShow.Model
-                    amountApplied =
-                        applyPreview "150" "g" [ scaledNutrient ] afterAmount
-
-                    afterUnit : MealShow.Model
-                    afterUnit =
-                        step (MealShow.UnitChanged "serving") amountApplied
-
-                    unitApplied : MealShow.Model
-                    unitApplied =
-                        applyPreview "150" "serving" [ servingNutrient ] afterUnit
-                in
-                { initialNutrients = toScreen nutritionLoadedModel |> .nutrients
-                , amountRequest = out (MealShow.AmountChanged "150") nutritionLoadedModel
-                , amountNutrition = toScreen amountApplied |> .nutrition
-                , amountNutrients = toScreen amountApplied |> .nutrients
-                , staleNutrition = toScreen staleIgnored |> .nutrition
-                , unitRequest = out (MealShow.UnitChanged "serving") amountApplied
-                , unitAmount = toScreen unitApplied |> .amount
-                , unitNutrients = toScreen unitApplied |> .nutrients
-                }
-                    |> Expect.equal
-                        { initialNutrients = Just [ nutrient ]
-                        , amountRequest = MealShow.RequestNutrientPreview "meal-1" "150" "g"
-                        , amountNutrition = "loaded"
-                        , amountNutrients = Just [ scaledNutrient ]
-                        , staleNutrition = "loading"
-                        , unitRequest = MealShow.RequestNutrientPreview "meal-1" "150" "serving"
-                        , unitAmount = Just "150"
-                        , unitNutrients = Just [ servingNutrient ]
-                        }
-        , test "an invalid or non-positive amount clears the displayed preview without a request" <|
-            \_ ->
-                let
-                    invalid : MealShow.Model
-                    invalid =
-                        step (MealShow.AmountChanged "nope") nutritionLoadedModel
+                    ( named, finalProductOut ) =
+                        stepWithOut
+                            (MealShow.ProductDetailLoaded "food-2" (Err Client.NetworkError))
+                            withFirstProduct
 
                     zero : MealShow.Model
                     zero =
-                        step (MealShow.AmountChanged "0") nutritionLoadedModel
+                        step (MealShow.AmountChanged "0") named
+
+                    invalid : MealShow.Model
+                    invalid =
+                        step (MealShow.AmountChanged "nope") zero
+
+                    ( changed, amountOut ) =
+                        stepWithOut (MealShow.AmountChanged "150") invalid
+
+                    stale : MealShow.Model
+                    stale =
+                        step
+                            (MealShow.NutrientPreviewLoaded
+                                "meal-1"
+                                (Ok (previewFor "100" "g" [ nutrient ]))
+                            )
+                            changed
+
+                    applied : MealShow.Model
+                    applied =
+                        step
+                            (MealShow.NutrientPreviewLoaded
+                                "meal-1"
+                                (Ok (previewFor "150" "g" [ scaledNutrient ]))
+                            )
+                            stale
+
+                    ( unitChanged, unitOut ) =
+                        stepWithOut (MealShow.UnitChanged "serving") applied
+
+                    unitApplied : MealShow.Model
+                    unitApplied =
+                        step
+                            (MealShow.NutrientPreviewLoaded
+                                "meal-1"
+                                (Ok (previewFor "150" "serving" [ servingNutrient ]))
+                            )
+                            unitChanged
+
+                    staleMeal : MealShow.Model
+                    staleMeal =
+                        step (MealShow.MealLoaded "other" (Ok otherMeal)) unitApplied
+
+                    final : MealShow.Model
+                    final =
+                        step
+                            (MealShow.NutrientPreviewLoaded "meal-1" (Err Fixtures.unauthorized))
+                            staleMeal
                 in
-                { invalidRequest = out (MealShow.AmountChanged "nope") nutritionLoadedModel
-                , invalidNutrition = toScreen invalid |> .nutrition
-                , invalidNutrients = toScreen invalid |> .nutrients
-                , zeroRequest = out (MealShow.AmountChanged "0") nutritionLoadedModel
-                , zeroNutrition = toScreen zero |> .nutrition
-                }
-                    |> Expect.equal
-                        { invalidRequest = MealShow.NoOp
-                        , invalidNutrition = "unavailable"
-                        , invalidNutrients = Nothing
-                        , zeroRequest = MealShow.NoOp
-                        , zeroNutrition = "unavailable"
+                Expect.all
+                    [ \_ ->
+                        { fallbackUnits = (nutritionScreen withFallbackUnits).units
+                        , zero = ( (nutritionScreen zero).amount, (nutritionScreen zero).nutrients )
+                        , zeroOut = out (MealShow.AmountChanged "0") named
+                        , invalid =
+                            ( (nutritionScreen invalid).amount
+                            , (nutritionScreen invalid).nutrients
+                            )
+                        , invalidOut = out (MealShow.AmountChanged "nope") zero
+                        , amountRequest = previewRequest amountOut
+                        , staleNutrients = (nutritionScreen stale).nutrients
+                        , amountNutrients = (nutritionScreen applied).nutrients
+                        , unitRequest = previewRequest unitOut
+                        , unitNutrients = (nutritionScreen unitApplied).nutrients
+                        , staleMealName = (nutritionScreen staleMeal).name
+                        , productRequest = productRequestOut
+                        , secondProductRequest = secondProductRequestOut
+                        , finalProductOut = finalProductOut
+                        , editOut = out MealShow.EditClicked named
+                        , screen = nutritionScreen final
+                        , finalOut =
+                            out
+                                (MealShow.NutrientPreviewLoaded
+                                    "meal-1"
+                                    (Err Fixtures.unauthorized)
+                                )
+                                staleMeal
                         }
-        , test "deleting a meal confirms, requests, and navigates to the list on success" <|
+                            |> Expect.equal
+                                { fallbackUnits = [ "g" ]
+                                , zero = ( "0", [] )
+                                , zeroOut = MealShow.NoOp
+                                , invalid = ( "nope", [] )
+                                , invalidOut = MealShow.NoOp
+                                , amountRequest =
+                                    Just ( "meal-1", "150", "g" )
+                                , staleNutrients = []
+                                , amountNutrients = [ "ENERGY_KCAL:180" ]
+                                , unitRequest =
+                                    Just ( "meal-1", "150", "serving" )
+                                , unitNutrients = [ "ENERGY_KCAL:90" ]
+                                , staleMealName = "Lunch"
+                                , productRequest = MealShow.RequestProductDetail "food-1"
+                                , secondProductRequest = MealShow.RequestProductDetail "food-2"
+                                , finalProductOut = MealShow.NoOp
+                                , editOut = MealShow.Navigate (MealEdit "meal-1")
+                                , screen =
+                                    { name = "Lunch"
+                                    , units = [ "g" ]
+                                    , amount = "150"
+                                    , unit = "serving"
+                                    , nutrients = []
+                                    , error = Just "Sign in again"
+                                    }
+                                , finalOut = MealShow.SessionExpired
+                                }
+                    , \_ ->
+                        contentFor named
+                            |> Query.has [ Selector.text "Apple" ]
+                    , \_ ->
+                        contentFor named
+                            |> Query.has [ Selector.text "Unknown food" ]
+                    ]
+                    ()
+        , test "delete cancel, failure, a late success, and retry navigation" <|
             \_ ->
                 let
+                    loaded : MealShow.Model
+                    loaded =
+                        Tuple.first (MealShow.init "meal-1")
+                            |> runSteps step
+                                [ MealShow.UnitsLoaded (Ok { items = [ gram ] })
+                                , MealShow.MealLoaded "meal-1" (Ok meal)
+                                ]
+
                     confirming : MealShow.Model
                     confirming =
-                        step MealShow.DeleteClicked loadedMealModel
+                        step MealShow.DeleteClicked loaded
 
-                    deleting : MealShow.Model
-                    deleting =
-                        step MealShow.ConfirmDeleteClicked confirming
+                    cancelled : MealShow.Model
+                    cancelled =
+                        step MealShow.CancelDeleteClicked confirming
+
+                    reconfirming : MealShow.Model
+                    reconfirming =
+                        step MealShow.DeleteClicked cancelled
+
+                    ( deleting, deleteOut ) =
+                        stepWithOut MealShow.ConfirmDeleteClicked reconfirming
+
+                    failed : MealShow.Model
+                    failed =
+                        step
+                            (MealShow.DeleteCompleted (Err Client.NetworkError))
+                            deleting
+
+                    lateOut : MealShow.OutMsg
+                    lateOut =
+                        out (MealShow.DeleteCompleted (Ok ())) failed
+
+                    ( retrying, retryOut ) =
+                        stepWithOut MealShow.ConfirmDeleteClicked failed
+
+                    ( final, completionOut ) =
+                        stepWithOut (MealShow.DeleteCompleted (Ok ())) retrying
                 in
-                { confirmState = toScreen confirming |> .delete
-                , request = out MealShow.ConfirmDeleteClicked confirming
-                , deletingState = toScreen deleting |> .delete
-                , success = out (MealShow.DeleteCompleted (Ok ())) deleting
+                { confirming = deleteScreen confirming
+                , cancelled = deleteScreen cancelled
+                , deleting = deleteScreen deleting
+                , deleteRequest = deleteOut
+                , failure = deleteScreen failed
+                , lateOut = lateOut
+                , retryRequest = retryOut
+                , screen = deleteScreen final
+                , finalOut = completionOut
                 }
                     |> Expect.equal
-                        { confirmState = Just DeleteConfirming
-                        , request = MealShow.RequestDeleteMeal "meal-1"
-                        , deletingState = Just Deleting
-                        , success = MealShow.Navigate MealList
+                        { confirming = confirmingDelete
+                        , cancelled = closed
+                        , deleting = pendingDelete
+                        , deleteRequest = MealShow.RequestDeleteMeal "meal-1"
+                        , failure = failedDelete Fixtures.networkErrorMessage
+                        , lateOut = MealShow.NoOp
+                        , retryRequest = MealShow.RequestDeleteMeal "meal-1"
+                        , screen = pendingDelete
+                        , finalOut = MealShow.Navigate MealList
                         }
-        , test "a failed delete retries, and an unauthorized delete expires the session" <|
-            \_ ->
-                let
-                    deleting : MealShow.Model
-                    deleting =
-                        loadedMealModel
-                            |> step MealShow.DeleteClicked
-                            |> step MealShow.ConfirmDeleteClicked
-
-                    afterFailure : MealShow.Model
-                    afterFailure =
-                        step (MealShow.DeleteCompleted (Err Client.NetworkError)) deleting
-                in
-                { failedState = toScreen afterFailure |> .delete
-                , retry = out MealShow.ConfirmDeleteClicked afterFailure
-                , unauthorized = out (MealShow.DeleteCompleted (Err unauthorized)) deleting
-                }
-                    |> Expect.equal
-                        { failedState = Just (DeleteFailed networkErrorMessage)
-                        , retry = MealShow.RequestDeleteMeal "meal-1"
-                        , unauthorized = MealShow.SessionExpired
-                        }
-        , test "the edit action navigates to the meal edit route" <|
-            \_ ->
-                out MealShow.EditClicked loadedMealModel
-                    |> Expect.equal (MealShow.Navigate (MealEdit "meal-1"))
         ]
 
 
-
--- SCREEN PROJECTION
-
-
-type alias Screen =
-    { phase : String
-    , units : Maybe (List UnitItem)
-    , nutrition : String
-    , nutrients : Maybe (List NutrientAmount)
-    , amount : Maybe String
-    , unit : Maybe String
-    , delete : Maybe DeleteState
+type alias NutritionProjection =
+    { name : String
+    , units : List String
+    , amount : String
+    , unit : String
+    , nutrients : List String
     , error : Maybe String
     }
 
 
-toScreen : MealShow.Model -> Screen
-toScreen model =
+nutritionScreen : MealShow.Model -> NutritionProjection
+nutritionScreen model =
     case model of
-        MealShow.Loading loading ->
-            { phase = "loading"
-            , units = Just loading.units
-            , nutrition = statusOf loading.nutrition
-            , nutrients = nutrientsOf loading.nutrition
-            , amount = Just (nutritionInput loading.nutrition).amount
-            , unit = Just (nutritionInput loading.nutrition).unit
-            , delete = Nothing
-            , error = Nothing
-            }
-
         MealShow.Loaded loaded ->
-            { phase = "loaded"
-            , units = Just loaded.units
-            , nutrition = statusOf loaded.nutrition
-            , nutrients = nutrientsOf loaded.nutrition
-            , amount = Just (nutritionInput loaded.nutrition).amount
-            , unit = Just (nutritionInput loaded.nutrition).unit
-            , delete = Just loaded.delete
+            let
+                ( amount, unit ) =
+                    nutritionFields loaded.nutrition
+            in
+            { name = loaded.meal.name
+            , units = List.map .code loaded.units
+            , amount = amount
+            , unit = unit
+            , nutrients = nutritionAmounts loaded.nutrition
+            , error = nutritionFailure loaded.nutrition
+            }
+
+        MealShow.LoadFailed _ ->
+            { name = ""
+            , units = []
+            , amount = ""
+            , unit = ""
+            , nutrients = []
             , error = Nothing
             }
 
-        MealShow.LoadFailed failed ->
-            { phase = "failed"
-            , units = Nothing
-            , nutrition = "none"
-            , nutrients = Nothing
-            , amount = Nothing
-            , unit = Nothing
-            , delete = Nothing
-            , error = Just failed.message
+        MealShow.Loading loading ->
+            let
+                ( amount, unit ) =
+                    nutritionFields loading.nutrition
+            in
+            { name = ""
+            , units = List.map .code loading.units
+            , amount = amount
+            , unit = unit
+            , nutrients = nutritionAmounts loading.nutrition
+            , error = nutritionFailure loading.nutrition
             }
 
 
-statusOf : NutritionState -> String
-statusOf nutrition =
+nutritionFields : NutritionState -> ( String, String )
+nutritionFields nutrition =
     case nutrition of
-        NutritionLoading _ ->
-            "loading"
+        NutritionLoading input ->
+            ( input.amount, input.unit )
 
-        NutritionLoaded _ _ ->
-            "loaded"
+        NutritionLoaded input _ ->
+            ( input.amount, input.unit )
 
-        NutritionFailed _ _ ->
-            "failed"
+        NutritionFailed input _ ->
+            ( input.amount, input.unit )
 
-        NutritionUnavailable _ ->
-            "unavailable"
+        NutritionUnavailable input ->
+            ( input.amount, input.unit )
 
 
-nutrientsOf : NutritionState -> Maybe (List NutrientAmount)
-nutrientsOf nutrition =
+nutritionAmounts : NutritionState -> List String
+nutritionAmounts nutrition =
     case nutrition of
         NutritionLoaded _ nutrients ->
-            Just nutrients
+            List.map (\item -> item.code ++ ":" ++ item.amount) nutrients
+
+        _ ->
+            []
+
+
+nutritionFailure : NutritionState -> Maybe String
+nutritionFailure nutrition =
+    case nutrition of
+        NutritionFailed _ message ->
+            Just message
 
         _ ->
             Nothing
 
 
-nameFor : String -> MealShow.Model -> String
-nameFor productId model =
+type alias DeleteView =
+    { open : Bool, pending : Bool, cancelDisabled : Bool, error : Maybe String }
+
+
+deleteScreen : MealShow.Model -> DeleteView
+deleteScreen model =
     case model of
         MealShow.Loaded loaded ->
-            ItemNameLookup.nameFor "" (ItemNameLookup.productRef productId) loaded.productNames
+            deleteView loaded.delete
 
         _ ->
-            ""
+            closed
+
+
+deleteView : DeleteState -> DeleteView
+deleteView state =
+    case state of
+        DeleteIdle ->
+            closed
+
+        DeleteConfirming ->
+            confirmingDelete
+
+        Deleting ->
+            pendingDelete
+
+        DeleteFailed message ->
+            failedDelete message
+
+
+closed : DeleteView
+closed =
+    { open = False, pending = False, cancelDisabled = False, error = Nothing }
+
+
+confirmingDelete : DeleteView
+confirmingDelete =
+    { open = True, pending = False, cancelDisabled = False, error = Nothing }
+
+
+pendingDelete : DeleteView
+pendingDelete =
+    { open = True, pending = True, cancelDisabled = True, error = Nothing }
+
+
+failedDelete : String -> DeleteView
+failedDelete message =
+    { open = True, pending = False, cancelDisabled = False, error = Just message }
+
+
+previewRequest : MealShow.OutMsg -> Maybe ( String, String, String )
+previewRequest outMsg =
+    case outMsg of
+        MealShow.RequestNutrientPreview mealId amount unit ->
+            Just ( mealId, amount, unit )
+
+        _ ->
+            Nothing
+
+
+contentFor : MealShow.Model -> Query.Single MealShow.Msg
+contentFor model =
+    MealShow.view
+        { theme = Theme.light
+        , device = { class = Phone, orientation = Portrait }
+        , language = Util.EN_US
+        }
+        model
+        |> Element.layout []
+        |> Query.fromHtml
 
 
 step : MealShow.Msg -> MealShow.Model -> MealShow.Model
 step msg model =
-    first (MealShow.update msg model)
+    Fixtures.tupleFirst (MealShow.update msg model)
+
+
+stepWithOut :
+    MealShow.Msg
+    -> MealShow.Model
+    -> ( MealShow.Model, MealShow.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            MealShow.update msg model
+    in
+    ( next, outMsg )
 
 
 out : MealShow.Msg -> MealShow.Model -> MealShow.OutMsg
 out msg model =
-    third (MealShow.update msg model)
-
-
-loadedMealModel : MealShow.Model
-loadedMealModel =
-    MealShow.init "meal-1"
-        |> Tuple.first
-        |> step (MealShow.MealLoaded "meal-1" (Ok meal))
-        |> step (MealShow.UnitsLoaded (Ok { items = [ gram ] }))
-
-
-nutritionLoadedModel : MealShow.Model
-nutritionLoadedModel =
-    step
-        (MealShow.NutrientPreviewLoaded "meal-1" (Ok (previewFor "100" "g" [ nutrient ])))
-        loadedMealModel
+    Fixtures.tupleThird (MealShow.update msg model)
 
 
 previewFor : String -> String -> List NutrientAmount -> MealNutritionResponse
@@ -377,18 +414,6 @@ previewFor amount unit nutrients =
     , nutritionSummary = Nutrition.emptySummary
     , nutrients = nutrients
     }
-
-
-applyPreview :
-    String
-    -> String
-    -> List NutrientAmount
-    -> MealShow.Model
-    -> MealShow.Model
-applyPreview amount unit nutrients model =
-    step
-        (MealShow.NutrientPreviewLoaded "meal-1" (Ok (previewFor amount unit nutrients)))
-        model
 
 
 meal : Meal
@@ -405,8 +430,8 @@ meal =
           , nutritionSummary = Nothing
           }
         ]
-    , createdAt = "now"
-    , updatedAt = "now"
+    , createdAt = "2026-08-18T10:00:00Z"
+    , updatedAt = "2026-08-18T10:00:00Z"
     }
 
 
@@ -424,27 +449,8 @@ twoProductMeal =
     }
 
 
-repeatedProductMeal : Meal
-repeatedProductMeal =
-    { meal
-        | components =
-            meal.components
-                ++ [ { id = "component-2"
-                     , item = { itemType = ItemRef.Product, id = "food-1" }
-                     , quantity = { amount = "50", unit = "g" }
-                     , nutritionSummary = Nothing
-                     }
-                   , { id = "component-meal"
-                     , item = { itemType = ItemRef.Meal, id = "meal-child" }
-                     , quantity = { amount = "1", unit = "serving" }
-                     , nutritionSummary = Nothing
-                     }
-                   ]
-    }
-
-
-product : ProductDetail
-product =
+appleProduct : ProductDetail
+appleProduct =
     { id = "food-1"
     , source = "USER"
     , sourceId = Nothing
@@ -458,13 +464,13 @@ product =
     , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients = []
     , servings = []
-    , allowedUnits = [ gram ]
+    , allowedUnits = []
     }
 
 
-banana : ProductDetail
-banana =
-    { product | id = "food-2", name = "Banana" }
+otherMeal : Meal
+otherMeal =
+    { meal | id = "meal-2", name = "Dinner" }
 
 
 nutrient : NutrientAmount
@@ -485,18 +491,3 @@ servingNutrient =
 gram : UnitItem
 gram =
     { code = "g", name = "Gram", kind = "mass" }
-
-
-fallbackGram : UnitItem
-fallbackGram =
-    { code = "g", name = "g", kind = "mass" }
-
-
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value

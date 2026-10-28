@@ -3,7 +3,6 @@ module Page.Users.Login exposing
     , Msg(..)
     , OutMsg(..)
     , init
-    , loginPayload
     , update
     , view
     )

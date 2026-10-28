@@ -1,292 +1,306 @@
 module Page.FoodLog.EntryTest exposing (tests)
 
 import Api.Client as Client
-import Api.Foods exposing (ProductDetail, UnitItem)
+import Api.Foods exposing (UnitItem)
 import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog as FoodLog exposing (FoodLog)
-import Data.MealSlot exposing (MealSlot(..))
-import Data.Nutrition as Nutrition
+import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
+import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
-import Lib.Date as LocalDate exposing (LocalDate)
+import I18n
+import Lib.Date exposing (LocalDate)
 import Page.FoodLog.Entry as FoodLogEntry
+import Support.Fixtures as Fixtures
+import Support.Story exposing (runSteps)
 import Test exposing (Test, describe, test)
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util as Util
+import Ui.Env as UiEnv
+import Ui.Theme as Theme
 import View.DeleteModal exposing (DeleteState(..))
-
-
-networkErrorMessage : String
-networkErrorMessage =
-    "Could not reach the server. Check your connection and try again."
 
 
 tests : Test
 tests =
     describe "Page.FoodLog.Entry"
-        [ test "loading a product log requests its detail and completes once units arrive" <|
+        [ test "a product log is edited, rejected once, retried, and saved" <|
             \_ ->
                 let
-                    ( loading, initial ) =
-                        FoodLogEntry.init "log-1"
+                    loaded : FoodLogEntry.Model
+                    loaded =
+                        loadingModel
+                            |> runSteps step
+                                [ FoodLogEntry.UnitsLoaded (Ok { items = [ gram ] })
+                                , FoodLogEntry.LogLoaded "log-1" (Ok productLog)
+                                , FoodLogEntry.ProductDetailLoaded (Err Client.NetworkError)
+                                ]
 
-                    unitsOnly : FoodLogEntry.Model
-                    unitsOnly =
-                        step (FoodLogEntry.UnitsLoaded (Ok { items = [ gram ] })) loading
+                    blanked : FoodLogEntry.Model
+                    blanked =
+                        step (FoodLogEntry.FormMsg (FoodLogForm.AmountChanged " ")) loaded
 
-                    completed : FoodLogEntry.Model
-                    completed =
-                        step (FoodLogEntry.LogLoaded "log-1" (Ok productLog)) unitsOnly
-                in
-                { initial = initial
-                , unitsPhase = toScreen unitsOnly |> .phase
-                , detailRequest = out (FoodLogEntry.LogLoaded "log-1" (Ok productLog)) unitsOnly
-                , completedPhase = toScreen completed |> .phase
-                , amount = toScreen completed |> .amount
-                }
-                    |> Expect.equal
-                        { initial = FoodLogEntry.RequestInitialData "log-1"
-                        , unitsPhase = "loading"
-                        , detailRequest = FoodLogEntry.RequestProductDetail "food-1"
-                        , completedPhase = "loaded"
-                        , amount = Just "2"
-                        }
-        , test "a response for another log is ignored and a failed load surfaces the page error" <|
-            \_ ->
-                let
-                    ( loading, _ ) =
-                        FoodLogEntry.init "log-1"
+                    rejected : FoodLogEntry.Model
+                    rejected =
+                        step FoodLogEntry.SubmitClicked blanked
 
-                    afterOther : FoodLogEntry.Model
-                    afterOther =
-                        step (FoodLogEntry.LogLoaded "other" (Ok productLog)) loading
+                    edited : FoodLogEntry.Model
+                    edited =
+                        blanked
+                            |> step FoodLogEntry.SubmitClicked
+                            |> step (FoodLogEntry.FormMsg (FoodLogForm.AmountChanged "4"))
+                            |> step (FoodLogEntry.FormMsg (FoodLogForm.NotesChanged "Updated"))
 
-                    afterFailure : FoodLogEntry.Model
-                    afterFailure =
-                        step (FoodLogEntry.LogLoaded "log-1" (Err Client.NetworkError)) loading
-                in
-                { otherPhase = toScreen afterOther |> .phase
-                , failedPhase = toScreen afterFailure |> .phase
-                , error = toScreen afterFailure |> .error
-                }
-                    |> Expect.equal
-                        { otherPhase = "loading"
-                        , failedPhase = "failed"
-                        , error = Just networkErrorMessage
-                        }
-        , test "product nutrients follow the edit form quantity" <|
-            \_ ->
-                FoodLogEntry.nutrientsForDisplay
-                    (FoodLogEntry.ProductItem (FoodLogEntry.DetailLoaded foodWithNutrition))
-                    productLog
-                    form
-                    |> Expect.equal
-                        [ { code = "ENERGY_KCAL"
-                          , amount = "120"
-                          , unit = "kcal"
-                          }
-                        ]
-        , test "meal nutrients scale the saved snapshot and hold when units change" <|
-            \_ ->
-                let
-                    scaled : FoodLogForm.Model
-                    scaled =
-                        { form | amount = "3" }
+                    submitting : FoodLogEntry.Model
+                    submitting =
+                        step FoodLogEntry.SubmitClicked edited
 
-                    scaledInGrams : FoodLogForm.Model
-                    scaledInGrams =
-                        { form | amount = "3", unit = "g" }
+                    failed : FoodLogEntry.Model
+                    failed =
+                        step (FoodLogEntry.UpdateCompleted (Err Client.NetworkError)) submitting
+
+                    retrying : FoodLogEntry.Model
+                    retrying =
+                        step FoodLogEntry.SubmitClicked failed
                 in
-                { scaled =
-                    FoodLogEntry.nutrientsForDisplay
-                        (FoodLogEntry.MealItem logWithNutrients.item)
-                        logWithNutrients
-                        scaled
-                , heldWhenUnitChanges =
-                    FoodLogEntry.nutrientsForDisplay
-                        (FoodLogEntry.MealItem logWithNutrients.item)
-                        logWithNutrients
-                        scaledInGrams
-                }
-                    |> Expect.equal
-                        { scaled =
-                            [ { code = "ENERGY_KCAL"
-                              , amount = "180"
-                              , unit = "kcal"
-                              }
-                            ]
-                        , heldWhenUnitChanges =
-                            [ { code = "ENERGY_KCAL"
-                              , amount = "120"
-                              , unit = "kcal"
-                              }
-                            ]
-                        }
-        , test "submitting an edit sends the update payload and reports the affected diary date" <|
+                Expect.all
+                    [ \_ ->
+                        visibleSubmitError rejected
+                            |> Expect.equal (Just amountRequired)
+                    , \_ ->
+                        updateRequest (out FoodLogEntry.SubmitClicked edited)
+                            |> Expect.equal
+                                (Just
+                                    { mealSlot = Just "lunch"
+                                    , amount = "4"
+                                    , unit = "serving"
+                                    , notes = Just "Updated"
+                                    }
+                                )
+                    , \_ ->
+                        out FoodLogEntry.SubmitClicked submitting
+                            |> Expect.equal FoodLogEntry.NoOp
+                    , \_ ->
+                        visibleSubmitError failed
+                            |> Expect.equal (Just Fixtures.networkErrorMessage)
+                    , \_ ->
+                        out (FoodLogEntry.UpdateCompleted (Err Fixtures.unauthorized)) submitting
+                            |> Expect.equal FoodLogEntry.SessionExpired
+                    , \_ ->
+                        contentFor loaded
+                            |> Query.has [ Selector.text "Apple" ]
+                    , \_ ->
+                        contentFor loaded
+                            |> Query.hasNot [ Selector.text Fixtures.networkErrorMessage ]
+                    , \_ ->
+                        contentFor edited
+                            |> Query.has [ Selector.text "240.000" ]
+                    , \_ ->
+                        out (FoodLogEntry.LogLoaded "other" (Ok mealLog)) loaded
+                            |> Expect.equal FoodLogEntry.NoOp
+                    , \_ ->
+                        out (FoodLogEntry.UpdateCompleted (Ok updatedLog)) retrying
+                            |> Expect.equal (FoodLogEntry.LogUpdated sampleDate)
+                    ]
+                    ()
+        , test "deleting a meal log cancels, fails, retries, and reports the deleted date" <|
             \_ ->
                 let
-                    afterSubmit : FoodLogEntry.Model
-                    afterSubmit =
-                        step FoodLogEntry.SubmitClicked loadedModel
-                in
-                { request = out FoodLogEntry.SubmitClicked loadedModel
-                , phase = toScreen afterSubmit |> .phase
-                , success = out (FoodLogEntry.UpdateCompleted (Ok updatedLog)) afterSubmit
-                }
-                    |> Expect.equal
-                        { request =
-                            FoodLogEntry.RequestUpdateLog "log-1"
-                                { mealSlot = Just Lunch
-                                , quantity = { amount = "2", unit = "serving" }
-                                , notes = Just "Good"
-                                }
-                        , phase = "loaded"
-                        , success = FoodLogEntry.LogUpdated updatedLog.logDate
-                        }
-        , test "a failed update keeps the form and shows the request error" <|
-            \_ ->
-                let
-                    afterFailure : FoodLogEntry.Model
-                    afterFailure =
-                        step
-                            (FoodLogEntry.UpdateCompleted (Err Client.NetworkError))
-                            savingModel
-                in
-                { request =
-                    out (FoodLogEntry.UpdateCompleted (Err Client.NetworkError)) savingModel
-                , phase = toScreen afterFailure |> .phase
-                , amount = toScreen afterFailure |> .amount
-                , submitError = toScreen afterFailure |> .submitError
-                }
-                    |> Expect.equal
-                        { request = FoodLogEntry.NoOp
-                        , phase = "loaded"
-                        , amount = Just "4"
-                        , submitError = Just networkErrorMessage
-                        }
-        , test "deleting a log confirms, requests, and reports success with its diary date" <|
-            \_ ->
-                let
+                    loaded : FoodLogEntry.Model
+                    loaded =
+                        FoodLogEntry.init "log-2"
+                            |> Tuple.first
+                            |> runSteps step
+                                [ FoodLogEntry.UnitsLoaded (Ok { items = [ gram ] })
+                                , FoodLogEntry.LogLoaded "log-2" (Ok mealLog)
+                                ]
+
                     confirming : FoodLogEntry.Model
                     confirming =
-                        step FoodLogEntry.DeleteClicked loadedModel
+                        step FoodLogEntry.DeleteClicked loaded
+
+                    cancelled : FoodLogEntry.Model
+                    cancelled =
+                        step FoodLogEntry.CancelDeleteClicked confirming
+
+                    reopened : FoodLogEntry.Model
+                    reopened =
+                        step FoodLogEntry.DeleteClicked cancelled
 
                     deleting : FoodLogEntry.Model
                     deleting =
-                        step FoodLogEntry.ConfirmDeleteClicked confirming
-                in
-                { confirm = toScreen confirming |> .delete
-                , request = out FoodLogEntry.ConfirmDeleteClicked confirming
-                , phase = toScreen deleting |> .phase
-                , deleted = out (FoodLogEntry.DeleteCompleted (Ok ())) deleting
-                }
-                    |> Expect.equal
-                        { confirm = Just DeleteConfirming
-                        , request = FoodLogEntry.RequestDeleteLog "log-1"
-                        , phase = "loaded"
-                        , deleted =
-                            FoodLogEntry.LogDeleted productLog.logDate (DiaryDay Nothing Nothing)
-                        }
-        , test "a failed delete keeps the modal open and retries the deletion" <|
-            \_ ->
-                let
-                    deleting : FoodLogEntry.Model
-                    deleting =
-                        loadedModel
-                            |> step FoodLogEntry.DeleteClicked
-                            |> step FoodLogEntry.ConfirmDeleteClicked
+                        step FoodLogEntry.ConfirmDeleteClicked reopened
 
-                    afterFailure : FoodLogEntry.Model
-                    afterFailure =
-                        step
-                            (FoodLogEntry.DeleteCompleted (Err Client.NetworkError))
-                            deleting
+                    failed : FoodLogEntry.Model
+                    failed =
+                        step (FoodLogEntry.DeleteCompleted (Err Client.NetworkError)) deleting
+
+                    retrying : FoodLogEntry.Model
+                    retrying =
+                        step FoodLogEntry.ConfirmDeleteClicked failed
                 in
-                { failedState = toScreen afterFailure |> .delete
-                , retry = out FoodLogEntry.ConfirmDeleteClicked afterFailure
-                }
-                    |> Expect.equal
-                        { failedState = Just (DeleteFailed networkErrorMessage)
-                        , retry = FoodLogEntry.RequestDeleteLog "log-1"
-                        }
-        , test "an unauthorized delete expires the session" <|
-            \_ ->
-                loadedModel
-                    |> step FoodLogEntry.DeleteClicked
-                    |> step FoodLogEntry.ConfirmDeleteClicked
-                    |> out
-                        (FoodLogEntry.DeleteCompleted
-                            (Err (Client.BadStatus 401 "unauthorized" "Unauthorized"))
-                        )
-                    |> Expect.equal FoodLogEntry.SessionExpired
+                Expect.all
+                    [ \_ -> modalVisible confirming |> Expect.equal True
+                    , \_ -> modalVisible cancelled |> Expect.equal False
+                    , \_ ->
+                        modalFor confirming
+                            |> Query.has
+                                [ Selector.text (I18n.en TidFoodLogDeleteConfirmTitle)
+                                , Selector.text (I18n.en TidCustomFoodConfirmDelete)
+                                ]
+                    , \_ ->
+                        deleteRequest (out FoodLogEntry.ConfirmDeleteClicked reopened)
+                            |> Expect.equal (Just "log-2")
+                    , \_ ->
+                        visibleDeleteError failed
+                            |> Expect.equal (Just Fixtures.networkErrorMessage)
+                    , \_ -> modalVisible failed |> Expect.equal True
+                    , \_ ->
+                        modalFor failed
+                            |> Query.has [ Selector.text Fixtures.networkErrorMessage ]
+                    , \_ ->
+                        deleteRequest (out FoodLogEntry.ConfirmDeleteClicked failed)
+                            |> Expect.equal (Just "log-2")
+                    , \_ ->
+                        out (FoodLogEntry.DeleteCompleted (Ok ())) cancelled
+                            |> Expect.equal FoodLogEntry.NoOp
+                    , \_ ->
+                        out (FoodLogEntry.DeleteCompleted (Err Fixtures.unauthorized)) deleting
+                            |> Expect.equal FoodLogEntry.SessionExpired
+                    , \_ ->
+                        out (FoodLogEntry.DeleteCompleted (Ok ())) retrying
+                            |> Expect.equal
+                                (FoodLogEntry.LogDeleted sampleDate (DiaryDay Nothing Nothing))
+                    ]
+                    ()
         ]
 
 
 
--- SCREEN PROJECTION
+-- USER-VISIBLE PROJECTIONS
 
 
-type alias Screen =
-    { phase : String
-    , amount : Maybe String
-    , unit : Maybe String
-    , submit : Maybe FoodLogForm.SubmitState
-    , submitError : Maybe String
-    , delete : Maybe DeleteState
-    , error : Maybe String
-    }
+visibleSubmitError : FoodLogEntry.Model -> Maybe String
+visibleSubmitError model =
+    loadedForm model formError |> Maybe.andThen identity
 
 
-toScreen : FoodLogEntry.Model -> Screen
-toScreen model =
+visibleDeleteError : FoodLogEntry.Model -> Maybe String
+visibleDeleteError model =
     case model of
         FoodLogEntry.Loaded loaded ->
-            { phase = "loaded"
-            , amount = Just loaded.form.amount
-            , unit = Just loaded.form.unit
-            , submit = Just loaded.form.submitState
-            , submitError = formError loaded.form
-            , delete = Just loaded.delete
-            , error = Nothing
-            }
-
-        FoodLogEntry.Loading _ ->
-            { phase = "loading"
-            , amount = Nothing
-            , unit = Nothing
-            , submit = Nothing
-            , submitError = Nothing
-            , delete = Nothing
-            , error = Nothing
-            }
-
-        FoodLogEntry.LoadFailed failed ->
-            { phase = "failed"
-            , amount = Nothing
-            , unit = Nothing
-            , submit = Nothing
-            , submitError = Nothing
-            , delete = Nothing
-            , error = Just failed.error
-            }
-
-
-formError : FoodLogForm.Model -> Maybe String
-formError current =
-    case current.submitState of
-        FoodLogForm.SubmitFailed failure ->
-            Just (FoodLogForm.submitFailureMessage failure)
+            deleteError loaded.delete
 
         _ ->
             Nothing
 
 
+modalVisible : FoodLogEntry.Model -> Bool
+modalVisible model =
+    FoodLogEntry.modalView env model /= Nothing
+
+
+loadedForm : FoodLogEntry.Model -> (FoodLogForm.Model -> a) -> Maybe a
+loadedForm model transform =
+    case model of
+        FoodLogEntry.Loaded loaded ->
+            Just (transform loaded.form)
+
+        _ ->
+            Nothing
+
+
+formError : FoodLogForm.Model -> Maybe String
+formError form =
+    case form.submitState of
+        FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage ->
+            Just amountRequired
+
+        FoodLogForm.SubmitFailed (FoodLogForm.RequestFailed message) ->
+            Just message
+
+        _ ->
+            Nothing
+
+
+deleteError : DeleteState -> Maybe String
+deleteError state =
+    case state of
+        DeleteFailed message ->
+            Just message
+
+        _ ->
+            Nothing
+
+
+updateRequest :
+    FoodLogEntry.OutMsg
+    -> Maybe { mealSlot : Maybe String, amount : String, unit : String, notes : Maybe String }
+updateRequest outMsg =
+    case outMsg of
+        FoodLogEntry.RequestUpdateLog _ request ->
+            Just
+                { mealSlot = Maybe.map MealSlot.toString request.mealSlot
+                , amount = request.quantity.amount
+                , unit = request.quantity.unit
+                , notes = request.notes
+                }
+
+        _ ->
+            Nothing
+
+
+deleteRequest : FoodLogEntry.OutMsg -> Maybe String
+deleteRequest outMsg =
+    case outMsg of
+        FoodLogEntry.RequestDeleteLog logId ->
+            Just logId
+
+        _ ->
+            Nothing
+
+
+
+-- VIEW HELPERS
+
+
+env : UiEnv.Env
+env =
+    { theme = Theme.light
+    , device = { class = Phone, orientation = Portrait }
+    , language = Util.EN_US
+    }
+
+
+contentFor : FoodLogEntry.Model -> Query.Single FoodLogEntry.Msg
+contentFor model =
+    FoodLogEntry.contentView env model
+        |> Element.layout []
+        |> Query.fromHtml
+
+
+modalFor : FoodLogEntry.Model -> Query.Single FoodLogEntry.Msg
+modalFor model =
+    FoodLogEntry.modalView env model
+        |> Maybe.withDefault Element.none
+        |> Element.layout []
+        |> Query.fromHtml
+
+
+
+-- FIXTURES AND HELPERS
+
+
 step : FoodLogEntry.Msg -> FoodLogEntry.Model -> FoodLogEntry.Model
 step msg model =
-    first (FoodLogEntry.update msg model)
+    Fixtures.tupleFirst (FoodLogEntry.update msg model)
 
 
 out : FoodLogEntry.Msg -> FoodLogEntry.Model -> FoodLogEntry.OutMsg
 out msg model =
-    third (FoodLogEntry.update msg model)
+    Fixtures.tupleThird (FoodLogEntry.update msg model)
 
 
 loadingModel : FoodLogEntry.Model
@@ -294,23 +308,14 @@ loadingModel =
     FoodLogEntry.init "log-1" |> Tuple.first
 
 
-loadedModel : FoodLogEntry.Model
-loadedModel =
-    loadingModel
-        |> step (FoodLogEntry.UnitsLoaded (Ok { items = [ gram ] }))
-        |> step (FoodLogEntry.LogLoaded "log-1" (Ok productLog))
+sampleDate : LocalDate
+sampleDate =
+    Fixtures.date "2026-06-04"
 
 
-savingModel : FoodLogEntry.Model
-savingModel =
-    loadedModel
-        |> step (FoodLogEntry.FormMsg (FoodLogForm.AmountChanged "4"))
-        |> step FoodLogEntry.SubmitClicked
-
-
-form : FoodLogForm.Model
-form =
-    FoodLogForm.initLogFormFromLog productLog
+amountRequired : String
+amountRequired =
+    I18n.en TidFoodLogAmountRequired
 
 
 productLog : FoodLog
@@ -323,102 +328,30 @@ productLog =
         FoodLog.ProductLogItem
             { id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
-    , nutrients = []
+    , nutrients =
+        [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
     , notes = Just "Good"
     }
 
 
-sampleDate : LocalDate
-sampleDate =
-    sampleDateFromString "2026-06-04"
-
-
-sampleDateFromString : String -> LocalDate
-sampleDateFromString raw =
-    case LocalDate.fromString raw of
-        Just d ->
-            d
-
-        Nothing ->
-            todayFallback
-
-
-todayFallback : LocalDate
-todayFallback =
-    case LocalDate.fromParts 1970 1 1 of
-        Just d ->
-            d
-
-        Nothing ->
-            -- Unreachable: 1970-01-01 is always valid.
-            sampleDate
+mealLog : FoodLog
+mealLog =
+    { productLog
+        | id = "log-2"
+        , item = FoodLog.MealLogItem { id = "meal-1", name = "Lunch meal" }
+        , nutrients =
+            [ { code = "ENERGY_KCAL", amount = "400", unit = "kcal" } ]
+    }
 
 
 updatedLog : FoodLog
 updatedLog =
-    { productLog | quantity = { amount = "3", unit = "g" } }
-
-
-food : ProductDetail
-food =
-    { id = "food-1"
-    , source = "USER"
-    , sourceId = Nothing
-    , visibility = "private"
-    , barcode = Nothing
-    , name = "Apple"
-    , brand = Just "Local"
-    , categories = [ "fruit" ]
-    , defaultQuantity = Just "2"
-    , defaultUnit = Just "serving"
-    , nutritionSummary = { per100g = Nutrition.emptySummary }
-    , nutrients = []
-    , servings = []
-    , allowedUnits = [ gram ]
-    }
-
-
-foodWithNutrition : ProductDetail
-foodWithNutrition =
-    { food
-        | nutrients =
-            [ { code = "ENERGY_KCAL"
-              , amountPer100g = "120"
-              , unit = "kcal"
-              , source = Nothing
-              , confidence = Nothing
-              }
-            ]
-        , servings =
-            [ { unit = "serving"
-              , gramsPerUnit = "50"
-              }
-            ]
-    }
-
-
-logWithNutrients : FoodLog
-logWithNutrients =
     { productLog
-        | nutrients =
-            [ { code = "ENERGY_KCAL"
-              , amount = "120"
-              , unit = "kcal"
-              }
-            ]
+        | quantity = { amount = "4", unit = "serving" }
+        , notes = Just "Updated"
     }
 
 
 gram : UnitItem
 gram =
     { code = "g", name = "Gram", kind = "mass" }
-
-
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value

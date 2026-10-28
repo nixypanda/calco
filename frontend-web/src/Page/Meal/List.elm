@@ -4,7 +4,6 @@ module Page.Meal.List exposing
     , OutMsg(..)
     , contentView
     , init
-    , mealSummaryText
     , update
     )
 
