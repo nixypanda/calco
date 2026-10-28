@@ -839,6 +839,8 @@ fn build_clear_cookie(config: &SessionCookieConfig) -> CookieHeader {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
     fn header_value(raw: &str) -> header::HeaderValue {
@@ -851,37 +853,32 @@ mod tests {
         assert_eq!(error.body.error.code, "invalid_api_key");
     }
 
-    #[test]
-    fn parse_bearer_token_accepts_valid_scheme_and_spacing() {
-        for (raw, expected) in [
-            ("Bearer token", "token"),
-            ("bearer token", "token"),
-            ("BEARER token", "token"),
-            ("Bearer    token", "token"),
-        ] {
-            match parse_bearer_token(&header_value(raw)) {
-                Ok(token) => assert_eq!(token, expected, "{raw}"),
-                Err(_) => panic!("expected {raw:?} to parse"),
-            }
+    #[rstest]
+    #[case::canonical_spacing("Bearer token", "token")]
+    #[case::lowercase_scheme("bearer token", "token")]
+    #[case::uppercase_scheme("BEARER token", "token")]
+    #[case::extra_spacing("Bearer    token", "token")]
+    fn parse_bearer_token_accepts_valid_scheme_and_spacing(
+        #[case] raw: &str,
+        #[case] expected: &str,
+    ) {
+        match parse_bearer_token(&header_value(raw)) {
+            Ok(token) => assert_eq!(token, expected, "{raw}"),
+            Err(_) => panic!("expected {raw:?} to parse"),
         }
     }
 
-    #[test]
-    fn parse_bearer_token_rejects_malformed_values() {
-        for raw in [
-            "token",
-            " Bearer token",
-            "Basic abc",
-            "Bearer",
-            "Bearer ",
-            "Bearer   ",
-            "Bearer tok en",
-            "Bearer token ",
-        ] {
-            assert_invalid(&header_value(raw));
-        }
-
-        let non_utf8 = header::HeaderValue::from_bytes(b"Bearer \x80").unwrap();
-        assert_invalid(&non_utf8);
+    #[rstest]
+    #[case::missing_scheme(header_value("token"))]
+    #[case::leading_space(header_value(" Bearer token"))]
+    #[case::wrong_scheme(header_value("Basic abc"))]
+    #[case::scheme_without_token(header_value("Bearer"))]
+    #[case::single_trailing_space(header_value("Bearer "))]
+    #[case::multiple_trailing_spaces(header_value("Bearer   "))]
+    #[case::space_inside_token(header_value("Bearer tok en"))]
+    #[case::token_trailing_space(header_value("Bearer token "))]
+    #[case::non_utf8_token(header::HeaderValue::from_bytes(b"Bearer \x80").unwrap())]
+    fn parse_bearer_token_rejects_malformed_values(#[case] value: header::HeaderValue) {
+        assert_invalid(&value);
     }
 }

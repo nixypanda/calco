@@ -148,6 +148,8 @@ impl ApiKeyService {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use async_trait::async_trait;
     use std::sync::Mutex;
@@ -396,8 +398,12 @@ mod tests {
         ApiKeyService::new(api_key_repo, identity_repo, profile_repo)
     }
 
+    #[rstest]
+    #[case::zero_days(0)]
+    #[case::negative_day(-1)]
+    #[case::above_maximum(3651)]
     #[tokio::test]
-    async fn create_rejects_invalid_expiry_day_range() {
+    async fn create_rejects_invalid_expiry_days(#[case] days: i64) {
         let now = Utc::now();
         let identity = Identity::new_user(
             Username::new("expiry-service").unwrap(),
@@ -411,21 +417,49 @@ mod tests {
             Arc::new(MockUserProfileRepo::default()),
         );
 
-        for days in [0, -1, 3651] {
-            let result = service
-                .create(&identity, "Key", ApiKeyScope::Read, Some(days), now)
-                .await;
-            assert!(matches!(result, Err(AuthError::InvalidApiKeyExpiry)));
-        }
-        assert!(api_key_repo.keys.lock().unwrap().is_empty());
+        let result = service
+            .create(&identity, "Key", ApiKeyScope::Read, Some(days), now)
+            .await;
 
-        for days in [1, 3650] {
-            let created = service
-                .create(&identity, "Key", ApiKeyScope::Read, Some(days), now)
-                .await
-                .unwrap();
-            assert_eq!(created.api_key.expires_at, Some(now + Duration::days(days)));
+        match result {
+            Err(AuthError::InvalidApiKeyExpiry) => {}
+            Err(error) => panic!("{days} days returned {error:?}"),
+            Ok(_) => panic!("{days} days should have been rejected"),
         }
+        assert!(
+            api_key_repo.keys.lock().unwrap().is_empty(),
+            "rejected expiry of {days} days must not store a key"
+        );
+    }
+
+    #[rstest]
+    #[case::minimum_days(1)]
+    #[case::maximum_days(3650)]
+    #[tokio::test]
+    async fn create_accepts_valid_expiry_days(#[case] days: i64) {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("expiry-service").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let api_key_repo = Arc::new(MockApiKeyRepo::default());
+        let service = service(
+            api_key_repo.clone(),
+            Arc::new(MockIdentityRepo::default()),
+            Arc::new(MockUserProfileRepo::default()),
+        );
+
+        let created = service
+            .create(&identity, "Key", ApiKeyScope::Read, Some(days), now)
+            .await
+            .unwrap();
+
+        assert_eq!(created.api_key.expires_at, Some(now + Duration::days(days)));
+        assert_eq!(
+            api_key_repo.stored(created.api_key.id).expires_at,
+            Some(now + Duration::days(days))
+        );
     }
 
     #[tokio::test]
@@ -516,8 +550,21 @@ mod tests {
         assert_eq!(ids, vec![usable.id, expired.id]);
     }
 
+    #[derive(Clone, Copy, Debug)]
+    enum InvalidToken {
+        Malformed,
+        AboveMaximumLength,
+        IssuedKeyWithoutProfile,
+    }
+
+    #[rstest]
+    #[case::malformed(InvalidToken::Malformed)]
+    #[case::above_maximum_length(InvalidToken::AboveMaximumLength)]
+    #[case::issued_key_without_profile(InvalidToken::IssuedKeyWithoutProfile)]
     #[tokio::test]
-    async fn authenticate_rejects_bad_token_shape_and_missing_profile() {
+    async fn authenticate_rejects_bad_token_shape_and_missing_profile(
+        #[case] invalid_token: InvalidToken,
+    ) {
         let now = Utc::now();
         let identity = Identity::new_user(
             Username::new("auth-service").unwrap(),
@@ -525,26 +572,41 @@ mod tests {
             now,
         );
         let (token, key) = create_key(&identity, "Auth", now);
+        let raw_token = match invalid_token {
+            InvalidToken::Malformed => "not-a-calco-token".to_string(),
+            InvalidToken::AboveMaximumLength => {
+                format!("{API_KEY_TOKEN_PREFIX}{}", "A".repeat(300))
+            }
+            InvalidToken::IssuedKeyWithoutProfile => token.0,
+        };
         let service = service(
             Arc::new(MockApiKeyRepo::with_keys(vec![key])),
-            Arc::new(MockIdentityRepo::with_identities(vec![identity.clone()])),
+            Arc::new(MockIdentityRepo::with_identities(vec![identity])),
             Arc::new(MockUserProfileRepo::default()),
         );
 
-        for raw_token in [
-            "not-a-calco-token".to_string(),
-            format!("{API_KEY_TOKEN_PREFIX}{}", "A".repeat(300)),
-        ] {
-            let result = service.authenticate(&raw_token, now).await;
-            assert!(matches!(result, Err(AuthError::InvalidApiKey)));
+        match service.authenticate(&raw_token, now).await.map(|_| ()) {
+            Err(AuthError::InvalidApiKey) => {}
+            Err(error) => panic!("{invalid_token:?} token returned {error:?}"),
+            Ok(()) => panic!("{invalid_token:?} token should have been rejected"),
         }
-
-        let result = service.authenticate(&token.0, now).await;
-        assert!(matches!(result, Err(AuthError::InvalidApiKey)));
     }
 
+    #[derive(Clone, Copy, Debug)]
+    enum UnusableApiKey {
+        Expired,
+        Revoked,
+        SecurityStampMismatch,
+    }
+
+    #[rstest]
+    #[case::expired(UnusableApiKey::Expired)]
+    #[case::revoked(UnusableApiKey::Revoked)]
+    #[case::security_stamp_mismatch(UnusableApiKey::SecurityStampMismatch)]
     #[tokio::test]
-    async fn authenticate_rejects_expired_revoked_and_old_stamp_keys() {
+    async fn authenticate_rejects_expired_revoked_and_old_stamp_keys(
+        #[case] key_state: UnusableApiKey,
+    ) {
         let now = Utc::now();
         let identity = Identity::new_user(
             Username::new("auth-usability-service").unwrap(),
@@ -552,32 +614,32 @@ mod tests {
             now,
         );
         let profile = UserProfile::new(identity.id, "Tester", now);
-
-        let (expired_token, mut expired) = create_key(&identity, "Expired", now);
-        expired.expires_at = Some(now - Duration::seconds(1));
-        let (revoked_token, revoked) = create_key(&identity, "Revoked", now);
-        let revoked = revoked.revoke(now);
-        let (old_stamp_token, mut old_stamp) = create_key(&identity, "Old stamp", now);
-        old_stamp.identity_security_stamp = SessionSecurityStamp::new();
-
+        let (token, key) = create_key(&identity, "Key", now);
+        let key = match key_state {
+            UnusableApiKey::Expired => ApiKey {
+                expires_at: Some(now - Duration::seconds(1)),
+                ..key
+            },
+            UnusableApiKey::Revoked => key.revoke(now),
+            UnusableApiKey::SecurityStampMismatch => ApiKey {
+                identity_security_stamp: SessionSecurityStamp::new(),
+                ..key
+            },
+        };
         let service = service(
-            Arc::new(MockApiKeyRepo::with_keys(vec![expired, revoked, old_stamp])),
+            Arc::new(MockApiKeyRepo::with_keys(vec![key])),
             Arc::new(MockIdentityRepo::with_identities(vec![identity])),
             Arc::new(MockUserProfileRepo::with_profiles(vec![profile])),
         );
 
-        for (label, token) in [
-            ("expired", expired_token),
-            ("revoked", revoked_token),
-            ("old stamp", old_stamp_token),
-        ] {
-            match service.authenticate(&token.0, now).await {
-                Err(AuthError::ApiKeyExpired) if label == "expired" => {}
-                Err(AuthError::ApiKeyRevoked) if label == "revoked" => {}
-                Err(AuthError::InvalidApiKey) if label == "old stamp" => {}
-                Ok(_) => panic!("{label} key must be rejected"),
-                Err(_) => panic!("{label} key returned the wrong error"),
-            }
+        match (
+            key_state,
+            service.authenticate(&token.0, now).await.map(|_| ()),
+        ) {
+            (UnusableApiKey::Expired, Err(AuthError::ApiKeyExpired)) => {}
+            (UnusableApiKey::Revoked, Err(AuthError::ApiKeyRevoked)) => {}
+            (UnusableApiKey::SecurityStampMismatch, Err(AuthError::InvalidApiKey)) => {}
+            (key_state, result) => panic!("{key_state:?} key returned {result:?}"),
         }
     }
 

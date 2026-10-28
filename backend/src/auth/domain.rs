@@ -710,6 +710,8 @@ pub trait UserProfileRepo: Send + Sync {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
     #[test]
@@ -768,31 +770,42 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn new_password_enforces_length_boundaries() {
-        assert!(matches!(
-            NewPassword::new("a".repeat(7)),
-            Err(AuthError::InvalidPassword)
-        ));
-        assert!(NewPassword::new("a".repeat(8)).is_ok());
-        assert!(NewPassword::new("a".repeat(256)).is_ok());
-        assert!(matches!(
-            NewPassword::new("a".repeat(257)),
-            Err(AuthError::InvalidPassword)
-        ));
+    #[rstest]
+    #[case::below_minimum(7, false)]
+    #[case::minimum(8, true)]
+    #[case::maximum(256, true)]
+    #[case::above_maximum(257, false)]
+    fn new_password_enforces_length_boundaries(#[case] length: usize, #[case] accepted: bool) {
+        match NewPassword::new("a".repeat(length)) {
+            Ok(_) => assert!(
+                accepted,
+                "{length}-character password should have been rejected"
+            ),
+            Err(AuthError::InvalidPassword) => assert!(
+                !accepted,
+                "{length}-character password should have been accepted"
+            ),
+            Err(error) => panic!("{length}-character password returned {error:?}"),
+        }
     }
 
-    #[test]
-    fn session_policy_requires_a_positive_lifetime() {
-        assert!(SessionPolicy::new(Duration::seconds(1)).is_ok());
-        assert!(matches!(
-            SessionPolicy::new(Duration::zero()),
-            Err(InvalidSessionLifetime)
-        ));
-        assert!(matches!(
-            SessionPolicy::new(Duration::seconds(-1)),
-            Err(InvalidSessionLifetime)
-        ));
+    #[rstest]
+    #[case::positive(Duration::seconds(1), true)]
+    #[case::zero(Duration::zero(), false)]
+    #[case::negative(Duration::seconds(-1), false)]
+    fn session_policy_requires_a_positive_lifetime(
+        #[case] lifetime: Duration,
+        #[case] accepted: bool,
+    ) {
+        match SessionPolicy::new(lifetime) {
+            Ok(policy) => {
+                assert!(accepted, "{lifetime:?} should have been rejected");
+                assert_eq!(policy.lifetime(), lifetime);
+            }
+            Err(InvalidSessionLifetime) => {
+                assert!(!accepted, "{lifetime:?} should have been accepted");
+            }
+        }
     }
 
     fn api_key_fixture() -> (Identity, ApiKey) {
@@ -836,120 +849,133 @@ mod tests {
         assert_ne!(api_key.token_hash.0, key.token_hash.0);
     }
 
-    #[test]
-    fn api_key_name_is_trimmed_and_bounded() {
-        assert_eq!(ApiKeyName::new("  Script  ").unwrap().as_str(), "Script");
-        assert!(matches!(
-            ApiKeyName::new("   "),
-            Err(AuthError::InvalidApiKeyName)
-        ));
-        assert!(ApiKeyName::new(&"a".repeat(64)).is_ok());
-        assert!(matches!(
-            ApiKeyName::new(&"a".repeat(65)),
-            Err(AuthError::InvalidApiKeyName)
-        ));
-        assert!(matches!(
-            ApiKeyName::new("bad\nname"),
-            Err(AuthError::InvalidApiKeyName)
-        ));
+    #[rstest]
+    #[case::trims_surrounding_whitespace("  Script  ", "Script")]
+    #[case::unicode_text("Café 日本語 key", "Café 日本語 key")]
+    #[case::family_emoji_with_joiners(
+        "family 👨\u{200D}👩\u{200D}👧",
+        "family 👨\u{200D}👩\u{200D}👧"
+    )]
+    #[case::hindi_with_zero_width_non_joiner("हिन्दी\u{200C}key", "हिन्दी\u{200C}key")]
+    #[case::maximum_length(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    )]
+    fn api_key_name_accepts_and_normalizes_visible_names(
+        #[case] raw: &str,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(ApiKeyName::new(raw).unwrap().as_str(), expected);
     }
 
-    #[test]
-    fn api_key_name_rejects_bidi_and_invisible_format_controls() {
-        assert!(ApiKeyName::new("Café 日本語 key").is_ok());
-        assert!(ApiKeyName::new("family 👨\u{200D}👩\u{200D}👧").is_ok());
-        assert!(ApiKeyName::new("हिन्दी\u{200C}key").is_ok());
-
-        for name in [
-            "zero\u{200B}width",
-            "left\u{200E}mark",
-            "right\u{200F}mark",
-            "line\u{2028}separator",
-            "paragraph\u{2029}separator",
-            "embed\u{202A}ding",
-            "override\u{202E}ding",
-            "word\u{2060}joiner",
-            "bom\u{FEFF}mark",
-            "soft\u{00AD}hyphen",
-            "\u{200C}",
-            "\u{200D}",
-            " \u{200C} ",
-        ] {
-            assert!(
-                matches!(ApiKeyName::new(name), Err(AuthError::InvalidApiKeyName)),
-                "expected {name:?} to be rejected"
-            );
-        }
+    #[rstest]
+    #[case::whitespace_only("   ")]
+    #[case::above_maximum_length(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    )]
+    #[case::newline_control("bad\nname")]
+    #[case::zero_width_space("zero\u{200B}width")]
+    #[case::left_to_right_mark("left\u{200E}mark")]
+    #[case::right_to_left_mark("right\u{200F}mark")]
+    #[case::line_separator("line\u{2028}separator")]
+    #[case::paragraph_separator("paragraph\u{2029}separator")]
+    #[case::left_to_right_embedding("embed\u{202A}ding")]
+    #[case::right_to_left_override("override\u{202E}ding")]
+    #[case::word_joiner("word\u{2060}joiner")]
+    #[case::byte_order_mark("bom\u{FEFF}mark")]
+    #[case::soft_hyphen("soft\u{00AD}hyphen")]
+    #[case::zero_width_non_joiner_only("\u{200C}")]
+    #[case::zero_width_joiner_only("\u{200D}")]
+    #[case::whitespace_wrapped_zero_width_non_joiner(" \u{200C} ")]
+    fn api_key_name_rejects_empty_oversized_and_invisible_names(#[case] raw: &str) {
+        assert!(
+            matches!(ApiKeyName::new(raw), Err(AuthError::InvalidApiKeyName)),
+            "expected {raw:?} to be rejected"
+        );
     }
 
-    #[test]
-    fn api_key_expiry_must_be_in_the_future() {
+    #[rstest]
+    #[case::future(Some(Duration::seconds(1)), true)]
+    #[case::now(Some(Duration::zero()), false)]
+    #[case::past(Some(Duration::seconds(-1)), false)]
+    #[case::no_expiry(None, true)]
+    fn api_key_expiry_must_be_in_the_future(
+        #[case] offset: Option<Duration>,
+        #[case] accepted: bool,
+    ) {
         let now = Utc::now();
         let identity = Identity::new_user(
             Username::new("expiry-user").unwrap(),
             PasswordHash("hash".into()),
             now,
         );
-        let name = || ApiKeyName::new("Script").unwrap();
+        let expires_at = offset.map(|offset| now + offset);
 
-        assert!(
-            create_api_key(
-                &identity,
-                name(),
-                ApiKeyScope::Read,
-                Some(now + Duration::seconds(1)),
-                now,
-            )
-            .is_ok()
-        );
-        assert!(matches!(
-            create_api_key(&identity, name(), ApiKeyScope::Read, Some(now), now),
-            Err(AuthError::InvalidApiKeyExpiry)
-        ));
-        assert!(matches!(
-            create_api_key(
-                &identity,
-                name(),
-                ApiKeyScope::Read,
-                Some(now - Duration::seconds(1)),
-                now,
-            ),
-            Err(AuthError::InvalidApiKeyExpiry)
-        ));
-        assert!(create_api_key(&identity, name(), ApiKeyScope::Read, None, now).is_ok());
+        match create_api_key(
+            &identity,
+            ApiKeyName::new("Script").unwrap(),
+            ApiKeyScope::Read,
+            expires_at,
+            now,
+        ) {
+            Ok((_, key)) => {
+                assert!(accepted, "expiry {expires_at:?} should have been rejected");
+                assert_eq!(key.expires_at, expires_at);
+            }
+            Err(AuthError::InvalidApiKeyExpiry) => {
+                assert!(!accepted, "expiry {expires_at:?} should have been accepted");
+            }
+            Err(error) => panic!("expiry {expires_at:?} returned {error:?}"),
+        }
     }
 
-    #[test]
-    fn api_key_usability_rejects_revoked_expired_and_stamp_mismatch() {
+    #[derive(Clone, Copy, Debug)]
+    enum ApiKeyUsabilityCase {
+        Valid,
+        Revoked,
+        Expired,
+        SecurityStampMismatch,
+    }
+
+    #[rstest]
+    #[case::valid(ApiKeyUsabilityCase::Valid)]
+    #[case::revoked(ApiKeyUsabilityCase::Revoked)]
+    #[case::expired(ApiKeyUsabilityCase::Expired)]
+    #[case::security_stamp_mismatch(ApiKeyUsabilityCase::SecurityStampMismatch)]
+    fn api_key_usability_rejects_revoked_expired_and_stamp_mismatch(
+        #[case] case: ApiKeyUsabilityCase,
+    ) {
         let (identity, api_key) = api_key_fixture();
         let now = Utc::now();
 
-        assert!(api_key.is_usable_for(&identity, now));
-        assert!(api_key.ensure_usable_for(&identity, now).is_ok());
-
-        let revoked = api_key.revoke(now);
-        assert!(!revoked.is_usable_for(&identity, now));
-        assert!(matches!(
-            revoked.ensure_usable_for(&identity, now),
-            Err(AuthError::ApiKeyRevoked)
-        ));
-
-        let expired = ApiKey {
-            expires_at: Some(now - Duration::seconds(1)),
-            ..api_key.clone()
+        let (identity, api_key) = match case {
+            ApiKeyUsabilityCase::Valid => (identity, api_key),
+            ApiKeyUsabilityCase::Revoked => (identity, api_key.revoke(now)),
+            ApiKeyUsabilityCase::Expired => (
+                identity,
+                ApiKey {
+                    expires_at: Some(now - Duration::seconds(1)),
+                    ..api_key
+                },
+            ),
+            ApiKeyUsabilityCase::SecurityStampMismatch => (identity.disable(now), api_key),
         };
-        assert!(!expired.is_usable_for(&identity, now));
-        assert!(matches!(
-            expired.ensure_usable_for(&identity, now),
-            Err(AuthError::ApiKeyExpired)
-        ));
 
-        let rotated_identity = identity.disable(now);
-        assert!(!api_key.is_usable_for(&rotated_identity, now));
-        assert!(matches!(
-            api_key.ensure_usable_for(&rotated_identity, now),
-            Err(AuthError::InvalidApiKey)
-        ));
+        match (case, api_key.ensure_usable_for(&identity, now)) {
+            (ApiKeyUsabilityCase::Valid, Ok(())) => {
+                assert!(api_key.is_usable_for(&identity, now));
+            }
+            (ApiKeyUsabilityCase::Revoked, Err(AuthError::ApiKeyRevoked)) => {
+                assert!(!api_key.is_usable_for(&identity, now));
+            }
+            (ApiKeyUsabilityCase::Expired, Err(AuthError::ApiKeyExpired)) => {
+                assert!(!api_key.is_usable_for(&identity, now));
+            }
+            (ApiKeyUsabilityCase::SecurityStampMismatch, Err(AuthError::InvalidApiKey)) => {
+                assert!(!api_key.is_usable_for(&identity, now));
+            }
+            (case, result) => panic!("{case:?} key returned {result:?}"),
+        }
     }
 
     #[test]
@@ -1001,16 +1027,20 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn api_key_scope_parses_known_values_only() {
-        assert_eq!("read".parse::<ApiKeyScope>().unwrap(), ApiKeyScope::Read);
-        assert_eq!(
-            "read_write".parse::<ApiKeyScope>().unwrap(),
-            ApiKeyScope::ReadWrite
-        );
-        assert!(matches!(
-            "admin".parse::<ApiKeyScope>(),
-            Err(AuthError::InvalidApiKeyScope)
-        ));
+    #[rstest]
+    #[case::read("read", Ok(ApiKeyScope::Read))]
+    #[case::read_write("read_write", Ok(ApiKeyScope::ReadWrite))]
+    #[case::admin_rejected("admin", Err(AuthError::InvalidApiKeyScope))]
+    fn api_key_scope_parses_known_values_only(
+        #[case] raw: &str,
+        #[case] expected: Result<ApiKeyScope, AuthError>,
+    ) {
+        match (raw.parse::<ApiKeyScope>(), expected) {
+            (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
+            (Err(AuthError::InvalidApiKeyScope), Err(AuthError::InvalidApiKeyScope)) => {}
+            (actual, expected) => {
+                panic!("parsing {raw:?} returned {actual:?}, expected {expected:?}")
+            }
+        }
     }
 }
