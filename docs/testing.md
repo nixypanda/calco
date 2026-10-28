@@ -9,7 +9,7 @@ backend/src/**/*.rs        inline #[cfg(test)] unit tests (domain + app, mocked 
 backend/tests/all.rs       integration test entry point
 backend/tests/suites/*.rs  integration tests (real HTTP router, real Postgres)
 backend/tests/common/      shared harness (see below)
-frontend-web/tests/*.elm   Elm frontend unit tests
+frontend-web/tests/**/*.elm Elm frontend unit tests
 ```
 
 Integration tests cover the HTTP lifecycle of each entity end-to-end:
@@ -36,7 +36,7 @@ tests/suites/import_lifecycle.rs    admin import flow + error path
 Tests exist to catch behavior regressions, not to restate the implementation.
 Keep a test only when it proves one of:
 
-- a JSON/wire contract (encoder or decoder shape) another system depends on;
+- a top-level wire roundtrip another system depends on;
 - a non-trivial algorithm or branch (search tokenizing, nutrition scaling,
   ranking, date/calendar math, SQL filter builders);
 - an async race or staleness rule (stale response ignored, double-submit
@@ -45,6 +45,18 @@ Keep a test only when it proves one of:
   session/cache invalidation);
 - validation and its user-facing error;
 - navigation or effect output (the `OutMsg` a page returns).
+
+Frontend-specific rules:
+
+- response decoders are not tested directly, except the three intentional
+  negative invariants in the allowed-exceptions list; only top-level types with
+  both an encoder and a decoder get a roundtrip;
+- no response fixtures or golden wire JSON beyond the minimal negative fixtures
+  that prove those invariants;
+- pure logic is tested as properties, not as restated examples;
+- page tests are broad user stories, not one-message state transitions;
+- UI tests assert user-visible output only, never DOM structure or CSS;
+- keep the small set of allowed exceptions listed below.
 
 Do not add tests that:
 
@@ -68,23 +80,143 @@ unit test cannot cover it.
 
 Elm tests cannot drive a browser, so frontend coverage is layered:
 
-- **Pure functions** (`Data.*`, `Lib.*`, `Ui.*`, `View.*`) are tested as
-  input -> output. Whole-value equality is fine here.
-- **Contracts** (`Api.*`, decoders/encoders, `Data.Route`) are tested as
-  JSON -> value and value -> JSON, including the route parse/serialize fuzz.
-- **Feature scenarios** (`Page.*`) seed a realistic screen state, drive a
-  realistic sequence of user-level messages plus simulated server responses,
-  and assert the observable outcome: the `OutMsg`, a small local screen
-  projection (`toScreen : Model -> Screen`), and the in-flight/disabled flags
-  the UI actually uses. They do not assert an arbitrary internal field after a
-  single message, and they do not compare whole models.
-- **Component tests** (`Component.*`) keep only validation, request/payload
-  shape, cross-load composition, and async races. Form row/dropdown handler
-  state is implementation detail and belongs to a page scenario, if anywhere.
+- **Properties** (`Lib.*`, pure `Data.*`, `Access`, `Store`, `Page.reconcile`,
+  `Ui.Workspace.paneVisibility`, `Ui.CategoryTag.rows`,
+  `Main.classifyDevice`/`reclassifyDevice`, `Api.Client.failure`) state laws,
+  invariants, or metamorphic properties. Whole-value equality is acceptable
+  only when it is the law itself (for example, `addDays 0 date == date`).
+- **Top-level roundtrips** cover only types that have both an encoder and a
+  decoder. See the list below.
+- **Page stories** (`Page.*`) seed a realistic screen state, drive 3-6 user
+  actions through several user messages plus simulated server responses, and
+  assert the observable outcome: the final `OutMsg`, a small local screen
+  projection (`toScreen : Model -> Screen`), and any in-flight/disabled state
+  the user can actually see. They do not assert an arbitrary internal field
+  after a single message, and they do not compare whole models.
+- **Component tests** (`Component.*`) keep pure validation, request/payload
+  branches, and arithmetic. Update flows belong to page stories.
+- **UI/view tests** assert labels, ARIA, enabled/disabled state, and other
+  user-visible output. They never assert DOM structure, CSS classes, or layout.
+- **Exceptions** are the small high-value cases listed below.
 
 Async `Cmd` values are opaque, so the environment is modelled by feeding
-completion messages in the order the server would produce them; a scenario
-asserts that stale or duplicate completions change nothing.
+completion messages in the order the server would produce them; a story
+asserts that stale or duplicate completions do not change what the user sees.
+
+### Top-level roundtrip types
+
+Only these top-level **wire** types are roundtrip-tested:
+
+| Type | Roundtrip |
+|---|---|
+| `Lib.Date.LocalDate` | `fromString (format date) == Just date` |
+| `Data.Route.Route` | `fromUrl (routeToPath route) == Just route` |
+| `Data.MealSlot.MealSlot` | exhaustive `fromString (toString slot) == Just slot` |
+| `Data.DiaryPrefs.DiaryPrefs` | `decoder (encoder prefs) == Ok prefs` |
+
+`Lib.JsonTest` is not a wire-type exception: it tests the generic
+`Lib.Json.maybe`/`andMap` combinators with a local encoder/decoder pair, not a
+production response or request shape.
+
+Nested wire values such as `Data.Nutrition.Quantity` and
+`Data.ItemRef.ItemRef` are not top-level and are not roundtrip-tested. Request
+encoders get a property only when they have a real optional/omitted or
+purpose-encoded branch (create log, update log, API-key create, ad-hoc log,
+food-assistant conversation). Straight field-mapping encoders and response
+decoders have no direct test beyond the negative decoder exceptions.
+
+### Definition of a user story
+
+A page story:
+
+1. creates the page with a realistic route/context and feeds the initial
+   successful server responses needed to reach the loaded state;
+2. drives 3-6 user-level messages, plus the server completions they cause;
+3. asserts the final `OutMsg` and/or a narrow user-visible projection;
+4. may include a failure and retry, a 401, a double submit, a stale response,
+   or a cancel/confirm delete as steps, not separate tests.
+
+A story must not assert request IDs, generation counters, internal
+`Submitting`/`CopyPending` constructors, `Cmd` internals, DOM structure, CSS
+classes, or an intermediate model field that the user cannot see. If a
+required step is ignored by `update`, the story should fail explicitly rather
+than silently continuing with the previous model.
+
+### Allowed exceptions
+
+These survive outside properties, roundtrips, and stories:
+
+1. `Api.Client.failure` maps 401 to `SessionExpired` (one property).
+2. `Access.resolveRoute` exhaustive decision property.
+3. `Store` request-token/session property.
+4. API-key pane generation/re-entry race as one or two page-level pane-lifetime
+   stories; the generation race is one of them. A story may read a request ID or
+   copy ID to route a simulated completion, but must not assert equality on that
+   ID; IDs are an implementation detail, not user-visible output.
+5. Intentional decoder leniency/strictness:
+   - unknown meal slot decodes to `Nothing`;
+   - unknown API-key scope decodes to `UnknownScope`;
+   - food-assistant extra-key rejection.
+6. `Ui.CategoryTag` overflow render.
+
+Every exception must carry a comment explaining why it is not a property or a
+story; an uncommented exception is a test that has not justified its existence.
+Do not add standalone per-page 401, stale-response, or double-submit tests;
+fold those steps into the page story that owns them.
+
+### Shared test support
+
+`tests/Support/` holds small helpers shared by tests:
+
+- `Support.Fuzz` — reusable fuzzers (dates, meal slots, amounts, routes, API
+  errors, food logs). Fuzzers are reviewed like production code.
+- `Support.Fixtures` — canonical dates, API errors, user-facing error strings,
+  and tuple helpers. Page-specific model builders stay next to their page.
+- `Support.Story` — `runSteps` and `runStepsResult` for sequential messages.
+  It is deliberately small; it is not a test framework.
+
+Support modules must not expose a top-level value of type `Test`. `elm-test`
+compiles every `.elm` file under `tests/` and runs exposed `Test` values; the
+filename is a naming convention, not the discovery mechanism.
+
+### Fuzzer requirements
+
+- Generators must not silently bias values with `Maybe.withDefault` fallbacks.
+  If a value cannot be constructed, use `Fuzz.invalid` with a useful message.
+- Include edge cases explicitly: month ends, leap days, century rules, years
+  near 1 and 9999, empty and duplicate lists, blank/invalid strings.
+- Prefer a weighted mix of arbitrary and edge-case values over `Fuzz.filter`
+  retries.
+- Do not generate enormous strings unless the property needs them.
+- A safe-ID or constant-value generator that makes the property pass trivially
+  is a bug in the test.
+
+### Mutation sanity checks
+
+Before declaring a frontend test change done, break each of these and confirm
+a test fails:
+
+- change the macro factors in `Data.Nutrition`;
+- change `addDays`/`previousDay` month-end behavior;
+- change `shiftMonth` year-boundary behavior;
+- remove the generation check in `Store.settle`;
+- change `Store.settle` so an `Err` result is not cached (the failed-settlement
+  law must fail);
+- remove the valid-date branch from `Data.LocalCtx.fromRaw` (a valid
+  `YYYY-MM-DD` plus timezone must still return `Just`);
+- change `Data.Route.fromUrl` so an unknown path does not decode to `NotFound`;
+- change `Data.Search.applyCompletion` so a plain-token completion rewrites
+  earlier tokens or drops the leading text;
+- change `Data.Nutrition.scaledSnapshotForQuantity` so a non-numeric current
+  amount is accepted instead of yielding `Nothing`;
+- remove an optional-field branch from `createLogRequestEncoder` or the API-key
+  expiry encoder;
+- change `Page.reconcile` to reinitialize existing panes;
+- change `Ui.Workspace.paneLimit`;
+- change the `Ui.CategoryTag` overflow count;
+- remove a required field from an encoder covered by a branch property.
+
+If a mutation passes, the property or story is not testing what it claims.
 
 ## How Integration Tests Work
 
