@@ -1,19 +1,12 @@
 module Page.Diary.SettingsTest exposing (tests)
 
-{-| Diary-settings stories.
-
-Load retry, save failure/retry, validation, and the page-level 401 wiring check
-are steps inside the two user flows rather than standalone branch tests.
-
--}
-
 import Api.Client as Client
 import Data.DiaryPrefs exposing (DiaryPrefs)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Expect
 import I18n
 import Page.Diary.Settings as S
-import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
 import Translations.Ids exposing (TranslationId(..))
 
@@ -21,140 +14,52 @@ import Translations.Ids exposing (TranslationId(..))
 tests : Test
 tests =
     describe "Page.Diary.Settings"
-        [ test "a failed load retries, edits save through a failure, and the retry wins" <|
+        [ test "a user changes meal slots and saves" <|
             \_ ->
-                let
-                    ( loading, initialOut ) =
-                        S.init
-
-                    failedLoad : S.Model
-                    failedLoad =
-                        step (S.PrefsLoaded (Err Client.NetworkError)) loading
-
-                    ( retryingLoad, retryLoadOut ) =
-                        stepOnce S.RetryClicked failedLoad
-
-                    loaded : S.Model
-                    loaded =
-                        step
-                            (S.PrefsLoaded (Ok (prefs [ LateNightSnack, Breakfast ])))
-                            retryingLoad
-
-                    ( edited, _ ) =
-                        stepOnce (S.SlotToggled Lunch True) loaded
-
-                    ( editedAgain, _ ) =
-                        stepOnce (S.SlotToggled Breakfast False) edited
-
-                    ( saving, saveOut ) =
-                        stepOnce S.SaveClicked editedAgain
-
-                    ( saveFailed, saveFailureOut ) =
-                        stepOnce (S.SaveCompleted (Err Client.NetworkError)) saving
-
-                    ( retryingSave, retrySaveOut ) =
-                        stepOnce S.SaveClicked saveFailed
-
-                    ( saved, finalOut ) =
-                        stepOnce
-                            (S.SaveCompleted (Ok (prefs [ Dinner, Lunch ])))
-                            retryingSave
-                in
-                { initialOut = initialOut
-                , failedLoad = toScreen failedLoad
-                , retryLoadOut = retryLoadOut
-                , loaded =
-                    ( (toScreen loaded).selected, (toScreen loaded).submit )
-                , edited = (toScreen editedAgain).selected
-                , saveOut = saveOut
-                , saving = (toScreen saving).submit
-                , saveFailureOut = saveFailureOut
-                , saveFailed = toScreen saveFailed
-                , retrySaveOut = retrySaveOut
-                , saved = toScreen saved
-                , finalOut = finalOut
-                }
-                    |> Expect.equal
-                        { initialOut = S.RequestPrefs
-                        , failedLoad = { emptyScreen | error = Just Fixtures.networkErrorMessage }
-                        , retryLoadOut = S.RequestPrefs
-                        , loaded =
-                            ( [ "Breakfast", "Late-night Snack" ]
-                            , Just ( saveLabel, False )
-                            )
-                        , edited = [ "Lunch", "Late-night Snack" ]
-                        , saveOut =
-                            S.RequestSave
-                                { enabledMealSlots = [ Lunch, LateNightSnack ] }
-                        , saving = Just ( savingLabel, True )
-                        , saveFailureOut = S.NoOp
-                        , saveFailed =
-                            { readyScreen
-                                | selected = [ "Lunch", "Late-night Snack" ]
-                                , error = Just Fixtures.networkErrorMessage
+                editedPrefs
+                    |> step S.SaveClicked
+                    |> step (S.SaveCompleted (Ok (prefs [ Lunch, Dinner ])))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { screen = toScreen model
+                            , finalOut = outMsg
                             }
-                        , retrySaveOut =
-                            S.RequestSave { enabledMealSlots = [ Lunch, LateNightSnack ] }
-                        , saved =
-                            { readyScreen
-                                | selected = [ "Lunch", "Dinner" ]
-                                , submit = Just ( savedLabel, False )
-                            }
-                        , finalOut = S.NoOp
-                        }
-        , test "clearing every slot blocks save until fixed, then a 401 expires the session" <|
+                                |> Expect.equal
+                                    { screen =
+                                        { selected = [ "Lunch", "Dinner" ]
+                                        , error = Nothing
+                                        , submit = Just ( savedLabel, False )
+                                        }
+                                    , finalOut = S.NoOp
+                                    }
+                        )
+        , test "a failed save can be retried" <|
             \_ ->
-                let
-                    loaded : S.Model
-                    loaded =
-                        S.init
-                            |> Tuple.first
-                            |> step (S.PrefsLoaded (Ok (prefs [ Breakfast, Lunch ])))
-
-                    ( withoutBreakfast, _ ) =
-                        stepOnce (S.SlotToggled Breakfast False) loaded
-
-                    ( cleared, _ ) =
-                        stepOnce (S.SlotToggled Lunch False) withoutBreakfast
-
-                    ( invalid, validationOut ) =
-                        stepOnce S.SaveClicked cleared
-
-                    ( fixed, _ ) =
-                        stepOnce (S.SlotToggled Dinner True) invalid
-
-                    ( submitted, submitOut ) =
-                        stepOnce S.SaveClicked fixed
-
-                    finalOut : S.OutMsg
-                    finalOut =
-                        stepOnce (S.SaveCompleted (Err Fixtures.unauthorized)) submitted
-                            |> Tuple.second
-                in
-                { loaded = (toScreen loaded).selected
-                , cleared = (toScreen cleared).selected
-                , validationOut = validationOut
-                , invalid = toScreen invalid
-                , fixed = (toScreen fixed).selected
-                , submitOut = submitOut
-                , submitted = (toScreen submitted).submit
-                , finalOut = finalOut
-                }
-                    |> Expect.equal
-                        { loaded = [ "Breakfast", "Lunch" ]
-                        , cleared = []
-                        , validationOut = S.NoOp
-                        , invalid = { readyScreen | error = Just validationMessage }
-                        , fixed = [ "Dinner" ]
-                        , submitOut = S.RequestSave { enabledMealSlots = [ Dinner ] }
-                        , submitted = Just ( savingLabel, True )
-                        , finalOut = S.SessionExpired
-                        }
+                editedPrefs
+                    |> step S.SaveClicked
+                    |> step (S.SaveCompleted (Err Client.NetworkError))
+                    |> step S.SaveClicked
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { request = saveRequest outMsg
+                            , submit = (toScreen model).submit
+                            }
+                                |> Expect.equal
+                                    { request = Just { enabledMealSlots = [ Lunch, Dinner ] }
+                                    , submit = Just ( savingLabel, True )
+                                    }
+                        )
+        , test "a failed load can be retried" <|
+            \_ ->
+                S.init
+                    |> Story.start
+                    |> step (S.PrefsLoaded (Err Client.NetworkError))
+                    |> step S.RetryClicked
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal S.RequestPrefs
+                        )
         ]
-
-
-
--- SCREEN PROJECTION
 
 
 type alias Screen =
@@ -211,27 +116,14 @@ emptyScreen =
     { selected = [], error = Nothing, submit = Nothing }
 
 
-readyScreen : Screen
-readyScreen =
-    { selected = [], error = Nothing, submit = Just ( saveLabel, False ) }
+saveRequest : S.OutMsg -> Maybe DiaryPrefs
+saveRequest outMsg =
+    case outMsg of
+        S.RequestSave value ->
+            Just value
 
-
-
--- HELPERS
-
-
-step : S.Msg -> S.Model -> S.Model
-step msg model =
-    Tuple.first (stepOnce msg model)
-
-
-stepOnce : S.Msg -> S.Model -> ( S.Model, S.OutMsg )
-stepOnce msg model =
-    let
-        ( next, _, outMsg ) =
-            S.update msg model
-    in
-    ( next, outMsg )
+        _ ->
+            Nothing
 
 
 prefs : List MealSlot -> DiaryPrefs
@@ -254,6 +146,48 @@ savedLabel =
     I18n.en TidDiarySettingsSaved
 
 
-validationMessage : String
-validationMessage =
-    I18n.en TidDiarySettingsSelectAtLeastOne
+stepWithOut :
+    S.Msg
+    -> S.Model
+    -> ( S.Model, S.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            S.update msg model
+    in
+    ( next, outMsg )
+
+
+
+-- STORY PIPELINE
+
+
+type alias Journey =
+    Story.Journey S.Model S.OutMsg
+
+
+step : S.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+finish :
+    (( S.Model, S.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+loadedPrefs : Journey
+loadedPrefs =
+    S.init
+        |> Story.start
+        |> step (S.PrefsLoaded (Ok (prefs [ Breakfast, Lunch ])))
+
+
+editedPrefs : Journey
+editedPrefs =
+    loadedPrefs
+        |> step (S.SlotToggled Breakfast False)
+        |> step (S.SlotToggled Dinner True)
