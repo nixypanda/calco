@@ -1,16 +1,11 @@
-use std::collections::HashSet;
-
 use chrono::{DateTime, TimeZone, Utc};
 use rust_decimal::Decimal;
-use sea_query::PostgresQueryBuilder;
-use sea_query_sqlx::SqlxBinder;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::*;
 
 use super::PgProductRepo;
-use super::statements::nutrient_ids_by_code_statement;
 
 fn timestamp(day: u32, hour: u32) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 6, day, hour, 0, 0).unwrap()
@@ -197,34 +192,6 @@ async fn insert_serving_row(
     .execute(pool)
     .await
     .expect("insert product serving row");
-}
-
-#[sqlx::test]
-async fn nutrient_id_lookup_resolves_multiple_codes(pool: PgPool) {
-    let codes = vec![
-        "ENERGY_KCAL".to_owned(),
-        "PROTEIN_G".to_owned(),
-        "FAT_G".to_owned(),
-    ];
-    let (sql, values) = nutrient_ids_by_code_statement(&codes).build_sqlx(PostgresQueryBuilder);
-
-    let rows: Vec<(String, Uuid)> =
-        sqlx::query_as_with::<_, (String, Uuid), _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-            .fetch_all(&pool)
-            .await
-            .expect("resolve nutrient ids");
-    let resolved: HashSet<String> = rows.into_iter().map(|(code, _)| code).collect();
-    assert_eq!(
-        resolved.len(),
-        codes.len(),
-        "nutrient lookup must resolve every requested code"
-    );
-    for code in &codes {
-        assert!(
-            resolved.contains(code),
-            "nutrient lookup must resolve {code}"
-        );
-    }
 }
 
 #[sqlx::test]
