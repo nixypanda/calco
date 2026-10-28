@@ -743,6 +743,7 @@ fn category_tier(kind: MatchKind) -> CategoryTier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
     use uuid::Uuid;
 
     fn matcher(threshold: f64) -> TextMatcher {
@@ -822,34 +823,22 @@ mod tests {
         );
     }
 
-    #[test]
-    fn match_value_classifies_exact_prefix_substring_fuzzy_and_rejected() {
+    #[rstest]
+    #[case::exact("greek yogurt", "  Greek   Yogurt ", Some(MatchKind::Exact))]
+    #[case::prefix("greek", "Greek Yogurt", Some(MatchKind::Prefix))]
+    #[case::substring("yog", "Greek Yogurt", Some(MatchKind::Substring))]
+    #[case::fuzzy("yogrt", "yogurt", Some(MatchKind::Fuzzy))]
+    #[case::rejected("zzzz", "Greek Yogurt", None)]
+    fn match_value_classifies_exact_prefix_substring_fuzzy_and_rejected(
+        #[case] query: &str,
+        #[case] value: &str,
+        #[case] expected_kind: Option<MatchKind>,
+    ) {
         let matcher = TextMatcher::default();
 
-        let exact = matcher
-            .match_value(&matcher.normalize("greek yogurt"), "  Greek   Yogurt ")
-            .unwrap();
-        assert_eq!(exact.kind, MatchKind::Exact);
+        let matched = matcher.match_value(&matcher.normalize(query), value);
 
-        let prefix = matcher
-            .match_value(&matcher.normalize("greek"), "Greek Yogurt")
-            .unwrap();
-        assert_eq!(prefix.kind, MatchKind::Prefix);
-
-        let substring = matcher
-            .match_value(&matcher.normalize("yog"), "Greek Yogurt")
-            .unwrap();
-        assert_eq!(substring.kind, MatchKind::Substring);
-
-        let fuzzy = matcher
-            .match_value(&matcher.normalize("yogrt"), "yogurt")
-            .unwrap();
-        assert_eq!(fuzzy.kind, MatchKind::Fuzzy);
-
-        assert_eq!(
-            matcher.match_value(&matcher.normalize("zzzz"), "Greek Yogurt"),
-            None
-        );
+        assert_eq!(matched.map(|matched| matched.kind), expected_kind);
     }
 
     #[test]
@@ -870,18 +859,34 @@ mod tests {
         );
     }
 
-    #[test]
-    fn fuzzy_threshold_rejects_invalid_values() {
-        for value in [f64::NAN, -0.1, 1.1, f64::INFINITY, f64::NEG_INFINITY] {
-            assert!(
-                FuzzyThreshold::new(value).is_none(),
-                "expected {value} to be rejected"
-            );
-        }
+    #[rstest]
+    #[case::nan(f64::NAN)]
+    #[case::just_below_zero(-0.1)]
+    #[case::just_above_one(1.1)]
+    #[case::positive_infinity(f64::INFINITY)]
+    #[case::negative_infinity(f64::NEG_INFINITY)]
+    fn fuzzy_threshold_rejects_invalid_values(#[case] value: f64) {
+        assert!(
+            FuzzyThreshold::new(value).is_none(),
+            "expected {value} to be rejected"
+        );
+    }
 
-        assert_eq!(FuzzyThreshold::default().value(), DEFAULT_FUZZY_THRESHOLD);
-        assert_eq!(FuzzyThreshold::new(0.0).unwrap().value(), 0.0);
-        assert_eq!(FuzzyThreshold::new(1.0).unwrap().value(), 1.0);
+    #[rstest]
+    #[case::lower_boundary(Some(0.0), 0.0)]
+    #[case::upper_boundary(Some(1.0), 1.0)]
+    #[case::default(None, DEFAULT_FUZZY_THRESHOLD)]
+    fn fuzzy_threshold_accepts_valid_boundaries_and_default(
+        #[case] value: Option<f64>,
+        #[case] expected: f64,
+    ) {
+        let threshold = match value {
+            Some(value) => FuzzyThreshold::new(value).expect("boundary must be valid"),
+            // `None` exercises the `Default` impl rather than `new`.
+            None => FuzzyThreshold::default(),
+        };
+
+        assert_eq!(threshold.value(), expected);
     }
 
     #[test]
@@ -905,40 +910,40 @@ mod tests {
         assert_similarity_eq(matched.similarity.value(), forward.value());
     }
 
-    #[test]
-    fn rust_fuzzy_search_scores_match_documented_goldens() {
+    #[rstest]
+    #[case::chese_cheese_cube("chese", "Cheese Cube", 0.8333)]
+    #[case::chese_chase("chese", "Chase", 0.5)]
+    #[case::milk_almond_almond_milk("milk almond", "Almond Milk", 0.8333)]
+    #[case::yoghurt_greek_yogurt("yoghurt", "Greek Yogurt", 0.5)]
+    #[case::chiken_chicken_breast("chiken", "Chicken Breast", 0.7143)]
+    #[case::chiken_grilled_chicken_breast("chiken", "Grilled Chicken Breast", 0.5714)]
+    #[case::vegtable_other_vegetables("vegtable", "other-vegetables", 0.4444)]
+    #[case::cheese_chess("cheese", "chess", 0.4286)]
+    #[case::coke_cookies("coke", "Cookies", 0.4)]
+    #[case::rice_rce("rice", "rce", 0.4)]
+    #[case::almnd_salmon("almnd", "Salmon", 0.1667)]
+    #[case::granila_rani("granila", "Rani", 0.25)]
+    #[case::vegtable_feta("vegtable", "feta", 0.0)]
+    #[case::dairy_cadbury("dairy", "Cadbury", 0.1667)]
+    #[case::chedar_mature_cheddar("chedar", "Mature Cheddar", 0.7143)]
+    #[case::strawbery_ice_creams_strawberry("strawbery", "Ice Creams, Strawberry", 0.8)]
+    #[case::choclate_almond_chocolate("choclate", "Almond Chocolate", 0.6667)]
+    #[case::brocolli_broccoli_raw("brocolli", "Broccoli, raw", 0.5556)]
+    #[case::avacado_avocado("avacado", "Avocado", 0.625)]
+    #[case::vegtable_vegetables("vegtable", "vegetables", 0.6667)]
+    // Orientation matters: `dairy` -> `dary` is exactly 0.5, while the
+    // reverse (`dary` -> `Dairy`) is 0.6.
+    #[case::dairy_dary("dairy", "dary", 0.5)]
+    #[case::dary_dairy("dary", "Dairy", 0.6)]
+    #[case::abc124_abc123("abc124", "abc123", 0.7143)]
+    fn rust_fuzzy_search_scores_match_documented_goldens(
+        #[case] query: &str,
+        #[case] candidate: &str,
+        #[case] expected: f64,
+    ) {
         let matcher = TextMatcher::default();
-
-        // Orientation matters: `dairy` -> `dary` is exactly 0.5, while the
-        // reverse (`dary` -> `Dairy`) is 0.6.
-        for (query, candidate, expected) in [
-            ("chese", "Cheese Cube", 0.8333),
-            ("chese", "Chase", 0.5),
-            ("milk almond", "Almond Milk", 0.8333),
-            ("yoghurt", "Greek Yogurt", 0.5),
-            ("chiken", "Chicken Breast", 0.7143),
-            ("chiken", "Grilled Chicken Breast", 0.5714),
-            ("vegtable", "other-vegetables", 0.4444),
-            ("cheese", "chess", 0.4286),
-            ("coke", "Cookies", 0.4),
-            ("rice", "rce", 0.4),
-            ("almnd", "Salmon", 0.1667),
-            ("granila", "Rani", 0.25),
-            ("vegtable", "feta", 0.0),
-            ("dairy", "Cadbury", 0.1667),
-            ("chedar", "Mature Cheddar", 0.7143),
-            ("strawbery", "Ice Creams, Strawberry", 0.8),
-            ("choclate", "Almond Chocolate", 0.6667),
-            ("brocolli", "Broccoli, raw", 0.5556),
-            ("avacado", "Avocado", 0.625),
-            ("vegtable", "vegetables", 0.6667),
-            ("dairy", "dary", 0.5),
-            ("dary", "Dairy", 0.6),
-            ("abc124", "abc123", 0.7143),
-        ] {
-            let actual = text_similarity(&matcher.normalize(query), &matcher.normalize(candidate));
-            assert_similarity_eq(actual.value(), expected);
-        }
+        let actual = text_similarity(&matcher.normalize(query), &matcher.normalize(candidate));
+        assert_similarity_eq(actual.value(), expected);
     }
 
     #[test]
@@ -972,10 +977,11 @@ mod tests {
         );
     }
 
-    #[test]
-    fn short_unrelated_queries_do_not_match() {
-        assert!(rank_catalog("rice", vec![fields(1, "beans", None, None)], 10).is_empty());
-        assert!(rank_catalog("coke", vec![fields(1, "milk", None, None)], 10).is_empty());
+    #[rstest]
+    #[case::rice_does_not_match_beans("rice", "beans")]
+    #[case::coke_does_not_match_milk("coke", "milk")]
+    fn short_unrelated_queries_do_not_match(#[case] query: &str, #[case] candidate_name: &str) {
+        assert!(rank_catalog(query, vec![fields(1, candidate_name, None, None)], 10).is_empty());
     }
 
     #[test]
@@ -1193,28 +1199,27 @@ mod tests {
         assert!(!matches.is_match());
     }
 
-    #[test]
-    fn identifier_matches_have_zero_similarity() {
+    #[rstest]
+    #[case::exact("abc123", MatchKind::Exact)]
+    #[case::prefix("abc", MatchKind::Prefix)]
+    #[case::substring("bc1", MatchKind::Substring)]
+    fn identifier_matches_have_zero_similarity(
+        #[case] query: &str,
+        #[case] expected_kind: MatchKind,
+    ) {
         let matcher = TextMatcher::default();
+        let query = matcher.normalize(query);
+        let document = SearchDocument {
+            name: "Plain base",
+            brand: None,
+            identifier: Some("abc123"),
+            terms: &[],
+        };
 
-        for (query, expected_kind) in [
-            ("abc123", MatchKind::Exact),
-            ("abc", MatchKind::Prefix),
-            ("bc1", MatchKind::Substring),
-        ] {
-            let query = matcher.normalize(query);
-            let document = SearchDocument {
-                name: "Plain base",
-                brand: None,
-                identifier: Some("abc123"),
-                terms: &[],
-            };
-
-            let matches = matcher.match_document(&query, &document);
-            let identifier = matches.identifier.expect("identifier should match");
-            assert_eq!(identifier.kind, expected_kind);
-            assert_eq!(identifier.similarity.value(), 0.0);
-        }
+        let matches = matcher.match_document(&query, &document);
+        let identifier = matches.identifier.expect("identifier should match");
+        assert_eq!(identifier.kind, expected_kind);
+        assert_eq!(identifier.similarity.value(), 0.0);
     }
 
     #[test]
