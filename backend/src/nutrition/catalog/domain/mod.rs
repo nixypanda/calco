@@ -1069,6 +1069,7 @@ pub trait UnitRepo: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
     use rstest::rstest;
 
     #[test]
@@ -1209,9 +1210,9 @@ mod tests {
 
         match ExternalProductBatch::new(vec![first, second]) {
             Err(NutritionError::Validation(message)) => {
-                assert!(
-                    message.contains("duplicate external product identity"),
-                    "message: {message}"
+                assert_eq!(
+                    message,
+                    "duplicate external product identity: (OFF, same-id)"
                 );
             }
             other => panic!("expected duplicate identity validation error, got {other:?}"),
@@ -1443,10 +1444,12 @@ mod tests {
 
         assert!(policy.authorize_view(other, &product).is_ok());
         assert!(policy.authorize_mutation(owner, &product).is_ok());
-        assert!(matches!(
-            policy.authorize_mutation(other, &product),
-            Err(NutritionError::Forbidden(_))
-        ));
+        match policy.authorize_mutation(other, &product) {
+            Err(NutritionError::Forbidden(message)) => {
+                assert_eq!(message, "only the creator may modify this custom food")
+            }
+            other => panic!("expected forbidden mutation error, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1459,9 +1462,509 @@ mod tests {
         )
         .unwrap();
 
+        match CatalogPolicy.authorize_mutation(actor, &product) {
+            Err(NutritionError::Forbidden(message)) => {
+                assert_eq!(message, "system catalog products are read-only");
+            }
+            other => panic!("expected forbidden mutation error, got {other:?}"),
+        }
+    }
+
+    const PROPERTY_NUTRIENT_CODES: &[&str] = &["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"];
+    const PROPERTY_SERVING_UNITS: &[&str] = &["serving", "slice", "piece", "tbsp"];
+
+    fn bounded_arbitrary_string() -> impl Strategy<Value = String> {
+        proptest::collection::vec(any::<char>(), 0..=12)
+            .prop_map(|chars| chars.into_iter().collect())
+    }
+
+    fn alphanumeric_string() -> impl Strategy<Value = String> {
+        proptest::collection::vec(
+            prop_oneof![
+                proptest::char::range('a', 'z'),
+                proptest::char::range('A', 'Z'),
+                proptest::char::range('0', '9'),
+            ],
+            1..=8,
+        )
+        .prop_map(|chars| chars.into_iter().collect())
+    }
+
+    fn external_source() -> impl Strategy<Value = ExternalSource> {
+        prop_oneof![
+            Just(ExternalSource::Off),
+            Just(ExternalSource::Usda),
+            Just(ExternalSource::Ifct),
+            Just(ExternalSource::Indb),
+        ]
+    }
+
+    fn padded_source_id() -> impl Strategy<Value = String> {
+        (
+            alphanumeric_string(),
+            proptest::collection::vec(prop_oneof![Just(' '), Just('\t')], 0..=2),
+        )
+            .prop_map(|(base, leading)| {
+                let leading: String = leading.into_iter().collect();
+                let trailing: String = leading.chars().rev().collect();
+                format!("{leading}{base}{trailing}")
+            })
+    }
+
+    fn nutrient_code_list() -> impl Strategy<Value = Vec<String>> {
+        proptest::collection::vec(proptest::sample::select(PROPERTY_NUTRIENT_CODES), 0..=4)
+            .prop_map(|codes| {
+                let mut unique: Vec<String> = Vec::new();
+                for code in codes {
+                    if !unique.iter().any(|existing| existing == code) {
+                        unique.push(code.to_owned());
+                    }
+                }
+                unique
+            })
+    }
+
+    fn serving_unit_list() -> impl Strategy<Value = Vec<String>> {
+        proptest::collection::vec(proptest::sample::select(PROPERTY_SERVING_UNITS), 0..=4).prop_map(
+            |units| {
+                let mut unique: Vec<String> = Vec::new();
+                for unit in units {
+                    if !unique.iter().any(|existing| existing == unit) {
+                        unique.push(unit.to_owned());
+                    }
+                }
+                unique
+            },
+        )
+    }
+
+    fn decimal_amount() -> impl Strategy<Value = Decimal> {
+        prop_oneof![
+            4 => Just(Decimal::ZERO),
+            3 => Just(Decimal::new(-1, 12)),
+            3 => Just(Decimal::new(1, 12)),
+            3 => Just(Decimal::new(-5, 7)),
+            3 => Just(Decimal::new(5, 7)),
+            16 => (-1_000_000_000i64..=1_000_000_000i64, 0u32..=6)
+                .prop_map(|(mantissa, scale)| Decimal::new(mantissa, scale)),
+            16 => (-1_000_000_000i64..=1_000_000_000i64, 7u32..=12)
+                .prop_map(|(mantissa, scale)| Decimal::new(mantissa, scale)),
+        ]
+    }
+
+    fn valid_external_product(
+        source: ExternalSource,
+        source_id: &str,
+        name: &str,
+        nutrient_codes: &[String],
+        serving_units: &[String],
+        catalog: &NutrientCatalog,
+    ) -> Product {
+        let nutrients = nutrient_codes
+            .iter()
+            .map(|code| nutrient_input_for(code, Decimal::new(10, 0)))
+            .collect();
+        let servings = serving_units
+            .iter()
+            .map(|unit| ProductServingInput {
+                unit: unit.clone(),
+                grams_per_unit: Decimal::new(100, 0),
+            })
+            .collect();
+
+        Product::new_external(
+            source,
+            ExternalProductBuilder::new(source_id, name)
+                .nutrients(nutrients)
+                .servings(servings),
+            catalog,
+        )
+        .expect("generated external product should be valid")
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum PolicyProductCase {
+        CustomOwned,
+        CustomForeign,
+        External(ExternalSource),
+    }
+
+    fn policy_product_case() -> impl Strategy<Value = PolicyProductCase> {
+        prop_oneof![
+            Just(PolicyProductCase::CustomOwned),
+            Just(PolicyProductCase::CustomForeign),
+            external_source().prop_map(PolicyProductCase::External),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn category_normalize_list_is_idempotent_and_normalized(
+            generated_values in proptest::collection::vec(bounded_arbitrary_string(), 0..=12),
+        ) {
+            let mut values = generated_values;
+            // Guarantee case/padding collisions so deduplication is always exercised.
+            values.extend(
+                ["Snacks", " snacks ", "SNACKS", " Beverages"]
+                    .into_iter()
+                    .map(str::to_owned),
+            );
+
+            let normalized = Category::normalize_list(values.iter().map(String::as_str));
+            let renormalized =
+                Category::normalize_list(normalized.iter().map(|category| category.0.as_str()));
+
+            prop_assert_eq!(&renormalized, &normalized);
+
+            let mut distinct_nonblank_inputs: Vec<String> = Vec::new();
+            for value in &values {
+                let normalized_input = value.trim().to_lowercase();
+                if !normalized_input.is_empty()
+                    && !distinct_nonblank_inputs.contains(&normalized_input)
+                {
+                    distinct_nonblank_inputs.push(normalized_input);
+                }
+            }
+
+            let actual: Vec<String> = normalized
+                .iter()
+                .map(|category| category.0.clone())
+                .collect();
+            prop_assert_eq!(actual, distinct_nonblank_inputs);
+
+            let mut seen: Vec<String> = Vec::new();
+            for category in &normalized {
+                let value = category.0.as_str();
+                prop_assert!(!value.is_empty(), "normalized categories must not be blank");
+                prop_assert_eq!(value.to_owned(), value.trim().to_owned());
+                prop_assert_eq!(value.to_owned(), value.to_lowercase());
+                prop_assert!(
+                    seen.iter().all(|existing| existing != value),
+                    "duplicate normalized category: {value}"
+                );
+                seen.push(value.to_owned());
+            }
+        }
+
+        #[test]
+        fn amount_per_100g_accepts_exactly_non_negative_values_at_six_places(
+            amount in decimal_amount(),
+        ) {
+            match AmountPer100g::new(amount) {
+                Ok(accepted) => {
+                    prop_assert!(amount >= Decimal::ZERO);
+                    prop_assert!(accepted.value() >= Decimal::ZERO);
+                    prop_assert!(accepted.value().scale() <= 6);
+                    prop_assert_eq!(accepted.value(), amount.round_dp(6));
+                    if amount.scale() <= 6 {
+                        prop_assert_eq!(accepted.value(), amount);
+                    }
+                }
+                Err(error) => {
+                    prop_assert!(
+                        amount < Decimal::ZERO,
+                        "only negative amounts should be rejected: amount {amount}, error {error:?}"
+                    );
+                    prop_assert!(matches!(error, NutritionError::Validation(_)));
+                }
+            }
+        }
+
+        #[test]
+        fn external_product_batch_rejects_identities_colliding_after_trimming(
+            source in external_source(),
+            source_id in padded_source_id(),
+            extra_count in 0usize..=3,
+        ) {
+            let catalog = test_catalog();
+            let mut products = vec![
+                valid_external_product(source, &source_id, "Food One", &[], &[], &catalog),
+                valid_external_product(
+                    source,
+                    &format!(" \t {source_id} \t "),
+                    "Food Two",
+                    &[],
+                    &[],
+                    &catalog,
+                ),
+            ];
+            for index in 0..extra_count {
+                products.push(valid_external_product(
+                    source,
+                    &format!("extra-{source_id}-{index}"),
+                    &format!("Extra {index}"),
+                    &[],
+                    &[],
+                    &catalog,
+                ));
+            }
+
+            let expected_message = format!(
+                "duplicate external product identity: ({}, {})",
+                source.as_str(),
+                source_id.trim()
+            );
+            match ExternalProductBatch::new(products) {
+                Err(NutritionError::Validation(message)) => {
+                    prop_assert_eq!(message, expected_message);
+                }
+                other => prop_assert!(
+                    false,
+                    "expected duplicate identity validation error, got {other:?}"
+                ),
+            }
+        }
+
+        #[test]
+        fn external_product_batch_rejects_duplicate_nutrient_codes(
+            source in external_source(),
+            nutrient_codes in nutrient_code_list()
+                .prop_filter("at least one nutrient", |codes| !codes.is_empty()),
+            duplicate_index in 0usize..=3,
+            target_position in 0usize..=5,
+            suffix in alphanumeric_string(),
+            extra_count in 0usize..=4,
+        ) {
+            let catalog = test_catalog();
+            let mut target = valid_external_product(
+                source,
+                &format!("target-{suffix}"),
+                "Target food",
+                &nutrient_codes,
+                &[],
+                &catalog,
+            );
+            // The public constructor already rejects duplicates. Mutate the aggregate
+            // afterwards to exercise the batch's defense-in-depth validation, keeping
+            // the code equal while changing the amount.
+            let index = duplicate_index % target.nutrients.len();
+            let original = target.nutrients[index].clone();
+            let duplicated_code = original.nutrient_code.0.clone();
+            let mut duplicate = original.clone();
+            duplicate.amount_per_100g =
+                AmountPer100g::new(duplicate.amount_per_100g.value() + Decimal::new(1, 0))
+                    .expect("adjusted duplicate amount should be valid");
+            prop_assert_ne!(
+                duplicate.amount_per_100g.value(),
+                original.amount_per_100g.value()
+            );
+            target.nutrients.push(duplicate);
+
+            let mut products: Vec<Product> = (0..extra_count)
+                .map(|index| {
+                    valid_external_product(
+                        source,
+                        &format!("extra-{suffix}-{index}"),
+                        &format!("Extra {index}"),
+                        &[],
+                        &[],
+                        &catalog,
+                    )
+                })
+                .collect();
+            let target_position = target_position % (products.len() + 1);
+            products.insert(target_position, target);
+
+            let expected_message = format!(
+                "duplicate nutrient code for external product: {duplicated_code}"
+            );
+            match ExternalProductBatch::new(products) {
+                Err(NutritionError::Validation(message)) => {
+                    prop_assert_eq!(message, expected_message);
+                }
+                other => prop_assert!(
+                    false,
+                    "expected duplicate nutrient validation error, got {other:?}"
+                ),
+            }
+        }
+
+        #[test]
+        fn external_product_batch_rejects_duplicate_serving_units(
+            source in external_source(),
+            serving_units in serving_unit_list()
+                .prop_filter("at least one serving", |units| !units.is_empty()),
+            target_position in 0usize..=5,
+            suffix in alphanumeric_string(),
+            extra_count in 0usize..=4,
+        ) {
+            let catalog = test_catalog();
+            let mut target = valid_external_product(
+                source,
+                &format!("target-{suffix}"),
+                "Target food",
+                &[],
+                &serving_units,
+                &catalog,
+            );
+            // As with nutrients, the constructor rejects duplicates; mutate the
+            // aggregate to exercise the batch's defense-in-depth validation, keeping
+            // the unit equal while changing the grams per unit.
+            let original = target.servings[0].clone();
+            let duplicated_unit = original.unit.0.clone();
+            let mut duplicate = original.clone();
+            duplicate.grams_per_unit += Decimal::new(1, 0);
+            prop_assert_ne!(duplicate.grams_per_unit, original.grams_per_unit);
+            target.servings.push(duplicate);
+
+            let mut products: Vec<Product> = (0..extra_count)
+                .map(|index| {
+                    valid_external_product(
+                        source,
+                        &format!("extra-{suffix}-{index}"),
+                        &format!("Extra {index}"),
+                        &[],
+                        &[],
+                        &catalog,
+                    )
+                })
+                .collect();
+            let target_position = target_position % (products.len() + 1);
+            products.insert(target_position, target);
+
+            let expected_message =
+                format!("duplicate serving unit for external product: {duplicated_unit}");
+            match ExternalProductBatch::new(products) {
+                Err(NutritionError::Validation(message)) => {
+                    prop_assert_eq!(message, expected_message);
+                }
+                other => prop_assert!(
+                    false,
+                    "expected duplicate serving validation error, got {other:?}"
+                ),
+            }
+        }
+
+        #[test]
+        fn external_product_batch_accepts_valid_products_and_preserves_order(
+            product_count in 0usize..=5,
+            prefix in alphanumeric_string(),
+            nutrient_codes in nutrient_code_list(),
+            serving_units in serving_unit_list(),
+        ) {
+            let catalog = test_catalog();
+            // Reverse the generated order so a sort by name or source ID cannot
+            // accidentally satisfy the order-preservation assertion.
+            let mut products: Vec<Product> = (0..product_count)
+                .map(|index| {
+                    valid_external_product(
+                        ExternalSource::Off,
+                        &format!("{prefix}-{index}"),
+                        &format!("Food {index}"),
+                        &nutrient_codes,
+                        &serving_units,
+                        &catalog,
+                    )
+                })
+                .collect();
+            products.reverse();
+            let expected: Vec<(Uuid, String)> = products
+                .iter()
+                .map(|product| (product.id.0, product.name.as_str().to_owned()))
+                .collect();
+
+            let batch = ExternalProductBatch::new(products)
+                .expect("generated batch with unique identities should be accepted");
+            let actual: Vec<(Uuid, String)> = batch
+                .products()
+                .iter()
+                .map(|product| (product.id.0, product.name.as_str().to_owned()))
+                .collect();
+
+            prop_assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn catalog_policy_allows_every_view_and_only_owner_custom_mutations(
+            case in policy_product_case(),
+            actor_bits in any::<u128>(),
+        ) {
+            let catalog = test_catalog();
+            let actor = Uuid::from_u128(actor_bits);
+            let (product, mutation_allowed) = match case {
+                PolicyProductCase::CustomOwned => (
+                    Product::new_custom(actor, custom_product_input("Owned food"), &catalog)
+                        .expect("generated custom product should be valid"),
+                    true,
+                ),
+                PolicyProductCase::CustomForeign => (
+                    Product::new_custom(
+                        Uuid::from_u128(actor_bits ^ 1),
+                        custom_product_input("Foreign food"),
+                        &catalog,
+                    )
+                    .expect("generated custom product should be valid"),
+                    false,
+                ),
+                PolicyProductCase::External(source) => (
+                    valid_external_product(
+                        source,
+                        &format!("external-{}", source.as_str().to_lowercase()),
+                        &format!("External {} food", source.as_str()),
+                        &[],
+                        &[],
+                        &catalog,
+                    ),
+                    false,
+                ),
+            };
+
+            prop_assert!(
+                CatalogPolicy.authorize_view(actor, &product).is_ok(),
+                "every product should be viewable"
+            );
+            let mutation = CatalogPolicy.authorize_mutation(actor, &product);
+            if mutation_allowed {
+                prop_assert!(
+                    mutation.is_ok(),
+                    "owner should be allowed to mutate their custom product: {mutation:?}"
+                );
+            } else {
+                let expected_message = match case {
+                    PolicyProductCase::CustomForeign => {
+                        "only the creator may modify this custom food"
+                    }
+                    PolicyProductCase::External(_) => "system catalog products are read-only",
+                    PolicyProductCase::CustomOwned => {
+                        unreachable!("owned custom products are allowed to mutate")
+                    }
+                };
+                match mutation {
+                    Err(NutritionError::Forbidden(message)) => {
+                        prop_assert_eq!(message, expected_message.to_owned());
+                    }
+                    other => prop_assert!(
+                        false,
+                        "expected forbidden mutation error, got {other:?}"
+                    ),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn amount_per_100g_classifies_tiny_boundary_values() {
+        assert_eq!(
+            AmountPer100g::new(Decimal::ZERO).unwrap().value(),
+            Decimal::ZERO
+        );
+        assert_eq!(
+            AmountPer100g::new(Decimal::new(5, 7)).unwrap().value(),
+            Decimal::ZERO
+        );
+        assert_eq!(
+            AmountPer100g::new(Decimal::new(1, 12)).unwrap().value(),
+            Decimal::ZERO
+        );
         assert!(matches!(
-            CatalogPolicy.authorize_mutation(actor, &product),
-            Err(NutritionError::Forbidden(_))
+            AmountPer100g::new(Decimal::new(-1, 12)),
+            Err(NutritionError::Validation(_))
+        ));
+        assert!(matches!(
+            AmountPer100g::new(Decimal::new(-5, 7)),
+            Err(NutritionError::Validation(_))
         ));
     }
 }
