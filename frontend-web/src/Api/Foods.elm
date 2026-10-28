@@ -22,10 +22,6 @@ module Api.Foods exposing
     , ServingEntry
     , UnitItem
     , UnitListResponse
-    , barcodeLookupResponseDecoder
-    , barcodePath
-    , categorySuggestionPath
-    , categorySuggestionResponseDecoder
     , createCustomFood
     , deleteCustomFood
     , getFoodDetail
@@ -34,11 +30,7 @@ module Api.Foods exposing
     , listNutrients
     , listUnits
     , lookupBarcode
-    , productDetailDecoder
     , searchFoods
-    , searchPath
-    , searchResponseDecoder
-    , unitListResponseDecoder
     , updateCustomFood
     )
 

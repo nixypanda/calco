@@ -2,7 +2,6 @@ module Api.Goals exposing
     ( SaveGoalRequest
     , getGoal
     , saveGoal
-    , saveGoalRequestEncoder
     )
 
 import Api.Client as Client
