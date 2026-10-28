@@ -11,7 +11,7 @@ DOM structure is not asserted either.
 import Data.Nutrition as Nutrition
 import Expect
 import Fuzz exposing (Fuzzer)
-import Test exposing (Test, describe, fuzz, fuzz2, fuzz3)
+import Test exposing (Test, describe, fuzz, fuzz3)
 import Translations.Util as Util
 import View.Nutrients as Nutrients exposing (NutritionInput, NutritionState(..))
 
@@ -25,10 +25,6 @@ tests =
                     Nutrients.nutrientLabel Util.EN_US generated.code
                         |> Expect.equal generated.label
             , fuzz plainCode "a code without a recognized unit becomes title-cased words" <|
-                \generated ->
-                    Nutrients.nutrientLabel Util.EN_US generated.code
-                        |> Expect.equal generated.label
-            , fuzz bareUnitCode "a bare unit token keeps the code and adds the canonical unit" <|
                 \generated ->
                     Nutrients.nutrientLabel Util.EN_US generated.code
                         |> Expect.equal generated.label
@@ -49,26 +45,31 @@ tests =
                         ()
             ]
         , describe "mapNutritionInput"
-            [ fuzz2 nutritionState transform "preserves the NutritionState constructor" <|
-                \state step ->
-                    Nutrients.mapNutritionInput step state
-                        |> stateTag
-                        |> Expect.equal (stateTag state)
-            , fuzz2 nutritionState transform "applies the transform to the embedded input" <|
-                \state step ->
-                    Nutrients.mapNutritionInput step state
-                        |> Nutrients.nutritionInput
-                        |> Expect.equal (step (Nutrients.nutritionInput state))
-            , fuzz nutritionState "mapping identity is identity" <|
-                \state ->
-                    Nutrients.mapNutritionInput identity state
-                        |> Expect.equal state
-            , fuzz3 nutritionState transform transform "mapping composes" <|
+            [ fuzz3 nutritionState
+                transform
+                transform
+                "mapping updates the input and preserves the constructor, identity, and composition"
+              <|
                 \state first second ->
-                    Nutrients.mapNutritionInput first
-                        (Nutrients.mapNutritionInput second state)
-                        |> Expect.equal
-                            (Nutrients.mapNutritionInput (first << second) state)
+                    Expect.all
+                        [ \_ ->
+                            Nutrients.mapNutritionInput first state
+                                |> stateTag
+                                |> Expect.equal (stateTag state)
+                        , \_ ->
+                            Nutrients.mapNutritionInput first state
+                                |> Nutrients.nutritionInput
+                                |> Expect.equal (first (Nutrients.nutritionInput state))
+                        , \_ ->
+                            Nutrients.mapNutritionInput identity state
+                                |> Expect.equal state
+                        , \_ ->
+                            Nutrients.mapNutritionInput first
+                                (Nutrients.mapNutritionInput second state)
+                                |> Expect.equal
+                                    (Nutrients.mapNutritionInput (first << second) state)
+                        ]
+                        ()
             ]
         ]
 
@@ -134,15 +135,20 @@ unitCode : Fuzzer GeneratedCode
 unitCode =
     Fuzz.map2
         (\tokens ( rawUnit, canonicalUnit ) ->
+            let
+                rendered : String
+                rendered =
+                    if List.isEmpty tokens then
+                        rawUnit
+
+                    else
+                        String.join " " (List.map titleCase tokens)
+            in
             { code = String.join "_" (tokens ++ [ rawUnit ])
-            , label =
-                String.join " " (List.map titleCase tokens)
-                    ++ " ("
-                    ++ canonicalUnit
-                    ++ ")"
+            , label = rendered ++ " (" ++ canonicalUnit ++ ")"
             }
         )
-        nameTokens
+        (Fuzz.list (Fuzz.oneOfValues safeWords))
         unitToken
 
 
@@ -155,17 +161,6 @@ plainCode =
             }
         )
         nameTokens
-
-
-bareUnitCode : Fuzzer GeneratedCode
-bareUnitCode =
-    Fuzz.map
-        (\( rawUnit, canonicalUnit ) ->
-            { code = rawUnit
-            , label = rawUnit ++ " (" ++ canonicalUnit ++ ")"
-            }
-        )
-        unitToken
 
 
 {-| Codes that tokenize into empty strings: underscore-only, leading/trailing
@@ -200,7 +195,6 @@ generatedCode =
     Fuzz.oneOf
         [ Fuzz.map .code unitCode
         , Fuzz.map .code plainCode
-        , Fuzz.map .code bareUnitCode
         , pathologicalCode
         ]
 

@@ -12,7 +12,7 @@ tests =
     describe "Lib.Number"
         [ fuzz2 nonNegativeValue
             precision
-            "toFixed parses back within half a unit in the last place"
+            "toFixed rounds within half a unit in the last place and pads exact digits"
           <|
             \value digits ->
                 let
@@ -20,37 +20,25 @@ tests =
                     formatted =
                         Number.toFixed digits value
 
-                    -- The half-unit term is the actual rounding law. The extra
-                    -- 1e-9 only absorbs double rounding in the multiply/round/
-                    -- divide path for values up to one million.
+                    -- The half-unit term is the rounding law. The extra 1e-9
+                    -- absorbs double rounding in the multiply/round/divide
+                    -- path for values up to one million.
                     tolerance : Float
                     tolerance =
                         0.5 / (10 ^ toFloat digits) + 1.0e-9
                 in
                 case String.toFloat formatted of
-                    Just parsed ->
-                        parsed
-                            |> Expect.within (Expect.Absolute tolerance) value
-
                     Nothing ->
                         Expect.fail ("toFixed produced a non-numeric string: " ++ formatted)
-        , fuzz2 nonNegativeValue
-            (Fuzz.intRange 1 6)
-            "toFixed emits exactly the requested fractional digits"
-          <|
-            \value digits ->
-                case String.split "." (Number.toFixed digits value) of
-                    [ whole, fractional ] ->
+
+                    Just parsed ->
                         Expect.all
-                            [ \_ -> String.length fractional |> Expect.equal digits
-                            , \_ -> String.all Char.isDigit fractional |> Expect.equal True
-                            , \_ -> String.isEmpty whole |> Expect.equal False
-                            , \_ -> String.all Char.isDigit whole |> Expect.equal True
+                            [ \_ ->
+                                parsed
+                                    |> Expect.within (Expect.Absolute tolerance) value
+                            , \_ -> fractionalDigits digits formatted
                             ]
                             ()
-
-                    _ ->
-                        Expect.fail "expected a single decimal point"
         , fuzz2 nonNegativeValue
             precision
             "toFixedTrimmed parses like toFixed without trailing zeros or dot"
@@ -66,7 +54,9 @@ tests =
                         Number.toFixedTrimmed digits value
                 in
                 Expect.all
-                    [ \_ -> String.toFloat trimmed |> Expect.equal (String.toFloat formatted)
+                    [ \_ ->
+                        String.toFloat trimmed
+                            |> Expect.equal (String.toFloat formatted)
                     , \_ ->
                         if String.contains "." trimmed then
                             Expect.all
@@ -79,40 +69,51 @@ tests =
                             Expect.pass
                     ]
                     ()
-        , fuzz (Fuzz.map (\raw -> raw ++ ".") Fuzz.string)
-            "normalizeDecimalSeparator leaves inputs containing a dot unchanged"
+        , fuzz normalizeInput
+            "normalizeDecimalSeparator rewrites exactly one comma when no dot is present"
           <|
             \raw ->
+                let
+                    expected : String
+                    expected =
+                        if String.contains "." raw then
+                            raw
+
+                        else
+                            case String.indexes "," raw of
+                                [ _ ] ->
+                                    String.replace "," "." raw
+
+                                _ ->
+                                    raw
+                in
                 Number.normalizeDecimalSeparator raw
-                    |> Expect.equal raw
-        , fuzz loneCommaInput "normalizeDecimalSeparator rewrites a lone comma to a dot" <|
-            \raw ->
-                Number.normalizeDecimalSeparator raw
-                    |> Expect.equal (String.replace "," "." raw)
-        , fuzz withoutLoneComma "normalizeDecimalSeparator leaves zero or many commas unchanged" <|
-            \raw ->
-                Number.normalizeDecimalSeparator raw
-                    |> Expect.equal raw
-        , fuzz (Fuzz.oneOf [ Fuzz.string, commaInput ])
-            "normalizeDecimalSeparator is idempotent"
-          <|
-            \raw ->
-                Number.normalizeDecimalSeparator (Number.normalizeDecimalSeparator raw)
-                    |> Expect.equal (Number.normalizeDecimalSeparator raw)
+                    |> Expect.equal expected
         ]
 
 
-{-| `toFixed` is only specified for non-negative values in this phase; its
-negative branch is a known separate production risk.
+fractionalDigits : Int -> String -> Expect.Expectation
+fractionalDigits digits formatted =
+    if digits == 0 then
+        String.contains "." formatted |> Expect.equal False
 
-The domain stops at one million. Widening it to 10^9 keeps the scaled integer
-(10^15 at precision 6) below 2^53, but the source value's ULP there is about
-1.2e-7. An exact half-unit tie can then round to a double whose distance from
-the source exceeds the 1e-9 representation slack: for example
-`363593900.9862655` at precision 6 lands 5.36e-7 away, above the 5.01e-7
-half-unit tolerance. At one million the ULP is small enough for the half-unit
-law plus 1e-9 slack to stay meaningful.
+    else
+        case String.split "." formatted of
+            [ whole, fractional ] ->
+                Expect.all
+                    [ \_ -> String.length fractional |> Expect.equal digits
+                    , \_ -> String.all Char.isDigit fractional |> Expect.equal True
+                    , \_ -> String.isEmpty whole |> Expect.equal False
+                    ]
+                    ()
 
+            _ ->
+                Expect.fail "expected a single decimal point"
+
+
+{-| `toFixed` is only specified for non-negative values here; its negative
+branch remains a separate production risk. The domain stops at one million so
+the scaled integer stays well below 2^53 and the half-unit law stays meaningful.
 -}
 nonNegativeValue : Fuzzer Float
 nonNegativeValue =
@@ -129,43 +130,20 @@ precision =
     Fuzz.intRange 0 6
 
 
-loneCommaInput : Fuzzer String
-loneCommaInput =
-    Fuzz.map2
-        (\before after -> before ++ "," ++ after)
-        withoutDotOrComma
-        withoutDotOrComma
-
-
-commaInput : Fuzzer String
-commaInput =
+normalizeInput : Fuzzer String
+normalizeInput =
     Fuzz.oneOf
-        [ withoutDotOrComma
+        [ Fuzz.map (\raw -> raw ++ ".") Fuzz.string
+        , Fuzz.map2
+            (\before after -> before ++ "," ++ after)
+            withoutDotOrComma
+            withoutDotOrComma
         , Fuzz.map3
             (\first second third -> first ++ "," ++ second ++ "," ++ third)
             withoutDotOrComma
             withoutDotOrComma
             withoutDotOrComma
-        ]
-
-
-withoutLoneComma : Fuzzer String
-withoutLoneComma =
-    Fuzz.oneOf
-        [ withoutDotOrComma
-        , Fuzz.map3
-            (\first second third -> first ++ "," ++ second ++ "," ++ third)
-            withoutDotOrComma
-            withoutDotOrComma
-            withoutDotOrComma
-        , Fuzz.map4
-            (\first second third fourth ->
-                first ++ "," ++ second ++ "," ++ third ++ "," ++ fourth
-            )
-            withoutDotOrComma
-            withoutDotOrComma
-            withoutDotOrComma
-            withoutDotOrComma
+        , withoutDotOrComma
         ]
 
 

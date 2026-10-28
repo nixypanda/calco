@@ -1,9 +1,12 @@
 module Ui.CategoryTagTest exposing (tests)
 
-{-| Laws for `Ui.CategoryTag.rows`, plus the one allowed overflow render.
+{-| One property for the `Ui.CategoryTag.rows` layout decision, plus the one
+allowed overflow render.
 
-`rows` is a pure layout decision. The render below asserts only user-visible
-overflow text; CSS and DOM structure are deliberately not asserted.
+`rows` is a pure layout decision, so its whole contract is asserted as a single
+`Expect.all`: at most two rows of at most two cells, input-order prefix, all
+categories fit up to four, and one overflow cell counting `n - 3` only when
+`n > 4`.
 
 -}
 
@@ -21,72 +24,60 @@ import Ui.Theme as Theme
 tests : Test
 tests =
     describe "Ui.CategoryTag"
-        [ describe "rows"
-            [ fuzz categories "at most two rows" <|
-                \input ->
-                    CategoryTag.rows input
-                        |> List.length
-                        |> Expect.atMost 2
-            , fuzz categories "at most two cells per row" <|
-                \input ->
-                    CategoryTag.rows input
-                        |> List.map List.length
-                        |> List.all (\size -> size <= 2)
-                        |> Expect.equal True
-            , fuzz categories "categories appear in input order as a prefix" <|
-                \input ->
-                    let
-                        names : List String
-                        names =
-                            CategoryTag.rows input |> categoryNames
-                    in
-                    names
-                        |> Expect.equal (List.take (List.length names) input)
-            , fuzz (Fuzz.listOfLengthBetween 0 4 Fuzz.string) "up to four categories all fit" <|
-                \input ->
-                    let
-                        tagRows : List (List CategoryTag)
-                        tagRows =
-                            CategoryTag.rows input
-                    in
-                    Expect.all
-                        [ \_ -> categoryNames tagRows |> Expect.equal input
-                        , \_ -> overflowCounts tagRows |> Expect.equal []
-                        , \_ -> cellCount tagRows |> Expect.equal (List.length input)
-                        ]
-                        ()
-            , fuzz overFourCategories "more than four categories keep three and hide the rest" <|
-                \input ->
-                    let
-                        tagRows : List (List CategoryTag)
-                        tagRows =
-                            CategoryTag.rows input
-                    in
-                    Expect.all
-                        [ \_ -> categoryNames tagRows |> Expect.equal (List.take 3 input)
-                        , \_ ->
-                            overflowCounts tagRows
-                                |> Expect.equal [ List.length input - 3 ]
-                        , \_ -> cellCount tagRows |> Expect.equal 4
-                        ]
-                        ()
-            , fuzz categories "represented categories plus overflow count equal input length" <|
-                \input ->
-                    let
-                        tagRows : List (List CategoryTag)
-                        tagRows =
-                            CategoryTag.rows input
-                    in
-                    List.length (categoryNames tagRows)
-                        + List.sum (overflowCounts tagRows)
-                        |> Expect.equal (List.length input)
-            , fuzz categories "rows is empty only for empty input" <|
-                \input ->
-                    CategoryTag.rows input
-                        |> List.isEmpty
-                        |> Expect.equal (List.isEmpty input)
-            ]
-        , test "the overflow tag shows the visible remainder and hides the rest" <|
+        [ fuzz categories "rows preserve order and hide only the overflow remainder" <|
+            \input ->
+                let
+                    tagRows : List (List CategoryTag)
+                    tagRows =
+                        CategoryTag.rows input
+
+                    names : List String
+                    names =
+                        categoryNames tagRows
+
+                    counts : List Int
+                    counts =
+                        overflowCounts tagRows
+
+                    inputLength : Int
+                    inputLength =
+                        List.length input
+                in
+                Expect.all
+                    [ \_ -> List.length tagRows |> Expect.atMost 2
+                    , \_ ->
+                        tagRows
+                            |> List.all (\cells -> List.length cells <= 2)
+                            |> Expect.equal True
+                    , \_ -> names |> Expect.equal (List.take (List.length names) input)
+                    , \_ ->
+                        if inputLength <= 4 then
+                            Expect.all
+                                [ \_ -> names |> Expect.equal input
+                                , \_ -> counts |> Expect.equal []
+                                , \_ -> cellCount tagRows |> Expect.equal inputLength
+                                ]
+                                ()
+
+                        else
+                            Expect.all
+                                [ \_ -> names |> Expect.equal (List.take 3 input)
+                                , \_ -> counts |> Expect.equal [ inputLength - 3 ]
+                                , \_ -> cellCount tagRows |> Expect.equal 4
+                                ]
+                                ()
+                    , \_ ->
+                        List.length names
+                            + List.sum counts
+                            |> Expect.equal inputLength
+                    ]
+                    ()
+        , {- Allowed render exception: the translated overflow label is only
+             observable after `view` renders it, which is not expressible as a
+             pure `rows` property; a full page story does not own this layout
+             helper.
+          -}
+          test "the overflow tag shows the visible remainder and hides the rest" <|
             \_ ->
                 CategoryTag.view Theme.light
                     Util.EN_US
@@ -104,11 +95,6 @@ tests =
 categories : Fuzzer (List String)
 categories =
     Fuzz.list Fuzz.string
-
-
-overFourCategories : Fuzzer (List String)
-overFourCategories =
-    Fuzz.listOfLengthBetween 5 25 Fuzz.string
 
 
 categoryNames : List (List CategoryTag) -> List String

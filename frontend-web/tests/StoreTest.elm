@@ -6,8 +6,13 @@ Every law is fuzzed over the resource data it depends on (dates, logs, and
 preference values) so a regression in keying or token bookkeeping cannot hide
 behind one fixed fixture.
 
+This is the allowed token/session exception: `Store` is a cross-page cache with
+no page owner, so its stale-response and failure-caching laws stay at the state
+layer instead of being duplicated in page stories.
+
 -}
 
+import Api.Client as Client exposing (ApiError)
 import Api.Foods exposing (NutrientListResponse, UnitListResponse)
 import Api.Logs exposing (LatestSlotsResponse)
 import Data.DiaryPrefs exposing (DiaryPrefs)
@@ -17,19 +22,18 @@ import Expect exposing (Expectation)
 import Lib.Date as LocalDate exposing (LocalDate)
 import Store exposing (Access, RequestToken, Store)
 import Support.Fuzz as FuzzSupport
-import Test exposing (Test, describe, fuzz2)
+import Test exposing (Test, describe, fuzz, fuzz2)
 
 
 tests : Test
 tests =
     describe "Store"
         [ requestIsIssuedOnce
-        , generationGuardsSettlement
-        , settleRequiresMatchingRequestId
+        , tokenGuardsSettlement
         , settleRejectsSupersededRequests
+        , failedSettlementIsCached
         , resetInvalidatesEverything
-        , clearGoalsKeepsOtherResources
-        , clearLatestSlotsKeepsOtherResources
+        , clearDateKeyedFamilies
         , seedAndInvalidate
         , resourceKeysAreIndependent
         ]
@@ -78,37 +82,47 @@ requestIsIssuedOnce =
         )
 
 
-{-| `reset` restarts request ids, so the only thing that can separate the old
-token from the new one is the generation. This law proves the generation half
-of the token is actually checked.
+{-| Both halves of the token must match the live in-flight request: the request
+id stops one resource's response settling another, and the generation stops a
+response from before `reset` settling the reissued request with the same id.
 -}
-generationGuardsSettlement : Test
-generationGuardsSettlement =
+tokenGuardsSettlement : Test
+tokenGuardsSettlement =
     fuzz2 FuzzSupport.interiorLocalDate
         FuzzSupport.foodLogList
-        "a token from before reset is rejected even when the request id repeats"
+        "a token settles only its own request id in the current generation"
         (\date logs ->
             let
                 access : Access (List FoodLog)
                 access =
                     Store.diaryLogsAt date
-            in
-            case Store.request access Store.empty of
-                Nothing ->
-                    Expect.fail "the first request should have been issued"
 
-                Just ( firstStore, staleToken ) ->
-                    case Store.request access (Store.reset firstStore) of
+                secondAccess : Access (List FoodLog)
+                secondAccess =
+                    Store.diaryLogsAt (LocalDate.addDays 1 date)
+            in
+            case requestPair access secondAccess Store.empty of
+                Nothing ->
+                    Expect.fail "both independent requests should have been issued"
+
+                Just ( bothInFlight, firstToken, secondToken ) ->
+                    case Store.request access (Store.reset bothInFlight) of
                         Nothing ->
                             Expect.fail "the request after reset should have been issued"
 
-                        Just ( liveStore, liveToken ) ->
+                        Just ( afterReset, liveToken ) ->
                             Expect.all
                                 [ \_ ->
-                                    Store.settle access staleToken (Ok logs) liveStore
+                                    Store.settle secondAccess firstToken (Ok logs) bothInFlight
                                         |> Expect.equal Nothing
                                 , \_ ->
-                                    Store.settle access liveToken (Ok logs) liveStore
+                                    Store.settle access secondToken (Ok logs) bothInFlight
+                                        |> Expect.equal Nothing
+                                , \_ ->
+                                    Store.settle access firstToken (Ok logs) afterReset
+                                        |> Expect.equal Nothing
+                                , \_ ->
+                                    Store.settle access liveToken (Ok logs) afterReset
                                         |> Maybe.andThen (Store.cached access)
                                         |> Expect.equal (Just (Ok logs))
                                 ]
@@ -116,42 +130,55 @@ generationGuardsSettlement =
         )
 
 
-{-| The request id half of the token: a token minted for one in-flight request
-must not settle another one, even when both belong to the current generation.
+{-| A failed settlement is a cached outcome like any other: it is exposed to
+readers, blocks a duplicate request while cached, and is cleared by
+`invalidate` so the user can retry.
 -}
-settleRequiresMatchingRequestId : Test
-settleRequiresMatchingRequestId =
-    fuzz2 FuzzSupport.interiorLocalDate
-        FuzzSupport.foodLogList
-        "a token settles only the request that issued it"
-        (\date logs ->
+failedSettlementIsCached : Test
+failedSettlementIsCached =
+    fuzz FuzzSupport.localDate
+        "a settled error is cached, blocks a second request, and invalidate retries"
+        (\date ->
             let
-                firstAccess : Access (List FoodLog)
-                firstAccess =
+                access : Access (List FoodLog)
+                access =
                     Store.diaryLogsAt date
 
-                secondAccess : Access (List FoodLog)
-                secondAccess =
-                    Store.diaryLogsAt (LocalDate.addDays 1 date)
+                failure : Result ApiError (List FoodLog)
+                failure =
+                    Err (Client.BadStatus 500 "server_error" "Server failed")
             in
-            case requestPair firstAccess secondAccess Store.empty of
+            case Store.request access Store.empty of
                 Nothing ->
-                    Expect.fail "both independent requests should have been issued"
+                    Expect.fail "the first request should have been issued"
 
-                Just ( bothInFlight, firstToken, secondToken ) ->
-                    Expect.all
-                        [ \_ ->
-                            Store.settle secondAccess firstToken (Ok logs) bothInFlight
-                                |> Expect.equal Nothing
-                        , \_ ->
-                            Store.settle firstAccess secondToken (Ok logs) bothInFlight
-                                |> Expect.equal Nothing
-                        , \_ ->
-                            Store.settle firstAccess firstToken (Ok logs) bothInFlight
-                                |> Maybe.andThen (Store.cached firstAccess)
-                                |> Expect.equal (Just (Ok logs))
-                        ]
-                        ()
+                Just ( inFlight, token ) ->
+                    case Store.settle access token failure inFlight of
+                        Nothing ->
+                            Expect.fail "the live token should settle a failure"
+
+                        Just settled ->
+                            let
+                                retryable : Store
+                                retryable =
+                                    Store.invalidate access settled
+                            in
+                            Expect.all
+                                [ \_ ->
+                                    Store.cached access settled
+                                        |> Expect.equal (Just failure)
+                                , \_ ->
+                                    Store.request access settled
+                                        |> Expect.equal Nothing
+                                , \_ ->
+                                    Store.cached access retryable
+                                        |> Expect.equal Nothing
+                                , \_ ->
+                                    Store.request access retryable
+                                        |> Maybe.map (always True)
+                                        |> Expect.equal (Just True)
+                                ]
+                                ()
         )
 
 
@@ -285,93 +312,58 @@ resetInvalidatesEverything =
         )
 
 
-{-| `clearGoals` drops every date-keyed goal but must not disturb other
-resource families.
+{-| `clearGoals` and `clearLatestSlots` are the two date-keyed family clears:
+each drops only its own family and leaves the other families, including the
+same date key in another dictionary, intact.
 -}
-clearGoalsKeepsOtherResources : Test
-clearGoalsKeepsOtherResources =
+clearDateKeyedFamilies : Test
+clearDateKeyedFamilies =
     fuzz2 FuzzSupport.interiorLocalDate
         FuzzSupport.foodLogList
-        "clearGoals removes goal entries and keeps other resource families"
+        "clearGoals and clearLatestSlots remove only their own date-keyed family"
         (\date logs ->
             let
                 goalAccess : Access GoalSnapshot
                 goalAccess =
                     Store.diaryGoalAt date
 
-                goalSnapshot : GoalSnapshot
-                goalSnapshot =
-                    goalValue date
-
-                logsAccess : Access (List FoodLog)
-                logsAccess =
-                    Store.diaryLogsAt date
-
-                seeded : Store
-                seeded =
-                    Store.empty
-                        |> Store.seed goalAccess goalSnapshot
-                        |> Store.seed logsAccess logs
-                        |> Store.seed Store.nutrients nutrientsValue
-
-                cleared : Store
-                cleared =
-                    Store.clearGoals seeded
-            in
-            Expect.all
-                [ \_ -> expectCached goalAccess goalSnapshot seeded
-                , \_ -> Store.cached goalAccess cleared |> Expect.equal Nothing
-                , \_ -> expectCached logsAccess logs cleared
-                , \_ -> expectCached Store.nutrients nutrientsValue cleared
-                ]
-                ()
-        )
-
-
-{-| `clearLatestSlots` drops every date-keyed latest-slots entry but must not
-disturb goals, units, or logs.
--}
-clearLatestSlotsKeepsOtherResources : Test
-clearLatestSlotsKeepsOtherResources =
-    fuzz2 FuzzSupport.interiorLocalDate
-        FuzzSupport.foodLogList
-        "clearLatestSlots removes slot entries and keeps other resource families"
-        (\date logs ->
-            let
                 slotsAccess : Access LatestSlotsResponse
                 slotsAccess =
                     Store.latestSlotsAt date
 
-                goalAccess : Access GoalSnapshot
-                goalAccess =
-                    Store.diaryGoalAt date
+                logsAccess : Access (List FoodLog)
+                logsAccess =
+                    Store.diaryLogsAt date
 
                 goalSnapshot : GoalSnapshot
                 goalSnapshot =
                     goalValue date
 
-                logsAccess : Access (List FoodLog)
-                logsAccess =
-                    Store.diaryLogsAt date
-
                 seeded : Store
                 seeded =
                     Store.empty
-                        |> Store.seed slotsAccess latestSlotsValue
                         |> Store.seed goalAccess goalSnapshot
-                        |> Store.seed Store.units unitsValue
+                        |> Store.seed slotsAccess latestSlotsValue
                         |> Store.seed logsAccess logs
+                        |> Store.seed Store.units unitsValue
 
-                cleared : Store
-                cleared =
+                withoutGoals : Store
+                withoutGoals =
+                    Store.clearGoals seeded
+
+                withoutSlots : Store
+                withoutSlots =
                     Store.clearLatestSlots seeded
             in
             Expect.all
-                [ \_ -> expectCached slotsAccess latestSlotsValue seeded
-                , \_ -> Store.cached slotsAccess cleared |> Expect.equal Nothing
-                , \_ -> expectCached goalAccess goalSnapshot cleared
-                , \_ -> expectCached Store.units unitsValue cleared
-                , \_ -> expectCached logsAccess logs cleared
+                [ \_ -> Store.cached goalAccess withoutGoals |> Expect.equal Nothing
+                , \_ -> expectCached slotsAccess latestSlotsValue withoutGoals
+                , \_ -> expectCached logsAccess logs withoutGoals
+                , \_ -> expectCached Store.units unitsValue withoutGoals
+                , \_ -> expectCached goalAccess goalSnapshot withoutSlots
+                , \_ -> Store.cached slotsAccess withoutSlots |> Expect.equal Nothing
+                , \_ -> expectCached logsAccess logs withoutSlots
+                , \_ -> expectCached Store.units unitsValue withoutSlots
                 ]
                 ()
         )

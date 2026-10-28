@@ -43,7 +43,7 @@ tests =
 
         {- This is one of the three allowed negative decoder invariants from
            the overhaul plan (§6.5): an unrecognised server scope must degrade
-           to `UnknownScope` instead of rejecting the whole list. It survives
+           to `UnknownScope` instead of rejecting the metadata. It survives
            because the fallback is deliberate leniency, not field-by-field
            decoder restatement.
         -}

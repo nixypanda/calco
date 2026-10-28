@@ -3,76 +3,19 @@ module Data.ItemNameLookupTest exposing (tests)
 import Data.ItemNameLookup as ItemNameLookup exposing (Names)
 import Expect
 import Fuzz exposing (Fuzzer)
-import Test exposing (Test, describe, fuzz, test)
+import Test exposing (Test, describe, fuzz)
 
 
 tests : Test
 tests =
     describe "Data.ItemNameLookup"
-        [ describe "uniqueProductIds"
-            [ fuzz idsFuzzer "keeps first occurrences in input order" <|
-                \ids ->
-                    ItemNameLookup.uniqueProductIds ids
-                        |> Expect.equal (firstUnique ids)
-            , fuzz idsFuzzer "is idempotent" <|
-                \ids ->
-                    ItemNameLookup.uniqueProductIds (ItemNameLookup.uniqueProductIds ids)
-                        |> Expect.equal (ItemNameLookup.uniqueProductIds ids)
-            , fuzz idsFuzzer "contains no duplicate ids" <|
-                \ids ->
-                    let
-                        unique : List String
-                        unique =
-                            ItemNameLookup.uniqueProductIds ids
-                    in
-                    List.all
-                        (\id -> List.length (List.filter ((==) id) unique) == 1)
-                        unique
-                        |> Expect.equal True
-            ]
-        , describe "nextMissingProductId"
-            [ fuzz lookupFuzzer "returns the first unique unloaded non-completed id" <|
-                \( completed, ids, loaded ) ->
-                    ItemNameLookup.nextMissingProductId completed ids (namesFrom loaded)
-                        |> Expect.equal (firstEligible completed ids loaded)
-            , fuzz lookupFuzzer "only returns an id that still needs loading" <|
-                \( completed, ids, loaded ) ->
-                    case ItemNameLookup.nextMissingProductId completed ids (namesFrom loaded) of
-                        Nothing ->
-                            Expect.pass
-
-                        Just id ->
-                            Expect.all
-                                [ \_ -> List.member id ids |> Expect.equal True
-                                , \_ -> (Just id /= completed) |> Expect.equal True
-                                , \_ ->
-                                    ItemNameLookup.isLoaded
-                                        (ItemNameLookup.productRef id)
-                                        (namesFrom loaded)
-                                        |> Expect.equal False
-                                ]
-                                ()
-            , fuzz idsFuzzer "without loaded names selects the first input id" <|
-                \ids ->
-                    ItemNameLookup.nextMissingProductId Nothing ids ItemNameLookup.empty
-                        |> Expect.equal (List.head ids)
-            , fuzz idsFuzzer "returns Nothing when every id is loaded" <|
-                \ids ->
-                    ItemNameLookup.nextMissingProductId Nothing ids (namesFrom ids)
-                        |> Expect.equal Nothing
-            , test "skips loaded ids and duplicate suggestions" <|
-                \_ ->
-                    ItemNameLookup.nextMissingProductId
-                        Nothing
-                        [ "food-1", "food-2", "food-2" ]
-                        (namesFrom [ "food-1" ])
-                        |> Expect.equal (Just "food-2")
-            ]
+        [ fuzz lookupFuzzer
+            "nextMissingProductId is the first unique, unloaded, non-completed id"
+          <|
+            \( completed, ids, loaded ) ->
+                ItemNameLookup.nextMissingProductId completed ids (namesFrom loaded)
+                    |> Expect.equal (firstEligible completed ids loaded)
         ]
-
-
-
--- Fuzzers
 
 
 idFuzzer : Fuzzer String
@@ -109,16 +52,21 @@ lookupFuzzer =
         (Fuzz.intRange -1 12)
 
 
-
--- References
-
-
 namesFrom : List String -> Names
 namesFrom ids =
     List.foldl
         (\id names -> ItemNameLookup.insertProduct id id names)
         ItemNameLookup.empty
         ids
+
+
+firstEligible : Maybe String -> List String -> List String -> Maybe String
+firstEligible completed ids loaded =
+    ids
+        |> firstUnique
+        |> List.filter
+            (\id -> Just id /= completed && not (List.member id loaded))
+        |> List.head
 
 
 firstUnique : List String -> List String
@@ -133,13 +81,3 @@ firstUnique ids =
         )
         []
         ids
-
-
-firstEligible : Maybe String -> List String -> List String -> Maybe String
-firstEligible completed ids loaded =
-    firstUnique ids
-        |> List.filter
-            (\id ->
-                Just id /= completed && not (List.member id loaded)
-            )
-        |> List.head

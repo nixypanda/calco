@@ -244,6 +244,11 @@ the encoder escapes dynamic IDs rather than assuming they are URL-safe. The
 edge pool makes the reserved `new`/`custom` escapes and percent decoding
 deterministic instead of relying on random strings.
 
+`arbitrarySegment` always has a head character, so it cannot be empty. If its
+raw value is exactly `"."` or `".."`, `avoidDotSegments` appends `"x"`; every
+other value is unchanged. Filtering would retry and bias the generator, while
+remapping changes only the two values a browser cannot carry through a URL.
+
 -}
 segment : Fuzzer String
 segment =
@@ -259,6 +264,16 @@ arbitrarySegment =
         (\head tail -> String.fromChar head ++ tail)
         Fuzz.char
         (Fuzz.map String.fromList (Fuzz.listOfLengthBetween 0 12 Fuzz.char))
+        |> Fuzz.map avoidDotSegments
+
+
+avoidDotSegments : String -> String
+avoidDotSegments value =
+    if value == "." || value == ".." then
+        value ++ "x"
+
+    else
+        value
 
 
 edgeSegments : List String

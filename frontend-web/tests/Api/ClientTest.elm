@@ -1,10 +1,20 @@
 module Api.ClientTest exposing (tests)
 
+{-| Failure classification and display-message laws for `Api.Client`.
+
+The unauthorized law is the allowed 401 exception from `docs/testing.md`: it
+cannot be folded into a page story because every page consumes the same
+`failure` helper, and a per-page 401 test would duplicate this one. The law
+covers the whole `ApiError` space plus the 401/403/429 edges that decide whether
+a session is expired.
+
+-}
+
 import Api.Client as Client exposing (ApiError(..))
 import Expect exposing (Expectation)
-import Support.Fixtures as Fixtures
+import Fuzz exposing (Fuzzer)
 import Support.Fuzz as FuzzSupport
-import Test exposing (Test, describe, fuzz, test)
+import Test exposing (Test, describe, fuzz)
 
 
 type OutMsg
@@ -19,54 +29,18 @@ type alias Model =
 tests : Test
 tests =
     describe "Api.Client"
-        [ isUnauthorizedOnlyFor401
-        , isUnauthorizedAtStatusEdges
-        , failureExpiresOnlyUnauthorizedSessions
+        [ unauthorizedExpiresSession
         , failureAppliesDisplayError
         , displayErrorIsNeverBlank
-        , blankBackendMessageFallsBack
-        , networkErrorHasDisplayMessage
-        , canonicalUnauthorizedFixture
         ]
 
 
-isUnauthorizedOnlyFor401 : Test
-isUnauthorizedOnlyFor401 =
-    fuzz FuzzSupport.apiError "isUnauthorized is true only for BadStatus 401" <|
-        \error ->
-            case error of
-                BadStatus status _ _ ->
-                    Client.isUnauthorized error
-                        |> Expect.equal (status == 401)
-
-                _ ->
-                    Client.isUnauthorized error
-                        |> Expect.equal False
-
-
-{-| Explicit edge statuses for the privacy-relevant session-expiry decision:
-only 401 expires a session; 403 and 429 are ordinary failures.
+{-| Allowed 401 exception: `isUnauthorized` is true exactly for status 401, and
+`failure` expires the session exactly then.
 -}
-isUnauthorizedAtStatusEdges : Test
-isUnauthorizedAtStatusEdges =
-    test "only status 401 is unauthorized at the 401/403/429 edges" <|
-        \_ ->
-            [ ( 401, True )
-            , ( 403, False )
-            , ( 429, False )
-            ]
-                |> List.map
-                    (\( status, expected ) ->
-                        Client.isUnauthorized (BadStatus status "denied" "Denied")
-                            |> Expect.equal expected
-                            |> Expect.onFail ("status " ++ String.fromInt status)
-                    )
-                |> expectAll
-
-
-failureExpiresOnlyUnauthorizedSessions : Test
-failureExpiresOnlyUnauthorizedSessions =
-    fuzz FuzzSupport.apiError "failure expires the session exactly when isUnauthorized holds" <|
+unauthorizedExpiresSession : Test
+unauthorizedExpiresSession =
+    fuzz FuzzSupport.apiError "only a 401 is unauthorized and expires the session" <|
         \error ->
             let
                 ( _, _, outMsg ) =
@@ -74,13 +48,45 @@ failureExpiresOnlyUnauthorizedSessions =
 
                 expected : OutMsg
                 expected =
-                    if Client.isUnauthorized error then
+                    if isUnauthorizedStatus error then
                         SessionExpired
 
                     else
                         NoOp
             in
-            outMsg |> Expect.equal expected
+            Expect.all
+                [ \_ ->
+                    Client.isUnauthorized error
+                        |> Expect.equal (expected == SessionExpired)
+                , \_ -> outMsg |> Expect.equal expected
+                , \_ -> statusEdges |> List.map statusEdgeExpectation |> expectAll
+                ]
+                ()
+
+
+isUnauthorizedStatus : ApiError -> Bool
+isUnauthorizedStatus error =
+    case error of
+        BadStatus 401 _ _ ->
+            True
+
+        _ ->
+            False
+
+
+statusEdges : List ( Int, Bool )
+statusEdges =
+    [ ( 401, True )
+    , ( 403, False )
+    , ( 429, False )
+    ]
+
+
+statusEdgeExpectation : ( Int, Bool ) -> Expectation
+statusEdgeExpectation ( status, expected ) =
+    Client.isUnauthorized (BadStatus status "denied" "Denied")
+        |> Expect.equal expected
+        |> Expect.onFail ("status " ++ String.fromInt status)
 
 
 failureAppliesDisplayError : Test
@@ -95,61 +101,26 @@ failureAppliesDisplayError =
                 |> Expect.equal (Just (Client.displayError error))
 
 
+{-| Includes deterministic blank/whitespace backend messages because the generic
+fuzzer only samples them probabilistically.
+-}
 displayErrorIsNeverBlank : Test
 displayErrorIsNeverBlank =
-    fuzz FuzzSupport.apiError "displayError never returns a blank message" <|
+    fuzz displayErrorInput "displayError never returns a blank message" <|
         \error ->
             Client.displayError error
                 |> String.trim
                 |> Expect.notEqual ""
 
 
-{-| The fuzzer samples empty and whitespace messages only probabilistically, so
-the blank-message fallback also gets deterministic cases.
--}
-blankBackendMessageFallsBack : Test
-blankBackendMessageFallsBack =
-    test "blank backend messages fall back to a non-blank display message" <|
-        \_ ->
-            [ Client.BadStatus 400 "validation" ""
-            , Client.BadStatus 500 "server_error" "   "
-            ]
-                |> List.map
-                    (\error ->
-                        Client.displayError error
-                            |> String.trim
-                            |> String.isEmpty
-                    )
-                |> Expect.equal [ False, False ]
-
-
-networkErrorHasDisplayMessage : Test
-networkErrorHasDisplayMessage =
-    test "a network failure still yields a non-blank message" <|
-        \_ ->
-            Client.displayError Client.NetworkError
-                |> String.trim
-                |> Expect.notEqual ""
-
-
-canonicalUnauthorizedFixture : Test
-canonicalUnauthorizedFixture =
-    test "the shared unauthorized fixture is classified and expires the session" <|
-        \_ ->
-            let
-                ( model, _, outMsg ) =
-                    Client.failure config Fixtures.unauthorized emptyModel
-            in
-            Expect.all
-                [ \_ ->
-                    Client.isUnauthorized Fixtures.unauthorized
-                        |> Expect.equal True
-                , \_ -> outMsg |> Expect.equal SessionExpired
-                , \_ ->
-                    model.appliedError
-                        |> Expect.equal (Just (Client.displayError Fixtures.unauthorized))
-                ]
-                ()
+displayErrorInput : Fuzzer ApiError
+displayErrorInput =
+    Fuzz.oneOf
+        [ FuzzSupport.apiError
+        , Fuzz.constant (BadStatus 400 "validation" "")
+        , Fuzz.constant (BadStatus 500 "server_error" "   ")
+        , Fuzz.constant NetworkError
+        ]
 
 
 config :

@@ -5,145 +5,94 @@ import Expect
 import Fuzz exposing (Fuzzer)
 import Lib.Date as LocalDate exposing (LocalDate)
 import Support.Fuzz as SupportFuzz
-import Test exposing (Test, describe, fuzz, fuzz2, fuzz3, test)
+import Test exposing (Test, describe, fuzz, fuzz2, fuzz3)
 
 
 tests : Test
 tests =
     describe "Data.Calendar"
-        [ describe "shiftMonth"
-            [ fuzz shiftablePeriodFuzzer "shifting by zero is identity" <|
-                \period ->
-                    Calendar.shiftMonth 0 period
-                        |> Expect.equal period
-            , fuzz2 offsetFuzzer shiftablePeriodFuzzer "shifting by n then -n is identity" <|
-                \offset period ->
-                    Calendar.shiftMonth offset (Calendar.shiftMonth -offset period)
-                        |> Expect.equal period
-            , fuzz3 offsetFuzzer offsetFuzzer shiftablePeriodFuzzer "shifts compose additively" <|
-                \first second period ->
-                    Calendar.shiftMonth first (Calendar.shiftMonth second period)
-                        |> Expect.equal (Calendar.shiftMonth (first + second) period)
-            ]
-        , describe "monthCells"
-            [ fuzz SupportFuzz.monthPeriod "aligns cells to the independent first weekday" <|
-                \period ->
-                    expectCellsAligned period
-            , test "century and year-boundary periods align independently" <|
-                \_ ->
-                    Expect.all
-                        (List.map (\period _ -> expectCellsAligned period) boundaryPeriods)
-                        ()
-            ]
-        , describe "month boundaries"
-            [ fuzz SupportFuzz.monthPeriod "monthStart is the first day of the month" <|
-                \period ->
-                    case monthParts period of
-                        Nothing ->
-                            Expect.fail ("unexpected invalid month period: " ++ period)
+        [ fuzz3 offsetFuzzer
+            offsetFuzzer
+            shiftablePeriodFuzzer
+            "shiftMonth is an additive group action"
+          <|
+            \first second period ->
+                Expect.all
+                    [ \_ -> Calendar.shiftMonth 0 period |> Expect.equal period
+                    , \_ ->
+                        Calendar.shiftMonth first (Calendar.shiftMonth second period)
+                            |> Expect.equal (Calendar.shiftMonth (first + second) period)
+                    , \_ ->
+                        Calendar.shiftMonth -first (Calendar.shiftMonth first period)
+                            |> Expect.equal period
+                    ]
+                    ()
+        , fuzz calendarPeriodFuzzer
+            "monthCells aligns the first weekday and contains exactly the month's days"
+          <|
+            \period ->
+                expectCellsAligned period
+        , fuzz calendarPeriodFuzzer
+            "monthStart and monthEnd are the valid first and last days of the month"
+          <|
+            \period ->
+                expectMonthBounds period
+        , fuzz2
+            (Fuzz.intRange -3 24)
+            shiftablePeriodFuzzer
+            "monthsDescending returns count months, or none for non-positive counts"
+          <|
+            \count period ->
+                let
+                    months : List String
+                    months =
+                        Calendar.monthsDescending count period
+                in
+                if count <= 0 then
+                    months |> Expect.equal []
 
-                        Just ( yearValue, month ) ->
-                            Calendar.monthStart period
-                                |> Expect.equal (LocalDate.fromParts yearValue month 1)
-            , fuzz SupportFuzz.monthPeriod "monthEnd is the day before the next month starts" <|
-                \period ->
-                    if period == "9999-12" then
-                        {- The next period would be 10000-01, outside the canonical
-                           four-digit year range, so there is no next monthStart to compare.
-                        -}
-                        Expect.pass
-
-                    else
-                        let
-                            expected : Maybe LocalDate
-                            expected =
-                                Calendar.monthStart (Calendar.shiftMonth 1 period)
-                                    |> Maybe.map (LocalDate.addDays -1)
-                        in
-                        Calendar.monthEnd period
-                            |> Expect.equal expected
-            , test "century and year-boundary periods have direct start and end dates" <|
-                \_ ->
-                    Expect.all
-                        (List.map (\period _ -> expectMonthBounds period) boundaryPeriods)
-                        ()
-            ]
-        , describe "monthsDescending"
-            [ fuzz2
-                (Fuzz.intRange 1 24)
-                shiftablePeriodFuzzer
-                "returns count months starting at the requested month"
-              <|
-                \count period ->
-                    let
-                        months : List String
-                        months =
-                            Calendar.monthsDescending count period
-                    in
+                else
                     Expect.all
                         [ \_ -> List.length months |> Expect.equal count
                         , \_ -> List.head months |> Expect.equal (Just period)
                         , \_ -> expectDescending months
                         ]
                         ()
-            , fuzz2
-                (Fuzz.intRange -50 0)
-                shiftablePeriodFuzzer
-                "a non-positive count returns no months"
-              <|
-                \count period ->
-                    Calendar.monthsDescending count period
-                        |> Expect.equal []
-            ]
-        , describe "dayKey"
-            [ fuzz2
-                SupportFuzz.monthPeriod
-                (Fuzz.intRange 1 9)
-                "single-digit days are zero-padded"
-              <|
-                \period day ->
-                    let
-                        key : String
-                        key =
-                            Calendar.dayKey period day
-                    in
-                    Expect.all
-                        [ \_ -> String.startsWith period key |> Expect.equal True
-                        , \_ ->
-                            String.endsWith ("-0" ++ String.fromInt day) key
-                                |> Expect.equal True
-                        , \_ -> String.length key |> Expect.equal (String.length period + 3)
-                        ]
-                        ()
-            , fuzz
-                (SupportFuzz.monthPeriod |> Fuzz.andThen periodAndDayFuzzer)
-                "dayKey parses back to the same date"
-              <|
-                \( period, day ) ->
-                    case monthParts period of
-                        Nothing ->
-                            Expect.fail ("unexpected invalid month period: " ++ period)
+        , fuzz
+            (SupportFuzz.monthPeriod |> Fuzz.andThen periodAndDayFuzzer)
+            "dayKey zero-pads single-digit days and parses back to the same date"
+          <|
+            \( period, day ) ->
+                case monthParts period of
+                    Nothing ->
+                        Expect.fail ("unexpected invalid month period: " ++ period)
 
-                        Just ( yearValue, month ) ->
-                            LocalDate.fromString (Calendar.dayKey period day)
-                                |> Expect.equal (LocalDate.fromParts yearValue month day)
-            , test "year-boundary periods parse at their first and last days" <|
-                \_ ->
-                    Expect.all
-                        [ \_ ->
-                            LocalDate.fromString (Calendar.dayKey "1000-01" 1)
-                                |> Expect.equal (LocalDate.fromParts 1000 1 1)
-                        , \_ ->
-                            LocalDate.fromString (Calendar.dayKey "9999-12" 31)
-                                |> Expect.equal (LocalDate.fromParts 9999 12 31)
-                        ]
-                        ()
-            ]
+                    Just ( yearValue, month ) ->
+                        let
+                            key : String
+                            key =
+                                Calendar.dayKey period day
+                        in
+                        Expect.all
+                            [ \_ -> String.startsWith period key |> Expect.equal True
+                            , \_ ->
+                                String.endsWith ("-" ++ pad2 day) key
+                                    |> Expect.equal True
+                            , \_ ->
+                                String.length key
+                                    |> Expect.equal (String.length period + 3)
+                            , \_ ->
+                                LocalDate.fromString key
+                                    |> Expect.equal (LocalDate.fromParts yearValue month day)
+                            , \_ ->
+                                LocalDate.fromString (Calendar.dayKey "1000-01" 1)
+                                    |> Expect.equal (LocalDate.fromParts 1000 1 1)
+                            , \_ ->
+                                LocalDate.fromString (Calendar.dayKey "9999-12" 31)
+                                    |> Expect.equal (LocalDate.fromParts 9999 12 31)
+                            ]
+                            ()
         ]
-
-
-
--- Fuzzers
 
 
 offsetFuzzer : Fuzzer Int
@@ -154,11 +103,17 @@ offsetFuzzer =
 shiftablePeriodFuzzer : Fuzzer String
 shiftablePeriodFuzzer =
     Fuzz.map2
-        (\yearValue month ->
-            String.fromInt yearValue ++ "-" ++ pad2 month
-        )
+        (\yearValue month -> String.fromInt yearValue ++ "-" ++ pad2 month)
         (Fuzz.intRange 1100 9899)
         (Fuzz.intRange 1 12)
+
+
+calendarPeriodFuzzer : Fuzzer String
+calendarPeriodFuzzer =
+    Fuzz.frequency
+        [ ( 5, SupportFuzz.monthPeriod )
+        , ( 1, Fuzz.oneOfValues boundaryPeriods )
+        ]
 
 
 periodAndDayFuzzer : String -> Fuzzer ( String, Int )
@@ -171,10 +126,6 @@ periodAndDayFuzzer period =
 
         Nothing ->
             Fuzz.invalid ("invalid month period: " ++ period)
-
-
-
--- References and assertions
 
 
 boundaryPeriods : List String
@@ -338,18 +289,36 @@ expectMonthBounds period =
             Expect.fail ("unexpected invalid month period: " ++ period)
 
         Just ( yearValue, month ) ->
+            let
+                end : Maybe LocalDate
+                end =
+                    Calendar.monthEnd period
+            in
             Expect.all
                 [ \_ ->
                     Calendar.monthStart period
                         |> Expect.equal (LocalDate.fromParts yearValue month 1)
                 , \_ ->
-                    Calendar.monthEnd period
+                    end
                         |> Expect.equal
                             (LocalDate.fromParts
                                 yearValue
                                 month
                                 (referenceDaysInMonth yearValue month)
                             )
+                , \_ ->
+                    if period == "9999-12" then
+                        {- The next period would be 10000-01, outside the
+                           canonical four-digit year range.
+                        -}
+                        Expect.pass
+
+                    else
+                        end
+                            |> Expect.equal
+                                (Calendar.monthStart (Calendar.shiftMonth 1 period)
+                                    |> Maybe.map (LocalDate.addDays -1)
+                                )
                 ]
                 ()
 

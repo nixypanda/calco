@@ -2,28 +2,34 @@ module Data.LocalCtxTest exposing (tests)
 
 import Data.LocalCtx as LocalCtx
 import Expect
-import Fuzz
+import Lib.Date as LocalDate
 import Support.Fuzz as Support
-import Test exposing (Test, describe, fuzz)
+import Test exposing (Test, describe, fuzz3)
 
 
 tests : Test
 tests =
     describe "Data.LocalCtx.fromRaw"
-        [ fuzz (Fuzz.map2 Tuple.pair Support.year Support.segment)
-            "invalid canonical date strings are rejected"
+        [ fuzz3
+            Support.localDate
+            Support.year
+            Support.segment
+            "fromRaw roundtrips canonical dates and rejects invalid ones"
           <|
-            \( year, timezone ) ->
-                Support.invalidCanonicalDateStrings year
-                    |> List.map
-                        (\raw ->
-                            LocalCtx.fromRaw { date = raw, timezone = timezone }
-                                |> Expect.equal Nothing
-                        )
-                    |> expectAll
+            \date yearValue timezone ->
+                Expect.all
+                    [ \_ ->
+                        LocalCtx.fromRaw
+                            { date = LocalDate.format date, timezone = timezone }
+                            |> Expect.equal (Just { date = date, timezone = timezone })
+                    , \_ ->
+                        Support.invalidCanonicalDateStrings yearValue
+                            |> List.all
+                                (\raw ->
+                                    LocalCtx.fromRaw { date = raw, timezone = timezone }
+                                        == Nothing
+                                )
+                            |> Expect.equal True
+                    ]
+                    ()
         ]
-
-
-expectAll : List Expect.Expectation -> Expect.Expectation
-expectAll expectations =
-    Expect.all (List.map always expectations) ()

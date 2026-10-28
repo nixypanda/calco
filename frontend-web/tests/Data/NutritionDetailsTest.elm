@@ -3,79 +3,57 @@ module Data.NutritionDetailsTest exposing (tests)
 import Data.NutritionDetails as Details exposing (GuidanceKind(..), NutrientStatus(..))
 import Expect
 import Fuzz exposing (Fuzzer)
-import Test exposing (Test, describe, fuzz, fuzz2, fuzz3)
+import Test exposing (Test, describe, fuzz2, fuzz3)
 
 
 tests : Test
 tests =
     describe "Data.NutritionDetails"
-        [ describe "progressPercent"
-            [ fuzz2 maybeFloatFuzzer maybeFloatFuzzer "informational nutrients have no progress" <|
-                \known reference ->
-                    Details.progressPercent (nutrient Informational known reference Available)
-                        |> Expect.equal Nothing
-            , fuzz3
-                nonInformationalGuidanceFuzzer
-                maybeFloatFuzzer
-                maybeFloatFuzzer
-                "is defined exactly when the reference is positive"
-              <|
-                \guidance known reference ->
-                    let
-                        result : Maybe Float
-                        result =
-                            Details.progressPercent
-                                (nutrient guidance known reference Available)
-                    in
-                    case ( known, reference ) of
-                        ( Just knownAmount, Just referenceAmount ) ->
-                            if referenceAmount > 0 then
-                                case result of
-                                    Just percent ->
-                                        percent
-                                            |> Expect.within progressTolerance
-                                                ((knownAmount / referenceAmount) * 100)
+        [ fuzz3
+            guidanceKindFuzzer
+            maybeFloatFuzzer
+            maybeFloatFuzzer
+            "progressPercent is defined exactly for non-informational positive references"
+          <|
+            \guidance known reference ->
+                let
+                    expected : Maybe Float
+                    expected =
+                        case ( guidance, known, reference ) of
+                            ( Informational, _, _ ) ->
+                                Nothing
 
-                                    Nothing ->
-                                        Expect.fail "positive references must produce progress"
+                            ( _, Just knownAmount, Just referenceAmount ) ->
+                                if referenceAmount > 0 then
+                                    Just ((knownAmount / referenceAmount) * 100)
 
-                            else
-                                result |> Expect.equal Nothing
+                                else
+                                    Nothing
 
-                        _ ->
-                            result |> Expect.equal Nothing
-            ]
-        , describe "isDangerous"
-            [ fuzz2
-                guidanceKindFuzzer
-                nutrientStatusFuzzer
-                "is true exactly for Maximum and OverLimit"
-              <|
-                \guidance status ->
-                    Details.isDangerous (nutrient guidance Nothing Nothing status)
-                        |> Expect.equal
-                            (guidance == Details.Maximum && status == Details.OverLimit)
-            , fuzz2
-                nonMaximumGuidanceFuzzer
-                nutrientStatusFuzzer
-                "informational and adequacy nutrients are never dangerous"
-              <|
-                \guidance status ->
-                    Details.isDangerous (nutrient guidance Nothing Nothing status)
-                        |> Expect.equal False
-            , fuzz
-                nonOverLimitStatusFuzzer
-                "maximum nutrients below their limit are not dangerous"
-              <|
-                \status ->
-                    Details.isDangerous (nutrient Details.Maximum Nothing Nothing status)
-                        |> Expect.equal False
-            ]
+                            _ ->
+                                Nothing
+
+                    actual : Maybe Float
+                    actual =
+                        Details.progressPercent (nutrient guidance known reference Available)
+                in
+                case ( actual, expected ) of
+                    ( Just actualProgress, Just expectedProgress ) ->
+                        actualProgress
+                            |> Expect.within progressTolerance expectedProgress
+
+                    _ ->
+                        actual |> Expect.equal expected
+        , fuzz2
+            guidanceKindFuzzer
+            nutrientStatusFuzzer
+            "isDangerous is true exactly for Maximum and OverLimit"
+          <|
+            \guidance status ->
+                Details.isDangerous (nutrient guidance Nothing Nothing status)
+                    |> Expect.equal
+                        (guidance == Details.Maximum && status == Details.OverLimit)
         ]
-
-
-
--- Fuzzers
 
 
 maybeFloatFuzzer : Fuzzer (Maybe Float)
@@ -86,16 +64,6 @@ maybeFloatFuzzer =
 guidanceKindFuzzer : Fuzzer GuidanceKind
 guidanceKindFuzzer =
     Fuzz.oneOfValues [ Details.Informational, Details.Adequacy, Details.Maximum ]
-
-
-nonInformationalGuidanceFuzzer : Fuzzer GuidanceKind
-nonInformationalGuidanceFuzzer =
-    Fuzz.oneOfValues [ Details.Adequacy, Details.Maximum ]
-
-
-nonMaximumGuidanceFuzzer : Fuzzer GuidanceKind
-nonMaximumGuidanceFuzzer =
-    Fuzz.oneOfValues [ Details.Informational, Details.Adequacy ]
 
 
 nutrientStatusFuzzer : Fuzzer NutrientStatus
@@ -109,22 +77,6 @@ nutrientStatusFuzzer =
         , Details.WithinLimit
         , Details.OverLimit
         ]
-
-
-nonOverLimitStatusFuzzer : Fuzzer NutrientStatus
-nonOverLimitStatusFuzzer =
-    Fuzz.oneOfValues
-        [ Details.NoData
-        , Details.PartialData
-        , Details.Available
-        , Details.BelowReference
-        , Details.MetReference
-        , Details.WithinLimit
-        ]
-
-
-
--- References
 
 
 progressTolerance : Expect.FloatingPointTolerance

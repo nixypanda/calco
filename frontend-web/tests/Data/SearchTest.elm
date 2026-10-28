@@ -7,408 +7,267 @@ import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Platform.Cmd as Cmd
 import Support.Fuzz as SupportFuzz
-import Test exposing (Test, describe, fuzz, fuzz2, fuzz3, test)
+import Test exposing (Test, describe, fuzz, fuzz2, fuzz3)
 
 
 tests : Test
 tests =
     describe "Data.Search"
-        [ describe "completion navigation"
-            [ fuzz (Fuzz.maybe completionFuzzer) "empty options never yield a selection" <|
-                \current ->
-                    Expect.all
-                        [ \_ -> Search.nextCompletion current [] |> Expect.equal Nothing
-                        , \_ -> Search.previousCompletion current [] |> Expect.equal Nothing
-                        ]
-                        ()
-            , fuzz2
-                (Fuzz.maybe completionFuzzer)
-                completionsFuzzer
-                "the selection stays within the options"
-              <|
-                \current options ->
-                    Expect.all
-                        [ \_ ->
-                            expectCompletionMember options (Search.nextCompletion current options)
-                        , \_ ->
-                            expectCompletionMember options
-                                (Search.previousCompletion current options)
-                        ]
-                        ()
-            , fuzz2
-                uniqueCompletionsFuzzer
-                (Fuzz.intRange 0 1000)
-                "nextCompletion never moves to an earlier option"
-              <|
-                \options rawIndex ->
-                    let
-                        index : Int
-                        index =
-                            modBy (max 1 (List.length options)) rawIndex
+        [ fuzz uniqueCompletionsFuzzer
+            "completion navigation moves exactly one step and clamps at both ends"
+          <|
+            \options ->
+                navigationExpectations options
+                    |> expectAll
+        , fuzz2 completionFuzzer
+            completionsFuzzer
+            "completionIndex reports the first exact index or Nothing"
+          <|
+            \target options ->
+                case Search.completionIndex target options of
+                    Nothing ->
+                        List.member target options
+                            |> Expect.equal False
 
-                        current : Maybe Completion
-                        current =
-                            List.drop index options |> List.head
-                    in
-                    case current of
-                        Nothing ->
-                            Expect.pass
+                    Just index ->
+                        Expect.all
+                            [ \_ ->
+                                List.drop index options
+                                    |> List.head
+                                    |> Expect.equal (Just target)
+                            , \_ ->
+                                List.take index options
+                                    |> List.member target
+                                    |> Expect.equal False
+                            ]
+                            ()
+        , fuzz applyCaseFuzzer
+            "applyCompletion replaces only the last token and category values roundtrip"
+          <|
+            \caseValue ->
+                case caseValue of
+                    OperatorApply prefix token ->
+                        let
+                            label : String
+                            label =
+                                "replacement-" ++ token
+                        in
+                        Search.applyCompletion (OperatorCompletion label) (prefix ++ token)
+                            |> Expect.equal (prefix ++ label)
 
-                        Just selected ->
-                            case
-                                ( Search.completionIndex selected options
-                                , Search.nextCompletion (Just selected) options
-                                    |> Maybe.andThen
-                                        (\next -> Search.completionIndex next options)
+                    CategoryApply prefix value ->
+                        let
+                            replacement : String
+                            replacement =
+                                prefix ++ Text.quoteIfWhitespace value
+
+                            applied : String
+                            applied =
+                                Search.applyCompletion
+                                    (CategoryCompletion replacement 1)
+                                    ("apple " ++ prefix ++ "typed")
+                        in
+                        Expect.all
+                            [ \_ -> applied |> Expect.equal ("apple " ++ replacement)
+                            , \_ -> Search.categoryQuery applied |> Expect.equal (Just value)
+                            ]
+                            ()
+        , fuzz completionsCaseFuzzer
+            "completions handles operator, empty, category, plain, and non-category colon tokens"
+          <|
+            \caseValue ->
+                Expect.all
+                    [ \_ -> Search.completions "apple" [] |> Expect.equal []
+                    , \_ ->
+                        Search.completions caseValue.query caseValue.suggestions
+                            |> Expect.equal caseValue.expected
+                    ]
+                    ()
+        , fuzz3
+            queryInputFuzzer
+            (Fuzz.list suggestionFuzzer)
+            queryStateFuzzer
+            "onQueryChanged advances tokens, preserves query text, and gates category requests"
+          <|
+            \raw suggestions state ->
+                let
+                    ( next, request ) =
+                        Search.onQueryChanged raw state
+
+                    categoryValue : Maybe String
+                    categoryValue =
+                        Search.categoryQuery raw
+
+                    expectedRequest : Maybe Search.CategoryRequest
+                    expectedRequest =
+                        categoryValue
+                            |> Maybe.map
+                                (\value ->
+                                    { token = Ticket.next state.categoryToken, query = value }
                                 )
-                            of
-                                ( Just before, Just after ) ->
-                                    after |> Expect.atLeast before
 
-                                _ ->
-                                    Expect.fail "nextCompletion must resolve to an indexed option"
-            , fuzz uniqueCompletionsFuzzer "nextCompletion moves to the exact adjacent option" <|
-                \options ->
-                    case options of
-                        [] ->
-                            Expect.pass
+                    expectedSuggestions : List CategorySuggestion
+                    expectedSuggestions =
+                        case categoryValue of
+                            Nothing ->
+                                []
 
-                        _ ->
-                            List.map2
-                                (\current expected ->
-                                    Search.nextCompletion (Just current) options
-                                        |> Expect.equal (Just expected)
-                                )
-                                (List.take (List.length options - 1) options)
-                                (List.drop 1 options)
-                                |> expectAll
-            , fuzz
-                uniqueCompletionsFuzzer
-                "previousCompletion moves to the exact adjacent option"
-              <|
-                \options ->
-                    case options of
-                        [] ->
-                            Expect.pass
+                            Just _ ->
+                                if String.isEmpty (String.trim raw) then
+                                    []
 
-                        _ ->
-                            List.map2
-                                (\current expected ->
-                                    Search.previousCompletion (Just current) options
-                                        |> Expect.equal (Just expected)
-                                )
-                                (List.drop 1 options)
-                                (List.take (List.length options - 1) options)
-                                |> expectAll
-            , fuzz completionsFuzzer "nextCompletion stays on the last option" <|
-                \options ->
-                    let
-                        unique : List Completion
-                        unique =
-                            uniqueCompletions options
-                    in
-                    case List.reverse unique |> List.head of
-                        Nothing ->
-                            Expect.pass
-
-                        Just last ->
-                            Search.nextCompletion (Just last) unique
-                                |> Expect.equal (Just last)
-            , fuzz completionsFuzzer "previousCompletion stays on the first option" <|
-                \options ->
-                    let
-                        unique : List Completion
-                        unique =
-                            uniqueCompletions options
-                    in
-                    case List.head unique of
-                        Nothing ->
-                            Expect.pass
-
-                        Just first ->
-                            Search.previousCompletion (Just first) unique
-                                |> Expect.equal (Just first)
-            , fuzz categoryCompletionsFuzzer "a missing selection falls back to the first option" <|
-                \options ->
-                    let
-                        current : Completion
-                        current =
-                            OperatorCompletion "not-a-category-completion"
-                    in
-                    Expect.all
-                        [ \_ ->
-                            Search.nextCompletion (Just current) options
-                                |> Expect.equal (List.head options)
-                        , \_ ->
-                            Search.previousCompletion (Just current) options
-                                |> Expect.equal (List.head options)
-                        ]
-                        ()
-            ]
-        , describe "completionIndex"
-            [ fuzz2 completionFuzzer completionsFuzzer "reports the first matching index" <|
-                \target options ->
-                    case Search.completionIndex target options of
-                        Nothing ->
-                            List.member target options
-                                |> Expect.equal False
-
-                        Just index ->
-                            Expect.all
-                                [ \_ ->
-                                    List.drop index options
-                                        |> List.head
-                                        |> Expect.equal (Just target)
-                                , \_ ->
-                                    List.take index options
-                                        |> List.member target
-                                        |> Expect.equal False
-                                ]
-                                ()
-            ]
-        , describe "applyCompletion"
-            [ fuzz2 completionPrefixFuzzer wordFuzzer "only the last token changes" <|
-                \prefix token ->
-                    let
-                        label : String
-                        label =
-                            "replacement-" ++ token
-                    in
-                    Search.applyCompletion (OperatorCompletion label) (prefix ++ token)
-                        |> Expect.equal (prefix ++ label)
-            , fuzz2
-                categoryPrefixFuzzer
-                categoryValueFuzzer
-                "a category completion replaces only the last token"
-              <|
-                \prefix value ->
-                    let
-                        replacement : String
-                        replacement =
-                            prefix ++ Text.quoteIfWhitespace value
-
-                        completion : Completion
-                        completion =
-                            CategoryCompletion replacement 1
-                    in
-                    Search.applyCompletion completion ("apple " ++ prefix ++ "typed")
-                        |> Expect.equal ("apple " ++ replacement)
-            , fuzz2
-                categoryPrefixFuzzer
-                categoryValueFuzzer
-                "category completions roundtrip through categoryQuery"
-              <|
-                \prefix value ->
-                    let
-                        completion : Completion
-                        completion =
-                            CategoryCompletion (prefix ++ Text.quoteIfWhitespace value) 1
-                    in
-                    Search.applyCompletion completion (prefix ++ "typed")
-                        |> Search.categoryQuery
-                        |> Expect.equal (Just value)
-            , fuzz categoryValueFuzzer "category values survive the quote and strip roundtrip" <|
-                \value ->
-                    Text.stripBoundingQuotes (Text.quoteIfWhitespace value)
-                        |> Expect.equal value
-            ]
-        , describe "completions"
-            [ fuzz operatorTokenFuzzer "operator prefixes suggest their full operator" <|
-                \( token, operator ) ->
-                    Search.completions token []
-                        |> Expect.equal [ OperatorCompletion operator ]
-            , fuzz2
-                whitespaceFuzzer
-                (Fuzz.list suggestionFuzzer)
-                "an empty current token has no completions"
-              <|
-                \query suggestions ->
-                    Search.completions query suggestions
-                        |> Expect.equal []
-            , fuzz2
-                categoryPrefixFuzzer
-                (Fuzz.list suggestionFuzzer)
-                "category completions preserve order, values, and counts"
-              <|
-                \prefix suggestions ->
-                    let
-                        expected : List Completion
-                        expected =
-                            List.map
-                                (\suggestion ->
-                                    CategoryCompletion
-                                        (prefix ++ Text.quoteIfWhitespace suggestion.value)
-                                        suggestion.count
-                                )
-                                suggestions
-                    in
-                    Search.completions (prefix ++ "typed") suggestions
-                        |> Expect.equal expected
-            , fuzz2
-                (Fuzz.map (\value -> "foo:" ++ value) wordFuzzer)
-                (Fuzz.map2 (::) suggestionFuzzer (Fuzz.list suggestionFuzzer))
-                "a non-category colon token has no completions"
-              <|
-                \query suggestions ->
-                    Search.completions query suggestions
-                        |> Expect.equal []
-            ]
-        , describe "onQueryChanged"
-            [ fuzz2
-                Fuzz.string
-                queryStateFuzzer
-                "advances both tickets by one and preserves the query"
-              <|
-                \raw state ->
-                    let
-                        next : QueryState
-                        next =
-                            Tuple.first (Search.onQueryChanged raw state)
-                    in
-                    Expect.all
-                        [ \_ -> next.searchToken |> Expect.equal (Ticket.next state.searchToken)
-                        , \_ -> next.categoryToken |> Expect.equal (Ticket.next state.categoryToken)
-                        , \_ -> next.query |> Expect.equal raw
-                        ]
-                        ()
-            , fuzz2
-                whitespaceFuzzer
-                queryStateFuzzer
-                "whitespace queries clear suggestions and request no categories"
-              <|
-                \raw state ->
-                    let
-                        ( next, request ) =
-                            Search.onQueryChanged raw state
-                    in
-                    Expect.all
-                        [ \_ -> request |> Expect.equal Nothing
-                        , \_ -> next.categorySuggestions |> Expect.equal []
-                        ]
-                        ()
-            , fuzz2 plainQueryFuzzer queryStateFuzzer "plain queries clear category suggestions" <|
-                \raw state ->
-                    let
-                        ( next, request ) =
-                            Search.onQueryChanged raw state
-                    in
-                    Expect.all
-                        [ \_ -> request |> Expect.equal Nothing
-                        , \_ -> next.categorySuggestions |> Expect.equal []
-                        ]
-                        ()
-            , fuzz3
-                categoryPrefixFuzzer
-                categoryValueFuzzer
-                queryStateFuzzer
-                "category queries request the new token and value"
-              <|
-                \prefix value state ->
-                    let
-                        raw : String
-                        raw =
-                            prefix ++ Text.quoteIfWhitespace value
-
-                        ( next, request ) =
-                            Search.onQueryChanged raw state
-                    in
-                    Expect.all
-                        [ \_ ->
-                            request
-                                |> Expect.equal
-                                    (Just
-                                        { token = Ticket.next state.categoryToken
-                                        , query = value
-                                        }
-                                    )
-                        , \_ ->
-                            next.categorySuggestions
-                                |> Expect.equal state.categorySuggestions
-                        ]
-                        ()
-            ]
-        , describe "setCategorySuggestions"
-            [ test "a live category token updates the suggestions" <|
-                \_ ->
-                    let
-                        state : QueryState
-                        state =
-                            Search.empty
-
-                        suggestions : List CategorySuggestion
-                        suggestions =
-                            [ { value = "fruit", count = 3 } ]
-                    in
-                    Search.setCategorySuggestions state.categoryToken suggestions state
-                        |> Expect.equal { state | categorySuggestions = suggestions }
-            , test "the next category token is stale and leaves the state unchanged" <|
-                \_ ->
-                    let
-                        state : QueryState
-                        state =
-                            Search.empty
-                    in
-                    Search.setCategorySuggestions
-                        (Ticket.next state.categoryToken)
-                        [ { value = "fruit", count = 3 } ]
-                        state
-                        |> Expect.equal state
-            , fuzz3
-                queryStateFuzzer
-                ticketFuzzer
-                (Fuzz.list suggestionFuzzer)
-                "applies only the live category token"
-              <|
-                \state token suggestions ->
-                    let
-                        expected : QueryState
-                        expected =
-                            if token == state.categoryToken then
-                                { state | categorySuggestions = suggestions }
-
-                            else
-                                state
-                    in
-                    Search.setCategorySuggestions token suggestions state
-                        |> Expect.equal expected
-            ]
-        , describe "onQueryChangedDebounced"
-            [ fuzz2 Fuzz.string queryStateFuzzer "shares onQueryChanged's state transition" <|
-                \raw state ->
-                    Tuple.first (Search.onQueryChangedDebounced raw state debounce)
-                        |> Expect.equal (Tuple.first (Search.onQueryChanged raw state))
-            , fuzz2 whitespaceFuzzer queryStateFuzzer "empty or whitespace emits no command" <|
-                \raw state ->
-                    let
-                        ( next, command ) =
-                            Search.onQueryChangedDebounced raw state debounce
-                    in
-                    Expect.all
-                        [ \_ -> command |> Expect.equal Cmd.none
-                        , \_ ->
+                                else
+                                    state.categorySuggestions
+                in
+                Expect.all
+                    [ \_ ->
+                        next.searchToken
+                            |> Expect.equal (Ticket.next state.searchToken)
+                    , \_ ->
+                        next.categoryToken
+                            |> Expect.equal (Ticket.next state.categoryToken)
+                    , \_ -> next.query |> Expect.equal raw
+                    , \_ -> request |> Expect.equal expectedRequest
+                    , \_ ->
+                        next.categorySuggestions
+                            |> Expect.equal expectedSuggestions
+                    , \_ ->
+                        Search.setCategorySuggestions next.categoryToken suggestions next
+                            |> Expect.equal { next | categorySuggestions = suggestions }
+                    , \_ ->
+                        Search.setCategorySuggestions
+                            (Ticket.next next.categoryToken)
+                            suggestions
                             next
-                                |> Expect.equal (Tuple.first (Search.onQueryChanged raw state))
-                        ]
-                        ()
-            , fuzz2 plainQueryFuzzer queryStateFuzzer "a non-empty query emits a command" <|
-                \raw state ->
-                    let
-                        ( next, command ) =
-                            Search.onQueryChangedDebounced raw state debounce
-                    in
-                    Expect.all
-                        [ \_ -> command |> Expect.notEqual Cmd.none
-                        , \_ ->
-                            next
-                                |> Expect.equal (Tuple.first (Search.onQueryChanged raw state))
-                        ]
-                        ()
-            ]
+                            |> Expect.equal next
+                    ]
+                    ()
+        , fuzz2 queryInputFuzzer
+            queryStateFuzzer
+            "onQueryChangedDebounced shares the state transition and commands only non-empty text"
+          <|
+            \raw state ->
+                let
+                    ( next, command ) =
+                        Search.onQueryChangedDebounced raw state debounce
+
+                    ( expectedState, _ ) =
+                        Search.onQueryChanged raw state
+                in
+                Expect.all
+                    [ \_ -> next |> Expect.equal expectedState
+                    , \_ ->
+                        (command == Cmd.none)
+                            |> Expect.equal (String.isEmpty (String.trim raw))
+                    ]
+                    ()
         ]
 
 
+type ApplyCase
+    = OperatorApply String String
+    | CategoryApply String String
 
--- Fuzzers
+
+type alias CompletionsCase =
+    { query : String
+    , suggestions : List CategorySuggestion
+    , expected : List Completion
+    }
+
+
+applyCaseFuzzer : Fuzzer ApplyCase
+applyCaseFuzzer =
+    Fuzz.oneOf
+        [ Fuzz.map2 OperatorApply completionPrefixFuzzer wordFuzzer
+        , Fuzz.map2 CategoryApply categoryPrefixFuzzer categoryValueFuzzer
+        ]
+
+
+completionsCaseFuzzer : Fuzzer CompletionsCase
+completionsCaseFuzzer =
+    Fuzz.oneOf
+        [ Fuzz.map
+            (\( token, operator ) ->
+                { query = token, suggestions = [], expected = [ OperatorCompletion operator ] }
+            )
+            operatorTokenFuzzer
+        , Fuzz.map2
+            (\query suggestions ->
+                { query = query, suggestions = suggestions, expected = [] }
+            )
+            whitespaceFuzzer
+            (Fuzz.list suggestionFuzzer)
+        , Fuzz.map2
+            (\prefix suggestions ->
+                { query = prefix ++ "typed"
+                , suggestions = suggestions
+                , expected =
+                    List.map
+                        (\suggestion ->
+                            CategoryCompletion
+                                (prefix ++ Text.quoteIfWhitespace suggestion.value)
+                                suggestion.count
+                        )
+                        suggestions
+                }
+            )
+            categoryPrefixFuzzer
+            (Fuzz.list suggestionFuzzer)
+        , Fuzz.map2
+            (\word suggestions ->
+                { query = word, suggestions = suggestions, expected = [] }
+            )
+            wordFuzzer
+            (Fuzz.list suggestionFuzzer)
+        , Fuzz.map2
+            (\word suggestions ->
+                { query = "foo:" ++ word, suggestions = suggestions, expected = [] }
+            )
+            wordFuzzer
+            (Fuzz.list suggestionFuzzer)
+        ]
+
+
+navigationExpectations : List Completion -> List Expect.Expectation
+navigationExpectations options =
+    [ Search.nextCompletion Nothing options |> Expect.equal (List.head options)
+    , Search.previousCompletion Nothing options |> Expect.equal (List.head options)
+    , Search.nextCompletion (Just missingCompletion) options |> Expect.equal (List.head options)
+    , Search.previousCompletion (Just missingCompletion) options
+        |> Expect.equal (List.head options)
+    ]
+        ++ List.indexedMap
+            (\index option ->
+                let
+                    nextExpected : Completion
+                    nextExpected =
+                        List.drop (index + 1) options
+                            |> List.head
+                            |> Maybe.withDefault option
+
+                    previousExpected : Completion
+                    previousExpected =
+                        List.drop (max 0 (index - 1)) options
+                            |> List.head
+                            |> Maybe.withDefault option
+                in
+                Expect.all
+                    [ \_ ->
+                        Search.nextCompletion (Just option) options
+                            |> Expect.equal (Just nextExpected)
+                    , \_ ->
+                        Search.previousCompletion (Just option) options
+                            |> Expect.equal (Just previousExpected)
+                    ]
+                    ()
+            )
+            options
+
+
+missingCompletion : Completion
+missingCompletion =
+    OperatorCompletion "missing-option"
 
 
 ticketFuzzer : Fuzzer Ticket
@@ -467,12 +326,6 @@ uniqueCompletionsFuzzer =
         (Fuzz.intRange 0 20)
 
 
-categoryCompletionsFuzzer : Fuzzer (List Completion)
-categoryCompletionsFuzzer =
-    Fuzz.list
-        (Fuzz.map2 CategoryCompletion SupportFuzz.segment (Fuzz.intRange 0 1000))
-
-
 queryStateFuzzer : Fuzzer QueryState
 queryStateFuzzer =
     Fuzz.map4
@@ -522,6 +375,18 @@ plainQueryFuzzer =
         (Fuzz.list wordFuzzer)
 
 
+queryInputFuzzer : Fuzzer String
+queryInputFuzzer =
+    Fuzz.oneOf
+        [ whitespaceFuzzer
+        , plainQueryFuzzer
+        , Fuzz.map2
+            (\prefix value -> prefix ++ Text.quoteIfWhitespace value)
+            categoryPrefixFuzzer
+            categoryValueFuzzer
+        ]
+
+
 operatorTokenFuzzer : Fuzzer ( String, String )
 operatorTokenFuzzer =
     Fuzz.map2
@@ -541,10 +406,6 @@ operatorTokenFuzzer =
         (Fuzz.intRange 1 8)
 
 
-
--- Helpers
-
-
 debounce : Search.Debounce ()
 debounce =
     { delayMs = 0
@@ -555,37 +416,4 @@ debounce =
 
 expectAll : List Expect.Expectation -> Expect.Expectation
 expectAll expectations =
-    case expectations of
-        [] ->
-            Expect.pass
-
-        _ ->
-            Expect.all (List.map (\expectation _ -> expectation) expectations) ()
-
-
-uniqueCompletions : List Completion -> List Completion
-uniqueCompletions options =
-    List.foldl
-        (\completion unique ->
-            if List.member completion unique then
-                unique
-
-            else
-                unique ++ [ completion ]
-        )
-        []
-        options
-
-
-expectCompletionMember : List Completion -> Maybe Completion -> Expect.Expectation
-expectCompletionMember options result =
-    if List.isEmpty options then
-        result |> Expect.equal Nothing
-
-    else
-        case result of
-            Just chosen ->
-                List.member chosen options |> Expect.equal True
-
-            Nothing ->
-                Expect.fail "non-empty options must yield a completion"
+    Expect.all (List.map always expectations) ()

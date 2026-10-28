@@ -7,6 +7,10 @@ constructor, plus optional-field variants (`Nothing` dates, slots, months, and
 lookup notes), so the folds also classify the generic user routes rather than
 only fully-populated examples.
 
+This is the allowed exhaustive-decision exception: `resolveRoute` is consumed by
+every route and page, so a page story cannot cover the whole decision surface
+without duplicating this table.
+
 -}
 
 import Access exposing (RouteDecision(..))
@@ -25,8 +29,7 @@ tests =
         , noAdminBootstrapsEveryRoute
         , adminSeesOnlyAdminRoutes
         , unauthenticatedSeesOnlyLogin
-        , normalUserSeesOnlyUserRoutes
-        , otherRoleFollowsNormalUserBranch
+        , authenticatedNonAdminSeesOnlyUserRoutes
         ]
 
 
@@ -107,31 +110,24 @@ unauthenticatedSeesOnlyLogin =
                 |> expectAll
 
 
-normalUserSeesOnlyUserRoutes : Test
-normalUserSeesOnlyUserRoutes =
-    test "a normal user renders user routes and redirects every other route" <|
-        \_ ->
-            testRoutes
-                |> List.map
-                    (\route ->
-                        Access.resolveRoute normalUser True route
-                            |> Expect.equal (normalUserDecision route)
-                    )
-                |> expectAll
-
-
-{-| An authenticated identity whose role is neither admin nor user must follow
-the normal-user branch rather than being treated as an admin.
+{-| Both a normal user and an authenticated identity with an unknown role must
+follow the normal-user branch; a role that is neither admin nor user is never
+treated as an admin.
 -}
-otherRoleFollowsNormalUserBranch : Test
-otherRoleFollowsNormalUserBranch =
-    test "an unknown role follows the normal-user branch" <|
+authenticatedNonAdminSeesOnlyUserRoutes : Test
+authenticatedNonAdminSeesOnlyUserRoutes =
+    test "an authenticated non-admin renders user routes and redirects the rest" <|
         \_ ->
-            testRoutes
-                |> List.map
-                    (\route ->
-                        Access.resolveRoute otherRoleUser True route
-                            |> Expect.equal (normalUserDecision route)
+            [ ( "user", normalUser ), ( "other role", otherRoleUser ) ]
+                |> List.concatMap
+                    (\( label, session ) ->
+                        testRoutes
+                            |> List.map
+                                (\route ->
+                                    Access.resolveRoute session True route
+                                        |> Expect.equal (normalUserDecision route)
+                                        |> Expect.onFail label
+                                )
                     )
                 |> expectAll
 
