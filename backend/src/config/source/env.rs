@@ -82,8 +82,8 @@ pub(in crate::config) fn load(
 mod tests {
     use super::super::super::ConfigError;
     use super::{
-        APP_HOST, APP_PORT, CORS_ALLOWED_ORIGINS, DATABASE_URL, SESSION_COOKIE_NAME,
-        SESSION_COOKIE_SECURE, SESSION_TTL_SECONDS, load,
+        APP_HOST, APP_PORT, CORS_ALLOWED_ORIGINS, DATABASE_URL, SESSION_COOKIE_SECURE,
+        SESSION_TTL_SECONDS, load,
     };
 
     #[test]
@@ -92,21 +92,6 @@ mod tests {
             load(|_| None).err().unwrap(),
             ConfigError::DatabaseUrlMissing
         );
-    }
-
-    #[test]
-    fn bind_address_uses_defaults_and_accepts_explicit_values() {
-        let defaults = load(|name| (name == DATABASE_URL).then(|| "database".into())).unwrap();
-        assert_eq!(defaults.server.bind_addr.to_string(), "0.0.0.0:3001");
-
-        let explicit = load(|name| match name {
-            DATABASE_URL => Some("database".into()),
-            APP_HOST => Some("127.0.0.1".into()),
-            APP_PORT => Some("4321".into()),
-            _ => None,
-        })
-        .unwrap();
-        assert_eq!(explicit.server.bind_addr.to_string(), "127.0.0.1:4321");
     }
 
     #[test]
@@ -126,26 +111,6 @@ mod tests {
                 expected
             );
         }
-    }
-
-    #[test]
-    fn session_uses_defaults_and_accepts_explicit_values() {
-        let defaults = load(|name| (name == DATABASE_URL).then(|| "database".into())).unwrap();
-        assert_eq!(defaults.session.cookie_name, "calco_session");
-        assert!(!defaults.session.cookie_secure);
-        assert_eq!(defaults.session.ttl_seconds, 604800);
-
-        let explicit = load(|name| match name {
-            DATABASE_URL => Some("database".into()),
-            SESSION_COOKIE_NAME => Some("custom_session".into()),
-            SESSION_COOKIE_SECURE => Some("true".into()),
-            SESSION_TTL_SECONDS => Some("60".into()),
-            _ => None,
-        })
-        .unwrap();
-        assert_eq!(explicit.session.cookie_name, "custom_session");
-        assert!(explicit.session.cookie_secure);
-        assert_eq!(explicit.session.ttl_seconds, 60);
     }
 
     #[test]

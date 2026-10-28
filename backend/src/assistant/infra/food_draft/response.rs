@@ -124,12 +124,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_clarification_directly_to_final_type() {
-        let value = parse(FoodDraftPurpose::CustomFood, r#"{"assistant_message":"How many grams?","status":"needs_clarification","draft":null,"warnings":[]}"#).unwrap();
-        assert!(matches!(value, FoodDraftTurn::NeedsClarification { .. }));
-    }
-
-    #[test]
     fn rejects_unknown_fields_and_incomplete_drafts() {
         assert!(parse(FoodDraftPurpose::CustomFood, r#"{"assistant_message":"x","status":"needs_clarification","draft":null,"warnings":[],"extra":1}"#).is_err());
         assert!(

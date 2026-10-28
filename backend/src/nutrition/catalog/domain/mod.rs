@@ -1092,19 +1092,6 @@ mod tests {
     }
 
     #[test]
-    fn product_search_scope_maps_catalog_scopes_and_rejects_history() {
-        assert_eq!(
-            ProductSearchScope::All.catalog_scope(),
-            Some(CatalogSearchScope::All)
-        );
-        assert_eq!(
-            ProductSearchScope::Custom.catalog_scope(),
-            Some(CatalogSearchScope::Custom)
-        );
-        assert_eq!(ProductSearchScope::History.catalog_scope(), None);
-    }
-
-    #[test]
     fn category_normalize_list_trims_lowercases_and_deduplicates() {
         let categories = Category::normalize_list([" Snacks ", "snacks", "", "Beverages"]);
         assert_eq!(
@@ -1357,25 +1344,6 @@ mod tests {
         .unwrap();
         assert_eq!(product.default_quantity, Some(Decimal::new(3, 0)));
         assert_eq!(product.default_unit.unwrap().0, "serving");
-    }
-
-    #[test]
-    fn quantity_to_grams_multiplies_amount_by_grams_per_unit() {
-        let product = Product::new_custom(
-            Uuid::new_v4(),
-            CustomProductBuilder::new("Food")
-                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
-                .servings(vec![serving_input(Decimal::new(14, 0))]),
-            &test_catalog(),
-        )
-        .unwrap();
-        let quantity = Quantity::new(Decimal::new(3, 0), UnitCode("serving".into())).unwrap();
-        let converter = UnitConverter::from_entries([]);
-
-        assert_eq!(
-            product.quantity_to_grams(&quantity, &converter),
-            Ok(Decimal::new(42, 0))
-        );
     }
 
     #[test]

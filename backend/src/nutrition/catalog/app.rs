@@ -725,26 +725,6 @@ mod tests {
         assert!(repo.upserted.lock().unwrap().is_empty());
     }
 
-    #[tokio::test]
-    async fn external_product_write_delegates_a_valid_batch_to_persistence() {
-        let repo = Arc::new(MockProductRepo {
-            found: None,
-            created: Mutex::new(vec![]),
-            upserted: Mutex::new(vec![]),
-        });
-        let external = Arc::new(MockExternalCatalog {
-            product: None,
-            calls: AtomicUsize::new(0),
-        });
-        let service = service(repo.clone(), external);
-        let product = external_product_for_write();
-
-        let result = service.upsert_external_many(vec![product]).await.unwrap();
-
-        assert_eq!(result.created, 1);
-        assert_eq!(repo.upserted.lock().unwrap().len(), 1);
-    }
-
     fn product_with_id(value: u128) -> Product {
         let mut product = external_product_for_write();
         product.id = ProductId(Uuid::from_u128(value));

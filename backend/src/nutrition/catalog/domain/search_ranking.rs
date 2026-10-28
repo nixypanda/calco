@@ -853,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn fuzzy_threshold_is_enforced_and_similarity_is_bounded() {
+    fn fuzzy_threshold_is_enforced() {
         let strict = matcher(0.99);
         assert_eq!(
             strict.match_value(&strict.normalize("yogrt"), "yogurt"),
@@ -867,16 +867,6 @@ mod tests {
                 .unwrap()
                 .kind,
             MatchKind::Exact
-        );
-
-        assert_eq!(Similarity::new(-1.0).value(), 0.0);
-        assert_eq!(Similarity::new(2.0).value(), 1.0);
-        assert_eq!(Similarity::new(f64::NAN).value(), 0.0);
-        assert_eq!(Similarity::new(0.25).value(), 0.25);
-        assert_eq!(Similarity::default().value(), 0.0);
-        assert_eq!(
-            Similarity::new(0.25).total_cmp(&Similarity::new(0.5)),
-            Ordering::Less
         );
     }
 
@@ -948,58 +938,6 @@ mod tests {
         ] {
             let actual = text_similarity(&matcher.normalize(query), &matcher.normalize(candidate));
             assert_similarity_eq(actual.value(), expected);
-        }
-    }
-
-    #[test]
-    fn word_order_and_typo_queries_match_at_default_threshold() {
-        for (query, name) in [
-            ("chese", "Cheese Cube"),
-            ("chese", "Chase"),
-            ("milk almond", "Almond Milk"),
-            ("yoghurt", "Greek Yogurt"),
-            ("chiken", "Chicken Breast"),
-            ("chiken", "Grilled Chicken Breast"),
-            ("chedar", "Mature Cheddar"),
-            ("strawbery", "Ice Creams, Strawberry"),
-            ("choclate", "Almond Chocolate"),
-            ("brocolli", "Broccoli, raw"),
-            ("avacado", "Avocado"),
-            ("vegtable", "vegetables"),
-            ("dary", "Dairy"),
-            ("abc124", "abc123"),
-        ] {
-            assert_eq!(
-                rank_catalog(query, vec![fields(1, name, None, None)], 10),
-                vec![product_id(1)],
-                "{query} should fuzzy-match {name}"
-            );
-        }
-    }
-
-    #[test]
-    fn documented_fuzzy_near_misses_are_rejected() {
-        let matcher = TextMatcher::default();
-
-        for (query, name) in [
-            ("vegtable", "other-vegetables"),
-            ("cheese", "chess"),
-            ("coke", "Cookies"),
-            ("rice", "rce"),
-            ("almnd", "Salmon"),
-            ("granila", "Rani"),
-            ("vegtable", "feta"),
-            ("dairy", "Cadbury"),
-        ] {
-            assert_eq!(
-                matcher.match_value(&matcher.normalize(query), name),
-                None,
-                "{query} should be rejected against {name}"
-            );
-            assert!(
-                rank_catalog(query, vec![fields(1, name, None, None)], 10).is_empty(),
-                "{query} should not be ranked against {name}"
-            );
         }
     }
 

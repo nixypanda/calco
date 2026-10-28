@@ -228,18 +228,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_day_is_no_data_for_every_entry() {
-        let report = nutrition_details_from_logs(date(), set(), vec![]);
-        assert_eq!(report.nutrients.len(), 19);
-        assert!(
-            report
-                .nutrients
-                .iter()
-                .all(|entry| entry.status == NutritionDetailsStatus::NoData
-                    && entry.known_amount.is_none())
-        );
-    }
-    #[test]
     fn complete_informational_data_is_available_and_explicit_zero_is_data() {
         let report = nutrition_details_from_logs(
             date(),

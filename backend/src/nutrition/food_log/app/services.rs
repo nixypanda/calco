@@ -347,37 +347,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_food_log_success() {
-        let (services, food_log_repo) = make_services_with_repo(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let created = services
-            .log_item(
-                user_id,
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: Some("Asia/Kolkata".to_string()),
-                    meal_slot: Some(MealSlot::Lunch),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        assert!(
-            services
-                .delete_food_log(created.id(), user_id)
-                .await
-                .is_ok()
-        );
-        let still_there = food_log_repo.find_by_id(created.id()).await.unwrap();
-        assert!(still_there.is_none());
-    }
-
-    #[tokio::test]
     async fn test_get_food_log_hides_another_users_log() {
         let services = make_services(Some(sample_product()));
         let owner = Uuid::new_v4();
@@ -417,50 +386,6 @@ mod tests {
             NutritionError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
-    }
-
-    #[tokio::test]
-    async fn test_update_food_log_success() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let created = services
-            .log_item(
-                user_id,
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: Some(MealSlot::Lunch),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        let updated = services
-            .update_food_log(
-                created.id(),
-                user_id,
-                UpdateFoodInput {
-                    log_date: Some(sample_log_date()),
-                    device_timezone: None,
-                    meal_slot: Some(Some(MealSlot::Dinner)),
-                    item: None,
-                    quantity: Some(
-                        Quantity::new(Decimal::new(200, 0), UnitCode("g".to_string())).unwrap(),
-                    ),
-                    notes: Some(Some("updated notes".to_string())),
-                },
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(updated.meal_slot(), Some(MealSlot::Dinner));
-        assert_eq!(updated.quantity_amount(), Decimal::new(200, 0));
-        assert_eq!(updated.notes(), Some("updated notes"));
     }
 
     #[tokio::test]

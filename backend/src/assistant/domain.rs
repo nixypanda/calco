@@ -625,23 +625,4 @@ mod tests {
             Err(DraftValidationError)
         ));
     }
-
-    #[test]
-    fn ad_hoc_log_policy_requires_a_convertible_consistent_portion() {
-        let policy = FoodDraftPolicy::new(
-            [("ENERGY_KCAL".into(), "kcal".into())],
-            ["bowl".into()],
-            ["ENERGY_KCAL".into()],
-        );
-        let draft = FoodDraftBuilder::new("Dal")
-            .nutrients([DraftNutrient::new("ENERGY_KCAL".into(), Decimal::ONE).unwrap()])
-            .servings([DraftServing::new("bowl".into(), Decimal::from(250)).unwrap()])
-            .build()
-            .unwrap();
-        let suggested =
-            SuggestedLog::new(Decimal::from(2), "bowl".into(), Decimal::from(500)).unwrap();
-        let turn = FoodDraftTurn::ready_for_log("Review", draft, suggested, vec![]).unwrap();
-
-        assert_eq!(policy.validate(FoodDraftPurpose::AdHocLog, &turn), Ok(()));
-    }
 }

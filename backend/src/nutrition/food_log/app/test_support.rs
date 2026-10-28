@@ -311,12 +311,6 @@ pub(super) fn make_services_and_history(
     (services, FoodLogHistoryService::new(repo))
 }
 
-pub(super) fn make_services_with_repo(
-    product: Option<Product>,
-) -> (FoodLogService, Arc<dyn FoodLogRepo>) {
-    build_services_with_repo(product, None)
-}
-
 pub(super) fn empty_history_services() -> FoodLogHistoryService {
     FoodLogHistoryService::new(Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepo>)
 }

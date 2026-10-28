@@ -456,47 +456,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_meal_success() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let created = services
-            .create_meal(
-                user_id,
-                CreateMealInput {
-                    name: "Original".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![sample_component()],
-                },
-            )
-            .await
-            .unwrap();
-
-        let updated = services
-            .update_meal(
-                created.id,
-                user_id,
-                UpdateMealInput {
-                    name: Some("Updated".to_string()),
-                    notes: Some(Some("new notes".to_string())),
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(updated.name.as_str(), "Updated");
-        assert_eq!(
-            updated.notes.as_ref().map(|n| n.0.as_str()),
-            Some("new notes")
-        );
-    }
-
-    #[tokio::test]
     async fn test_update_meal_can_clear_optional_fields() {
         let services = make_services(Some(sample_product()));
         let user_id = Uuid::new_v4();

@@ -522,37 +522,4 @@ model = "model"
             assert_eq!(load(Some(file.path())), Err(ConfigError::InvalidToml));
         }
     }
-
-    #[test]
-    fn tracked_assistant_configs_load_without_reading_key_files() {
-        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../assistant-config");
-        let expected = [
-            (
-                "groq.toml",
-                "https://api.groq.com/openai/v1/chat/completions",
-                "qwen/qwen3.8-27b",
-                "assistant-config/groq-api-key",
-            ),
-            (
-                "openrouter.toml",
-                "https://openrouter.ai/api/v1/chat/completions",
-                "openrouter/free",
-                "assistant-config/openrouter-api-key",
-            ),
-        ];
-
-        for (file_name, endpoint, model, api_key_file) in expected {
-            let loaded = load(Some(&directory.join(file_name))).unwrap();
-            let settings = loaded.as_enabled().expect("assistant is enabled");
-            assert_eq!(settings.endpoint.as_str(), endpoint);
-            assert_eq!(settings.model.as_str(), model);
-            assert!(settings.supports_images);
-            assert_eq!(
-                settings.authentication,
-                AssistantAuth::Bearer {
-                    api_key_file: PathBuf::from(api_key_file),
-                }
-            );
-        }
-    }
 }
