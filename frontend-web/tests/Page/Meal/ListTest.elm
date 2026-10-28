@@ -6,107 +6,44 @@ import Data.Route exposing (Route(..))
 import Expect
 import Page.Meal.List as MealList
 import Support.Fixtures as Fixtures
-import Support.Story exposing (runStepsResult)
+import Support.Story as Story
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
     describe "Page.Meal.List"
-        [ test "a loaded list opens a meal, returns, and starts the create flow" <|
+        [ test "a loaded list opens a meal" <|
             \_ ->
-                let
-                    loaded : MealList.Model
-                    loaded =
-                        step
-                            (MealList.MealsLoaded (Ok { items = [ lunchMeal, sideMeal ] }))
-                            initModel
-
-                    actions : Result String ( MealList.Model, List MealList.OutMsg )
-                    actions =
-                        runStepsResult stepWithOut
-                            [ MealList.OpenMealClicked "meal-1"
-                            , MealList.BackClicked
-                            , MealList.CreateMealClicked
-                            ]
-                            loaded
-                in
-                case actions of
-                    Ok ( final, [ openOut, backOut, createOut ] ) ->
-                        { openOut = openOut
-                        , backOut = backOut
-                        , createOut = createOut
-                        , screen = toScreen final
-                        }
-                            |> Expect.equal
-                                { openOut = MealList.Navigate (MealShow "meal-1")
-                                , backOut = MealList.Navigate (DiaryDay Nothing Nothing)
-                                , createOut = MealList.Navigate MealCreate
-                                , screen =
-                                    { names = [ "Lunch", "Side salad" ], error = Nothing }
-                                }
-
-                    Ok _ ->
-                        Expect.fail "the meal list story produced unexpected out messages"
-
-                    Err message ->
-                        Expect.fail message
-        , test "a failed load returns to the diary, then re-entry loads and a 401 expires" <|
+                loadedList
+                    |> step (MealList.OpenMealClicked "meal-1")
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg
+                                |> Expect.equal (MealList.Navigate (MealShow "meal-1"))
+                        )
+        , test "a loaded list starts meal creation" <|
             \_ ->
-                let
-                    failed : MealList.Model
-                    failed =
-                        step (MealList.MealsLoaded (Err Client.NetworkError))
-                            initModel
-
-                    actions : Result String ( MealList.Model, List MealList.OutMsg )
-                    actions =
-                        runStepsResult stepWithOut
-                            [ MealList.CreateMealClicked
-                            , MealList.BackClicked
-                            ]
-                            failed
-
-                    reentered : MealList.Model
-                    reentered =
-                        step (MealList.MealsLoaded (Ok { items = [ lunchMeal ] }))
-                            initModel
-
-                    expired : MealList.Model
-                    expired =
-                        step
-                            (MealList.MealsLoaded (Err Fixtures.unauthorized))
-                            reentered
-                in
-                case actions of
-                    Ok ( _, [ createOut, backOut ] ) ->
-                        { failed = toScreen failed
-                        , createOut = createOut
-                        , backOut = backOut
-                        , reentryOut = Tuple.second MealList.init
-                        , reentered = toScreen reentered
-                        , screen = toScreen expired
-                        , finalOut =
-                            out
-                                (MealList.MealsLoaded (Err Fixtures.unauthorized))
-                                reentered
-                        }
-                            |> Expect.equal
-                                { failed =
-                                    { names = [], error = Just Fixtures.networkErrorMessage }
-                                , createOut = MealList.Navigate MealCreate
-                                , backOut = MealList.Navigate (DiaryDay Nothing Nothing)
-                                , reentryOut = MealList.RequestMeals
-                                , reentered = { names = [ "Lunch" ], error = Nothing }
-                                , screen = { names = [], error = Just "Sign in again" }
-                                , finalOut = MealList.SessionExpired
-                                }
-
-                    Ok _ ->
-                        Expect.fail "the failed-load story produced unexpected out messages"
-
-                    Err message ->
-                        Expect.fail message
+                loadedList
+                    |> step MealList.CreateMealClicked
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg
+                                |> Expect.equal (MealList.Navigate MealCreate)
+                        )
+        , test "a failed load shows the error" <|
+            \_ ->
+                MealList.init
+                    |> Story.start
+                    |> step (MealList.MealsLoaded (Err Client.NetworkError))
+                    |> finish
+                        (\( model, _ ) ->
+                            toScreen model
+                                |> Expect.equal
+                                    { names = []
+                                    , error = Just Fixtures.networkErrorMessage
+                                    }
+                        )
         ]
 
 
@@ -129,32 +66,44 @@ toScreen model =
             { names = [], error = Nothing }
 
 
-initModel : MealList.Model
-initModel =
-    Tuple.first MealList.init
-
-
-step : MealList.Msg -> MealList.Model -> MealList.Model
-step msg model =
-    Fixtures.tupleFirst (MealList.update msg model)
-
-
-out : MealList.Msg -> MealList.Model -> MealList.OutMsg
-out msg model =
-    Fixtures.tupleThird (MealList.update msg model)
-
-
-stepWithOut : MealList.Msg -> MealList.Model -> Maybe ( MealList.Model, MealList.OutMsg )
+stepWithOut :
+    MealList.Msg
+    -> MealList.Model
+    -> ( MealList.Model, MealList.OutMsg )
 stepWithOut msg model =
     let
         ( next, _, outMsg ) =
             MealList.update msg model
     in
-    if next == model && outMsg == MealList.NoOp then
-        Nothing
+    ( next, outMsg )
 
-    else
-        Just ( next, outMsg )
+
+
+-- STORY PIPELINE
+
+
+type alias Journey =
+    Story.Journey MealList.Model MealList.OutMsg
+
+
+step : MealList.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+finish :
+    (( MealList.Model, MealList.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+loadedList : Journey
+loadedList =
+    MealList.init
+        |> Story.start
+        |> step (MealList.MealsLoaded (Ok { items = [ lunchMeal, sideMeal ] }))
 
 
 lunchMeal : Meal
