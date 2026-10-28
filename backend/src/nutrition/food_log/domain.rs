@@ -659,6 +659,7 @@ impl FoodLogPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
     use rstest::rstest;
 
     #[test]
@@ -845,5 +846,250 @@ mod tests {
         let result = log.update_ad_hoc_log(ad_hoc_date(), None, None, grams, None);
 
         assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    const REQUIRED_NUTRIENTS: [(&str, &str); 4] = [
+        ("ENERGY_KCAL", "kcal"),
+        ("PROTEIN_G", "g"),
+        ("CARBS_G", "g"),
+        ("FAT_G", "g"),
+    ];
+
+    fn valid_ad_hoc_name() -> impl Strategy<Value = String> {
+        "[A-Za-z][A-Za-z0-9 ]{0,24}"
+    }
+
+    type GeneratedNutrient = (NutrientCode, Decimal, UnitCode);
+
+    /// Positive quantities in `0.000001..=10_000`, including real fractional values.
+    fn positive_quantity_amount() -> impl Strategy<Value = Decimal> {
+        prop_oneof![
+            Just(Decimal::new(1, 6)),
+            Just(Decimal::new(25, 1)),
+            (1i64..=10_000i64, 0u32..=2)
+                .prop_map(|(mantissa, scale)| Decimal::new(mantissa, scale)),
+        ]
+    }
+
+    /// Non-negative required-nutrient amounts in `0..=1_000_000`, including fractions.
+    fn bounded_required_amount() -> impl Strategy<Value = Decimal> {
+        prop_oneof![
+            Just(Decimal::ZERO),
+            Just(Decimal::new(1, 6)),
+            Just(Decimal::new(25, 1)),
+            (0i64..=1_000_000i64, 0u32..=6)
+                .prop_map(|(mantissa, scale)| Decimal::new(mantissa, scale)),
+        ]
+    }
+
+    fn required_nutrients_strategy() -> impl Strategy<Value = Vec<GeneratedNutrient>> {
+        (
+            bounded_required_amount(),
+            bounded_required_amount(),
+            bounded_required_amount(),
+            bounded_required_amount(),
+        )
+            .prop_map(|(energy, protein, carbs, fat)| {
+                vec![
+                    (
+                        NutrientCode("ENERGY_KCAL".into()),
+                        energy,
+                        UnitCode("kcal".into()),
+                    ),
+                    (
+                        NutrientCode("PROTEIN_G".into()),
+                        protein,
+                        UnitCode("g".into()),
+                    ),
+                    (NutrientCode("CARBS_G".into()), carbs, UnitCode("g".into())),
+                    (NutrientCode("FAT_G".into()), fat, UnitCode("g".into())),
+                ]
+            })
+    }
+
+    fn shuffled_required_nutrients_strategy() -> impl Strategy<Value = Vec<GeneratedNutrient>> {
+        (
+            required_nutrients_strategy(),
+            proptest::array::uniform4(any::<u8>()),
+        )
+            .prop_map(|(nutrients, keys)| {
+                let mut order: Vec<usize> = (0..nutrients.len()).collect();
+                order.sort_by_key(|&index| (keys[index], index));
+                order
+                    .into_iter()
+                    .map(|index| nutrients[index].clone())
+                    .collect()
+            })
+    }
+
+    fn snapshots_from_generated(nutrients: &[GeneratedNutrient]) -> Vec<FoodLogNutrientSnapshot> {
+        nutrients
+            .iter()
+            .map(|(code, amount, unit)| FoodLogNutrientSnapshot {
+                nutrient_code: code.clone(),
+                amount: *amount,
+                unit: unit.clone(),
+            })
+            .collect()
+    }
+
+    fn build_log_with_quantity(
+        name: String,
+        quantity_amount: Decimal,
+        nutrients: &[GeneratedNutrient],
+    ) -> FoodLog {
+        FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            name,
+            None,
+            serving_quantity(quantity_amount),
+            snapshots_from_generated(nutrients),
+        )
+        .expect("valid ad-hoc input must be accepted")
+        .build()
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn new_ad_hoc_accepts_valid_required_nutrients(
+            name in valid_ad_hoc_name(),
+            quantity_amount in positive_quantity_amount(),
+            nutrients in required_nutrients_strategy(),
+        ) {
+            let expected_name = name.trim().to_string();
+            let log = build_log_with_quantity(name, quantity_amount, &nutrients);
+
+            prop_assert_eq!(log.quantity_amount(), quantity_amount);
+            prop_assert_eq!(log.quantity_unit(), &UnitCode("serving".into()));
+            prop_assert_eq!(
+                log.item(),
+                &FoodLogItemSnapshot::AdHoc {
+                    name: expected_name,
+                    brand: None,
+                }
+            );
+            prop_assert_eq!(log.nutrient_snapshots().len(), nutrients.len());
+            for (snapshot, (code, amount, unit)) in
+                log.nutrient_snapshots().iter().zip(nutrients.iter())
+            {
+                prop_assert_eq!(&snapshot.nutrient_code, code);
+                prop_assert_eq!(snapshot.amount, *amount);
+                prop_assert_eq!(&snapshot.unit, unit);
+            }
+            for (code, _) in REQUIRED_NUTRIENTS {
+                let count = log
+                    .nutrient_snapshots()
+                    .iter()
+                    .filter(|snapshot| snapshot.nutrient_code.0 == code)
+                    .count();
+                prop_assert_eq!(count, 1, "expected exactly one {}", code);
+            }
+            for snapshot in log.nutrient_snapshots() {
+                prop_assert!(snapshot.amount >= Decimal::ZERO);
+            }
+        }
+
+        #[test]
+        fn new_ad_hoc_accepts_required_nutrients_in_shuffled_order(
+            name in valid_ad_hoc_name(),
+            quantity_amount in positive_quantity_amount(),
+            nutrients in shuffled_required_nutrients_strategy(),
+        ) {
+            let log = build_log_with_quantity(name, quantity_amount, &nutrients);
+
+            prop_assert_eq!(log.nutrient_snapshots().len(), nutrients.len());
+            for (snapshot, (code, amount, unit)) in
+                log.nutrient_snapshots().iter().zip(nutrients.iter())
+            {
+                prop_assert_eq!(&snapshot.nutrient_code, code);
+                prop_assert_eq!(snapshot.amount, *amount);
+                prop_assert_eq!(&snapshot.unit, unit);
+            }
+            for (code, _) in REQUIRED_NUTRIENTS {
+                let count = log
+                    .nutrient_snapshots()
+                    .iter()
+                    .filter(|snapshot| snapshot.nutrient_code.0 == code)
+                    .count();
+                prop_assert_eq!(count, 1, "expected exactly one {}", code);
+            }
+        }
+
+        #[test]
+        fn update_ad_hoc_log_preserves_snapshots_and_scales_by_quantity_ratio(
+            name in valid_ad_hoc_name(),
+            old_amount in positive_quantity_amount(),
+            new_amount in positive_quantity_amount(),
+            nutrients in required_nutrients_strategy(),
+        ) {
+            let log = build_log_with_quantity(name, old_amount, &nutrients);
+            let original_item = log.item().clone();
+            let original_unit = log.quantity_unit().clone();
+            let original_snapshots = log.nutrient_snapshots().to_vec();
+
+            let updated = log
+                .update_ad_hoc_log(
+                    ad_hoc_date(),
+                    None,
+                    None,
+                    serving_quantity(new_amount),
+                    None,
+                )
+                .expect("positive same-unit update must succeed");
+
+            prop_assert_eq!(updated.item(), &original_item);
+            prop_assert_eq!(updated.quantity_amount(), new_amount);
+            prop_assert_eq!(updated.quantity_unit(), &original_unit);
+            prop_assert_eq!(updated.nutrient_snapshots().len(), original_snapshots.len());
+
+            let scale = new_amount / old_amount;
+            for (snapshot, original) in updated
+                .nutrient_snapshots()
+                .iter()
+                .zip(original_snapshots.iter())
+            {
+                prop_assert_eq!(&snapshot.nutrient_code, &original.nutrient_code);
+                prop_assert_eq!(&snapshot.unit, &original.unit);
+                prop_assert_eq!(snapshot.amount, original.amount * scale);
+            }
+        }
+
+        #[test]
+        fn update_ad_hoc_log_scales_by_exact_multiple(
+            name in valid_ad_hoc_name(),
+            old_amount in positive_quantity_amount(),
+            multiplier in 1i64..=10i64,
+            nutrients in required_nutrients_strategy(),
+        ) {
+            let factor = Decimal::from(multiplier);
+            let new_amount = old_amount * factor;
+            let log = build_log_with_quantity(name, old_amount, &nutrients);
+            let original_snapshots = log.nutrient_snapshots().to_vec();
+
+            let updated = log
+                .update_ad_hoc_log(
+                    ad_hoc_date(),
+                    None,
+                    None,
+                    serving_quantity(new_amount),
+                    None,
+                )
+                .expect("exact-multiple update must succeed");
+
+            prop_assert_eq!(updated.quantity_amount(), new_amount);
+            prop_assert_eq!(updated.nutrient_snapshots().len(), original_snapshots.len());
+            for (snapshot, original) in updated
+                .nutrient_snapshots()
+                .iter()
+                .zip(original_snapshots.iter())
+            {
+                prop_assert_eq!(&snapshot.nutrient_code, &original.nutrient_code);
+                prop_assert_eq!(&snapshot.unit, &original.unit);
+                prop_assert_eq!(snapshot.amount, original.amount * factor);
+            }
+        }
     }
 }
