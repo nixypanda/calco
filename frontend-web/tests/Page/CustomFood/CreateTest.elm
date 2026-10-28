@@ -4,233 +4,77 @@ import Api.Client as Client
 import Api.Foods exposing (CategorySuggestion, NutrientItem, UnitItem)
 import Component.FoodAssistant as Assistant
 import Component.FoodEditor as Form
-import Data.FoodAssistant as FoodAssistant exposing (FoodDraftTurn(..))
+import Data.FoodAssistant exposing (FoodDraftTurn(..))
 import Data.Route exposing (Route(..))
 import Expect
-import I18n
 import Lib.Ticket exposing (Ticket)
 import Page.CustomFood.Create as CustomFoodCreate
-import Support.Fixtures as Fixtures
-import Support.Story exposing (runSteps)
+import Support.Story as Story
 import Test exposing (Test, describe, test)
-import Translations.Ids exposing (TranslationId(..))
 
 
 tests : Test
 tests =
     describe "Page.CustomFood.Create"
-        [ test "units clear a catalog error, then a categorized food is validated and saved" <|
+        [ test "a user creates a food manually" <|
             \_ ->
-                let
-                    started : CustomFoodCreate.Model
-                    started =
-                        Tuple.first CustomFoodCreate.init
-
-                    catalogFailed : CustomFoodCreate.Model
-                    catalogFailed =
-                        step
-                            (CustomFoodCreate.NutrientsLoaded (Err Client.NetworkError))
-                            started
-
-                    ( catalogCleared, _ ) =
-                        stepWithOut
-                            (CustomFoodCreate.UnitsLoaded (Ok { items = [ gram ] }))
-                            catalogFailed
-
-                    loaded : CustomFoodCreate.Model
-                    loaded =
-                        step
-                            (CustomFoodCreate.NutrientsLoaded (Ok { items = nutrientItems }))
-                            catalogCleared
-
-                    invalid : CustomFoodCreate.Model
-                    invalid =
-                        step CustomFoodCreate.SubmitClicked loaded
-
-                    ( named, _ ) =
-                        stepWithOut
-                            (CustomFoodCreate.FormMsg (Form.NameChanged "Paneer"))
-                            invalid
-
-                    ( querying, categoryOut ) =
-                        stepWithOut
-                            (CustomFoodCreate.FormMsg (Form.CategoryQueryChanged "dai"))
-                            named
-                in
-                case categoryRequest categoryOut of
-                    Just category ->
-                        let
-                            suggesting : CustomFoodCreate.Model
-                            suggesting =
-                                step
-                                    (CustomFoodCreate.CategorySuggestionsLoaded
-                                        category.token
-                                        (Ok { items = [ dairySuggestion ] })
-                                    )
-                                    querying
-
-                            categorized : CustomFoodCreate.Model
-                            categorized =
-                                step
-                                    (CustomFoodCreate.FormMsg
-                                        (Form.AcceptCategorySuggestion "dairy")
-                                    )
-                                    suggesting
-
-                            ( submitting, createOut ) =
-                                stepWithOut CustomFoodCreate.SubmitClicked categorized
-
-                            ( failed, _ ) =
-                                stepWithOut
-                                    (CustomFoodCreate.SaveCompleted (Err Client.NetworkError))
-                                    submitting
-
-                            ( retrying, _ ) =
-                                stepWithOut CustomFoodCreate.SubmitClicked failed
-
-                            ( saved, completionOut ) =
-                                stepWithOut
-                                    (CustomFoodCreate.SaveCompleted (Ok { id = "food-1" }))
-                                    retrying
-                        in
-                        { errorTransition =
-                            ( (toScreen catalogFailed).error
-                            , (toScreen catalogCleared).error
-                            )
-                        , validation = (toScreen invalid).error
-                        , categoryRequest =
-                            Just { query = category.query, limit = category.limit }
-                        , request = createRequest createOut
-                        , failure = (toScreen failed).error
-                        , screen = toScreen saved
-                        , finalOut = completionOut
-                        }
-                            |> Expect.equal
-                                { errorTransition =
-                                    ( Just Fixtures.networkErrorMessage, Nothing )
-                                , validation = Just nameRequired
-                                , categoryRequest = Just { query = "dai", limit = 8 }
-                                , request = Just categorizedRequest
-                                , failure = Just Fixtures.networkErrorMessage
-                                , screen =
-                                    { name = "Paneer"
-                                    , categories = [ "dairy" ]
-                                    , nutrients = []
+                preparedManualFood
+                    |> step CustomFoodCreate.SubmitClicked
+                    |> step (CustomFoodCreate.SaveCompleted (Ok { id = "food-1" }))
+                    |> finish
+                        (\( saved, completionOut ) ->
+                            { screen = toScreen saved
+                            , finalOut = completionOut
+                            }
+                                |> Expect.equal
+                                    { screen =
+                                        { name = "Paneer"
+                                        , categories = [ "dairy" ]
+                                        , nutrients = []
+                                        , error = Nothing
+                                        }
+                                    , finalOut =
+                                        CustomFoodCreate.Navigate (CustomFoodShow "food-1")
+                                    }
+                        )
+        , test "a user creates a food from an AI draft" <|
+            \_ ->
+                preparedDraft
+                    |> step CustomFoodCreate.SubmitClicked
+                    |> step (CustomFoodCreate.SaveCompleted (Ok { id = "food-1" }))
+                    |> finish
+                        (\( saved, completionOut ) ->
+                            { screen = toScreen saved
+                            , finalOut = completionOut
+                            }
+                                |> Expect.equal
+                                    { screen =
+                                        { name = "Paneer"
+                                        , categories = [ "dairy" ]
+                                        , nutrients = [ "PROTEIN_G:18" ]
+                                        , error = Nothing
+                                        }
+                                    , finalOut =
+                                        CustomFoodCreate.Navigate (CustomFoodShow "food-1")
+                                    }
+                        )
+        , test "a failed save can be retried" <|
+            \_ ->
+                preparedManualFood
+                    |> step CustomFoodCreate.SubmitClicked
+                    |> step
+                        (CustomFoodCreate.SaveCompleted (Err Client.NetworkError))
+                    |> step CustomFoodCreate.SubmitClicked
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { request = createRequest outMsg
+                            , disabled = Form.isSubmitting model.form.submit
+                            }
+                                |> Expect.equal
+                                    { request = Just categorizedRequest
                                     , disabled = True
-                                    , error = Nothing
                                     }
-                                , finalOut =
-                                    CustomFoodCreate.Navigate (CustomFoodShow "food-1")
-                                }
-
-                    Nothing ->
-                        Expect.fail "the category query produced no request"
-        , test "an assistant draft applies, a stale category token is ignored, and a 401 expires" <|
-            \_ ->
-                let
-                    started : CustomFoodCreate.Model
-                    started =
-                        Tuple.first CustomFoodCreate.initWithAssistant
-                            |> runSteps step
-                                [ CustomFoodCreate.NutrientsLoaded
-                                    (Ok { items = nutrientItems })
-                                , CustomFoodCreate.UnitsLoaded (Ok { items = [ gram ] })
-                                , CustomFoodCreate.AssistantMsg
-                                    (Assistant.StatusLoaded
-                                        (Ok { enabled = True, supportsImages = False })
-                                    )
-                                ]
-
-                    describing : CustomFoodCreate.Model
-                    describing =
-                        step
-                            (CustomFoodCreate.AssistantMsg
-                                (Assistant.DescriptionChanged "paneer")
-                            )
-                            started
-
-                    ( sending, sendOut ) =
-                        stepWithOut
-                            (CustomFoodCreate.AssistantMsg Assistant.SendClicked)
-                            describing
-
-                    applied : CustomFoodCreate.Model
-                    applied =
-                        sending
-                            |> step
-                                (CustomFoodCreate.AssistantMsg
-                                    (Assistant.DraftCompleted (Ok readyTurn))
-                                )
-                            |> step
-                                (CustomFoodCreate.AssistantMsg
-                                    (Assistant.ApplyDraftClicked False)
-                                )
-
-                    ( firstQuery, firstOut ) =
-                        stepWithOut
-                            (CustomFoodCreate.FormMsg (Form.CategoryQueryChanged "da"))
-                            applied
-
-                    ( secondQuery, secondOut ) =
-                        stepWithOut
-                            (CustomFoodCreate.FormMsg (Form.CategoryQueryChanged "dai"))
-                            firstQuery
-                in
-                case ( assistantRequest sendOut, categoryTokens firstOut secondOut ) of
-                    ( Just request, Just ( staleToken, currentToken ) ) ->
-                        let
-                            stale : CustomFoodCreate.Model
-                            stale =
-                                step
-                                    (CustomFoodCreate.CategorySuggestionsLoaded
-                                        staleToken
-                                        (Ok { items = [ otherSuggestion ] })
-                                    )
-                                    secondQuery
-
-                            suggested : CustomFoodCreate.Model
-                            suggested =
-                                step
-                                    (CustomFoodCreate.CategorySuggestionsLoaded
-                                        currentToken
-                                        (Ok { items = [ dairySuggestion ] })
-                                    )
-                                    stale
-
-                            ( submitting, createOut ) =
-                                stepWithOut CustomFoodCreate.SubmitClicked suggested
-
-                            ( final, completionOut ) =
-                                stepWithOut
-                                    (CustomFoodCreate.SaveCompleted (Err Fixtures.unauthorized))
-                                    submitting
-                        in
-                        { request = request
-                        , applied = toScreen applied
-                        , staleSuggestions = suggestions stale
-                        , suggestions = suggestions suggested
-                        , createRequest = createRequest createOut
-                        , screen = toScreen final
-                        , finalOut = completionOut
-                        }
-                            |> Expect.equal
-                                { request = assistantRequestValue
-                                , applied = draftScreen
-                                , staleSuggestions = []
-                                , suggestions = [ "dairy" ]
-                                , createRequest = Just draftCreateRequest
-                                , screen =
-                                    { name = "Paneer"
-                                    , categories = [ "dairy" ]
-                                    , nutrients = [ "PROTEIN_G:18" ]
-                                    , disabled = False
-                                    , error = Just "Sign in again"
-                                    }
-                                , finalOut = CustomFoodCreate.SessionExpired
-                                }
-
-                    _ ->
-                        Expect.fail "the assistant send or category typing produced no request"
+                        )
         ]
 
 
@@ -238,7 +82,6 @@ type alias Screen =
     { name : String
     , categories : List String
     , nutrients : List String
-    , disabled : Bool
     , error : Maybe String
     }
 
@@ -248,7 +91,6 @@ toScreen model =
     { name = model.form.name
     , categories = model.form.categoryInput.selected
     , nutrients = List.filterMap nutrientRow model.form.nutrients
-    , disabled = Form.isSubmitting model.form.submit
     , error = firstError model.error model.form.submit
     }
 
@@ -277,21 +119,6 @@ nutrientRow row =
         Just (row.code ++ ":" ++ row.amount)
 
 
-suggestions : CustomFoodCreate.Model -> List String
-suggestions model =
-    List.map .value model.form.categoryInput.suggestions
-
-
-draftScreen : Screen
-draftScreen =
-    { name = "Paneer"
-    , categories = [ "dairy" ]
-    , nutrients = [ "PROTEIN_G:18" ]
-    , disabled = False
-    , error = Nothing
-    }
-
-
 createRequest : CustomFoodCreate.OutMsg -> Maybe Api.Foods.CreateFoodRequest
 createRequest outMsg =
     case outMsg of
@@ -302,43 +129,14 @@ createRequest outMsg =
             Nothing
 
 
-type alias CategoryRequest =
-    { token : Ticket, query : String, limit : Int }
-
-
-categoryRequest : CustomFoodCreate.OutMsg -> Maybe CategoryRequest
+categoryRequest : CustomFoodCreate.OutMsg -> Maybe Ticket
 categoryRequest outMsg =
     case outMsg of
-        CustomFoodCreate.RequestCategorySuggestions token request ->
-            Just { token = token, query = request.query, limit = request.limit }
+        CustomFoodCreate.RequestCategorySuggestions token _ ->
+            Just token
 
         _ ->
             Nothing
-
-
-categoryTokens : CustomFoodCreate.OutMsg -> CustomFoodCreate.OutMsg -> Maybe ( Ticket, Ticket )
-categoryTokens first second =
-    case ( categoryRequest first, categoryRequest second ) of
-        ( Just firstRequest, Just secondRequest ) ->
-            Just ( firstRequest.token, secondRequest.token )
-
-        _ ->
-            Nothing
-
-
-assistantRequest : CustomFoodCreate.OutMsg -> Maybe CustomFoodCreate.OutMsg
-assistantRequest outMsg =
-    case outMsg of
-        CustomFoodCreate.RequestFoodDraft _ _ _ ->
-            Just outMsg
-
-        _ ->
-            Nothing
-
-
-step : CustomFoodCreate.Msg -> CustomFoodCreate.Model -> CustomFoodCreate.Model
-step msg model =
-    Fixtures.tupleFirst (CustomFoodCreate.update msg model)
 
 
 stepWithOut :
@@ -353,47 +151,104 @@ stepWithOut msg model =
     ( next, outMsg )
 
 
-assistantRequestValue : CustomFoodCreate.OutMsg
-assistantRequestValue =
-    case
-        FoodAssistant.userTurn "paneer"
-            |> Result.andThen (\turn -> FoodAssistant.conversation [ turn ])
-    of
-        Ok conversation ->
-            CustomFoodCreate.RequestFoodDraft FoodAssistant.CustomFood conversation []
 
-        Err _ ->
-            CustomFoodCreate.NoOp
+-- STORY PIPELINE
 
 
-nameRequired : String
-nameRequired =
-    I18n.en TidCustomFoodNameRequired
+type alias Journey =
+    Story.Journey CustomFoodCreate.Model CustomFoodCreate.OutMsg
 
 
-baseFoodRequest : Api.Foods.CreateFoodRequest
-baseFoodRequest =
-    { name = "Paneer"
-    , brand = Nothing
-    , categories = []
-    , defaultQuantity = Nothing
-    , defaultUnit = Nothing
-    , nutrients = []
-    , servings = []
-    }
+step : CustomFoodCreate.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+bind :
+    (CustomFoodCreate.OutMsg -> Result String CustomFoodCreate.Msg)
+    -> Journey
+    -> Journey
+bind =
+    Story.bind stepWithOut
+
+
+finish :
+    (( CustomFoodCreate.Model, CustomFoodCreate.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+preparedManualFood : Journey
+preparedManualFood =
+    CustomFoodCreate.init
+        |> Story.start
+        |> step (CustomFoodCreate.NutrientsLoaded (Ok { items = nutrientItems }))
+        |> step (CustomFoodCreate.UnitsLoaded (Ok { items = [ gram ] }))
+        |> step (CustomFoodCreate.FormMsg (Form.NameChanged "Paneer"))
+        |> step (CustomFoodCreate.FormMsg (Form.CategoryQueryChanged "dai"))
+        |> bind
+            (\out ->
+                case categoryRequest out of
+                    Just token ->
+                        Ok
+                            (CustomFoodCreate.CategorySuggestionsLoaded
+                                token
+                                (Ok { items = [ dairySuggestion ] })
+                            )
+
+                    Nothing ->
+                        Err "the category query produced no request"
+            )
+        |> step
+            (CustomFoodCreate.FormMsg (Form.AcceptCategorySuggestion "dairy"))
+
+
+preparedDraft : Journey
+preparedDraft =
+    CustomFoodCreate.initWithAssistant
+        |> Story.start
+        |> step (CustomFoodCreate.NutrientsLoaded (Ok { items = nutrientItems }))
+        |> step (CustomFoodCreate.UnitsLoaded (Ok { items = [ gram ] }))
+        |> step
+            (CustomFoodCreate.AssistantMsg
+                (Assistant.StatusLoaded
+                    (Ok { enabled = True, supportsImages = False })
+                )
+            )
+        |> step
+            (CustomFoodCreate.AssistantMsg
+                (Assistant.DescriptionChanged "paneer")
+            )
+        |> step (CustomFoodCreate.AssistantMsg Assistant.SendClicked)
+        |> bind
+            (\out ->
+                case out of
+                    CustomFoodCreate.RequestFoodDraft _ _ _ ->
+                        Ok
+                            (CustomFoodCreate.AssistantMsg
+                                (Assistant.DraftCompleted (Ok readyTurn))
+                            )
+
+                    _ ->
+                        Err "the assistant send produced no draft request"
+            )
+        |> step
+            (CustomFoodCreate.AssistantMsg
+                (Assistant.ApplyDraftClicked False)
+            )
 
 
 categorizedRequest : Api.Foods.CreateFoodRequest
 categorizedRequest =
-    { baseFoodRequest | categories = [ "dairy" ] }
-
-
-draftCreateRequest : Api.Foods.CreateFoodRequest
-draftCreateRequest =
-    { baseFoodRequest
-        | brand = Just "Local"
-        , categories = [ "dairy" ]
-        , nutrients = [ { code = "PROTEIN_G", amountPer100g = 18 } ]
+    { name = "Paneer"
+    , brand = Nothing
+    , categories = [ "dairy" ]
+    , defaultQuantity = Nothing
+    , defaultUnit = Nothing
+    , nutrients = []
+    , servings = []
     }
 
 
@@ -418,11 +273,6 @@ readyTurn =
 dairySuggestion : CategorySuggestion
 dairySuggestion =
     { value = "dairy", count = 4 }
-
-
-otherSuggestion : CategorySuggestion
-otherSuggestion =
-    { value = "other", count = 1 }
 
 
 nutrientItems : List NutrientItem

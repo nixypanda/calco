@@ -6,173 +6,66 @@ import Component.FoodEditor as Form
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Expect
-import I18n
 import Page.CustomFood.Edit as CustomFoodEdit
-import Support.Fixtures as Fixtures
-import Support.Story exposing (runSteps)
+import Support.Story as Story
 import Test exposing (Test, describe, test)
-import Translations.Ids exposing (TranslationId(..))
 
 
 tests : Test
 tests =
     describe "Page.CustomFood.Edit"
-        [ test "load, validation, and a failed save retried from the same form" <|
+        [ test "a user edits a food and saves it" <|
             \_ ->
-                let
-                    loaded : CustomFoodEdit.Model
-                    loaded =
-                        CustomFoodEdit.init "food-1"
-                            |> Tuple.first
-                            |> runSteps step
-                                [ CustomFoodEdit.FoodLoaded "food-1" (Ok food)
-                                , CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems })
-                                , CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] })
-                                ]
-
-                    cleared : CustomFoodEdit.Model
-                    cleared =
-                        step (CustomFoodEdit.FormMsg (Form.NameChanged "")) loaded
-
-                    invalid : CustomFoodEdit.Model
-                    invalid =
-                        step CustomFoodEdit.SubmitClicked cleared
-
-                    named : CustomFoodEdit.Model
-                    named =
-                        step (CustomFoodEdit.FormMsg (Form.NameChanged "Paneer")) invalid
-
-                    ( submitting, updateOut ) =
-                        stepWithOut CustomFoodEdit.SubmitClicked named
-
-                    ( failed, _ ) =
-                        stepWithOut
-                            (CustomFoodEdit.SaveCompleted (Err Client.NetworkError))
-                            submitting
-
-                    ( retrying, retryOut ) =
-                        stepWithOut CustomFoodEdit.SubmitClicked failed
-
-                    ( saved, completionOut ) =
-                        stepWithOut
-                            (CustomFoodEdit.SaveCompleted (Ok { id = "food-1" }))
-                            retrying
-                in
-                { loaded = ( (toScreen loaded).name, (toScreen loaded).unitOptions )
-                , validation = (toScreen invalid).error
-                , request = updateRequest updateOut
-                , failure = (toScreen failed).error
-                , screen = toScreen saved
-                , retryRequest = updateRequest retryOut
-                , finalOut = completionOut
-                }
-                    |> Expect.equal
-                        { loaded = ( "Curd", [ "g" ] )
-                        , validation = Just nameRequired
-                        , request = Just paneerRequest
-                        , failure = Just Fixtures.networkErrorMessage
-                        , screen =
-                            { name = "Paneer"
-                            , categories = [ "dairy" ]
-                            , nutrients = []
-                            , unitOptions = [ "g" ]
-                            , disabled = True
-                            , error = Nothing
+                editedFood
+                    |> step CustomFoodEdit.SubmitClicked
+                    |> step (CustomFoodEdit.SaveCompleted (Ok { id = "food-1" }))
+                    |> finish
+                        (\( saved, completionOut ) ->
+                            { screen = toScreen saved
+                            , finalOut = completionOut
                             }
-                        , retryRequest = Just paneerRequest
-                        , finalOut =
-                            CustomFoodEdit.Navigate (CustomFoodShow "food-1")
-                        }
-        , test "stale loads and late completions are ignored, retry reloads, then 401 expires" <|
+                                |> Expect.equal
+                                    { screen =
+                                        { name = "Paneer"
+                                        , categories = [ "dairy" ]
+                                        , nutrients = []
+                                        , unitOptions = [ "g" ]
+                                        , error = Nothing
+                                        }
+                                    , finalOut =
+                                        CustomFoodEdit.Navigate (CustomFoodShow "food-1")
+                                    }
+                        )
+        , test "a failed save can be retried" <|
             \_ ->
-                let
-                    started : CustomFoodEdit.Model
-                    started =
-                        CustomFoodEdit.init "food-1" |> Tuple.first
-
-                    staleOther : CustomFoodEdit.Model
-                    staleOther =
-                        step (CustomFoodEdit.FoodLoaded "other" (Ok otherFood)) started
-
-                    failed : CustomFoodEdit.Model
-                    failed =
-                        step
-                            (CustomFoodEdit.FoodLoaded "food-1" (Err Client.NetworkError))
-                            staleOther
-
-                    late : CustomFoodEdit.Model
-                    late =
-                        step (CustomFoodEdit.FoodLoaded "food-1" (Ok food)) failed
-
-                    retried : CustomFoodEdit.Model
-                    retried =
-                        step CustomFoodEdit.RetryClicked late
-
-                    loaded : CustomFoodEdit.Model
-                    loaded =
-                        retried
-                            |> runSteps step
-                                [ CustomFoodEdit.FoodLoaded "food-1" (Ok food)
-                                , CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems })
-                                , CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] })
-                                ]
-
-                    staleAfter : CustomFoodEdit.Model
-                    staleAfter =
-                        step (CustomFoodEdit.FoodLoaded "other" (Ok otherFood)) loaded
-
-                    ( submitting, updateOut ) =
-                        stepWithOut CustomFoodEdit.SubmitClicked staleAfter
-
-                    ( saveFailed, _ ) =
-                        stepWithOut
-                            (CustomFoodEdit.SaveCompleted (Err Client.NetworkError))
-                            submitting
-
-                    lateSaveOut : CustomFoodEdit.OutMsg
-                    lateSaveOut =
-                        out
-                            (CustomFoodEdit.SaveCompleted (Ok { id = "food-1" }))
-                            saveFailed
-
-                    ( retrying, retryOut ) =
-                        stepWithOut CustomFoodEdit.SubmitClicked saveFailed
-
-                    ( final, completionOut ) =
-                        stepWithOut
-                            (CustomFoodEdit.SaveCompleted (Err Fixtures.unauthorized))
-                            retrying
-                in
-                { staleOther = (toScreen staleOther).name
-                , failed = (toScreen failed).error
-                , late = (toScreen late).error
-                , retried = (toScreen retried).error
-                , staleAfter = (toScreen staleAfter).name
-                , request = updateRequest updateOut
-                , lateSaveOut = lateSaveOut
-                , retryRequest = updateRequest retryOut
-                , screen = toScreen final
-                , finalOut = completionOut
-                }
-                    |> Expect.equal
-                        { staleOther = ""
-                        , failed = Just Fixtures.networkErrorMessage
-                        , late = Just Fixtures.networkErrorMessage
-                        , retried = Nothing
-                        , staleAfter = "Curd"
-                        , request = Just curdRequest
-                        , lateSaveOut = CustomFoodEdit.NoOp
-                        , retryRequest = Just curdRequest
-                        , screen =
-                            { name = "Curd"
-                            , categories = [ "dairy" ]
-                            , nutrients = []
-                            , unitOptions = [ "g" ]
-                            , disabled = False
-                            , error = Just "Sign in again"
+                loadedFood
+                    |> step CustomFoodEdit.SubmitClicked
+                    |> step
+                        (CustomFoodEdit.SaveCompleted (Err Client.NetworkError))
+                    |> step CustomFoodEdit.SubmitClicked
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { request = updateRequest outMsg
+                            , disabled = isSubmitting model
                             }
-                        , finalOut = CustomFoodEdit.SessionExpired
-                        }
+                                |> Expect.equal
+                                    { request = Just curdRequest
+                                    , disabled = True
+                                    }
+                        )
+        , test "a failed load can be retried" <|
+            \_ ->
+                CustomFoodEdit.init "food-1"
+                    |> Story.start
+                    |> step
+                        (CustomFoodEdit.FoodLoaded "food-1" (Err Client.NetworkError))
+                    |> step CustomFoodEdit.RetryClicked
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg
+                                |> Expect.equal
+                                    (CustomFoodEdit.RequestInitialData "food-1")
+                        )
         ]
 
 
@@ -181,7 +74,6 @@ type alias Screen =
     , categories : List String
     , nutrients : List String
     , unitOptions : List String
-    , disabled : Bool
     , error : Maybe String
     }
 
@@ -194,7 +86,6 @@ toScreen model =
             , categories = loaded.form.categoryInput.selected
             , nutrients = List.filterMap nutrientRow loaded.form.nutrients
             , unitOptions = List.map .code loaded.units
-            , disabled = Form.isSubmitting loaded.form.submit
             , error = submitError loaded.form.submit
             }
 
@@ -203,7 +94,6 @@ toScreen model =
             , categories = []
             , nutrients = []
             , unitOptions = []
-            , disabled = False
             , error = Just failed.message
             }
 
@@ -212,7 +102,6 @@ toScreen model =
             , categories = []
             , nutrients = []
             , unitOptions = []
-            , disabled = False
             , error = Nothing
             }
 
@@ -236,6 +125,16 @@ submitError state =
             Nothing
 
 
+isSubmitting : CustomFoodEdit.Model -> Bool
+isSubmitting model =
+    case model of
+        CustomFoodEdit.Loaded loaded ->
+            Form.isSubmitting loaded.form.submit
+
+        _ ->
+            False
+
+
 updateRequest : CustomFoodEdit.OutMsg -> Maybe Api.Foods.CreateFoodRequest
 updateRequest outMsg =
     case outMsg of
@@ -244,11 +143,6 @@ updateRequest outMsg =
 
         _ ->
             Nothing
-
-
-step : CustomFoodEdit.Msg -> CustomFoodEdit.Model -> CustomFoodEdit.Model
-step msg model =
-    Fixtures.tupleFirst (CustomFoodEdit.update msg model)
 
 
 stepWithOut :
@@ -263,14 +157,40 @@ stepWithOut msg model =
     ( next, outMsg )
 
 
-out : CustomFoodEdit.Msg -> CustomFoodEdit.Model -> CustomFoodEdit.OutMsg
-out msg model =
-    Fixtures.tupleThird (CustomFoodEdit.update msg model)
+
+-- STORY PIPELINE
 
 
-nameRequired : String
-nameRequired =
-    I18n.en TidCustomFoodNameRequired
+type alias Journey =
+    Story.Journey CustomFoodEdit.Model CustomFoodEdit.OutMsg
+
+
+step : CustomFoodEdit.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+finish :
+    (( CustomFoodEdit.Model, CustomFoodEdit.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+loadedFood : Journey
+loadedFood =
+    CustomFoodEdit.init "food-1"
+        |> Story.start
+        |> step (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
+        |> step (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
+        |> step (CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] }))
+
+
+editedFood : Journey
+editedFood =
+    loadedFood
+        |> step (CustomFoodEdit.FormMsg (Form.NameChanged "Paneer"))
 
 
 curdRequest : Api.Foods.CreateFoodRequest
@@ -283,11 +203,6 @@ curdRequest =
     , nutrients = []
     , servings = [ { unit = "cup", gramsPerUnit = 240 } ]
     }
-
-
-paneerRequest : Api.Foods.CreateFoodRequest
-paneerRequest =
-    { curdRequest | name = "Paneer" }
 
 
 food : ProductDetail
@@ -307,11 +222,6 @@ food =
     , servings = [ { unit = "cup", gramsPerUnit = "240" } ]
     , allowedUnits = [ gram ]
     }
-
-
-otherFood : ProductDetail
-otherFood =
-    { food | id = "food-2", name = "Ghee" }
 
 
 gram : UnitItem

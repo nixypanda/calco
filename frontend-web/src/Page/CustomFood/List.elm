@@ -59,7 +59,6 @@ type Msg
     | OpenFoodClicked String
     | CreateWithAiClicked
     | CreateManuallyClicked
-    | BackClicked
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -81,9 +80,6 @@ update msg model =
 
         CreateManuallyClicked ->
             ( model, Cmd.none, Navigate CustomFoodCreate )
-
-        BackClicked ->
-            ( model, Cmd.none, Navigate (DiaryDay Nothing Nothing) )
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
