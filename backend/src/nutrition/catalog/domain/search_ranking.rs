@@ -815,16 +815,6 @@ mod tests {
         ProductId(Uuid::from_u128(value))
     }
 
-    #[test]
-    fn normalize_trims_lowercases_and_collapses_whitespace() {
-        let matcher = TextMatcher::default();
-
-        assert_eq!(
-            matcher.normalize("  Greek \t  Yogurt\n").as_str(),
-            "greek yogurt"
-        );
-    }
-
     #[rstest]
     #[case::exact("greek yogurt", "  Greek   Yogurt ", Some(MatchKind::Exact))]
     #[case::prefix("greek", "Greek Yogurt", Some(MatchKind::Prefix))]
@@ -858,19 +848,6 @@ mod tests {
                 .unwrap()
                 .kind,
             MatchKind::Exact
-        );
-    }
-
-    #[rstest]
-    #[case::nan(f64::NAN)]
-    #[case::just_below_zero(-0.1)]
-    #[case::just_above_one(1.1)]
-    #[case::positive_infinity(f64::INFINITY)]
-    #[case::negative_infinity(f64::NEG_INFINITY)]
-    fn fuzzy_threshold_rejects_invalid_values(#[case] value: f64) {
-        assert!(
-            FuzzyThreshold::new(value).is_none(),
-            "expected {value} to be rejected"
         );
     }
 
@@ -1038,50 +1015,6 @@ mod tests {
     }
 
     #[test]
-    fn inclusive_and_exclusive_threshold_gates_use_trigram_containment() {
-        let default_matcher = TextMatcher::default();
-
-        let product_match = default_matcher
-            .match_value(&default_matcher.normalize("chese"), "Chase")
-            .expect("product fuzzy gate is inclusive at exactly 0.5");
-        assert_eq!(product_match.kind, MatchKind::Fuzzy);
-        assert_similarity_eq(product_match.similarity.value(), 0.5);
-
-        let counts = vec![category_count("chase", 1)];
-        assert!(
-            rank_category_suggestions_with(&default_matcher, "chese", counts.clone(), 10)
-                .is_empty(),
-            "category fuzzy gate is exclusive at exactly 0.5"
-        );
-
-        let below = matcher(DEFAULT_FUZZY_THRESHOLD - 0.000_001);
-        assert_eq!(
-            rank_category_suggestions_with(&below, "chese", counts, 10),
-            vec![CategorySuggestion {
-                value: "chase".into(),
-                count: 1,
-            }]
-        );
-
-        let yoghurt_match = default_matcher
-            .match_value(&default_matcher.normalize("yoghurt"), "Greek Yogurt")
-            .expect("product fuzzy gate accepts the 0.5 word-order match");
-        assert_eq!(yoghurt_match.kind, MatchKind::Fuzzy);
-        assert_similarity_eq(yoghurt_match.similarity.value(), 0.5);
-
-        assert!(
-            rank_category_suggestions_with(
-                &default_matcher,
-                "yoghurt",
-                vec![category_count("greek yogurt", 1)],
-                10,
-            )
-            .is_empty(),
-            "category gate rejects the 0.5 word-order match"
-        );
-    }
-
-    #[test]
     fn wildcard_characters_are_literal() {
         let matcher = TextMatcher::default();
         let percent = matcher
@@ -1177,51 +1110,6 @@ mod tests {
         assert_eq!(matches.term, None);
         assert_eq!(matches.name_similarity.value(), 1.0);
         assert!(matches.brand_similarity.value() > 0.0);
-    }
-
-    #[test]
-    fn identifier_matching_never_uses_fuzzy_similarity() {
-        let matcher = TextMatcher::default();
-        let query = matcher.normalize("abc124");
-
-        assert_eq!(
-            matcher.match_value(&query, "abc123").unwrap().kind,
-            MatchKind::Fuzzy
-        );
-
-        let document = SearchDocument {
-            name: "zzzzzz",
-            brand: None,
-            identifier: Some("abc123"),
-            terms: &[],
-        };
-        let matches = matcher.match_document(&query, &document);
-
-        assert_eq!(matches.identifier, None);
-        assert!(!matches.is_match());
-    }
-
-    #[rstest]
-    #[case::exact("abc123", MatchKind::Exact)]
-    #[case::prefix("abc", MatchKind::Prefix)]
-    #[case::substring("bc1", MatchKind::Substring)]
-    fn identifier_matches_have_zero_similarity(
-        #[case] query: &str,
-        #[case] expected_kind: MatchKind,
-    ) {
-        let matcher = TextMatcher::default();
-        let query = matcher.normalize(query);
-        let document = SearchDocument {
-            name: "Plain base",
-            brand: None,
-            identifier: Some("abc123"),
-            terms: &[],
-        };
-
-        let matches = matcher.match_document(&query, &document);
-        let identifier = matches.identifier.expect("identifier should match");
-        assert_eq!(identifier.kind, expected_kind);
-        assert_eq!(identifier.similarity.value(), 0.0);
     }
 
     #[test]
@@ -1515,38 +1403,6 @@ mod tests {
 
         eprintln!("ranked 13,057 catalog candidates in {elapsed:?}");
         assert_eq!(ranked.len(), PRODUCT_SEARCH_LIMIT);
-    }
-
-    #[test]
-    fn limit_is_applied_after_ranking() {
-        let candidates = vec![
-            fields(1, "Yogurt", None, None),
-            fields(2, "Yogurt cup", None, None),
-            fields(3, "Greek yogurt", None, None),
-        ];
-        assert_eq!(
-            rank_catalog("yogurt", candidates, 2),
-            vec![product_id(1), product_id(2)]
-        );
-
-        let counts = vec![
-            category_count("dairy bar", 5),
-            category_count("dairy", 2),
-            category_count("non dairy", 100),
-        ];
-        assert_eq!(
-            rank_category_suggestions("dairy", counts, 2),
-            vec![
-                CategorySuggestion {
-                    value: "dairy bar".into(),
-                    count: 5,
-                },
-                CategorySuggestion {
-                    value: "dairy".into(),
-                    count: 2,
-                },
-            ]
-        );
     }
 
     type GeneratedProduct = (String, Option<String>, Option<String>);

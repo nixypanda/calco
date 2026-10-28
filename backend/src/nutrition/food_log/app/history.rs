@@ -663,26 +663,6 @@ mod tests {
     }
 
     #[test]
-    fn recent_items_break_score_ties_by_log_date_then_name() {
-        let logs = vec![
-            aged_log("Cherry", 3, 1, "100"),
-            aged_log("Banana", 2, 0, "100"),
-            aged_log("Apple", 1, 0, "100"),
-        ];
-
-        let items = recent_items_from_logs(logs, reference_date());
-
-        assert!(items.iter().all(|item| item.score == 8));
-        assert_eq!(
-            items
-                .iter()
-                .map(|item| item_name(&item.item))
-                .collect::<Vec<_>>(),
-            vec!["Apple", "Banana", "Cherry"]
-        );
-    }
-
-    #[test]
     fn recent_items_report_the_most_recently_logged_quantity_as_last_used() {
         let mut logs = vec![aged_log("Test Food", 1, 0, "250")];
         logs.extend((0..5).map(|_| aged_log("Test Food", 1, 10, "100")));

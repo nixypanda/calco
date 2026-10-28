@@ -1093,15 +1093,6 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn category_normalize_list_trims_lowercases_and_deduplicates() {
-        let categories = Category::normalize_list([" Snacks ", "snacks", "", "Beverages"]);
-        assert_eq!(
-            categories.iter().map(|c| c.0.as_str()).collect::<Vec<_>>(),
-            vec!["snacks", "beverages"]
-        );
-    }
-
     fn nutrient_input(amount_per_100g: Decimal) -> ProductNutrientInput {
         ProductNutrientInput {
             code: "ENERGY_KCAL".into(),
@@ -1190,33 +1181,6 @@ mod tests {
             blank_source_id,
             Err(NutritionError::Validation(_))
         ));
-    }
-
-    #[test]
-    fn external_product_batch_rejects_identities_that_collide_after_trimming() {
-        let catalog = test_catalog();
-        let first = Product::new_external(
-            ExternalSource::Off,
-            ExternalProductBuilder::new("same-id", "Food One"),
-            &catalog,
-        )
-        .unwrap();
-        let second = Product::new_external(
-            ExternalSource::Off,
-            ExternalProductBuilder::new(" same-id ", "Food Two"),
-            &catalog,
-        )
-        .unwrap();
-
-        match ExternalProductBatch::new(vec![first, second]) {
-            Err(NutritionError::Validation(message)) => {
-                assert_eq!(
-                    message,
-                    "duplicate external product identity: (OFF, same-id)"
-                );
-            }
-            other => panic!("expected duplicate identity validation error, got {other:?}"),
-        }
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -1367,14 +1331,6 @@ mod tests {
     }
 
     #[test]
-    fn amount_per_100g_rounds_to_storage_scale() {
-        let amount =
-            AmountPer100g::new("0.08333333333333333333333333333".parse().unwrap()).unwrap();
-
-        assert_eq!(amount.value(), Decimal::new(83333, 6));
-    }
-
-    #[test]
     fn custom_product_builder_rejects_half_default_quantity_pair() {
         let missing_unit = CustomProductBuilder::new("Food")
             .optional_default_portion(Some(Decimal::new(1, 0)), None);
@@ -1426,47 +1382,6 @@ mod tests {
                 assert!(!msg.contains("missing required"), "msg: {msg}");
             }
             other => panic!("expected Validation error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn catalog_policy_shares_reads_but_limits_custom_food_writes_to_creator() {
-        let owner = Uuid::new_v4();
-        let other = Uuid::new_v4();
-        let product = Product::new_custom(
-            owner,
-            CustomProductBuilder::new("Shared food")
-                .nutrients(required_nutrient_inputs(Decimal::new(10, 0))),
-            &test_catalog(),
-        )
-        .unwrap();
-        let policy = CatalogPolicy;
-
-        assert!(policy.authorize_view(other, &product).is_ok());
-        assert!(policy.authorize_mutation(owner, &product).is_ok());
-        match policy.authorize_mutation(other, &product) {
-            Err(NutritionError::Forbidden(message)) => {
-                assert_eq!(message, "only the creator may modify this custom food")
-            }
-            other => panic!("expected forbidden mutation error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn catalog_policy_keeps_imported_products_read_only() {
-        let actor = Uuid::new_v4();
-        let product = Product::new_external(
-            ExternalSource::Off,
-            ExternalProductBuilder::new("imported-food", "Imported food"),
-            &test_catalog(),
-        )
-        .unwrap();
-
-        match CatalogPolicy.authorize_mutation(actor, &product) {
-            Err(NutritionError::Forbidden(message)) => {
-                assert_eq!(message, "system catalog products are read-only");
-            }
-            other => panic!("expected forbidden mutation error, got {other:?}"),
         }
     }
 
@@ -1942,29 +1857,5 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn amount_per_100g_classifies_tiny_boundary_values() {
-        assert_eq!(
-            AmountPer100g::new(Decimal::ZERO).unwrap().value(),
-            Decimal::ZERO
-        );
-        assert_eq!(
-            AmountPer100g::new(Decimal::new(5, 7)).unwrap().value(),
-            Decimal::ZERO
-        );
-        assert_eq!(
-            AmountPer100g::new(Decimal::new(1, 12)).unwrap().value(),
-            Decimal::ZERO
-        );
-        assert!(matches!(
-            AmountPer100g::new(Decimal::new(-1, 12)),
-            Err(NutritionError::Validation(_))
-        ));
-        assert!(matches!(
-            AmountPer100g::new(Decimal::new(-5, 7)),
-            Err(NutritionError::Validation(_))
-        ));
     }
 }

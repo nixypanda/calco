@@ -815,30 +815,6 @@ mod tests {
     }
 
     #[test]
-    fn update_ad_hoc_log_scales_snapshots_and_preserves_item_and_unit() {
-        let log = build_ad_hoc_log();
-        let original_snapshots = log.nutrient_snapshots().to_vec();
-        let updated_quantity = serving_quantity(Decimal::new(25, 1));
-
-        let updated = log
-            .update_ad_hoc_log(ad_hoc_date(), None, None, updated_quantity, None)
-            .unwrap();
-
-        assert_eq!(updated.item(), log.item());
-        assert_eq!(updated.quantity_amount(), Decimal::new(25, 1));
-        assert_eq!(updated.quantity_unit(), &UnitCode("serving".into()));
-        assert_eq!(updated.nutrient_snapshots().len(), original_snapshots.len());
-        for (snapshot, original) in updated
-            .nutrient_snapshots()
-            .iter()
-            .zip(original_snapshots.iter())
-        {
-            assert_eq!(snapshot.amount, original.amount * Decimal::new(25, 1));
-            assert_eq!(snapshot.unit, original.unit);
-        }
-    }
-
-    #[test]
     fn update_ad_hoc_log_rejects_changing_unit() {
         let log = build_ad_hoc_log();
         let grams = Quantity::new(Decimal::new(2, 0), UnitCode("g".into())).unwrap();

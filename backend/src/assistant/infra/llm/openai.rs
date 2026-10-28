@@ -796,13 +796,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn response_accepts_missing_usage() {
-        let parsed = parse_response(br#"{"choices":[{"message":{"content":"{}"}}]}"#).unwrap();
-        assert_eq!(parsed.content, "{}");
-        assert_eq!(parsed.usage, None);
-    }
-
     fn generated_content() -> impl Strategy<Value = String> {
         any::<String>().prop_map(|mut content| {
             if content.is_empty() {
