@@ -1,11 +1,29 @@
 module Support.Fuzz exposing
-    ( interiorLocalDate
+    ( amountString
+    , apiError
+    , device
+    , foodLog
+    , foodLogList
+    , interiorLocalDate
     , invalidCanonicalDateStrings
     , localDate
+    , maybeMealSlot
+    , mealSlot
+    , mealSlotList
     , monthBoundaryCases
+    , monthPeriod
+    , nonNegativeAmountString
+    , route
+    , segment
     , year
     )
 
+import Api.Client exposing (ApiError(..))
+import Data.FoodLog exposing (FoodLog, LogItem(..))
+import Data.MealSlot as MealSlot exposing (MealSlot)
+import Data.Nutrition as Nutrition
+import Data.Route exposing (Route(..))
+import Element exposing (DeviceClass(..), Orientation(..))
 import Fuzz exposing (Fuzzer)
 import Lib.Date as LocalDate exposing (LocalDate)
 
@@ -127,6 +145,307 @@ monthBoundaryCases yearValue =
 canonicalString : Int -> Int -> Int -> String
 canonicalString yearValue month day =
     pad4 yearValue ++ "-" ++ pad2 month ++ "-" ++ pad2 day
+
+
+{-| A valid month period with a four-digit year. The year range leaves room for
+every month-shift law used by the calendar tests without leaving the canonical
+four-digit `YYYY-MM` shape.
+-}
+monthPeriod : Fuzzer String
+monthPeriod =
+    Fuzz.map2
+        (\yearValue month -> pad4 yearValue ++ "-" ++ pad2 month)
+        (Fuzz.frequency
+            [ ( 6, Fuzz.intRange 1000 9998 )
+            , ( 2
+              , Fuzz.oneOfValues
+                    [ 1000, 1900, 2000, 2100, 2400, 9998 ]
+              )
+            ]
+        )
+        (Fuzz.intRange 1 12)
+
+
+mealSlot : Fuzzer MealSlot
+mealSlot =
+    Fuzz.oneOfValues MealSlot.all
+
+
+maybeMealSlot : Fuzzer (Maybe MealSlot)
+maybeMealSlot =
+    Fuzz.oneOf
+        [ Fuzz.constant Nothing
+        , Fuzz.map Just mealSlot
+        ]
+
+
+mealSlotList : Fuzzer (List MealSlot)
+mealSlotList =
+    Fuzz.listOfLengthBetween 0 8 mealSlot
+
+
+maybeLocalDate : Fuzzer (Maybe LocalDate)
+maybeLocalDate =
+    Fuzz.oneOf
+        [ Fuzz.constant Nothing
+        , Fuzz.map Just localDate
+        ]
+
+
+{-| Decimal strings, including blank, non-numeric, negative, zero, and large
+finite values. `NaN` and `Infinity` are deliberately absent: the properties
+that consume this fuzzer model finite amounts, and `safeAmount` has no defined
+policy for non-finite input yet.
+-}
+amountString : Fuzzer String
+amountString =
+    Fuzz.oneOf
+        [ Fuzz.constant ""
+        , Fuzz.constant " "
+        , Fuzz.constant "nope"
+        , Fuzz.constant "-1"
+        , Fuzz.constant "-0.5"
+        , Fuzz.constant "0"
+        , Fuzz.constant "100"
+        , Fuzz.map String.fromFloat (Fuzz.floatRange -100000 100000)
+        , Fuzz.map2
+            (\whole fraction ->
+                String.fromInt whole ++ "." ++ pad2 (modBy 100 fraction)
+            )
+            (Fuzz.intRange 0 100000)
+            (Fuzz.intRange 0 99)
+        ]
+
+
+{-| Finite, non-negative decimal strings for arithmetic properties.
+-}
+nonNegativeAmountString : Fuzzer String
+nonNegativeAmountString =
+    Fuzz.oneOf
+        [ Fuzz.constant "0"
+        , Fuzz.constant "100"
+        , Fuzz.map String.fromFloat (Fuzz.floatRange 0 100000)
+        , Fuzz.map2
+            (\whole fraction ->
+                String.fromInt whole ++ "." ++ pad2 (modBy 100 fraction)
+            )
+            (Fuzz.intRange 0 10000)
+            (Fuzz.intRange 0 99)
+        ]
+
+
+{-| A non-empty arbitrary URL path segment.
+
+Backend IDs are UUID strings, so empty segments, `"."`, and `".."` are outside
+the route-ID contract: no path encoding can survive browser dot-segment
+normalization for those values. Everything else, including whitespace, slashes,
+percent signs, and non-ASCII text, is in the pool so the route roundtrip proves
+the encoder escapes dynamic IDs rather than assuming they are URL-safe. The
+edge pool makes the reserved `new`/`custom` escapes and percent decoding
+deterministic instead of relying on random strings.
+
+-}
+segment : Fuzzer String
+segment =
+    Fuzz.frequency
+        [ ( 8, arbitrarySegment )
+        , ( 1, Fuzz.oneOfValues edgeSegments )
+        ]
+
+
+arbitrarySegment : Fuzzer String
+arbitrarySegment =
+    Fuzz.map2
+        (\head tail -> String.fromChar head ++ tail)
+        Fuzz.char
+        (Fuzz.map String.fromList (Fuzz.listOfLengthBetween 0 12 Fuzz.char))
+
+
+edgeSegments : List String
+edgeSegments =
+    [ "new"
+    , "custom"
+    , "new "
+    , " custom"
+    , "%"
+    , "%2F"
+    , "%41"
+    , "100%"
+    , "+"
+    , " "
+    , "/"
+    , "?"
+    , "#"
+    , "a b"
+    , "a/b"
+    , "a?b"
+    , "a#b"
+    , "é"
+    ]
+
+
+route : Fuzzer Route
+route =
+    Fuzz.oneOf
+        [ Fuzz.constant Root
+        , Fuzz.constant BootstrapSetup
+        , Fuzz.constant AuthLogin
+        , Fuzz.constant AdminDashboard
+        , Fuzz.constant AdminCreateUser
+        , Fuzz.map AdminEditUser segment
+        , Fuzz.map2 DiaryDay maybeLocalDate maybePeriod
+        , Fuzz.map DiaryCalendar maybePeriod
+        , Fuzz.map NutritionDetails maybeLocalDate
+        , Fuzz.constant GoalSettings
+        , Fuzz.constant DiarySettings
+        , Fuzz.constant SettingsApiKeys
+        , Fuzz.constant SettingsApiKeyCreate
+        , Fuzz.map3 FoodLogEntry segment maybeLocalDate maybePeriod
+        , Fuzz.map2 AdHocLogCreate maybeLocalDate maybeMealSlot
+        , Fuzz.map2 AiLogCreate maybeLocalDate maybeMealSlot
+        , Fuzz.map2 FoodSearch maybeLocalDate maybeMealSlot
+        , Fuzz.map4 FoodShow segment maybeLocalDate maybeMealSlot maybeSegment
+        , Fuzz.constant CustomFoodList
+        , Fuzz.constant CustomFoodCreate
+        , Fuzz.constant CustomFoodCreateWithAi
+        , Fuzz.map CustomFoodEdit segment
+        , Fuzz.map CustomFoodShow segment
+        , Fuzz.constant MealList
+        , Fuzz.constant MealCreate
+        , Fuzz.map MealShow segment
+        , Fuzz.map MealEdit segment
+        ]
+
+
+maybePeriod : Fuzzer (Maybe String)
+maybePeriod =
+    Fuzz.oneOf
+        [ Fuzz.constant Nothing
+        , Fuzz.map Just monthPeriod
+        , Fuzz.map Just segment
+        ]
+
+
+maybeSegment : Fuzzer (Maybe String)
+maybeSegment =
+    Fuzz.oneOf
+        [ Fuzz.constant Nothing
+        , Fuzz.map Just segment
+        ]
+
+
+apiError : Fuzzer ApiError
+apiError =
+    Fuzz.oneOf
+        [ Fuzz.constant BadUrl
+        , Fuzz.constant Timeout
+        , Fuzz.constant NetworkError
+        , Fuzz.map3 BadStatus statusCode Fuzz.string Fuzz.string
+        , Fuzz.map RateLimited
+            (Fuzz.oneOf
+                [ Fuzz.constant Nothing
+                , Fuzz.map Just (Fuzz.intRange 0 3600)
+                ]
+            )
+        , Fuzz.constant BadBody
+        ]
+
+
+statusCode : Fuzzer Int
+statusCode =
+    Fuzz.frequency
+        [ ( 2, Fuzz.oneOfValues [ 401, 403, 429 ] )
+        , ( 3, Fuzz.intRange 100 599 )
+        ]
+
+
+deviceClass : Fuzzer DeviceClass
+deviceClass =
+    Fuzz.oneOfValues [ Phone, Tablet, Desktop, BigDesktop ]
+
+
+device : Fuzzer Element.Device
+device =
+    Fuzz.map2
+        (\class orientation -> { class = class, orientation = orientation })
+        deviceClass
+        (Fuzz.oneOfValues [ Portrait, Landscape ])
+
+
+foodLogList : Fuzzer (List FoodLog)
+foodLogList =
+    Fuzz.listOfLengthBetween 0 10 foodLog
+
+
+{-| A food log whose date, slot, item shape, quantity, nutrients, and notes are
+all arbitrary. Filter properties use this rather than hand-built records so a
+regression in any bucket field is exercised.
+-}
+foodLog : Fuzzer FoodLog
+foodLog =
+    Fuzz.map2
+        (\base notes -> { base | notes = notes })
+        baseFoodLog
+        (Fuzz.oneOf [ Fuzz.constant Nothing, Fuzz.map Just segment ])
+
+
+baseFoodLog : Fuzzer FoodLog
+baseFoodLog =
+    Fuzz.map7
+        (\id logDate deviceTimezone mealSlotValue item quantityValue nutrients ->
+            { id = id
+            , logDate = logDate
+            , deviceTimezone = deviceTimezone
+            , mealSlot = mealSlotValue
+            , item = item
+            , quantity = quantityValue
+            , nutrients = nutrients
+            , notes = Nothing
+            }
+        )
+        (Fuzz.map (\value -> "log-" ++ String.fromInt value) (Fuzz.intRange 0 100000))
+        localDate
+        (Fuzz.oneOf [ Fuzz.constant Nothing, Fuzz.map Just segment ])
+        maybeMealSlot
+        logItem
+        quantity
+        (Fuzz.listOfLengthBetween 0 5 nutrientAmount)
+
+
+logItem : Fuzzer LogItem
+logItem =
+    Fuzz.oneOf
+        [ Fuzz.map3
+            (\id name brand -> ProductLogItem { id = id, name = name, brand = brand })
+            segment
+            segment
+            maybeSegment
+        , Fuzz.map2
+            (\id name -> MealLogItem { id = id, name = name })
+            segment
+            segment
+        , Fuzz.map2
+            (\name brand -> AdHocLogItem { name = name, brand = brand })
+            segment
+            maybeSegment
+        ]
+
+
+quantity : Fuzzer Nutrition.Quantity
+quantity =
+    Fuzz.map2
+        (\amount unit -> { amount = amount, unit = unit })
+        nonNegativeAmountString
+        segment
+
+
+nutrientAmount : Fuzzer Nutrition.NutrientAmount
+nutrientAmount =
+    Fuzz.map3
+        (\code amount unit -> { code = code, amount = amount, unit = unit })
+        segment
+        amountString
+        segment
 
 
 arbitraryLocalDate : Fuzzer LocalDate

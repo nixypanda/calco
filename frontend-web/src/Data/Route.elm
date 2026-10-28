@@ -8,7 +8,7 @@ module Data.Route exposing
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Lib.Date as LocalDate exposing (LocalDate)
 import Url exposing (Url)
-import Url.Parser as Parser exposing ((</>), (<?>), Parser, oneOf, s, string, top)
+import Url.Parser as Parser exposing ((</>), (<?>), Parser, oneOf, s, top)
 import Url.Parser.Query as Query
 
 
@@ -56,7 +56,7 @@ routeParser =
         , Parser.map AuthLogin (s "login")
         , Parser.map AdminDashboard (s "admin")
         , Parser.map AdminCreateUser (s "admin" </> s "users" </> s "new")
-        , Parser.map AdminEditUser (s "admin" </> s "users" </> string </> s "edit")
+        , Parser.map AdminEditUser (s "admin" </> s "users" </> pathSegment </> s "edit")
         , Parser.map DiaryDay
             (s "home" <?> dateQuery <?> Query.string "calendar_month")
         , Parser.map DiaryCalendar (s "calendar" <?> Query.string "month")
@@ -70,26 +70,36 @@ routeParser =
         , Parser.map AiLogCreate
             (s "logs" </> s "new" </> s "ai" <?> dateQuery <?> mealSlotQuery)
         , Parser.map FoodLogEntry
-            (s "logs" </> string <?> dateQuery <?> Query.string "calendar_month")
+            (s "logs" </> pathSegment <?> dateQuery <?> Query.string "calendar_month")
         , Parser.map FoodSearch (s "search" <?> dateQuery <?> mealSlotQuery)
         , Parser.map CustomFoodList (s "foods" </> s "custom")
         , Parser.map CustomFoodCreateWithAi
             (s "foods" </> s "custom" </> s "new" </> s "ai")
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
-        , Parser.map CustomFoodEdit (s "foods" </> s "custom" </> string </> s "edit")
-        , Parser.map CustomFoodShow (s "foods" </> s "custom" </> string)
+        , Parser.map CustomFoodEdit (s "foods" </> s "custom" </> pathSegment </> s "edit")
+        , Parser.map CustomFoodShow (s "foods" </> s "custom" </> pathSegment)
         , Parser.map FoodShow
             (s "foods"
-                </> string
+                </> pathSegment
                 <?> dateQuery
                 <?> mealSlotQuery
                 <?> Query.string "lookup_note"
             )
         , Parser.map MealList (s "meals")
         , Parser.map MealCreate (s "meals" </> s "new")
-        , Parser.map MealEdit (s "meals" </> string </> s "edit")
-        , Parser.map MealShow (s "meals" </> string)
+        , Parser.map MealEdit (s "meals" </> pathSegment </> s "edit")
+        , Parser.map MealShow (s "meals" </> pathSegment)
         ]
+
+
+{-| Url.Parser's built-in `string` leaves percent escapes untouched. Dynamic
+routes are written with `Url.percentEncode`, so the parser must decode exactly
+once to recover the original ID. A malformed raw escape such as `/foods/100%`
+stays verbatim instead of turning the whole route into `NotFound`.
+-}
+pathSegment : Parser (String -> a) a
+pathSegment =
+    Parser.custom "SEGMENT" (\raw -> Just (Maybe.withDefault raw (Url.percentDecode raw)))
 
 
 mealSlotQuery : Query.Parser (Maybe MealSlot)
@@ -182,7 +192,7 @@ routeToPath route =
             "/admin/users/new"
 
         AdminEditUser id ->
-            "/admin/users/" ++ id ++ "/edit"
+            "/admin/users/" ++ pathSegmentToString id ++ "/edit"
 
         DiaryDay maybeDate maybeCalendarMonth ->
             withQueryParams "/home"
@@ -218,7 +228,7 @@ routeToPath route =
             "/settings/api-keys/new"
 
         FoodLogEntry id maybeDate maybeCalendarMonth ->
-            withQueryParams ("/logs/" ++ id)
+            withQueryParams ("/logs/" ++ pathSegmentToString id)
                 [ Maybe.map
                     (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
                     maybeDate
@@ -237,7 +247,7 @@ routeToPath route =
             withFoodCtx "/search" maybeDate maybeSlot
 
         FoodShow id maybeDate maybeSlot lookupNote ->
-            withQueryParams ("/foods/" ++ id)
+            withQueryParams ("/foods/" ++ pathSegmentToString id)
                 [ Maybe.map
                     (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
                     maybeDate
@@ -259,10 +269,10 @@ routeToPath route =
             "/foods/custom/new/ai"
 
         CustomFoodEdit id ->
-            "/foods/custom/" ++ id ++ "/edit"
+            "/foods/custom/" ++ pathSegmentToString id ++ "/edit"
 
         CustomFoodShow id ->
-            "/foods/custom/" ++ id
+            "/foods/custom/" ++ pathSegmentToString id
 
         MealList ->
             "/meals"
@@ -271,13 +281,61 @@ routeToPath route =
             "/meals/new"
 
         MealShow id ->
-            "/meals/" ++ id
+            "/meals/" ++ pathSegmentToString id
 
         MealEdit id ->
-            "/meals/" ++ id ++ "/edit"
+            "/meals/" ++ pathSegmentToString id ++ "/edit"
 
         NotFound ->
             "/"
+
+
+{-| Encode a dynamic path segment so reserved characters cannot split the
+path, the query, or the fragment. `"new"` and `"custom"` also get their first
+character escaped because otherwise `/meals/new` could only mean `MealCreate`,
+and `/foods/custom` could only mean `CustomFoodList`.
+-}
+pathSegmentToString : String -> String
+pathSegmentToString value =
+    let
+        encoded : String
+        encoded =
+            Url.percentEncode value
+    in
+    if List.member encoded [ "new", "custom" ] then
+        escapeFirstCharacter encoded
+
+    else
+        encoded
+
+
+escapeFirstCharacter : String -> String
+escapeFirstCharacter value =
+    case String.uncons value of
+        Just ( first, rest ) ->
+            "%" ++ hexByte (Char.toCode first) ++ rest
+
+        Nothing ->
+            value
+
+
+hexByte : Int -> String
+hexByte value =
+    String.fromList
+        [ hexDigit (value // 16)
+        , hexDigit (modBy 16 value)
+        ]
+
+
+hexDigit : Int -> Char
+hexDigit value =
+    Char.fromCode
+        (if value < 10 then
+            Char.toCode '0' + value
+
+         else
+            Char.toCode 'A' + value - 10
+        )
 
 
 withFoodCtx : String -> Maybe LocalDate -> Maybe MealSlot -> String

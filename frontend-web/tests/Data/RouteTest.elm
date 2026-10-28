@@ -1,203 +1,109 @@
 module Data.RouteTest exposing (tests)
 
-import Data.MealSlot exposing (MealSlot(..))
-import Data.Route exposing (Route(..))
+import Data.MealSlot as MealSlot
+import Data.Route as Route exposing (Route(..))
 import Expect
-import Fuzz exposing (Fuzzer)
-import Lib.Date as LocalDate exposing (LocalDate)
+import Support.Fixtures as Fixtures
+import Support.Fuzz as Support
 import Test exposing (Test, describe, fuzz, test)
 import Url
 
 
+{-| `Support.Fuzz.segment` deliberately omits `""`, `"."`, and `".."`: backend
+IDs are UUIDs, and browsers normalize dot segments even when percent-encoded, so
+no `routeToPath` output could roundtrip those values. Percent signs, spaces,
+slashes, unicode, and the reserved words "new"/"custom" are all generated.
+-}
 tests : Test
 tests =
-    describe "Data.Route.fromUrl"
-        [ parses "/setup" BootstrapSetup
-        , parses "/login" AuthLogin
-        , parses "/admin" AdminDashboard
-        , parses "/home" (DiaryDay Nothing Nothing)
-        , parses "/home?date=2026-06-04" (DiaryDay (Just (date "2026-06-04")) Nothing)
-        , parses "/home?date=2026-06-04&calendar_month=2026-06"
-            (DiaryDay (Just (date "2026-06-04")) (Just "2026-06"))
-        , parses "/calendar" (DiaryCalendar Nothing)
-        , parses "/calendar?month=2026-06" (DiaryCalendar (Just "2026-06"))
-        , parses "/details" (NutritionDetails Nothing)
-        , parses "/details?date=2026-06-04" (NutritionDetails (Just (date "2026-06-04")))
-        , parses "/settings/goals" GoalSettings
-        , parses "/settings/api-keys" SettingsApiKeys
-        , parses "/settings/api-keys/new" SettingsApiKeyCreate
-        , parses "/logs/abc" (FoodLogEntry "abc" Nothing Nothing)
-        , parses "/logs/abc?date=2026-06-04"
-            (FoodLogEntry "abc" (Just (date "2026-06-04")) Nothing)
-        , parses "/logs/abc?date=2026-06-04&calendar_month=2026-06"
-            (FoodLogEntry "abc" (Just (date "2026-06-04")) (Just "2026-06"))
-        , parses "/logs/new/ad-hoc?date=2026-06-04&meal_slot=lunch"
-            (AdHocLogCreate (Just (date "2026-06-04")) (Just Lunch))
-        , parses "/logs/new/ai?date=2026-06-04&meal_slot=lunch"
-            (AiLogCreate (Just (date "2026-06-04")) (Just Lunch))
-        , parses "/search" (FoodSearch Nothing Nothing)
-        , parses "/search?meal_slot=breakfast" (FoodSearch Nothing (Just Breakfast))
-        , parses "/search?date=2026-06-04&meal_slot=breakfast"
-            (FoodSearch (Just (date "2026-06-04")) (Just Breakfast))
-        , parses "/foods/abc" (FoodShow "abc" Nothing Nothing Nothing)
-        , parses "/foods/abc?meal_slot=breakfast"
-            (FoodShow "abc" Nothing (Just Breakfast) Nothing)
-        , parses "/foods/abc?date=2026-06-04&meal_slot=breakfast"
-            (FoodShow "abc" (Just (date "2026-06-04")) (Just Breakfast) Nothing)
-        , parses "/foods/abc?lookup_note=Imported%20from%20OFF"
-            (FoodShow "abc" Nothing Nothing (Just "Imported from OFF"))
-        , parses "/foods/custom/new" CustomFoodCreate
-        , parses "/foods/custom/new/ai" CustomFoodCreateWithAi
-        , parses "/foods/custom/abc/edit" (CustomFoodEdit "abc")
-        , parses "/foods/custom" CustomFoodList
-        , parses "/meals" MealList
-        , parses "/meals/new" MealCreate
-        , parses "/meals/abc" (MealShow "abc")
-        , parses "/meals/abc/edit" (MealEdit "abc")
-        , parses "/unknown" NotFound
-        , fuzz routeFuzzer "route paths parse back to the same route" <|
+    describe "Data.Route"
+        [ fuzz Support.route "routeToPath then fromUrl is the identity" <|
             \route ->
                 route
-                    |> Data.Route.routeToPath
+                    |> Route.routeToPath
                     |> parsePath
                     |> Expect.equal (Just route)
+        , test "reserved-word detail IDs roundtrip through their escaped segments" <|
+            \_ ->
+                reservedWordRoutes
+                    |> List.map
+                        (\route ->
+                            route
+                                |> Route.routeToPath
+                                |> parsePath
+                                |> Expect.equal (Just route)
+                        )
+                    |> expectAll
+        , test "primaryRoute maps every detail family to its base family" <|
+            \_ ->
+                primaryRouteCases
+                    |> List.map
+                        (\( route, expected ) ->
+                            Route.primaryRoute route
+                                |> Expect.equal expected
+                        )
+                    |> expectAll
+        , fuzz Support.route "primaryRoute never returns NotFound for a known route" <|
+            \route ->
+                Route.primaryRoute route
+                    |> Expect.notEqual NotFound
+        , fuzz Support.route "primaryRoute is idempotent" <|
+            \route ->
+                Route.primaryRoute (Route.primaryRoute route)
+                    |> Expect.equal (Route.primaryRoute route)
         ]
 
 
-parses : String -> Route -> Test
-parses path expected =
-    test path <|
-        \_ ->
-            Url.fromString ("http://localhost" ++ path)
-                |> Maybe.map Data.Route.fromUrl
-                |> Expect.equal (Just expected)
+reservedWordRoutes : List Route
+reservedWordRoutes =
+    [ MealShow "new"
+    , MealEdit "new"
+    , CustomFoodShow "new"
+    , CustomFoodEdit "new"
+    , FoodShow "custom" Nothing Nothing Nothing
+    , AdminEditUser "new"
+    ]
+
+
+primaryRouteCases : List ( Route, Route )
+primaryRouteCases =
+    [ ( FoodShow "food-1" (Just Fixtures.today) (Just MealSlot.Breakfast) (Just "note")
+      , FoodSearch (Just Fixtures.today) (Just MealSlot.Breakfast)
+      )
+    , ( CustomFoodCreate, CustomFoodList )
+    , ( CustomFoodCreateWithAi, CustomFoodList )
+    , ( CustomFoodEdit "food-1", CustomFoodList )
+    , ( CustomFoodShow "food-1", CustomFoodList )
+    , ( AdminCreateUser, AdminDashboard )
+    , ( AdminEditUser "user-1", AdminDashboard )
+    , ( MealCreate, MealList )
+    , ( MealShow "meal-1", MealList )
+    , ( MealEdit "meal-1", MealList )
+    , ( SettingsApiKeyCreate, SettingsApiKeys )
+    , ( FoodLogEntry "log-1" (Just Fixtures.today) (Just "2026-08")
+      , DiaryDay Nothing Nothing
+      )
+    , ( AdHocLogCreate (Just Fixtures.today) (Just MealSlot.Lunch)
+      , FoodSearch (Just Fixtures.today) (Just MealSlot.Lunch)
+      )
+    , ( AiLogCreate (Just Fixtures.today) (Just MealSlot.Dinner)
+      , FoodSearch (Just Fixtures.today) (Just MealSlot.Dinner)
+      )
+    , ( DiaryDay (Just Fixtures.today) (Just "2026-08"), DiaryDay Nothing Nothing )
+    , ( DiaryCalendar (Just "2026-08"), DiaryDay Nothing Nothing )
+    , ( NutritionDetails (Just Fixtures.today), DiaryDay Nothing Nothing )
+    , ( FoodSearch (Just Fixtures.today) (Just MealSlot.Snack)
+      , FoodSearch (Just Fixtures.today) (Just MealSlot.Snack)
+      )
+    ]
 
 
 parsePath : String -> Maybe Route
 parsePath path =
     Url.fromString ("http://localhost" ++ path)
-        |> Maybe.map Data.Route.fromUrl
+        |> Maybe.map Route.fromUrl
 
 
-routeFuzzer : Fuzzer Route
-routeFuzzer =
-    Fuzz.oneOf
-        [ Fuzz.constant Root
-        , Fuzz.constant BootstrapSetup
-        , Fuzz.constant AuthLogin
-        , Fuzz.constant AdminDashboard
-        , Fuzz.constant AdminCreateUser
-        , Fuzz.map AdminEditUser safeSegmentFuzzer
-        , Fuzz.map2 DiaryDay maybeDateFuzzer maybeMonthFuzzer
-        , Fuzz.map DiaryCalendar maybeMonthFuzzer
-        , Fuzz.map NutritionDetails maybeDateFuzzer
-        , Fuzz.constant GoalSettings
-        , Fuzz.constant SettingsApiKeys
-        , Fuzz.constant SettingsApiKeyCreate
-        , Fuzz.map3 FoodLogEntry safeSegmentFuzzer maybeDateFuzzer maybeMonthFuzzer
-        , Fuzz.map2 AdHocLogCreate maybeDateFuzzer maybeMealSlotFuzzer
-        , Fuzz.map2 AiLogCreate maybeDateFuzzer maybeMealSlotFuzzer
-        , Fuzz.map2 FoodSearch maybeDateFuzzer maybeMealSlotFuzzer
-        , Fuzz.map4
-            FoodShow
-            safeSegmentFuzzer
-            maybeDateFuzzer
-            maybeMealSlotFuzzer
-            maybeLookupNoteFuzzer
-        , Fuzz.constant CustomFoodList
-        , Fuzz.constant CustomFoodCreate
-        , Fuzz.constant CustomFoodCreateWithAi
-        , Fuzz.map CustomFoodEdit safeSegmentFuzzer
-        , Fuzz.map CustomFoodShow safeSegmentFuzzer
-        , Fuzz.constant MealList
-        , Fuzz.constant MealCreate
-        , Fuzz.map MealShow safeSegmentFuzzer
-        , Fuzz.map MealEdit safeSegmentFuzzer
-        ]
-
-
-maybeDateFuzzer : Fuzzer (Maybe LocalDate)
-maybeDateFuzzer =
-    Fuzz.oneOf
-        [ Fuzz.constant Nothing
-        , Fuzz.map Just dateFuzzer
-        ]
-
-
-maybeLookupNoteFuzzer : Fuzzer (Maybe String)
-maybeLookupNoteFuzzer =
-    Fuzz.oneOf
-        [ Fuzz.constant Nothing
-        , Fuzz.constant (Just "Imported from Open Food Facts")
-        ]
-
-
-maybeMonthFuzzer : Fuzzer (Maybe String)
-maybeMonthFuzzer =
-    Fuzz.oneOf
-        [ Fuzz.constant Nothing
-        , Fuzz.map
-            (\value -> Just ("2026-" ++ pad2 value))
-            (Fuzz.intRange 1 12)
-        ]
-
-
-maybeMealSlotFuzzer : Fuzzer (Maybe MealSlot)
-maybeMealSlotFuzzer =
-    Fuzz.oneOf
-        [ Fuzz.constant Nothing
-        , Fuzz.map Just mealSlotFuzzer
-        ]
-
-
-mealSlotFuzzer : Fuzzer MealSlot
-mealSlotFuzzer =
-    Fuzz.oneOf
-        [ Fuzz.constant Breakfast
-        , Fuzz.constant Lunch
-        , Fuzz.constant Dinner
-        , Fuzz.constant Snack
-        , Fuzz.constant LateNightSnack
-        ]
-
-
-dateFuzzer : Fuzzer LocalDate
-dateFuzzer =
-    Fuzz.map3
-        (\year month day ->
-            LocalDate.fromParts year month day
-                |> Maybe.withDefault (date "2026-01-01")
-        )
-        (Fuzz.intRange 1000 9999)
-        (Fuzz.intRange 1 12)
-        (Fuzz.intRange 1 28)
-
-
-date : String -> LocalDate
-date raw =
-    case LocalDate.fromString raw of
-        Just value ->
-            value
-
-        Nothing ->
-            case LocalDate.fromParts 1970 1 1 of
-                Just fallback ->
-                    fallback
-
-                Nothing ->
-                    date raw
-
-
-safeSegmentFuzzer : Fuzzer String
-safeSegmentFuzzer =
-    Fuzz.intRange 1 999999
-        |> Fuzz.map (\value -> "id-" ++ String.fromInt value)
-
-
-pad2 : Int -> String
-pad2 value =
-    if value < 10 then
-        "0" ++ String.fromInt value
-
-    else
-        String.fromInt value
+expectAll : List Expect.Expectation -> Expect.Expectation
+expectAll expectations =
+    Expect.all (List.map always expectations) ()
