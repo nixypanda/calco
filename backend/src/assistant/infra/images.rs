@@ -154,6 +154,8 @@ fn validate_dimensions(width: u32, height: u32) -> Result<(), ImageError> {
 mod tests {
     use image::codecs::jpeg::JpegEncoder;
     use image::{DynamicImage, ImageBuffer, Rgba};
+    use proptest::prelude::*;
+    use rstest::rstest;
 
     use super::*;
 
@@ -171,6 +173,169 @@ mod tests {
                 .unwrap();
         }
         bytes.into_inner()
+    }
+
+    fn mime_for(format: ImageFormat) -> &'static str {
+        match format {
+            ImageFormat::Jpeg => "image/jpeg",
+            ImageFormat::Png => "image/png",
+            ImageFormat::WebP => "image/webp",
+            other => panic!("unsupported test image format: {other:?}"),
+        }
+    }
+
+    fn jpeg_with_app1_segment(encoded: Vec<u8>, marker: &[u8]) -> Vec<u8> {
+        let length = u16::try_from(marker.len() + 2).unwrap().to_be_bytes();
+        let mut with_metadata = Vec::with_capacity(encoded.len() + marker.len() + 4);
+        with_metadata.extend_from_slice(&encoded[..2]);
+        with_metadata.extend_from_slice(&[0xff, 0xe1]);
+        with_metadata.extend_from_slice(&length);
+        with_metadata.extend_from_slice(marker);
+        with_metadata.extend_from_slice(&encoded[2..]);
+        with_metadata
+    }
+
+    fn assert_output_invariants(
+        declared_mime_type: &str,
+        photo: &SanitizedFoodPhoto,
+    ) -> (u32, u32) {
+        assert_eq!(
+            Some(photo.mime_type),
+            parse_mime_type(declared_mime_type).ok()
+        );
+        assert_eq!(detect_format(&photo.bytes), Some(photo.mime_type));
+        assert!(!photo.bytes.is_empty());
+        assert!(photo.bytes.len() <= MAX_FOOD_PHOTO_BYTES);
+
+        let decoded =
+            ImageReader::with_format(Cursor::new(&photo.bytes), image_format(photo.mime_type))
+                .decode()
+                .expect("sanitized output must decode as its declared format");
+        let (width, height) = (decoded.width(), decoded.height());
+        assert!(width > 0 && height > 0);
+        assert!(width <= MAX_FOOD_PHOTO_DIMENSION);
+        assert!(height <= MAX_FOOD_PHOTO_DIMENSION);
+        assert!(u64::from(width) * u64::from(height) <= MAX_FOOD_PHOTO_PIXELS);
+        (width, height)
+    }
+
+    fn assert_dimensions_preserved(input: (u32, u32), output: (u32, u32)) {
+        let (input_width, input_height) = input;
+        let (width, height) = output;
+        if input_width <= MAX_FOOD_PHOTO_DIMENSION && input_height <= MAX_FOOD_PHOTO_DIMENSION {
+            assert_eq!(output, input, "in-bounds image must not be resized");
+            return;
+        }
+
+        assert_eq!(
+            width.max(height),
+            MAX_FOOD_PHOTO_DIMENSION,
+            "over-limit image must be scaled to the maximum dimension"
+        );
+        let scale = f64::from(MAX_FOOD_PHOTO_DIMENSION) / f64::from(input_width.max(input_height));
+        let expected_width = (f64::from(input_width) * scale).round().max(1.0) as u32;
+        let expected_height = (f64::from(input_height) * scale).round().max(1.0) as u32;
+        assert!(
+            width.abs_diff(expected_width) <= 1,
+            "width {width} does not preserve {input_width}x{input_height} within 1 px \
+             (expected {expected_width})"
+        );
+        assert!(
+            height.abs_diff(expected_height) <= 1,
+            "height {height} does not preserve {input_width}x{input_height} within 1 px \
+             (expected {expected_height})"
+        );
+    }
+
+    fn supported_formats() -> impl Strategy<Value = ImageFormat> {
+        prop_oneof![
+            Just(ImageFormat::Png),
+            Just(ImageFormat::Jpeg),
+            Just(ImageFormat::WebP),
+        ]
+    }
+
+    fn arbitrary_photo_input() -> impl Strategy<Value = (String, Vec<u8>)> {
+        let arbitrary_bytes = (
+            prop_oneof![
+                Just("image/jpeg".to_owned()),
+                Just("image/png".to_owned()),
+                Just("image/webp".to_owned()),
+                "[ -~]{0,40}",
+            ],
+            prop::collection::vec(any::<u8>(), 0..=4_096),
+        );
+        let encoded_small_image =
+            (supported_formats(), 1u32..=32, 1u32..=32).prop_map(|(format, width, height)| {
+                (
+                    mime_for(format).to_owned(),
+                    image_bytes(format, width, height),
+                )
+            });
+        prop_oneof![
+            1 => arbitrary_bytes,
+            1 => encoded_small_image,
+        ]
+    }
+
+    fn dimension_pairs() -> impl Strategy<Value = (u32, u32)> {
+        const TEST_MAX_DIMENSION: u32 = MAX_FOOD_PHOTO_DIMENSION + 152;
+        let boundary = (MAX_FOOD_PHOTO_DIMENSION - 1)..=TEST_MAX_DIMENSION;
+        prop_oneof![
+            // Mostly small images so the property runs quickly.
+            8 => (1u32..=256, 1u32..=256),
+            // Long, thin images exercise downscaling without allocating much.
+            4 => (1u32..=256, boundary.clone()),
+            4 => (boundary, 1u32..=256),
+            // A few fully random images also cover two-dimensional downscaling.
+            1 => (1u32..=TEST_MAX_DIMENSION, 1u32..=TEST_MAX_DIMENSION),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        #[test]
+        fn arbitrary_input_never_panics_and_successes_satisfy_invariants(
+            (declared_mime_type, bytes) in arbitrary_photo_input(),
+        ) {
+            match sanitize_food_photo(&declared_mime_type, bytes) {
+                Ok(photo) => {
+                    assert_output_invariants(&declared_mime_type, &photo);
+                }
+                Err(error) => {
+                    // ImageError is a closed enum; enumerate every variant so a new
+                    // variant forces this test to be reviewed.
+                    match error {
+                        ImageError::NotSupported
+                        | ImageError::Empty
+                        | ImageError::UnsupportedType
+                        | ImageError::TypeMismatch
+                        | ImageError::InvalidData
+                        | ImageError::DimensionsTooLarge
+                        | ImageError::EncodedTooLarge
+                        | ImageError::Internal => {}
+                    }
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(32))]
+
+        #[test]
+        fn structured_images_are_downscaled_within_bounds(
+            format in supported_formats(),
+            (width, height) in dimension_pairs(),
+        ) {
+            let declared_mime_type = mime_for(format);
+            let bytes = image_bytes(format, width, height);
+            let photo = sanitize_food_photo(declared_mime_type, bytes)
+                .expect("generated supported image must sanitize");
+            let output = assert_output_invariants(declared_mime_type, &photo);
+            assert_dimensions_preserved((width, height), output);
+        }
     }
 
     #[test]
@@ -194,6 +359,14 @@ mod tests {
             sanitize_food_photo("image/png", b"not an image".to_vec()),
             Err(ImageError::InvalidData)
         );
+        assert_eq!(
+            sanitize_food_photo("image/png", b"GIF89a\x01\x00\x01\x00".to_vec()),
+            Err(ImageError::InvalidData)
+        );
+        assert_eq!(
+            sanitize_food_photo("image/bmp", b"BM\x1a\x00\x00\x00".to_vec()),
+            Err(ImageError::UnsupportedType)
+        );
     }
 
     #[test]
@@ -202,13 +375,13 @@ mod tests {
         // A common 12 MP phone-camera resolution that exceeded the old limit.
         let encoded = image_bytes(ImageFormat::Jpeg, 2_500, 2_000);
         let marker = b"Exif\0\0calco-private-marker";
-        let length = u16::try_from(marker.len() + 2).unwrap().to_be_bytes();
-        let mut with_metadata = Vec::new();
-        with_metadata.extend_from_slice(&encoded[..2]);
-        with_metadata.extend_from_slice(&[0xff, 0xe1]);
-        with_metadata.extend_from_slice(&length);
-        with_metadata.extend_from_slice(marker);
-        with_metadata.extend_from_slice(&encoded[2..]);
+        let with_metadata = jpeg_with_app1_segment(encoded, marker);
+        assert!(
+            with_metadata
+                .windows(marker.len())
+                .any(|value| value == marker),
+            "metadata helper must insert the marker before sanitizing"
+        );
 
         let photo = sanitize_food_photo("image/jpeg", with_metadata).unwrap();
         assert!(
@@ -217,10 +390,8 @@ mod tests {
                 .windows(marker.len())
                 .any(|value| value == marker)
         );
-        let (width, height) = ImageReader::with_format(Cursor::new(photo.bytes), ImageFormat::Jpeg)
-            .into_dimensions()
-            .unwrap();
-        assert!(width <= MAX_FOOD_PHOTO_DIMENSION && height <= MAX_FOOD_PHOTO_DIMENSION);
+        let (width, height) = assert_output_invariants("image/jpeg", &photo);
+        assert_eq!((width, height), (MAX_FOOD_PHOTO_DIMENSION, 1_638));
     }
 
     #[test]
@@ -231,5 +402,117 @@ mod tests {
             validate_dimensions(8_192, 6_144),
             Err(ImageError::DimensionsTooLarge)
         );
+    }
+
+    #[test]
+    fn rejects_empty_and_oversized_inputs() {
+        assert_eq!(
+            sanitize_food_photo("image/png", Vec::new()),
+            Err(ImageError::Empty)
+        );
+        assert_eq!(
+            sanitize_food_photo("image/png", vec![0; MAX_FOOD_PHOTO_BYTES + 1]),
+            Err(ImageError::EncodedTooLarge)
+        );
+    }
+
+    #[rstest]
+    #[case("image/png", ImageFormat::Png, Ok(FoodPhotoMimeType::Png))]
+    #[case("image/png", ImageFormat::Jpeg, Err(ImageError::TypeMismatch))]
+    #[case("image/png", ImageFormat::WebP, Err(ImageError::TypeMismatch))]
+    #[case("image/jpeg", ImageFormat::Png, Err(ImageError::TypeMismatch))]
+    #[case("image/jpeg", ImageFormat::Jpeg, Ok(FoodPhotoMimeType::Jpeg))]
+    #[case("image/jpeg", ImageFormat::WebP, Err(ImageError::TypeMismatch))]
+    #[case("image/webp", ImageFormat::Png, Err(ImageError::TypeMismatch))]
+    #[case("image/webp", ImageFormat::Jpeg, Err(ImageError::TypeMismatch))]
+    #[case("image/webp", ImageFormat::WebP, Ok(FoodPhotoMimeType::Webp))]
+    #[case("image/gif", ImageFormat::Png, Err(ImageError::UnsupportedType))]
+    #[case("image/gif", ImageFormat::Jpeg, Err(ImageError::UnsupportedType))]
+    #[case("image/gif", ImageFormat::WebP, Err(ImageError::UnsupportedType))]
+    fn accepts_matching_mime_and_rejects_every_format_mismatch(
+        #[case] declared_mime_type: &str,
+        #[case] actual_format: ImageFormat,
+        #[case] expected: Result<FoodPhotoMimeType, ImageError>,
+    ) {
+        let result = sanitize_food_photo(declared_mime_type, image_bytes(actual_format, 5, 4));
+        match expected {
+            Ok(expected_mime_type) => {
+                let photo = result.expect("matching mime type must be accepted");
+                assert_eq!(photo.mime_type, expected_mime_type);
+                assert_output_invariants(declared_mime_type, &photo);
+            }
+            Err(expected_error) => assert_eq!(result, Err(expected_error)),
+        }
+    }
+
+    #[rstest]
+    #[case(
+        ImageFormat::Png,
+        MAX_FOOD_PHOTO_DIMENSION,
+        MAX_FOOD_PHOTO_DIMENSION,
+        (MAX_FOOD_PHOTO_DIMENSION, MAX_FOOD_PHOTO_DIMENSION)
+    )]
+    #[case(
+        ImageFormat::Png,
+        MAX_FOOD_PHOTO_DIMENSION + 1,
+        MAX_FOOD_PHOTO_DIMENSION + 1,
+        (MAX_FOOD_PHOTO_DIMENSION, MAX_FOOD_PHOTO_DIMENSION)
+    )]
+    #[case(
+        ImageFormat::Png,
+        MAX_FOOD_PHOTO_DIMENSION + 52,
+        64,
+        (MAX_FOOD_PHOTO_DIMENSION, 62)
+    )]
+    fn keeps_boundary_dimensions_and_downscales_thin_over_limit_images(
+        #[case] format: ImageFormat,
+        #[case] width: u32,
+        #[case] height: u32,
+        #[case] expected: (u32, u32),
+    ) {
+        let declared_mime_type = mime_for(format);
+        let photo = sanitize_food_photo(declared_mime_type, image_bytes(format, width, height))
+            .expect("supported image must sanitize");
+        let output = assert_output_invariants(declared_mime_type, &photo);
+        assert_eq!(output, expected);
+        assert_dimensions_preserved((width, height), output);
+    }
+
+    #[rstest]
+    #[case(ImageFormat::WebP, 2_500, 2_500, (2_048, 2_048))]
+    #[case(ImageFormat::Jpeg, 4_032, 3_024, (2_048, 1_536))]
+    #[ignore = "slow"]
+    fn downscales_slow_large_images_to_expected_dimensions(
+        #[case] format: ImageFormat,
+        #[case] width: u32,
+        #[case] height: u32,
+        #[case] expected: (u32, u32),
+    ) {
+        let declared_mime_type = mime_for(format);
+        let photo = sanitize_food_photo(declared_mime_type, image_bytes(format, width, height))
+            .expect("large supported image must sanitize");
+        let output = assert_output_invariants(declared_mime_type, &photo);
+        assert_eq!(output, expected);
+        assert_dimensions_preserved((width, height), output);
+    }
+
+    #[test]
+    fn strips_jpeg_metadata_from_small_images() {
+        let marker = b"Exif\0\0calco-small-private-marker";
+        let with_metadata = jpeg_with_app1_segment(image_bytes(ImageFormat::Jpeg, 64, 48), marker);
+        assert!(
+            with_metadata
+                .windows(marker.len())
+                .any(|value| value == marker),
+            "metadata helper must insert the marker before sanitizing"
+        );
+        let photo = sanitize_food_photo("image/jpeg", with_metadata).unwrap();
+        assert!(
+            !photo
+                .bytes
+                .windows(marker.len())
+                .any(|value| value == marker)
+        );
+        assert_output_invariants("image/jpeg", &photo);
     }
 }
