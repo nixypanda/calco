@@ -10,7 +10,6 @@ module Data.Nutrition exposing
     , dominantMacro
     , emptySummary
     , macroTotals
-    , nutrientAmount
     , nutrientsForQuantity
     , quantityDecoder
     , quantityEncoder
@@ -376,17 +375,8 @@ totalsFromLogs logs =
 
 
 uniqueCodes : List String -> List String
-uniqueCodes list =
-    List.foldr
-        (\code acc ->
-            if List.member code acc then
-                acc
-
-            else
-                code :: acc
-        )
-        []
-        list
+uniqueCodes =
+    ListExtra.uniqueBy identity
 
 
 quantityText : Quantity -> String
