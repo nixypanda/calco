@@ -12,6 +12,7 @@ module Api.Logs exposing
     , SummaryRequest
     , UpdateLogRequest
     , createAdHocLog
+    , createAdHocLogRequestEncoder
     , createLog
     , createLogRequestEncoder
     , createLogsBatch
@@ -19,10 +20,8 @@ module Api.Logs exposing
     , getLog
     , lastUsedItems
     , latestSlots
-    , latestSlotsResponseDecoder
     , listLogs
     , recentItems
-    , recentItemsResponseDecoder
     , summary
     , updateLog
     , updateLogRequestEncoder

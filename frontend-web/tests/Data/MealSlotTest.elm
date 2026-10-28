@@ -1,40 +1,63 @@
 module Data.MealSlotTest exposing (tests)
 
-import Data.MealSlot as MealSlot exposing (MealSlot(..))
+import Data.MealSlot as MealSlot exposing (MealSlot)
 import Expect
-import Test exposing (Test, describe, test)
-import Translations.Util as Util
+import Fuzz
+import Test exposing (Test, describe, fuzz, test)
 
 
 tests : Test
 tests =
     describe "Data.MealSlot"
-        [ test "parses known slots and rejects unknown ones" <|
+        [ test "every slot roundtrips through its code" <|
             \_ ->
-                Expect.all
-                    [ \_ -> MealSlot.fromString "lunch" |> Expect.equal (Just Lunch)
-                    , \_ -> MealSlot.fromString "midnight" |> Expect.equal Nothing
-                    ]
-                    ()
-        , test "supports late-night snack" <|
-            \_ ->
-                ( MealSlot.fromString "late_night_snack"
-                , MealSlot.toString LateNightSnack
-                , MealSlot.label Util.EN_US LateNightSnack
-                )
-                    |> Expect.equal
-                        ( Just LateNightSnack
-                        , "late_night_snack"
-                        , "Late-night Snack"
+                MealSlot.all
+                    |> List.map
+                        (\slot ->
+                            MealSlot.fromString (MealSlot.toString slot)
+                                |> Expect.equal (Just slot)
                         )
-        , test "every slot formats to a value the backend accepts" <|
+                    |> expectAll
+        , test "toString is injective over all slots" <|
             \_ ->
-                List.map MealSlot.toString MealSlot.all
+                allPairs
+                    |> List.all distinctCodes
+                    |> Expect.equal True
+        , fuzz Fuzz.string "fromString s is the first slot whose code equals s" <|
+            \raw ->
+                MealSlot.fromString raw
                     |> Expect.equal
-                        [ "breakfast"
-                        , "lunch"
-                        , "dinner"
-                        , "snack"
-                        , "late_night_snack"
-                        ]
+                        (MealSlot.all
+                            |> List.filter (\slot -> MealSlot.toString slot == raw)
+                            |> List.head
+                        )
+        , test "fromString rejects near-miss codes" <|
+            \_ ->
+                [ ""
+                , "brunch"
+                , " breakfast"
+                , "breakfast "
+                , "BREAKFAST"
+                , "late_night_snack "
+                , "dinner\n"
+                ]
+                    |> List.map (MealSlot.fromString >> Expect.equal Nothing)
+                    |> expectAll
         ]
+
+
+allPairs : List ( MealSlot, MealSlot )
+allPairs =
+    List.concatMap
+        (\left -> List.map (\right -> ( left, right )) MealSlot.all)
+        MealSlot.all
+
+
+distinctCodes : ( MealSlot, MealSlot ) -> Bool
+distinctCodes ( left, right ) =
+    left == right || MealSlot.toString left /= MealSlot.toString right
+
+
+expectAll : List Expect.Expectation -> Expect.Expectation
+expectAll expectations =
+    Expect.all (List.map always expectations) ()
