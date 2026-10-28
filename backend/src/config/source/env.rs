@@ -80,6 +80,8 @@ pub(in crate::config) fn load(
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::super::super::ConfigError;
     use super::{
         APP_HOST, APP_PORT, CORS_ALLOWED_ORIGINS, DATABASE_URL, SESSION_COOKIE_SECURE,
@@ -94,51 +96,48 @@ mod tests {
         );
     }
 
-    #[test]
-    fn invalid_host_and_port_are_rejected() {
-        for (variable, value, expected) in [
-            (APP_HOST, "not-an-ip", ConfigError::InvalidAppHost),
-            (APP_PORT, "not-a-port", ConfigError::InvalidAppPort),
-        ] {
-            assert_eq!(
-                load(|name| match name {
-                    DATABASE_URL => Some("database".into()),
-                    name if name == variable => Some(value.into()),
-                    _ => None,
-                })
-                .err()
-                .unwrap(),
-                expected
-            );
-        }
+    #[rstest]
+    #[case::invalid_host(APP_HOST, "not-an-ip", ConfigError::InvalidAppHost)]
+    #[case::invalid_port(APP_PORT, "not-a-port", ConfigError::InvalidAppPort)]
+    fn invalid_host_and_port_are_rejected(
+        #[case] variable: &str,
+        #[case] value: &str,
+        #[case] expected: ConfigError,
+    ) {
+        assert_eq!(
+            load(|name| match name {
+                DATABASE_URL => Some("database".into()),
+                name if name == variable => Some(value.into()),
+                _ => None,
+            })
+            .err()
+            .unwrap(),
+            expected
+        );
     }
 
-    #[test]
-    fn invalid_booleans_and_non_positive_ttls_are_rejected() {
-        for value in ["TRUE", "1", "yes"] {
-            assert_eq!(
-                load(|name| match name {
-                    DATABASE_URL => Some("database".into()),
-                    SESSION_COOKIE_SECURE => Some(value.into()),
-                    _ => None,
-                })
-                .err()
-                .unwrap(),
-                ConfigError::InvalidSessionCookieSecure
-            );
-        }
-        for value in ["0", "-1", "not-a-number"] {
-            assert_eq!(
-                load(|name| match name {
-                    DATABASE_URL => Some("database".into()),
-                    SESSION_TTL_SECONDS => Some(value.into()),
-                    _ => None,
-                })
-                .err()
-                .unwrap(),
-                ConfigError::InvalidSessionTtl
-            );
-        }
+    #[rstest]
+    #[case::uppercase_true(SESSION_COOKIE_SECURE, "TRUE", ConfigError::InvalidSessionCookieSecure)]
+    #[case::numeric_one(SESSION_COOKIE_SECURE, "1", ConfigError::InvalidSessionCookieSecure)]
+    #[case::yes(SESSION_COOKIE_SECURE, "yes", ConfigError::InvalidSessionCookieSecure)]
+    #[case::zero_ttl(SESSION_TTL_SECONDS, "0", ConfigError::InvalidSessionTtl)]
+    #[case::negative_ttl(SESSION_TTL_SECONDS, "-1", ConfigError::InvalidSessionTtl)]
+    #[case::non_numeric_ttl(SESSION_TTL_SECONDS, "not-a-number", ConfigError::InvalidSessionTtl)]
+    fn invalid_booleans_and_non_positive_ttls_are_rejected(
+        #[case] variable: &str,
+        #[case] value: &str,
+        #[case] expected: ConfigError,
+    ) {
+        assert_eq!(
+            load(|name| match name {
+                DATABASE_URL => Some("database".into()),
+                name if name == variable => Some(value.into()),
+                _ => None,
+            })
+            .err()
+            .unwrap(),
+            expected
+        );
     }
 
     #[test]
@@ -161,12 +160,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn invalid_cors_header_values_are_rejected() {
+    #[rstest]
+    #[case::invalid_header_value("https://valid.example,invalid\nvalue")]
+    fn invalid_cors_header_values_are_rejected(#[case] origins: &str) {
         assert_eq!(
             load(|name| match name {
                 DATABASE_URL => Some("database".into()),
-                CORS_ALLOWED_ORIGINS => Some("https://valid.example,invalid\nvalue".into()),
+                CORS_ALLOWED_ORIGINS => Some(origins.into()),
                 _ => None,
             })
             .err()
