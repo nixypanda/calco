@@ -659,6 +659,7 @@ impl FoodLogPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn test_meal_slot_from_str_invalid() {
@@ -705,89 +706,89 @@ mod tests {
         .build()
     }
 
-    #[test]
-    fn new_ad_hoc_rejects_blank_name() {
-        let result = FoodLogBuilder::new_ad_hoc(
-            Uuid::nil(),
-            ad_hoc_date(),
-            "   ".into(),
-            None,
-            serving_quantity(Decimal::ONE),
-            required_snapshots(),
-        );
-
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    #[derive(Debug, Clone, Copy)]
+    enum AdHocMutation {
+        BlankName,
+        MissingRequiredNutrient,
+        DuplicateRequiredNutrient,
+        WrongUnitForRequiredNutrient,
+        NegativeNutrientAmount,
     }
 
-    #[test]
-    fn new_ad_hoc_rejects_missing_required_nutrient() {
+    fn required_snapshot_mut<'a>(
+        nutrients: &'a mut [FoodLogNutrientSnapshot],
+        code: &str,
+    ) -> &'a mut FoodLogNutrientSnapshot {
+        nutrients
+            .iter_mut()
+            .find(|snapshot| snapshot.nutrient_code.0 == code)
+            .expect("required snapshot should be present")
+    }
+
+    impl AdHocMutation {
+        fn apply(self, name: &mut String, nutrients: &mut Vec<FoodLogNutrientSnapshot>) {
+            match self {
+                Self::BlankName => *name = "   ".into(),
+                Self::MissingRequiredNutrient => {
+                    nutrients.retain(|snapshot| snapshot.nutrient_code.0 != "FAT_G");
+                }
+                Self::DuplicateRequiredNutrient => {
+                    nutrients.push(snapshot("ENERGY_KCAL", Decimal::new(10, 0), "kcal"));
+                }
+                Self::WrongUnitForRequiredNutrient => {
+                    required_snapshot_mut(nutrients, "ENERGY_KCAL").unit = UnitCode("g".into());
+                }
+                Self::NegativeNutrientAmount => {
+                    required_snapshot_mut(nutrients, "PROTEIN_G").amount = Decimal::new(-1, 0);
+                }
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::blank_name(AdHocMutation::BlankName, "ad-hoc food name must not be blank")]
+    #[case::missing_required_nutrient(
+        AdHocMutation::MissingRequiredNutrient,
+        "missing required ad-hoc nutrient: FAT_G"
+    )]
+    #[case::duplicate_required_nutrient(
+        AdHocMutation::DuplicateRequiredNutrient,
+        "duplicate ad-hoc nutrient: ENERGY_KCAL"
+    )]
+    #[case::wrong_unit_for_required_nutrient(
+        AdHocMutation::WrongUnitForRequiredNutrient,
+        "ENERGY_KCAL must use unit kcal"
+    )]
+    #[case::negative_nutrient_amount(
+        AdHocMutation::NegativeNutrientAmount,
+        "PROTEIN_G amount must not be negative"
+    )]
+    fn new_ad_hoc_rejects_invalid_input(
+        #[case] mutation: AdHocMutation,
+        #[case] expected_message: &str,
+    ) {
+        let mut name = "Paneer tikka wrap".to_string();
         let mut nutrients = required_snapshots();
-        nutrients.retain(|snapshot| snapshot.nutrient_code.0 != "FAT_G");
+        mutation.apply(&mut name, &mut nutrients);
 
         let result = FoodLogBuilder::new_ad_hoc(
             Uuid::nil(),
             ad_hoc_date(),
-            "Paneer tikka wrap".into(),
+            name,
             None,
             serving_quantity(Decimal::ONE),
             nutrients,
         );
 
-        let Err(NutritionError::Validation(message)) = result else {
-            panic!("expected validation error");
-        };
-        assert!(message.contains("FAT_G"), "unexpected message: {message}");
-    }
-
-    #[test]
-    fn new_ad_hoc_rejects_duplicate_required_nutrient() {
-        let mut nutrients = required_snapshots();
-        nutrients.push(snapshot("ENERGY_KCAL", Decimal::new(10, 0), "kcal"));
-
-        let result = FoodLogBuilder::new_ad_hoc(
-            Uuid::nil(),
-            ad_hoc_date(),
-            "Paneer tikka wrap".into(),
-            None,
-            serving_quantity(Decimal::ONE),
-            nutrients,
-        );
-
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[test]
-    fn new_ad_hoc_rejects_wrong_unit_for_required_nutrient() {
-        let mut nutrients = required_snapshots();
-        nutrients[0].unit = UnitCode("g".into());
-
-        let result = FoodLogBuilder::new_ad_hoc(
-            Uuid::nil(),
-            ad_hoc_date(),
-            "Paneer tikka wrap".into(),
-            None,
-            serving_quantity(Decimal::ONE),
-            nutrients,
-        );
-
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[test]
-    fn new_ad_hoc_rejects_negative_nutrient_amount() {
-        let mut nutrients = required_snapshots();
-        nutrients[1].amount = Decimal::new(-1, 0);
-
-        let result = FoodLogBuilder::new_ad_hoc(
-            Uuid::nil(),
-            ad_hoc_date(),
-            "Paneer tikka wrap".into(),
-            None,
-            serving_quantity(Decimal::ONE),
-            nutrients,
-        );
-
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
+        match result {
+            Err(NutritionError::Validation(message)) => {
+                assert!(
+                    message.contains(expected_message),
+                    "unexpected message: {message}"
+                );
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
     }
 
     #[test]
