@@ -155,3 +155,94 @@ fn session_row_to_session(row: SessionRow) -> Session {
         revoked_at: row.revoked_at,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test]
+    async fn stale_record_seen_does_not_unrevoke_a_session(pool: PgPool) {
+        let identity_id = Uuid::new_v4();
+        let session_id = Uuid::new_v4();
+        let security_stamp = Uuid::new_v4();
+        let token_hash = format!("stale-session-{session_id}");
+
+        sqlx::query(
+            r#"
+            INSERT INTO identities (
+                id, username, password_hash, role, status, session_security_stamp,
+                created_at, updated_at
+            )
+            VALUES ($1, $2, 'test-password-hash', 'user', 'active', $3, now(), now())
+            "#,
+        )
+        .bind(identity_id)
+        .bind(format!("stale-session-{identity_id}"))
+        .bind(security_stamp)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            r#"
+            INSERT INTO sessions (
+                id, identity_id, identity_security_stamp, session_token_hash,
+                created_at, last_seen_at, expires_at, revoked_at
+            )
+            VALUES ($1, $2, $3, $4, now(), now(), now() + interval '1 hour', NULL)
+            "#,
+        )
+        .bind(session_id)
+        .bind(identity_id)
+        .bind(security_stamp)
+        .bind(&token_hash)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let aged_last_seen: DateTime<Utc> = sqlx::query_scalar(
+            "UPDATE sessions SET last_seen_at = now() - interval '2 hours' WHERE id = $1 RETURNING last_seen_at",
+        )
+        .bind(session_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let repo = PgSessionRepo::new(pool.clone());
+        let stale = repo
+            .find_by_token_hash(&token_hash)
+            .await
+            .unwrap()
+            .expect("session should exist");
+        assert!(stale.revoked_at.is_none());
+
+        repo.update(&stale.record_seen(Utc::now())).await.unwrap();
+        let refreshed_last_seen: DateTime<Utc> =
+            sqlx::query_scalar("SELECT last_seen_at FROM sessions WHERE id = $1")
+                .bind(session_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(
+            refreshed_last_seen > aged_last_seen,
+            "live session heartbeat must advance last_seen_at"
+        );
+
+        let current = repo
+            .find_by_token_hash(&token_hash)
+            .await
+            .unwrap()
+            .expect("session should exist");
+        repo.update(&current.revoke(Utc::now())).await.unwrap();
+        repo.update(&stale.record_seen(Utc::now())).await.unwrap();
+
+        let (last_seen_after, revoked_at): (DateTime<Utc>, Option<DateTime<Utc>>) =
+            sqlx::query_as("SELECT last_seen_at, revoked_at FROM sessions WHERE id = $1")
+                .bind(session_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(last_seen_after, refreshed_last_seen);
+        assert!(revoked_at.is_some());
+    }
+}

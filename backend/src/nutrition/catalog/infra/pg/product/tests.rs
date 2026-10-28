@@ -274,3 +274,68 @@ async fn serving_loads_return_position_order_without_normalizing(pool: PgPool) {
         "list_custom_foods must return servings in position order without normalization"
     );
 }
+
+#[sqlx::test]
+async fn history_candidates_use_latest_same_day_creation_time(pool: PgPool) {
+    let user_id = seed_identity_and_profile(&pool, "catalog-history-recency").await;
+    let created_at = timestamp(1, 8);
+    let product = product_fixture(
+        Uuid::new_v4(),
+        custom_origin(user_id),
+        "History Recency Product",
+        None,
+        &["history-recency"],
+        None,
+        None,
+        vec![],
+        vec![],
+        created_at,
+        created_at,
+    );
+    seed_product(&pool, &product).await;
+
+    let log_date = timestamp(10, 0).date_naive();
+    let older = timestamp(10, 8);
+    let newer = timestamp(10, 20);
+    // Both updated_at values are earlier than the newest created_at, so a
+    // MAX(updated_at) regression cannot pass this test.
+    let updated_at = timestamp(10, 9);
+    for (log_id, created_at) in [(Uuid::new_v4(), older), (Uuid::new_v4(), newer)] {
+        sqlx::query(
+            r#"
+            INSERT INTO food_logs (
+                id, user_id, log_date, meal_slot, device_timezone, item_product_id,
+                item_name, quantity, unit, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, 'breakfast', 'UTC', $4, $5, 100, 'g', $6, $7)
+            "#,
+        )
+        .bind(log_id)
+        .bind(user_id)
+        .bind(log_date)
+        .bind(product.id.0)
+        .bind(product.name.as_str())
+        .bind(created_at)
+        .bind(updated_at)
+        .execute(&pool)
+        .await
+        .expect("insert food log");
+    }
+
+    let candidates = PgProductRepo::new(pool)
+        .search_history_candidates(
+            &ProductSearchSpec::parse("category:history-recency"),
+            user_id,
+        )
+        .await
+        .expect("search history candidates");
+
+    assert_eq!(candidates.len(), 1, "one product should have history");
+    assert_eq!(
+        candidates[0].categories(),
+        &[Category("history-recency".into())]
+    );
+    let recency = candidates[0].recency();
+    assert_eq!(recency.last_log_date(), log_date);
+    assert_eq!(recency.last_logged_at(), newer);
+}

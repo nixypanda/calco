@@ -312,13 +312,130 @@ mod tests {
     use super::super::test_support::*;
     use super::*;
     use crate::nutrition::catalog::domain::calculation::Quantity;
-    use crate::nutrition::catalog::domain::{ProductId, UnitCode};
+    use crate::nutrition::catalog::domain::{NutrientCode, ProductId, UnitCode};
     use crate::nutrition::food_log::domain::{
-        FoodLogId, FoodLogItemRef, FoodLogItemSnapshot, MealSlot, NutritionError,
+        FoodLogId, FoodLogItemRef, FoodLogItemSnapshot, FoodLogNutrientSnapshot, MealSlot,
+        NutritionError,
     };
     use crate::nutrition::meal::domain::MealId;
     use rust_decimal::Decimal;
     use uuid::Uuid;
+
+    #[tokio::test]
+    async fn log_ad_hoc_rejects_unknown_nutrient_code() {
+        let services = make_services(None);
+        let snapshot = |code: &str, amount: i64, unit: &str| FoodLogNutrientSnapshot {
+            nutrient_code: NutrientCode(code.into()),
+            amount: Decimal::from(amount),
+            unit: UnitCode(unit.into()),
+        };
+
+        let result = services
+            .log_ad_hoc_food(
+                Uuid::new_v4(),
+                LogAdHocFoodInput {
+                    log_date: sample_log_date(),
+                    meal_slot: None,
+                    device_timezone: None,
+                    name: "Mystery food".into(),
+                    brand: None,
+                    quantity: Quantity::new(Decimal::ONE, UnitCode("serving".into())).unwrap(),
+                    nutrients: vec![
+                        snapshot("ENERGY_KCAL", 100, "kcal"),
+                        snapshot("PROTEIN_G", 1, "g"),
+                        snapshot("CARBS_G", 1, "g"),
+                        snapshot("FAT_G", 1, "g"),
+                        snapshot("NOT_A_NUTRIENT", 1, "g"),
+                    ],
+                    notes: None,
+                },
+            )
+            .await;
+
+        match result {
+            Err(NutritionError::Validation(message)) => assert!(
+                message.contains("unknown ad-hoc nutrient code: NOT_A_NUTRIENT"),
+                "unexpected message: {message}"
+            ),
+            Ok(_) => panic!("unknown nutrient must be rejected"),
+            Err(other) => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn update_ad_hoc_log_recalculates_quantity() {
+        let services = make_services(None);
+        let user_id = Uuid::new_v4();
+
+        let created = services
+            .log_ad_hoc_food(
+                user_id,
+                LogAdHocFoodInput {
+                    log_date: sample_log_date(),
+                    meal_slot: Some(MealSlot::Lunch),
+                    device_timezone: None,
+                    name: "Paneer tikka wrap".into(),
+                    brand: None,
+                    quantity: Quantity::new(Decimal::ONE, UnitCode("serving".into())).unwrap(),
+                    nutrients: vec![
+                        FoodLogNutrientSnapshot {
+                            nutrient_code: NutrientCode("ENERGY_KCAL".into()),
+                            amount: Decimal::new(520, 0),
+                            unit: UnitCode("kcal".into()),
+                        },
+                        FoodLogNutrientSnapshot {
+                            nutrient_code: NutrientCode("PROTEIN_G".into()),
+                            amount: Decimal::new(24, 0),
+                            unit: UnitCode("g".into()),
+                        },
+                        FoodLogNutrientSnapshot {
+                            nutrient_code: NutrientCode("CARBS_G".into()),
+                            amount: Decimal::new(48, 0),
+                            unit: UnitCode("g".into()),
+                        },
+                        FoodLogNutrientSnapshot {
+                            nutrient_code: NutrientCode("FAT_G".into()),
+                            amount: Decimal::new(25, 0),
+                            unit: UnitCode("g".into()),
+                        },
+                    ],
+                    notes: None,
+                },
+            )
+            .await
+            .unwrap();
+        let original_snapshots = created.nutrient_snapshots().to_vec();
+
+        let updated = services
+            .update_food_log(
+                created.id(),
+                user_id,
+                UpdateFoodInput {
+                    log_date: None,
+                    meal_slot: None,
+                    device_timezone: None,
+                    item: None,
+                    quantity: Some(
+                        Quantity::new(Decimal::new(2, 0), UnitCode("serving".into())).unwrap(),
+                    ),
+                    notes: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(updated.item(), FoodLogItemSnapshot::AdHoc { .. }));
+        assert_eq!(updated.quantity_amount(), Decimal::new(2, 0));
+        assert_eq!(updated.nutrient_snapshots().len(), original_snapshots.len());
+        for (snapshot, original) in updated
+            .nutrient_snapshots()
+            .iter()
+            .zip(original_snapshots.iter())
+        {
+            assert_eq!(snapshot.nutrient_code, original.nutrient_code);
+            assert_eq!(snapshot.amount, original.amount * Decimal::new(2, 0));
+        }
+    }
 
     #[tokio::test]
     async fn test_log_food_product_not_found() {

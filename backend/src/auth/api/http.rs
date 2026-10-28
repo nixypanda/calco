@@ -836,3 +836,52 @@ fn build_clear_cookie(config: &SessionCookieConfig) -> CookieHeader {
     }
     (header::SET_COOKIE, cookie)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn header_value(raw: &str) -> header::HeaderValue {
+        header::HeaderValue::from_str(raw).unwrap()
+    }
+
+    fn assert_invalid(value: &header::HeaderValue) {
+        let error = parse_bearer_token(value).unwrap_err();
+        assert_eq!(error.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(error.body.error.code, "invalid_api_key");
+    }
+
+    #[test]
+    fn parse_bearer_token_accepts_valid_scheme_and_spacing() {
+        for (raw, expected) in [
+            ("Bearer token", "token"),
+            ("bearer token", "token"),
+            ("BEARER token", "token"),
+            ("Bearer    token", "token"),
+        ] {
+            match parse_bearer_token(&header_value(raw)) {
+                Ok(token) => assert_eq!(token, expected, "{raw}"),
+                Err(_) => panic!("expected {raw:?} to parse"),
+            }
+        }
+    }
+
+    #[test]
+    fn parse_bearer_token_rejects_malformed_values() {
+        for raw in [
+            "token",
+            " Bearer token",
+            "Basic abc",
+            "Bearer",
+            "Bearer ",
+            "Bearer   ",
+            "Bearer tok en",
+            "Bearer token ",
+        ] {
+            assert_invalid(&header_value(raw));
+        }
+
+        let non_utf8 = header::HeaderValue::from_bytes(b"Bearer \x80").unwrap();
+        assert_invalid(&non_utf8);
+    }
+}

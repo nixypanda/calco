@@ -16,10 +16,13 @@ Integration tests cover the HTTP lifecycle of each entity end-to-end:
 
 ```text
 tests/suites/product_lifecycle.rs   custom-food CRUD + search + auth required
-tests/suites/search_lifecycle.rs    catalog ranking, scopes, filters, suggestions
+tests/suites/search_lifecycle.rs    search hydration, category filters, scopes,
+                                    soft-deleted/blank rows, category counts,
+                                    HTTP category limit
 tests/suites/product_repo.rs        external upsert + search-summary hydration
 tests/suites/auth_lifecycle.rs      bootstrap, login, sessions + admin user management
-tests/suites/diary_lifecycle.rs     food log CRUD, repeat/recent defaults + summary
+tests/suites/diary_lifecycle.rs     food log CRUD, list ordering,
+                                    recent/latest/last-used wire shape
 tests/suites/diary_prefs_lifecycle.rs
                                     per-user enabled meal-slot preferences
 tests/suites/goal_lifecycle.rs      goal defaults + save/overwrite flow
@@ -51,8 +54,15 @@ Do not add tests that:
 - assert something that cannot fail;
 - duplicate a rule already covered by a pure-logic test.
 
-Backend integration lifecycles under `backend/tests/suites/` are end-to-end and
-are kept in full.
+Backend lifecycle suites under `backend/tests/suites/` are smoke-level
+end-to-end tests: they prove the router, auth, handler, app, repository, and
+Postgres wiring works and that the wire shape survives the round trip. Pure
+validation, ranking, state transitions, and security-stamp rules belong in
+inline unit tests. Constant/default assertions are only kept where they prove
+an external contract; do not add a unit test that merely restates a literal.
+Behavior that only exists in SQL (query ordering, filters, constraints,
+conditional updates) stays in integration or repository tests, because a pure
+unit test cannot cover it.
 
 ## Frontend Test Shape
 

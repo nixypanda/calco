@@ -666,4 +666,183 @@ mod tests {
         assert!("".parse::<MealSlot>().is_err());
         assert!("LUNCH".parse::<MealSlot>().is_err());
     }
+
+    fn ad_hoc_date() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 9, 14).unwrap()
+    }
+
+    fn serving_quantity(amount: Decimal) -> Quantity {
+        Quantity::new(amount, UnitCode("serving".into())).unwrap()
+    }
+
+    fn snapshot(code: &str, amount: Decimal, unit: &str) -> FoodLogNutrientSnapshot {
+        FoodLogNutrientSnapshot {
+            nutrient_code: NutrientCode(code.into()),
+            amount,
+            unit: UnitCode(unit.into()),
+        }
+    }
+
+    fn required_snapshots() -> Vec<FoodLogNutrientSnapshot> {
+        vec![
+            snapshot("ENERGY_KCAL", Decimal::new(520, 0), "kcal"),
+            snapshot("PROTEIN_G", Decimal::new(24, 0), "g"),
+            snapshot("CARBS_G", Decimal::new(48, 0), "g"),
+            snapshot("FAT_G", Decimal::new(25, 0), "g"),
+        ]
+    }
+
+    fn build_ad_hoc_log() -> FoodLog {
+        FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            "Paneer tikka wrap".into(),
+            None,
+            serving_quantity(Decimal::ONE),
+            required_snapshots(),
+        )
+        .unwrap()
+        .build()
+    }
+
+    #[test]
+    fn new_ad_hoc_rejects_blank_name() {
+        let result = FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            "   ".into(),
+            None,
+            serving_quantity(Decimal::ONE),
+            required_snapshots(),
+        );
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[test]
+    fn new_ad_hoc_rejects_missing_required_nutrient() {
+        let mut nutrients = required_snapshots();
+        nutrients.retain(|snapshot| snapshot.nutrient_code.0 != "FAT_G");
+
+        let result = FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            "Paneer tikka wrap".into(),
+            None,
+            serving_quantity(Decimal::ONE),
+            nutrients,
+        );
+
+        let Err(NutritionError::Validation(message)) = result else {
+            panic!("expected validation error");
+        };
+        assert!(message.contains("FAT_G"), "unexpected message: {message}");
+    }
+
+    #[test]
+    fn new_ad_hoc_rejects_duplicate_required_nutrient() {
+        let mut nutrients = required_snapshots();
+        nutrients.push(snapshot("ENERGY_KCAL", Decimal::new(10, 0), "kcal"));
+
+        let result = FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            "Paneer tikka wrap".into(),
+            None,
+            serving_quantity(Decimal::ONE),
+            nutrients,
+        );
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[test]
+    fn new_ad_hoc_rejects_wrong_unit_for_required_nutrient() {
+        let mut nutrients = required_snapshots();
+        nutrients[0].unit = UnitCode("g".into());
+
+        let result = FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            "Paneer tikka wrap".into(),
+            None,
+            serving_quantity(Decimal::ONE),
+            nutrients,
+        );
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[test]
+    fn new_ad_hoc_rejects_negative_nutrient_amount() {
+        let mut nutrients = required_snapshots();
+        nutrients[1].amount = Decimal::new(-1, 0);
+
+        let result = FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            "Paneer tikka wrap".into(),
+            None,
+            serving_quantity(Decimal::ONE),
+            nutrients,
+        );
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[test]
+    fn new_ad_hoc_accepts_zero_required_amounts_and_optional_nutrient() {
+        let mut nutrients = required_snapshots();
+        for nutrient in &mut nutrients {
+            nutrient.amount = Decimal::ZERO;
+        }
+        nutrients.push(snapshot("FIBER_G", Decimal::new(7, 0), "g"));
+
+        let log = FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            "Paneer tikka wrap".into(),
+            None,
+            serving_quantity(Decimal::ONE),
+            nutrients,
+        )
+        .unwrap()
+        .build();
+
+        assert_eq!(log.nutrient_snapshots().len(), 5);
+    }
+
+    #[test]
+    fn update_ad_hoc_log_scales_snapshots_and_preserves_item_and_unit() {
+        let log = build_ad_hoc_log();
+        let original_snapshots = log.nutrient_snapshots().to_vec();
+        let updated_quantity = serving_quantity(Decimal::new(25, 1));
+
+        let updated = log
+            .update_ad_hoc_log(ad_hoc_date(), None, None, updated_quantity, None)
+            .unwrap();
+
+        assert_eq!(updated.item(), log.item());
+        assert_eq!(updated.quantity_amount(), Decimal::new(25, 1));
+        assert_eq!(updated.quantity_unit(), &UnitCode("serving".into()));
+        assert_eq!(updated.nutrient_snapshots().len(), original_snapshots.len());
+        for (snapshot, original) in updated
+            .nutrient_snapshots()
+            .iter()
+            .zip(original_snapshots.iter())
+        {
+            assert_eq!(snapshot.amount, original.amount * Decimal::new(25, 1));
+            assert_eq!(snapshot.unit, original.unit);
+        }
+    }
+
+    #[test]
+    fn update_ad_hoc_log_rejects_changing_unit() {
+        let log = build_ad_hoc_log();
+        let grams = Quantity::new(Decimal::new(2, 0), UnitCode("g".into())).unwrap();
+
+        let result = log.update_ad_hoc_log(ad_hoc_date(), None, None, grams, None);
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
 }

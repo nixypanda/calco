@@ -230,3 +230,72 @@ fn api_key_row_to_api_key(row: ApiKeyRow) -> Result<ApiKey, AuthError> {
         revoked_at: row.revoked_at,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::infra::pg::{PgIdentityRepo, PgUserProfileRepo};
+
+    #[sqlx::test]
+    async fn stale_record_used_does_not_unrevoke_an_api_key(pool: PgPool) {
+        // Microsecond-aligned so the Postgres timestamptz round trip is exact.
+        let now = DateTime::from_timestamp(1_780_000_000, 0).unwrap();
+        let identity = Identity::new_user(
+            Username::new("api-key-race").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        PgIdentityRepo::new(pool.clone())
+            .create(&identity)
+            .await
+            .unwrap();
+        PgUserProfileRepo::new(pool.clone())
+            .create(&UserProfile::new(identity.id, "API Key Race", now))
+            .await
+            .unwrap();
+
+        let (_, key) = create_api_key(
+            &identity,
+            ApiKeyName::new("Race").unwrap(),
+            ApiKeyScope::Read,
+            None,
+            now,
+        )
+        .unwrap();
+        let repo = PgApiKeyRepo::new(pool);
+        repo.create(&key).await.unwrap();
+
+        let stale = repo.find_by_id(key.id).await.unwrap().expect("api key");
+        assert!(stale.revoked_at.is_none());
+
+        let mut wrong_owner = stale.clone();
+        wrong_owner.identity_id = IdentityId::new();
+        repo.update(&wrong_owner.record_used(now)).await.unwrap();
+        let untouched = repo.find_by_id(key.id).await.unwrap().unwrap();
+        assert!(untouched.revoked_at.is_none());
+        assert!(untouched.last_used_at.is_none());
+
+        let used = stale.record_used(now);
+        repo.update(&used).await.unwrap();
+        let refreshed = repo.find_by_id(key.id).await.unwrap().unwrap();
+        assert_eq!(
+            refreshed.last_used_at,
+            Some(now),
+            "live key authentication must persist last_used_at"
+        );
+
+        let revoked_at = Utc::now();
+        repo.update(&refreshed.revoke(revoked_at)).await.unwrap();
+        let revoked = repo.find_by_id(key.id).await.unwrap().unwrap();
+        let revoked_at = revoked.revoked_at.expect("key should be revoked");
+        assert_eq!(revoked.last_used_at, Some(now));
+
+        repo.update(&stale.record_used(now + chrono::Duration::seconds(1)))
+            .await
+            .unwrap();
+
+        let stored = repo.find_by_id(key.id).await.unwrap().unwrap();
+        assert_eq!(stored.revoked_at, Some(revoked_at));
+        assert_eq!(stored.last_used_at, Some(now));
+    }
+}

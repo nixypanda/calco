@@ -460,3 +460,43 @@ fn import_error_row_to_record(row: ImportErrorRow) -> ImportErrorRecord {
         raw_payload: row.raw_payload,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test]
+    async fn failed_commit_records_failed_at_and_cannot_be_recommitted(pool: PgPool) {
+        let repository = PgImportRepo::new(pool.clone());
+        let job = ImportJob::new("OFF".to_owned(), None);
+        repository
+            .create_job(&job)
+            .await
+            .expect("create import job");
+
+        sqlx::query("UPDATE imports SET status = 'running' WHERE id = $1")
+            .bind(job.id.0)
+            .execute(&pool)
+            .await
+            .expect("mark import running");
+
+        repository
+            .finish_commit(job.id, ImportCommitOutcome::Failed)
+            .await
+            .expect("finish failed commit");
+
+        let (status, failed_at): (String, Option<DateTime<Utc>>) =
+            sqlx::query_as("SELECT status, failed_at FROM imports WHERE id = $1")
+                .bind(job.id.0)
+                .fetch_one(&pool)
+                .await
+                .expect("load import state");
+        assert_eq!(status, ImportStatus::Failed.as_str());
+        assert!(failed_at.is_some(), "failed commit must record failed_at");
+
+        assert!(matches!(
+            repository.prepare_commit(job.id).await,
+            Err(ImportError::InvalidStatus(_))
+        ));
+    }
+}

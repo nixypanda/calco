@@ -222,7 +222,7 @@ async fn import_commit_records_errors_for_unknown_nutrient(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn running_import_resumes_and_rejects_further_staging(pool: PgPool) {
+async fn running_import_can_be_committed(pool: PgPool) {
     let router = app(pool.clone()).await;
     let admin = bootstrap_admin(&router).await;
     let created: Value = post_json(
@@ -257,14 +257,6 @@ async fn running_import_resumes_and_rejects_further_staging(pool: PgPool) {
         .await
         .unwrap();
 
-    let _: Value = post_json(
-        &router,
-        &format!("/api/imports/{import_id}/foods"),
-        &admin,
-        &foods_payload,
-        StatusCode::CONFLICT,
-    )
-    .await;
     let committed: Value = post_json(
         &router,
         &format!("/api/imports/{import_id}/commit"),
@@ -320,7 +312,7 @@ async fn retrying_invalid_staging_does_not_duplicate_errors(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn deterministic_catalog_validation_marks_import_failed(pool: PgPool) {
+async fn validation_failure_marks_import_failed(pool: PgPool) {
     let router = app(pool).await;
     let admin = bootstrap_admin(&router).await;
     let created: Value = post_json(
@@ -470,172 +462,4 @@ async fn running_import_reapplies_catalog_after_pre_finalize_crash(pool: PgPool)
     .await;
     assert_eq!(committed["products_created"], 0);
     assert_eq!(committed["status"], "committed");
-}
-
-#[sqlx::test]
-async fn later_import_authoritatively_removes_omitted_children(pool: PgPool) {
-    let router = app(pool.clone()).await;
-    let admin = bootstrap_admin(&router).await;
-    let first: Value = post_json(
-        &router,
-        "/api/imports",
-        &admin,
-        &json!({ "source": "OFF" }),
-        StatusCode::CREATED,
-    )
-    .await;
-    let first_id = first["id"].as_str().unwrap();
-    let food = json!({
-        "rows": [{
-            "row_number": 1,
-            "source": "OFF",
-            "source_id": "authoritative-import",
-            "name": "Authoritative food",
-            "categories": []
-        }]
-    });
-    let _: Value = post_json(
-        &router,
-        &format!("/api/imports/{first_id}/foods"),
-        &admin,
-        &food,
-        StatusCode::OK,
-    )
-    .await;
-    let _: Value = post_json(
-        &router,
-        &format!("/api/imports/{first_id}/nutrients"),
-        &admin,
-        &json!({
-            "rows": [
-                {
-                    "row_number": 1,
-                    "source": "OFF",
-                    "source_id": "authoritative-import",
-                    "nutrient_code": "ENERGY_KCAL",
-                    "amount_per_100g": 100
-                },
-                {
-                    "row_number": 2,
-                    "source": "OFF",
-                    "source_id": "authoritative-import",
-                    "nutrient_code": "PROTEIN_G",
-                    "amount_per_100g": 10
-                }
-            ]
-        }),
-        StatusCode::OK,
-    )
-    .await;
-    let _: Value = post_json(
-        &router,
-        &format!("/api/imports/{first_id}/servings"),
-        &admin,
-        &json!({
-            "rows": [
-                {
-                    "row_number": 1,
-                    "source": "OFF",
-                    "source_id": "authoritative-import",
-                    "unit": "cup",
-                    "grams_per_unit": 200
-                },
-                {
-                    "row_number": 2,
-                    "source": "OFF",
-                    "source_id": "authoritative-import",
-                    "unit": "slice",
-                    "grams_per_unit": 30
-                }
-            ]
-        }),
-        StatusCode::OK,
-    )
-    .await;
-    let _: Value = post_json(
-        &router,
-        &format!("/api/imports/{first_id}/commit"),
-        &admin,
-        &json!({}),
-        StatusCode::OK,
-    )
-    .await;
-
-    let second: Value = post_json(
-        &router,
-        "/api/imports",
-        &admin,
-        &json!({ "source": "OFF" }),
-        StatusCode::CREATED,
-    )
-    .await;
-    let second_id = second["id"].as_str().unwrap();
-    let _: Value = post_json(
-        &router,
-        &format!("/api/imports/{second_id}/foods"),
-        &admin,
-        &food,
-        StatusCode::OK,
-    )
-    .await;
-    let _: Value = post_json(
-        &router,
-        &format!("/api/imports/{second_id}/nutrients"),
-        &admin,
-        &json!({
-            "rows": [{
-                "row_number": 1,
-                "source": "OFF",
-                "source_id": "authoritative-import",
-                "nutrient_code": "ENERGY_KCAL",
-                "amount_per_100g": 100
-            }]
-        }),
-        StatusCode::OK,
-    )
-    .await;
-    let _: Value = post_json(
-        &router,
-        &format!("/api/imports/{second_id}/servings"),
-        &admin,
-        &json!({
-            "rows": [{
-                "row_number": 1,
-                "source": "OFF",
-                "source_id": "authoritative-import",
-                "unit": "cup",
-                "grams_per_unit": 200
-            }]
-        }),
-        StatusCode::OK,
-    )
-    .await;
-    let result: Value = post_json(
-        &router,
-        &format!("/api/imports/{second_id}/commit"),
-        &admin,
-        &json!({}),
-        StatusCode::OK,
-    )
-    .await;
-
-    assert_eq!(result["products_updated"], 0);
-    assert_eq!(result["nutrients_written"], 1);
-    assert_eq!(result["servings_written"], 1);
-    let product_id: uuid::Uuid = sqlx::query_scalar(
-        "SELECT id FROM products WHERE source = 'OFF' AND source_id = 'authoritative-import'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    let child_counts: (i64, i64) = sqlx::query_as(
-        r#"SELECT
-               (SELECT COUNT(*) FROM product_nutrients WHERE product_id = $1),
-               (SELECT COUNT(*) FROM product_servings WHERE product_id = $1)"#,
-    )
-    .bind(product_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(child_counts, (1, 1));
 }

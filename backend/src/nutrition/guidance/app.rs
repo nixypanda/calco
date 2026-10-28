@@ -171,6 +171,7 @@ mod tests {
         FoodLogId, FoodLogItemSnapshot, FoodLogNutrientSnapshot,
     };
     use crate::nutrition::guidance::infra::StaticGuidanceRepo;
+    use crate::nutrition::meal::domain::MealId;
     use chrono::Utc;
 
     fn date() -> NaiveDate {
@@ -238,5 +239,149 @@ mod tests {
         assert_eq!(sugar.known_amount, Some(Decimal::ZERO));
         assert_eq!(sugar.coverage, NutrientCoverage::Complete);
         assert_eq!(sugar.status, NutritionDetailsStatus::Available);
+    }
+
+    #[test]
+    fn no_snapshots_report_no_data() {
+        let report = nutrition_details_from_logs(date(), set(), vec![log(vec![])]);
+
+        let energy = entry(&report, "ENERGY_KCAL");
+        assert_eq!(energy.known_amount, None);
+        assert_eq!(energy.coverage, NutrientCoverage::None);
+        assert_eq!(energy.status, NutritionDetailsStatus::NoData);
+    }
+
+    #[test]
+    fn informational_nutrient_with_partial_items_is_partial_data() {
+        let report = nutrition_details_from_logs(
+            date(),
+            set(),
+            vec![log(vec![("SUGAR_G", Decimal::from(5), "g")]), log(vec![])],
+        );
+
+        let sugar = entry(&report, "SUGAR_G");
+        assert_eq!(sugar.known_amount, Some(Decimal::from(5)));
+        assert_eq!(sugar.coverage, NutrientCoverage::Partial);
+        assert_eq!(sugar.status, NutritionDetailsStatus::PartialData);
+    }
+
+    #[test]
+    fn adequacy_status_tracks_reference_threshold_with_complete_coverage() {
+        let below = nutrition_details_from_logs(
+            date(),
+            set(),
+            vec![log(vec![("FIBER_G", Decimal::from(27), "g")])],
+        );
+        let fiber = entry(&below, "FIBER_G");
+        assert_eq!(fiber.coverage, NutrientCoverage::Complete);
+        assert_eq!(fiber.status, NutritionDetailsStatus::BelowReference);
+
+        for amount in [Decimal::from(28), Decimal::from(30)] {
+            let report = nutrition_details_from_logs(
+                date(),
+                set(),
+                vec![log(vec![("FIBER_G", amount, "g")])],
+            );
+            assert_eq!(
+                entry(&report, "FIBER_G").status,
+                NutritionDetailsStatus::MetReference
+            );
+        }
+    }
+
+    #[test]
+    fn adequacy_partial_coverage_status_tracks_amount_threshold() {
+        let below = nutrition_details_from_logs(
+            date(),
+            set(),
+            vec![log(vec![("FIBER_G", Decimal::from(10), "g")]), log(vec![])],
+        );
+
+        let fiber = entry(&below, "FIBER_G");
+        assert_eq!(fiber.known_amount, Some(Decimal::from(10)));
+        assert_eq!(fiber.coverage, NutrientCoverage::Partial);
+        assert_eq!(fiber.status, NutritionDetailsStatus::PartialData);
+
+        let at_reference = nutrition_details_from_logs(
+            date(),
+            set(),
+            vec![log(vec![("FIBER_G", Decimal::from(28), "g")]), log(vec![])],
+        );
+
+        let fiber = entry(&at_reference, "FIBER_G");
+        assert_eq!(fiber.coverage, NutrientCoverage::Partial);
+        assert_eq!(fiber.status, NutritionDetailsStatus::MetReference);
+    }
+
+    #[test]
+    fn maximum_status_tracks_reference_threshold_with_complete_coverage() {
+        let over = nutrition_details_from_logs(
+            date(),
+            set(),
+            vec![log(vec![("SODIUM_MG", Decimal::from(2301), "mg")])],
+        );
+        let sodium = entry(&over, "SODIUM_MG");
+        assert_eq!(sodium.coverage, NutrientCoverage::Complete);
+        assert_eq!(sodium.status, NutritionDetailsStatus::OverLimit);
+
+        for amount in [Decimal::from(2300), Decimal::from(1000)] {
+            let report = nutrition_details_from_logs(
+                date(),
+                set(),
+                vec![log(vec![("SODIUM_MG", amount, "mg")])],
+            );
+            assert_eq!(
+                entry(&report, "SODIUM_MG").status,
+                NutritionDetailsStatus::WithinLimit
+            );
+        }
+    }
+
+    #[test]
+    fn maximum_partial_coverage_status_tracks_amount_threshold() {
+        let report = nutrition_details_from_logs(
+            date(),
+            set(),
+            vec![
+                log(vec![("SODIUM_MG", Decimal::from(1000), "mg")]),
+                log(vec![]),
+            ],
+        );
+
+        let sodium = entry(&report, "SODIUM_MG");
+        assert_eq!(sodium.known_amount, Some(Decimal::from(1000)));
+        assert_eq!(sodium.coverage, NutrientCoverage::Partial);
+        assert_eq!(sodium.status, NutritionDetailsStatus::PartialData);
+
+        let over = nutrition_details_from_logs(
+            date(),
+            set(),
+            vec![
+                log(vec![("SODIUM_MG", Decimal::from(2301), "mg")]),
+                log(vec![]),
+            ],
+        );
+
+        let sodium = entry(&over, "SODIUM_MG");
+        assert_eq!(sodium.coverage, NutrientCoverage::Partial);
+        assert_eq!(sodium.status, NutritionDetailsStatus::OverLimit);
+    }
+
+    #[test]
+    fn meal_log_with_complete_item_data_is_still_partial_coverage() {
+        let meal_log = log_with(
+            Uuid::new_v4(),
+            FoodLogItemSnapshot::Meal {
+                id: MealId::new(),
+                name: "Test meal".into(),
+            },
+            vec![("SUGAR_G", Decimal::from(5), "g")],
+        );
+        let report = nutrition_details_from_logs(date(), set(), vec![meal_log]);
+
+        let sugar = entry(&report, "SUGAR_G");
+        assert_eq!(sugar.known_amount, Some(Decimal::from(5)));
+        assert_eq!(sugar.coverage, NutrientCoverage::Partial);
+        assert_eq!(sugar.status, NutritionDetailsStatus::PartialData);
     }
 }

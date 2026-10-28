@@ -1191,6 +1191,33 @@ mod tests {
     }
 
     #[test]
+    fn external_product_batch_rejects_identities_that_collide_after_trimming() {
+        let catalog = test_catalog();
+        let first = Product::new_external(
+            ExternalSource::Off,
+            ExternalProductBuilder::new("same-id", "Food One"),
+            &catalog,
+        )
+        .unwrap();
+        let second = Product::new_external(
+            ExternalSource::Off,
+            ExternalProductBuilder::new(" same-id ", "Food Two"),
+            &catalog,
+        )
+        .unwrap();
+
+        match ExternalProductBatch::new(vec![first, second]) {
+            Err(NutritionError::Validation(message)) => {
+                assert!(
+                    message.contains("duplicate external product identity"),
+                    "message: {message}"
+                );
+            }
+            other => panic!("expected duplicate identity validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn custom_product_creation_rejects_invalid_values() {
         let user_id = Uuid::new_v4();
         let catalog = test_catalog();

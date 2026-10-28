@@ -65,3 +65,22 @@ impl NutritionCalculator {
         CalculatedNutrition { amounts }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quantity_rejects_non_positive_and_accepts_positive() {
+        let unit = UnitCode("serving".into());
+
+        for amount in [Decimal::ZERO, Decimal::new(-1, 0)] {
+            assert!(matches!(
+                Quantity::new(amount, unit.clone()),
+                Err(NutritionError::Validation(_))
+            ));
+        }
+
+        assert!(Quantity::new(Decimal::ONE, unit).is_ok());
+    }
+}

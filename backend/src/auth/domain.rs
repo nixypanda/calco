@@ -965,6 +965,43 @@ mod tests {
     }
 
     #[test]
+    fn api_key_capacity_counts_only_usable_keys() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("api-key-capacity").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let name = || ApiKeyName::new("Capacity").unwrap();
+        let create = || {
+            create_api_key(&identity, name(), ApiKeyScope::Read, None, now)
+                .unwrap()
+                .1
+        };
+
+        let mut keys: Vec<ApiKey> = (0..MAX_ACTIVE_API_KEYS - 1).map(|_| create()).collect();
+
+        keys.push(create().revoke(now));
+
+        let mut expired = create();
+        expired.expires_at = Some(now - Duration::seconds(1));
+        keys.push(expired);
+
+        let mut old_stamp = create();
+        old_stamp.identity_security_stamp = SessionSecurityStamp::new();
+        keys.push(old_stamp);
+
+        assert!(ensure_api_key_capacity(&keys, &identity, now).is_ok());
+
+        keys.push(create());
+
+        assert!(matches!(
+            ensure_api_key_capacity(&keys, &identity, now),
+            Err(AuthError::ApiKeyLimitReached)
+        ));
+    }
+
+    #[test]
     fn api_key_scope_parses_known_values_only() {
         assert_eq!("read".parse::<ApiKeyScope>().unwrap(), ApiKeyScope::Read);
         assert_eq!(
