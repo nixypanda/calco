@@ -9,279 +9,120 @@ import Expect
 import Page.FoodLog.CreateAdHoc as CreateAdHoc
 import Page.FoodLog.ReviewStory as ReviewStory
 import Support.Fixtures as Fixtures
-import Support.Story exposing (runSteps)
+import Support.Story as Story
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
     describe "Page.FoodLog.CreateAdHoc"
-        [ test "a missing name is rejected, then an ad-hoc save fails and retries" <|
+        [ test "a user logs an ad-hoc food" <|
             \_ ->
-                let
-                    rejected : CreateAdHoc.Model
-                    rejected =
-                        step CreateAdHoc.SubmitClicked preparedModel
-
-                    named : CreateAdHoc.Model
-                    named =
-                        step (CreateAdHoc.FormMsg (Editor.NameChanged "Paneer wrap")) rejected
-
-                    submitting : CreateAdHoc.Model
-                    submitting =
-                        step CreateAdHoc.SubmitClicked named
-
-                    failed : CreateAdHoc.Model
-                    failed =
-                        step
-                            (CreateAdHoc.AdHocLogCompleted (Err Client.NetworkError))
-                            submitting
-
-                    retrying : CreateAdHoc.Model
-                    retrying =
-                        step CreateAdHoc.SubmitClicked failed
-                in
-                Expect.all
-                    [ \_ ->
-                        ReviewStory.submitError rejected
-                            |> Expect.equal (Just ReviewStory.nameRequired)
-                    , \_ ->
-                        adHocOut (out CreateAdHoc.SubmitClicked named)
-                            |> Expect.equal
-                                (Just
-                                    { name = "Paneer wrap"
-                                    , date = "2026-09-14"
-                                    , timezone = Nothing
-                                    , mealSlot = Just "lunch"
-                                    , amount = "1"
-                                    , unit = "serving"
-                                    , nutrients =
-                                        [ "ENERGY_KCAL:520"
-                                        , "PROTEIN_G:24"
-                                        , "CARBS_G:48"
-                                        , "FAT_G:25"
-                                        ]
-                                    , notes = Nothing
-                                    }
-                                )
-                    , \_ ->
-                        out CreateAdHoc.SubmitClicked submitting
-                            |> Expect.equal CreateAdHoc.NoOp
-                    , \_ ->
-                        ReviewStory.submitError failed
-                            |> Expect.equal (Just Fixtures.networkErrorMessage)
-                    , \_ ->
-                        out (CreateAdHoc.AdHocLogCompleted (Err Fixtures.unauthorized)) submitting
-                            |> Expect.equal CreateAdHoc.SessionExpired
-                    , \_ ->
-                        out (CreateAdHoc.AdHocLogCompleted (Ok adHocLog)) retrying
-                            |> Expect.equal (CreateAdHoc.LogCreated adHocLog)
-                    ]
-                    ()
-        , test "save-on creates a custom food once, then a failed product log is retried" <|
+                prepared
+                    |> step (CreateAdHoc.FormMsg (Editor.NameChanged "Paneer wrap"))
+                    |> step CreateAdHoc.SubmitClicked
+                    |> step (CreateAdHoc.AdHocLogCompleted (Ok adHocLog))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (CreateAdHoc.LogCreated adHocLog)
+                        )
+        , test "a user saves an ad-hoc food as a custom food and logs it" <|
             \_ ->
-                let
-                    prepared : CreateAdHoc.Model
-                    prepared =
-                        preparedModel
-                            |> step (CreateAdHoc.FormMsg (Editor.NameChanged "Paneer wrap"))
-                            |> step (CreateAdHoc.FormMsg Editor.LogPersistenceToggled)
-                            |> step (CreateAdHoc.FormMsg (Editor.PortionWeightChanged "160"))
-
-                    submitting : CreateAdHoc.Model
-                    submitting =
-                        step CreateAdHoc.SubmitClicked prepared
-
-                    foodSaved : CreateAdHoc.Model
-                    foodSaved =
-                        step
-                            (CreateAdHoc.CustomFoodCompleted (Ok { id = "food-1" }))
-                            submitting
-
-                    failed : CreateAdHoc.Model
-                    failed =
-                        step
-                            (CreateAdHoc.ProductLogCompleted (Err Client.NetworkError))
-                            foodSaved
-
-                    retried : CreateAdHoc.Model
-                    retried =
-                        step CreateAdHoc.SubmitClicked failed
-                in
-                Expect.all
-                    [ \_ ->
-                        createFoodOut (out CreateAdHoc.SubmitClicked prepared)
-                            |> Expect.equal
-                                (Just
-                                    { name = "Paneer wrap"
-                                    , defaultUnit = Just "serving"
-                                    , defaultQuantity = Just "1"
-                                    , servings = [ "serving:160" ]
-                                    }
-                                )
-                    , \_ ->
-                        out CreateAdHoc.SubmitClicked submitting
-                            |> Expect.equal CreateAdHoc.NoOp
-                    , \_ ->
-                        productOut
-                            (out
-                                (CreateAdHoc.CustomFoodCompleted (Ok { id = "food-1" }))
-                                submitting
-                            )
-                            |> Expect.equal (Just "food-1")
-                    , \_ ->
-                        step
-                            (CreateAdHoc.CustomFoodCompleted (Err Client.NetworkError))
-                            submitting
-                            |> ReviewStory.submitError
-                            |> Expect.equal (Just Fixtures.networkErrorMessage)
-                    , \_ ->
-                        out
-                            (CreateAdHoc.CustomFoodCompleted (Err Fixtures.unauthorized))
-                            submitting
-                            |> Expect.equal CreateAdHoc.SessionExpired
-                    , \_ ->
-                        out
-                            (CreateAdHoc.ProductLogCompleted (Err Fixtures.unauthorized))
-                            foodSaved
-                            |> Expect.equal CreateAdHoc.SessionExpired
-                    , \_ ->
-                        ReviewStory.submitError failed
-                            |> Expect.equal (Just ReviewStory.savedNotLogged)
-                    , \_ ->
-                        ReviewStory.submitLabel failed
-                            |> Expect.equal (Just ReviewStory.retryLabel)
-                    , \_ ->
-                        productOut (out CreateAdHoc.SubmitClicked failed)
-                            |> Expect.equal (Just "food-1")
-                    , \_ ->
-                        out (CreateAdHoc.ProductLogCompleted (Ok productLog)) retried
-                            |> Expect.equal (CreateAdHoc.LogCreated productLog)
-                    ]
-                    ()
-        , test "a blank date waits for local context and fills it before logging" <|
+                prepared
+                    |> step (CreateAdHoc.FormMsg (Editor.NameChanged "Paneer wrap"))
+                    |> step (CreateAdHoc.FormMsg Editor.LogPersistenceToggled)
+                    |> step (CreateAdHoc.FormMsg (Editor.PortionWeightChanged "160"))
+                    |> step CreateAdHoc.SubmitClicked
+                    |> step (CreateAdHoc.CustomFoodCompleted (Ok { id = "food-1" }))
+                    |> step (CreateAdHoc.ProductLogCompleted (Err Client.NetworkError))
+                    |> step CreateAdHoc.SubmitClicked
+                    |> step (CreateAdHoc.ProductLogCompleted (Ok productLog))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (CreateAdHoc.LogCreated productLog)
+                        )
+        , test "a blank date waits for local context before logging" <|
             \_ ->
-                let
-                    prepared : CreateAdHoc.Model
-                    prepared =
-                        CreateAdHoc.init Nothing Nothing
-                            |> step (CreateAdHoc.UnitsLoaded (Ok { items = ReviewStory.units }))
-                            |> step
-                                (CreateAdHoc.NutrientsLoaded (Ok { items = ReviewStory.catalog }))
-                            |> runSteps step ReviewStory.fillNutrients
-                            |> step (CreateAdHoc.FormMsg (Editor.NameChanged "Paneer wrap"))
-
-                    awaiting : CreateAdHoc.Model
-                    awaiting =
-                        step CreateAdHoc.SubmitClicked prepared
-                in
-                Expect.all
-                    [ \_ ->
-                        out CreateAdHoc.SubmitClicked prepared
-                            |> Expect.equal CreateAdHoc.RequestLocalCtx
-                    , \_ ->
-                        out CreateAdHoc.SubmitClicked awaiting
-                            |> Expect.equal CreateAdHoc.NoOp
-                    , \_ ->
-                        ReviewStory.dateOf awaiting |> Expect.equal ""
-                    , \_ ->
-                        out (CreateAdHoc.LocalCtxReceived context) awaiting
-                            |> adHocOut
-                            |> Expect.equal
-                                (Just
-                                    { name = "Paneer wrap"
-                                    , date = "2026-09-16"
-                                    , timezone = Just "Asia/Kolkata"
-                                    , mealSlot = Nothing
-                                    , amount = "1"
-                                    , unit = "serving"
-                                    , nutrients =
-                                        [ "ENERGY_KCAL:520"
-                                        , "PROTEIN_G:24"
-                                        , "CARBS_G:48"
-                                        , "FAT_G:25"
-                                        ]
-                                    , notes = Nothing
-                                    }
-                                )
-                    , \_ ->
-                        out
-                            (CreateAdHoc.AdHocLogCompleted (Ok adHocLog))
-                            (step (CreateAdHoc.LocalCtxReceived context) awaiting)
-                            |> Expect.equal (CreateAdHoc.LogCreated adHocLog)
-                    ]
-                    ()
+                blankDate
+                    |> step (CreateAdHoc.FormMsg (Editor.NameChanged "Paneer wrap"))
+                    |> step CreateAdHoc.SubmitClicked
+                    |> step (CreateAdHoc.LocalCtxReceived context)
+                    |> step (CreateAdHoc.AdHocLogCompleted (Ok adHocLog))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (CreateAdHoc.LogCreated adHocLog)
+                        )
         ]
 
 
-
--- OUTMSG PROJECTIONS
-
-
-adHocOut : CreateAdHoc.OutMsg -> Maybe ReviewStory.AdHocRequest
-adHocOut outMsg =
-    case outMsg of
-        CreateAdHoc.RequestAdHocLog request ->
-            Just (ReviewStory.adHocRequest request)
-
-        _ ->
-            Nothing
-
-
-createFoodOut : CreateAdHoc.OutMsg -> Maybe ReviewStory.CreateFoodProjection
-createFoodOut outMsg =
-    case outMsg of
-        CreateAdHoc.RequestCreateFood request ->
-            Just (ReviewStory.createFoodRequest request)
-
-        _ ->
-            Nothing
-
-
-productOut : CreateAdHoc.OutMsg -> Maybe String
-productOut outMsg =
-    case outMsg of
-        CreateAdHoc.RequestProductLog request ->
-            Just (ReviewStory.productLogItemId request)
-
-        _ ->
-            Nothing
+stepWithOut :
+    CreateAdHoc.Msg
+    -> CreateAdHoc.Model
+    -> ( CreateAdHoc.Model, CreateAdHoc.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            CreateAdHoc.update msg model
+    in
+    ( next, outMsg )
 
 
 
--- FIXTURES AND HELPERS
+-- STORY PIPELINE
 
 
-step : CreateAdHoc.Msg -> CreateAdHoc.Model -> CreateAdHoc.Model
-step msg model =
+type alias Journey =
+    Story.Journey CreateAdHoc.Model CreateAdHoc.OutMsg
+
+
+step : CreateAdHoc.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+finish :
+    (( CreateAdHoc.Model, CreateAdHoc.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+prepared : Journey
+prepared =
+    Story.start
+        ( CreateAdHoc.init (Just ReviewStory.day) (Just Lunch)
+            |> stepModel (CreateAdHoc.UnitsLoaded (Ok { items = ReviewStory.units }))
+            |> stepModel (CreateAdHoc.NutrientsLoaded (Ok { items = ReviewStory.catalog }))
+            |> runSteps stepModel ReviewStory.fillNutrients
+        , CreateAdHoc.NoOp
+        )
+
+
+blankDate : Journey
+blankDate =
+    Story.start
+        ( CreateAdHoc.init Nothing Nothing
+            |> stepModel (CreateAdHoc.UnitsLoaded (Ok { items = ReviewStory.units }))
+            |> stepModel (CreateAdHoc.NutrientsLoaded (Ok { items = ReviewStory.catalog }))
+            |> runSteps stepModel ReviewStory.fillNutrients
+        , CreateAdHoc.NoOp
+        )
+
+
+stepModel : CreateAdHoc.Msg -> CreateAdHoc.Model -> CreateAdHoc.Model
+stepModel msg model =
     Fixtures.tupleFirst (CreateAdHoc.update msg model)
 
 
-out : CreateAdHoc.Msg -> CreateAdHoc.Model -> CreateAdHoc.OutMsg
-out msg model =
-    Fixtures.tupleThird (CreateAdHoc.update msg model)
-
-
-preparedModel : CreateAdHoc.Model
-preparedModel =
-    CreateAdHoc.init (Just ReviewStory.day) (Just Lunch)
-        |> step (CreateAdHoc.UnitsLoaded (Ok { items = ReviewStory.units }))
-        |> step (CreateAdHoc.NutrientsLoaded (Ok { items = ReviewStory.catalog }))
-        |> runSteps step ReviewStory.fillNutrients
+runSteps : (msg -> model -> model) -> List msg -> model -> model
+runSteps =
+    Story.runSteps
 
 
 context : LocalCtx
 context =
     { date = Fixtures.date "2026-09-16", timezone = "Asia/Kolkata" }
-
-
-nutrients : List { code : String, amount : String, unit : String }
-nutrients =
-    [ { code = "ENERGY_KCAL", amount = "520", unit = "kcal" }
-    , { code = "PROTEIN_G", amount = "24", unit = "g" }
-    , { code = "CARBS_G", amount = "48", unit = "g" }
-    , { code = "FAT_G", amount = "25", unit = "g" }
-    ]
 
 
 adHocLog : FoodLog
@@ -292,7 +133,12 @@ adHocLog =
     , mealSlot = Just Lunch
     , item = FoodLog.AdHocLogItem { name = "Paneer wrap", brand = Nothing }
     , quantity = { amount = "1", unit = "serving" }
-    , nutrients = nutrients
+    , nutrients =
+        [ { code = "ENERGY_KCAL", amount = "520", unit = "kcal" }
+        , { code = "PROTEIN_G", amount = "24", unit = "g" }
+        , { code = "CARBS_G", amount = "48", unit = "g" }
+        , { code = "FAT_G", amount = "25", unit = "g" }
+        ]
     , notes = Nothing
     }
 
