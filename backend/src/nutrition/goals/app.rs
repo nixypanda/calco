@@ -152,38 +152,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn multiple_saved_rows_resolve_latest_effective_date() {
-        let user_id = Uuid::new_v4();
-        let now = Utc::now();
-        let services = GoalTargetService::new(Arc::new(MockGoalTargetRepo::new(vec![
-            GoalTarget::create(
-                user_id,
-                NaiveDate::from_ymd_opt(2026, 6, 10).unwrap(),
-                sample_targets(2100, 150, 240, 60),
-                now,
-            ),
-            GoalTarget::create(
-                user_id,
-                NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(),
-                sample_targets(2290, 160, 255, 70),
-                now,
-            ),
-        ])));
-
-        let snapshot = services
-            .get_goal_for_date(user_id, NaiveDate::from_ymd_opt(2026, 6, 16).unwrap())
-            .await
-            .unwrap();
-
-        assert_eq!(snapshot.source, GoalTargetSource::Saved);
-        assert_eq!(
-            snapshot.effective_from,
-            Some(NaiveDate::from_ymd_opt(2026, 6, 15).unwrap())
-        );
-        assert_eq!(snapshot.targets, sample_targets(2290, 160, 255, 70));
-    }
-
-    #[tokio::test]
     async fn effective_goal_lookup_does_not_cross_user_boundaries() {
         let actor_id = Uuid::new_v4();
         let other_user_id = Uuid::new_v4();

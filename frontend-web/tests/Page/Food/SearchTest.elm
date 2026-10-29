@@ -1,851 +1,278 @@
 module Page.Food.SearchTest exposing (tests)
 
 import Api.Client as Client
-import Api.Foods as Foods exposing (ProductDetail, SearchResult)
+import Api.Foods as Foods
 import Api.Logs as Logs
 import Data.FoodLog as FoodLog exposing (FoodLog)
-import Data.ItemRef as ItemRef
 import Data.LocalCtx exposing (LocalCtx)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
-import Data.Search as Search
-import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
-import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Date exposing (LocalDate)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.Food.Search as FoodSearch
+import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
-import Test.Html.Query as Query
-import Test.Html.Selector as Selector
-import Time
-import Translations.Util as Util
-import Ui.Theme as Theme
 
 
 tests : Test
 tests =
     describe "Page.Food.Search"
-        [ test "the manual and AI log actions navigate with the current diary context" <|
+        [ test "a user searches and opens a food" <|
             \_ ->
-                let
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init (Just (date "2026-06-01")) (Just Lunch)
-                in
-                ( out FoodSearch.CreateAdHocLogClicked model
-                , out FoodSearch.CreateAiLogClicked model
-                )
-                    |> Expect.equal
-                        ( FoodSearch.Navigate
-                            (AdHocLogCreate (Just (date "2026-06-01")) (Just Lunch))
-                        , FoodSearch.Navigate
-                            (AiLogCreate (Just (date "2026-06-01")) (Just Lunch))
-                        )
-        , test "retargeting a different diary context keeps the query and reloads recents" <|
-            \_ ->
-                let
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init (Just (date "2026-06-01")) (Just Lunch)
-                            |> step (FoodSearch.QueryChanged "apple")
-                            |> step
-                                (FoodSearch.RecentItemsLoaded (Just (date "2026-06-01"))
-                                    (Just Lunch)
-                                    (Ok { items = [ recentProduct ] })
-                                )
-
-                    ( retargeted, changed ) =
-                        FoodSearch.retarget (Just (date "2026-06-02")) (Just Dinner) model
-
-                    ( _, changedAgain ) =
-                        FoodSearch.retarget (Just (date "2026-06-02")) (Just Dinner) retargeted
-                in
-                { query = toScreen retargeted |> .query
-                , chrono = toScreen retargeted |> .chrono
-                , recents = toScreen retargeted |> .recentItems
-                , changed = changed
-                , changedAgain = changedAgain
-                }
-                    |> Expect.equal
-                        { query = "apple"
-                        , chrono = "2026-06-02/dinner"
-                        , recents = Loading
-                        , changed = True
-                        , changedAgain = False
-                        }
-        , test "typing debounces into a search result and selecting one opens the food" <|
-            \_ ->
-                let
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
-
-                    searched : FoodSearch.OutMsg
-                    searched =
-                        out (FoodSearch.DebounceElapsed (ticket 1) "apple")
-                            (step (FoodSearch.QueryChanged "apple") model)
-
-                    loaded : FoodSearch.Model
-                    loaded =
-                        step (FoodSearch.SearchCompleted (ticket 1) (Ok { items = [ apple ] }))
-                            (step (FoodSearch.QueryChanged "apple") model)
-                in
-                ( searched
-                , toScreen loaded |> .results
-                , out (FoodSearch.ResultClicked "food-1") loaded
-                )
-                    |> Expect.equal
-                        ( FoodSearch.RequestSearch (ticket 1)
-                            { query = "apple", scope = Foods.SearchHistory }
-                        , Success [ "Apple" ]
-                        , FoodSearch.Navigate
-                            (FoodShow "food-1" (Just (date "2026-05-29")) (Just Lunch) Nothing)
-                        )
-        , test "clearing a search drops its results and returns to the recents view" <|
-            \_ ->
-                let
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
-
-                    failed : FoodSearch.Model
-                    failed =
-                        model
-                            |> step (FoodSearch.QueryChanged "zzzz")
-                            |> step (FoodSearch.DebounceElapsed (ticket 1) "zzzz")
-                            |> step
-                                (FoodSearch.SearchCompleted (ticket 1)
-                                    (Err Client.NetworkError)
-                                )
-
-                    cleared : FoodSearch.Model
-                    cleared =
-                        step (FoodSearch.QueryChanged "   ") failed
-                in
-                ( toScreen failed |> .results
-                , toScreen cleared |> .results
-                , toScreen cleared |> .query
-                )
-                    |> Expect.equal ( Failure Client.NetworkError, NotAsked, "   " )
-        , test "a burst of category keystrokes only requests suggestions for the settled query" <|
-            \_ ->
-                let
-                    typed : FoodSearch.Model
-                    typed =
-                        List.foldl (\query model -> step (FoodSearch.QueryChanged query) model)
-                            (FoodSearch.init Nothing Nothing)
-                            [ "category:c", "category:ch", "category:cho" ]
-                in
-                ( out (FoodSearch.CategoryDebounceElapsed (ticket 1) "c") typed
-                , out (FoodSearch.CategoryDebounceElapsed (ticket 2) "ch") typed
-                , out (FoodSearch.CategoryDebounceElapsed (ticket 3) "cho") typed
-                )
-                    |> Expect.equal
-                        ( FoodSearch.NoOp
-                        , FoodSearch.NoOp
-                        , FoodSearch.RequestCategorySuggestions (ticket 3)
-                            { query = "cho", limit = 8 }
-                        )
-        , test "tab completion expands the category operators and preserves the gap" <|
-            \_ ->
-                let
-                    complete : String -> String
-                    complete query =
-                        FoodSearch.init Nothing Nothing
-                            |> step (FoodSearch.QueryChanged query)
-                            |> step FoodSearch.CompleteFirstSuggestion
-                            |> toScreen
-                            |> .query
-                in
-                ( complete "c", complete "apple c", complete "-c" )
-                    |> Expect.equal ( "category:", "apple category:", "-category:" )
-        , test "a settled category query completes the first suggestion with quotes" <|
-            \_ ->
-                let
-                    typed : FoodSearch.Model
-                    typed =
-                        step (FoodSearch.QueryChanged "category:foo")
-                            (FoodSearch.init Nothing Nothing)
-
-                    completed : FoodSearch.Model
-                    completed =
-                        typed
-                            |> step (FoodSearch.CategoryDebounceElapsed (ticket 1) "foo")
-                            |> step
-                                (FoodSearch.CategorySuggestionsCompleted (ticket 1)
-                                    (Ok { items = [ { value = "food and beverages", count = 4 } ] })
-                                )
-                            |> step FoodSearch.CompleteFirstSuggestion
-                in
-                { request = out (FoodSearch.CategoryDebounceElapsed (ticket 1) "foo") typed
-                , query = toScreen completed |> .query
-                }
-                    |> Expect.equal
-                        { request =
-                            FoodSearch.RequestCategorySuggestions (ticket 1)
-                                { query = "foo", limit = 8 }
-                        , query = "category:\"food and beverages\""
-                        }
-        , test "changing scope cancels a pending debounce and drops an in-flight suggestion" <|
-            \_ ->
-                let
-                    typed : FoodSearch.Model
-                    typed =
-                        step (FoodSearch.QueryChanged "category:foo")
-                            (FoodSearch.init Nothing Nothing)
-
-                    switched : FoodSearch.Model
-                    switched =
-                        step (FoodSearch.ScopeSelected FoodSearch.Custom) typed
-
-                    afterResponse : FoodSearch.Model
-                    afterResponse =
-                        step
-                            (FoodSearch.CategorySuggestionsCompleted (ticket 1)
-                                (Ok { items = [ { value = "food", count = 4 } ] })
-                            )
-                            switched
-                in
-                ( out (FoodSearch.CategoryDebounceElapsed (ticket 1) "foo") switched
-                , toScreen afterResponse |> .categorySuggestions
-                , toScreen afterResponse |> .scope
-                )
-                    |> Expect.equal ( FoodSearch.NoOp, [], FoodSearch.Custom )
-        , test "a category suggestion failure clears the list and unauthorized expires" <|
-            \_ ->
-                let
-                    base : FoodSearch.Model
-                    base =
-                        FoodSearch.init Nothing Nothing
-
-                    pending : FoodSearch.Model
-                    pending =
-                        { base
-                            | search =
-                                Search.empty
-                                    |> Search.withCategoryToken (ticket 1)
-                                    |> Search.setCategorySuggestions (ticket 1)
-                                        [ { value = "old", count = 1 } ]
-                        }
-
-                    failed : FoodSearch.Model
-                    failed =
-                        step
-                            (FoodSearch.CategorySuggestionsCompleted (ticket 1)
-                                (Err Client.NetworkError)
-                            )
-                            pending
-                in
-                ( toScreen failed |> .categorySuggestions
-                , out
-                    (FoodSearch.CategorySuggestionsCompleted (ticket 1)
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    pending
-                )
-                    |> Expect.equal ( [], FoodSearch.SessionExpired )
-        , test "scope switches re-search and debounce honors the selected scope" <|
-            \_ ->
-                let
-                    typed : FoodSearch.Model
-                    typed =
-                        step (FoodSearch.QueryChanged "apple")
-                            (FoodSearch.init Nothing Nothing)
-
-                    toAll : FoodSearch.Model
-                    toAll =
-                        step (FoodSearch.ScopeSelected FoodSearch.All) typed
-
-                    customModel : FoodSearch.Model
-                    customModel =
-                        step (FoodSearch.ScopeSelected FoodSearch.Custom) typed
-                in
-                ( out (FoodSearch.ScopeSelected FoodSearch.All) typed
-                , out (FoodSearch.ScopeSelected FoodSearch.History) toAll
-                , out (FoodSearch.DebounceElapsed (ticket 2) "apple") customModel
-                )
-                    |> Expect.equal
-                        ( FoodSearch.RequestSearch (ticket 2)
-                            { query = "apple", scope = Foods.SearchAll }
-                        , FoodSearch.RequestSearch (ticket 3)
-                            { query = "apple", scope = Foods.SearchHistory }
-                        , FoodSearch.RequestSearch (ticket 2)
-                            { query = "apple", scope = Foods.SearchCustom }
-                        )
-        , test "a stale search response is ignored and failures surface" <|
-            \_ ->
-                let
-                    typed : FoodSearch.Model
-                    typed =
-                        step (FoodSearch.QueryChanged "apple")
-                            (FoodSearch.init Nothing Nothing)
-
-                    retyped : FoodSearch.Model
-                    retyped =
-                        step (FoodSearch.QueryChanged "apples") typed
-
-                    stale : FoodSearch.Model
-                    stale =
-                        step (FoodSearch.SearchCompleted (ticket 1) (Ok { items = [ apple ] }))
-                            retyped
-
-                    failed : FoodSearch.Model
-                    failed =
-                        step (FoodSearch.SearchCompleted (ticket 2) (Err Client.NetworkError))
-                            retyped
-                in
-                ( toScreen stale |> .results
-                , toScreen failed |> .results
-                , out
-                    (FoodSearch.SearchCompleted (ticket 2)
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    retyped
-                )
-                    |> Expect.equal
-                        ( Loading, Failure Client.NetworkError, FoodSearch.SessionExpired )
-        , test "a barcode submit looks up the code and a hit opens the food with lookup context" <|
-            \_ ->
-                let
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
-                            |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
-                            |> step (FoodSearch.BarcodeChanged " 12345 ")
-
-                    note : String
-                    note =
-                        "Food was not found locally and was imported from Open Food Facts."
-
-                    requested : FoodSearch.Model
-                    requested =
-                        step FoodSearch.BarcodeSubmitted model
-
-                    completion : Foods.BarcodeLookupResponse -> FoodSearch.OutMsg
-                    completion lookup =
-                        out (FoodSearch.BarcodeLookupCompleted (ticket 2) (Ok lookup)) requested
-                in
-                ( out FoodSearch.BarcodeSubmitted model
-                , completion
-                    { product = appleDetail
-                    , lookup = { origin = Foods.Local, note = Nothing }
-                    }
-                , completion
-                    { product = appleDetail
-                    , lookup = { origin = Foods.OpenFoodFacts, note = Just note }
-                    }
-                )
-                    |> Expect.equal
-                        ( FoodSearch.RequestBarcodeLookup (ticket 2) "12345"
-                        , FoodSearch.Navigate
-                            (FoodShow "food-1" (Just (date "2026-05-29")) (Just Lunch) Nothing)
-                        , FoodSearch.Navigate
-                            (FoodShow "food-1" (Just (date "2026-05-29")) (Just Lunch) (Just note))
-                        )
-        , test "a stale barcode lookup response is ignored" <|
-            \_ ->
-                let
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init Nothing Nothing
-                            |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
-                            |> step (FoodSearch.BarcodeChanged "12345")
-                            |> step FoodSearch.BarcodeSubmitted
-                            |> step FoodSearch.BarcodeSubmitted
-
-                    hit : FoodSearch.OutMsg
-                    hit =
-                        out
-                            (FoodSearch.BarcodeLookupCompleted (ticket 1)
-                                (Ok
-                                    { product = appleDetail
-                                    , lookup = { origin = Foods.Local, note = Nothing }
-                                    }
-                                )
-                            )
-                            model
-                in
-                ( hit, toScreen model |> .barcodeLookup )
-                    |> Expect.equal ( FoodSearch.NoOp, Loading )
-        , test "a barcode lookup failure stays on the page and unauthorized expires the session" <|
-            \_ ->
-                let
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init Nothing Nothing
-                            |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
-                            |> step (FoodSearch.BarcodeChanged "12345")
-                            |> step FoodSearch.BarcodeSubmitted
-
-                    failed : FoodSearch.Model
-                    failed =
-                        step
-                            (FoodSearch.BarcodeLookupCompleted (ticket 2) (Err Client.NetworkError))
-                            model
-                in
-                ( toScreen failed |> .barcodeLookup
-                , out
-                    (FoodSearch.BarcodeLookupCompleted (ticket 2)
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    model
-                )
-                    |> Expect.equal ( Failure Client.NetworkError, FoodSearch.SessionExpired )
-        , test "starting and cancelling the scanner toggles the camera and leaving stops it" <|
-            \_ ->
-                let
-                    barcodeScope : FoodSearch.Model
-                    barcodeScope =
-                        step (FoodSearch.ScopeSelected FoodSearch.Barcode)
-                            (FoodSearch.init Nothing Nothing)
-
-                    started : FoodSearch.Model
-                    started =
-                        step
-                            (FoodSearch.BarcodeScannerEventReceived
-                                { event = "started", barcode = Nothing, message = Nothing }
-                            )
-                            (step FoodSearch.BarcodeScanClicked barcodeScope)
-
-                    cancelled : FoodSearch.Model
-                    cancelled =
-                        step FoodSearch.BarcodeScanCancelClicked started
-                in
-                { enterScope =
-                    out
-                        (FoodSearch.ScopeSelected FoodSearch.Barcode)
-                        (FoodSearch.init Nothing Nothing)
-                , startRequest = out FoodSearch.BarcodeScanClicked barcodeScope
-                , startedScanner = toScreen started |> .scanner
-                , cancelRequest = out FoodSearch.BarcodeScanCancelClicked started
-                , cancelledScanner = toScreen cancelled |> .scanner
-                , leaveRequest = out (FoodSearch.ScopeSelected FoodSearch.All) started
-                , leftScanner =
-                    toScreen (step (FoodSearch.ScopeSelected FoodSearch.All) started) |> .scanner
-                }
-                    |> Expect.equal
-                        { enterScope = FoodSearch.NoOp
-                        , startRequest = FoodSearch.RequestBarcodeScanStart
-                        , startedScanner = FoodSearch.ScannerActive
-                        , cancelRequest = FoodSearch.RequestBarcodeScanStop
-                        , cancelledScanner = FoodSearch.ScannerIdle
-                        , leaveRequest = FoodSearch.RequestBarcodeScanStop
-                        , leftScanner = FoodSearch.ScannerIdle
-                        }
-        , test "a detected barcode submits the lookup while a scanner failure is surfaced" <|
-            \_ ->
-                let
-                    active : FoodSearch.Model
-                    active =
-                        FoodSearch.init Nothing Nothing
-                            |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
-                            |> step FoodSearch.BarcodeScanClicked
-                            |> step
-                                (FoodSearch.BarcodeScannerEventReceived
-                                    { event = "started", barcode = Nothing, message = Nothing }
-                                )
-
-                    detected : FoodSearch.Model
-                    detected =
-                        step
-                            (FoodSearch.BarcodeScannerEventReceived
-                                { event = "detected", barcode = Just " 12345 ", message = Nothing }
-                            )
-                            active
-
-                    failed : FoodSearch.Model
-                    failed =
-                        FoodSearch.init Nothing Nothing
-                            |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
-                            |> step FoodSearch.BarcodeScanClicked
-                            |> step
-                                (FoodSearch.BarcodeScannerEventReceived
-                                    { event = "failed"
-                                    , barcode = Nothing
-                                    , message = Just "Camera permission was denied."
-                                    }
-                                )
-                in
-                { detectedRequest =
-                    out
-                        (FoodSearch.BarcodeScannerEventReceived
-                            { event = "detected", barcode = Just " 12345 ", message = Nothing }
-                        )
-                        active
-                , detectedQuery = toScreen detected |> .barcodeQuery
-                , detectedScanner = toScreen detected |> .scanner
-                , detectedLookup = toScreen detected |> .barcodeLookup
-                , failedScanner = toScreen failed |> .scanner
-                }
-                    |> Expect.equal
-                        { detectedRequest = FoodSearch.RequestBarcodeLookup (ticket 3) "12345"
-                        , detectedQuery = "12345"
-                        , detectedScanner = FoodSearch.ScannerIdle
-                        , detectedLookup = Loading
-                        , failedScanner =
-                            FoodSearch.ScannerFailed "Camera permission was denied."
-                        }
-        , test "only a genuine barcode miss offers the ad-hoc log actions" <|
-            \_ ->
-                let
-                    base : FoodSearch.Model
-                    base =
-                        FoodSearch.init Nothing Nothing
-                            |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
-                            |> step (FoodSearch.BarcodeChanged "12345")
-                            |> step FoodSearch.BarcodeSubmitted
-
-                    miss : FoodSearch.Model
-                    miss =
-                        step
-                            (FoodSearch.BarcodeLookupCompleted (ticket 2)
-                                (Err barcodeNotFound)
-                            )
-                            base
-
-                    transport : FoodSearch.Model
-                    transport =
-                        step
-                            (FoodSearch.BarcodeLookupCompleted (ticket 2)
-                                (Err Client.NetworkError)
-                            )
-                            base
-
-                    scanning : FoodSearch.Model
-                    scanning =
-                        step FoodSearch.BarcodeScanClicked miss
-                in
-                Expect.all
-                    [ \_ -> contentFor miss |> Query.has [ Selector.text "Create with AI" ]
-                    , \_ ->
-                        contentFor transport
-                            |> Query.hasNot [ Selector.text "Create with AI" ]
-                    , \_ ->
-                        contentFor scanning
-                            |> Query.hasNot [ Selector.text "No food found for that barcode." ]
-                    ]
-                    ()
-        , test "recent items are capped and stale, failed, or unauthorized loads are handled" <|
-            \_ ->
-                let
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
-
-                    loaded : FoodSearch.Model
-                    loaded =
-                        step
-                            (FoodSearch.RecentItemsLoaded (Just (date "2026-05-29"))
-                                (Just Lunch)
-                                (Ok { items = List.repeat 11 recentProduct })
-                            )
-                            model
-
-                    stale : FoodSearch.Model
-                    stale =
-                        step
-                            (FoodSearch.RecentItemsLoaded (Just (date "2026-05-29"))
-                                (Just Dinner)
-                                (Ok { items = [ recentProduct ] })
-                            )
-                            loaded
-
-                    failed : FoodSearch.Model
-                    failed =
-                        step
-                            (FoodSearch.RecentItemsLoaded (Just (date "2026-05-29"))
-                                (Just Lunch)
-                                (Err Client.NetworkError)
-                            )
-                            model
-                in
-                { capped = recentCount loaded
-                , staleCapped = recentCount stale
-                , failedRecents = toScreen failed |> .recentItems
-                , unauthorized =
-                    out
-                        (FoodSearch.RecentItemsLoaded (Just (date "2026-05-29"))
-                            (Just Lunch)
-                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                        )
-                        model
-                }
-                    |> Expect.equal
-                        { capped = 10
-                        , staleCapped = 10
-                        , failedRecents = Failure Client.NetworkError
-                        , unauthorized = FoodSearch.SessionExpired
-                        }
-        , test "clicking a recent item opens it while a quick add asks for the local context" <|
-            \_ ->
-                let
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
-                in
-                ( out (FoodSearch.RecentItemClicked recentMeal) model
-                , out quickAddRecent model
-                )
-                    |> Expect.equal
-                        ( FoodSearch.Navigate (MealShow "meal-1")
-                        , FoodSearch.RequestLocalCtx
-                        )
-        , test "a quick add builds a create-log request from the diary date or the device date" <|
-            \_ ->
-                let
-                    context : LocalCtx
-                    context =
-                        { date = date "2026-06-01", timezone = "Asia/Kolkata" }
-
-                    requestFor : FoodSearch.Model -> FoodSearch.OutMsg
-                    requestFor model =
-                        out (FoodSearch.LocalCtxReceived context)
-                            (step
-                                quickAddRecent
-                                model
-                            )
-                in
-                ( requestFor (FoodSearch.init (Just (date "2026-05-29")) (Just Lunch))
-                , requestFor (FoodSearch.init Nothing Nothing)
-                )
-                    |> Expect.equal
-                        ( FoodSearch.RequestCreateLog
-                            { logDate = date "2026-05-29"
-                            , deviceTimezone = Just "Asia/Kolkata"
-                            , mealSlot = Just Lunch
-                            , item = { itemType = ItemRef.Product, id = "food-1" }
-                            , quantity = { amount = "2", unit = "serving" }
-                            , notes = Nothing
+                page
+                    |> step (FoodSearch.QueryChanged "apple")
+                    |> step (FoodSearch.DebounceElapsed (ticket 1) "apple")
+                    |> step (FoodSearch.SearchCompleted (ticket 1) (Ok { items = [ apple ] }))
+                    |> step (FoodSearch.ResultClicked "food-1")
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { results = values .name model.results
+                            , finalOut = outMsg
                             }
-                        , FoodSearch.RequestCreateLog
-                            { logDate = date "2026-06-01"
-                            , deviceTimezone = Just "Asia/Kolkata"
-                            , mealSlot = Nothing
-                            , item = { itemType = ItemRef.Product, id = "food-1" }
-                            , quantity = { amount = "2", unit = "serving" }
-                            , notes = Nothing
+                                |> Expect.equal
+                                    { results = [ "Apple" ]
+                                    , finalOut =
+                                        FoodSearch.Navigate
+                                            (FoodShow "food-1" (Just day) (Just Lunch) Nothing)
+                                    }
+                        )
+        , test "a user scans an unknown barcode and creates an ad-hoc log" <|
+            \_ ->
+                page
+                    |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
+                    |> step FoodSearch.BarcodeScanClicked
+                    |> step (scannerEvent "started" Nothing)
+                    |> step (scannerEvent "detected" (Just " 111 "))
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                FoodSearch.RequestBarcodeLookup token _ ->
+                                    Ok
+                                        (FoodSearch.BarcodeLookupCompleted token
+                                            (Err barcodeNotFound)
+                                        )
+
+                                _ ->
+                                    Err "expected a barcode lookup request"
+                        )
+                    |> step FoodSearch.CreateAdHocLogClicked
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { barcode = model.barcodeQuery
+                            , notFound = barcodeNotFoundShown model.barcodeLookup
+                            , finalOut = outMsg
                             }
+                                |> Expect.equal
+                                    { barcode = "111"
+                                    , notFound = True
+                                    , finalOut =
+                                        FoodSearch.Navigate
+                                            (AdHocLogCreate (Just day) (Just Lunch))
+                                    }
                         )
-        , test "a quick add badges the item and reports the created log" <|
+        , test "a user quick-adds a recent food" <|
             \_ ->
-                let
-                    record : FoodSearch.Model -> FoodSearch.Model
-                    record model =
-                        model
-                            |> step
-                                quickAddRecent
-                            |> step
-                                (FoodSearch.LocalCtxReceived
-                                    { date = date "2026-06-01", timezone = "Asia/Kolkata" }
-                                )
-
-                    once : FoodSearch.Model
-                    once =
-                        FoodSearch.init Nothing Nothing
-                            |> record
-                            |> step (FoodSearch.QuickAddCompleted (Ok productLog))
-
-                    twice : FoodSearch.Model
-                    twice =
-                        once
-                            |> record
-                            |> step (FoodSearch.QuickAddCompleted (Ok productLog))
-                in
-                ( toScreen once |> .addedKeys
-                , toScreen twice |> .addedKeys
-                , out (FoodSearch.QuickAddCompleted (Ok productLog))
-                    (record (FoodSearch.init Nothing Nothing))
-                )
-                    |> Expect.equal
-                        ( [ "product:food-1:2 serving" ]
-                        , [ "product:food-1:2 serving" ]
-                        , FoodSearch.LogCreated productLog
+                recentsPage
+                    |> step (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
+                    |> step (FoodSearch.LocalCtxReceived context)
+                    |> step (FoodSearch.QuickAddCompleted (Ok productLog))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { recentNames = values (FoodLog.itemName << .item) model.recentItems
+                            , added = List.map .key model.addedItems
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { recentNames = [ "Apple", "Lunch meal" ]
+                                    , added = [ recentProductKey ]
+                                    , finalOut = FoodSearch.LogCreated productLog
+                                    }
                         )
-        , test "a sibling chip is blocked during a quick add and both recover after failure" <|
+        , test "a user looks up a barcode locally and opens the matching food" <|
             \_ ->
-                let
-                    submitting : FoodSearch.Model
-                    submitting =
-                        FoodSearch.init Nothing Nothing
-                            |> step
-                                quickAddRecent
-                            |> step
-                                (FoodSearch.LocalCtxReceived
-                                    { date = date "2026-06-01", timezone = "Asia/Kolkata" }
-                                )
+                page
+                    |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
+                    |> step (FoodSearch.BarcodeChanged "12345")
+                    |> step FoodSearch.BarcodeSubmitted
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                FoodSearch.RequestBarcodeLookup token _ ->
+                                    Ok
+                                        (FoodSearch.BarcodeLookupCompleted token
+                                            (Ok localBarcodeLookup)
+                                        )
 
-                    recovered : FoodSearch.Model
-                    recovered =
-                        step (FoodSearch.QuickAddCompleted (Err Client.NetworkError)) submitting
-                in
-                { siblingRequest =
-                    out (FoodSearch.RecentQuickAddClicked recentProduct siblingQuantity) submitting
-                , ownChip =
-                    FoodSearch.quickAddChipState submitting recentProduct recentProduct.quantity
-                , siblingChip =
-                    FoodSearch.quickAddChipState submitting recentProduct siblingQuantity
-                , recoveredChip =
-                    FoodSearch.quickAddChipState recovered recentProduct siblingQuantity
-                }
-                    |> Expect.equal
-                        { siblingRequest = FoodSearch.NoOp
-                        , ownChip = FoodSearch.QuickAddAdding
-                        , siblingChip = FoodSearch.QuickAddBlocked
-                        , recoveredChip = FoodSearch.QuickAddCanAdd
-                        }
-        , test "an unauthorized quick add expires the session" <|
-            \_ ->
-                FoodSearch.init Nothing Nothing
-                    |> step quickAddRecent
-                    |> step
-                        (FoodSearch.LocalCtxReceived
-                            { date = date "2026-06-01", timezone = "Asia/Kolkata" }
+                                _ ->
+                                    Err "expected a barcode lookup request"
                         )
-                    |> out
-                        (FoodSearch.QuickAddCompleted
-                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { barcode = model.barcodeQuery
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { barcode = "12345"
+                                    , finalOut =
+                                        FoodSearch.Navigate
+                                            (FoodShow
+                                                "food-barcode"
+                                                (Just day)
+                                                (Just Lunch)
+                                                Nothing
+                                            )
+                                    }
                         )
-                    |> Expect.equal FoodSearch.SessionExpired
-        , test "clearing an added badge ignores a stale token and removes the live one" <|
+        , test "a user fetches a missing barcode from Open Food Facts" <|
             \_ ->
-                let
-                    key : String
-                    key =
-                        "product:food-1:2 serving"
+                page
+                    |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
+                    |> step (FoodSearch.BarcodeChanged "12345")
+                    |> step FoodSearch.BarcodeSubmitted
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                FoodSearch.RequestBarcodeLookup token _ ->
+                                    Ok
+                                        (FoodSearch.BarcodeLookupCompleted token
+                                            (Ok offBarcodeLookup)
+                                        )
 
-                    model : FoodSearch.Model
-                    model =
-                        FoodSearch.init Nothing Nothing
-                            |> step
-                                quickAddRecent
-                            |> step
-                                (FoodSearch.LocalCtxReceived
-                                    { date = date "2026-06-01", timezone = "Asia/Kolkata" }
-                                )
-                            |> step (FoodSearch.QuickAddCompleted (Ok productLog))
-
-                    stale : FoodSearch.Model
-                    stale =
-                        step (FoodSearch.ClearRecentAdded key (ticket 0)) model
-
-                    cleared : FoodSearch.Model
-                    cleared =
-                        step (FoodSearch.ClearRecentAdded key (ticket 1)) model
-                in
-                ( toScreen stale |> .addedKeys, toScreen cleared |> .addedKeys )
-                    |> Expect.equal ( [ key ], [] )
+                                _ ->
+                                    Err "expected a barcode lookup request"
+                        )
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { barcode = model.barcodeQuery
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { barcode = "12345"
+                                    , finalOut =
+                                        FoodSearch.Navigate
+                                            (FoodShow
+                                                "food-barcode"
+                                                (Just day)
+                                                (Just Lunch)
+                                                (Just "Imported from Open Food Facts")
+                                            )
+                                    }
+                        )
+        , test "a user quick-adds a recent meal" <|
+            \_ ->
+                recentsPage
+                    |> step (FoodSearch.RecentQuickAddClicked recentMeal recentMeal.quantity)
+                    |> step (FoodSearch.LocalCtxReceived context)
+                    |> step (FoodSearch.QuickAddCompleted (Ok mealLog))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { recentNames = values (FoodLog.itemName << .item) model.recentItems
+                            , added = List.map .key model.addedItems
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { recentNames = [ "Apple", "Lunch meal" ]
+                                    , added = [ recentMealKey ]
+                                    , finalOut = FoodSearch.LogCreated mealLog
+                                    }
+                        )
         ]
 
 
-
--- SCREEN PROJECTION
-
-
-type alias Screen =
-    { scope : FoodSearch.SearchScope
-    , chrono : String
-    , query : String
-    , results : Loadable Client.ApiError (List String)
-    , barcodeQuery : String
-    , barcodeLookup : Loadable Client.ApiError String
-    , scanner : FoodSearch.BarcodeScannerState
-    , recentItems : Loadable Client.ApiError (List String)
-    , categorySuggestions : List String
-    , addedKeys : List String
-    }
-
-
-toScreen : FoodSearch.Model -> Screen
-toScreen model =
-    { scope = model.scope
-    , chrono =
-        (Maybe.map LocalDate.format model.date |> Maybe.withDefault "none")
-            ++ "/"
-            ++ (model.mealSlot |> Maybe.map mealSlotLabel |> Maybe.withDefault "none")
-    , query = model.search.query
-    , results = mapLoadable (List.map .name) model.results
-    , barcodeQuery = model.barcodeQuery
-    , barcodeLookup = mapLoadable .name model.barcodeLookup
-    , scanner = model.barcodeScanner
-    , recentItems =
-        mapLoadable (List.map (FoodLog.itemName << .item)) model.recentItems
-    , categorySuggestions = List.map .value model.search.categorySuggestions
-    , addedKeys = List.map .key model.addedItems
-    }
-
-
-mealSlotLabel : MealSlot -> String
-mealSlotLabel slot =
-    case slot of
-        Breakfast ->
-            "breakfast"
-
-        Lunch ->
-            "lunch"
-
-        Dinner ->
-            "dinner"
-
-        Snack ->
-            "snack"
-
-        LateNightSnack ->
-            "late_night_snack"
-
-
-mapLoadable : (a -> b) -> Loadable error a -> Loadable error b
-mapLoadable transform loadable =
+values : (a -> b) -> Loadable error (List a) -> List b
+values transform loadable =
     case loadable of
-        NotAsked ->
-            NotAsked
-
-        Loading ->
-            Loading
-
-        Failure error ->
-            Failure error
-
-        Success value ->
-            Success (transform value)
-
-
-recentCount : FoodSearch.Model -> Int
-recentCount model =
-    case toScreen model |> .recentItems of
         Success items ->
-            List.length items
+            List.map transform items
 
         _ ->
-            -1
+            []
 
 
-contentFor : FoodSearch.Model -> Query.Single FoodSearch.Msg
-contentFor model =
-    FoodSearch.contentView
-        { theme = Theme.light
-        , device = { class = Phone, orientation = Portrait }
-        , language = Util.EN_US
-        }
-        model
-        |> Element.layout []
-        |> Query.fromHtml
+barcodeNotFoundShown : Loadable Client.ApiError Foods.ProductDetail -> Bool
+barcodeNotFoundShown lookup =
+    case lookup of
+        Failure (Client.BadStatus 404 _ _) ->
+            True
+
+        _ ->
+            False
 
 
-step : FoodSearch.Msg -> FoodSearch.Model -> FoodSearch.Model
-step msg model =
-    first (FoodSearch.update msg model)
+stepWithOut :
+    FoodSearch.Msg
+    -> FoodSearch.Model
+    -> ( FoodSearch.Model, FoodSearch.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            FoodSearch.update msg model
+    in
+    ( next, outMsg )
 
 
-quickAddRecent : FoodSearch.Msg
-quickAddRecent =
-    FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity
+
+-- STORY PIPELINE
 
 
-out : FoodSearch.Msg -> FoodSearch.Model -> FoodSearch.OutMsg
-out msg model =
-    third (FoodSearch.update msg model)
+type alias Journey =
+    Story.Journey FoodSearch.Model FoodSearch.OutMsg
+
+
+step : FoodSearch.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+bind :
+    (FoodSearch.OutMsg -> Result String FoodSearch.Msg)
+    -> Journey
+    -> Journey
+bind =
+    Story.bind stepWithOut
+
+
+finish :
+    (( FoodSearch.Model, FoodSearch.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+page : Journey
+page =
+    Story.start ( FoodSearch.init (Just day) (Just Lunch), FoodSearch.NoOp )
+
+
+recentsPage : Journey
+recentsPage =
+    page
+        |> step
+            (FoodSearch.RecentItemsLoaded (Just day)
+                (Just Lunch)
+                (Ok { items = [ recentProduct, recentMeal ] })
+            )
+
+
+day : LocalDate
+day =
+    Fixtures.date "2026-05-29"
+
+
+context : LocalCtx
+context =
+    { date = Fixtures.date "2026-06-01", timezone = "Asia/Kolkata" }
+
+
+scannerEvent : String -> Maybe String -> FoodSearch.Msg
+scannerEvent event barcode =
+    FoodSearch.BarcodeScannerEventReceived
+        { event = event, barcode = barcode, message = Nothing }
 
 
 barcodeNotFound : Client.ApiError
@@ -853,7 +280,7 @@ barcodeNotFound =
     Client.BadStatus 404 "not_found" "No food matched that barcode."
 
 
-apple : SearchResult
+apple : Foods.SearchResult
 apple =
     { id = "food-1"
     , source = "USER"
@@ -862,36 +289,7 @@ apple =
     , name = "Apple"
     , brand = Just "Local"
     , categories = [ "fruit" ]
-    , nutritionSummary = { per100g = applePer100g }
-    }
-
-
-applePer100g : Nutrition.NutritionSummary
-applePer100g =
-    let
-        empty : Nutrition.NutritionSummary
-        empty =
-            Nutrition.emptySummary
-    in
-    { empty | energyKcal = Just "52" }
-
-
-appleDetail : ProductDetail
-appleDetail =
-    { id = "food-1"
-    , source = "USER"
-    , sourceId = Nothing
-    , visibility = "private"
-    , barcode = Just "12345"
-    , name = "Apple"
-    , brand = Just "Local"
-    , categories = [ "fruit" ]
-    , defaultQuantity = Just "1"
-    , defaultUnit = Just "g"
     , nutritionSummary = { per100g = Nutrition.emptySummary }
-    , nutrients = []
-    , servings = []
-    , allowedUnits = []
     }
 
 
@@ -900,7 +298,7 @@ recentProduct =
     { item =
         FoodLog.ProductLogItem
             { id = "food-1", name = "Apple", brand = Just "Local" }
-    , lastUsedDate = date "2026-05-28"
+    , lastUsedDate = Fixtures.date "2026-05-28"
     , mealSlot = Just Lunch
     , quantity = { amount = "2", unit = "serving" }
     , nutritionSummary = Nutrition.emptySummary
@@ -911,23 +309,20 @@ recentProduct =
     }
 
 
-siblingQuantity : Nutrition.Quantity
-siblingQuantity =
-    { amount = "1", unit = "serving" }
-
-
 recentMeal : Logs.RecentItem
 recentMeal =
     { recentProduct
-        | item =
-            FoodLog.MealLogItem { id = "meal-1", name = "Lunch meal" }
+        | item = FoodLog.MealLogItem { id = "meal-1", name = "Lunch meal" }
+        , quantity = { amount = "1", unit = "bowl" }
+        , topQuantities =
+            [ { quantity = { amount = "1", unit = "bowl" }, logCount = 1 } ]
     }
 
 
 productLog : FoodLog
 productLog =
     { id = "log-1"
-    , logDate = date "2026-06-01"
+    , logDate = day
     , deviceTimezone = Just "Asia/Kolkata"
     , mealSlot = Just Lunch
     , item = recentProduct.item
@@ -937,29 +332,60 @@ productLog =
     }
 
 
-date : String -> LocalDate
-date raw =
-    case LocalDate.fromString raw of
-        Just parsed ->
-            parsed
-
-        Nothing ->
-            fallbackDate
+recentProductKey : String
+recentProductKey =
+    "product:food-1:2 serving"
 
 
-fallbackDate : LocalDate
-fallbackDate =
-    LocalDate.fromPosix Time.utc (Time.millisToPosix 0)
+recentMealKey : String
+recentMealKey =
+    "meal:meal-1:1 bowl"
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
+localBarcodeLookup : Foods.BarcodeLookupResponse
+localBarcodeLookup =
+    { product = barcodeFood
+    , lookup = { origin = Foods.Local, note = Nothing }
+    }
 
 
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
+offBarcodeLookup : Foods.BarcodeLookupResponse
+offBarcodeLookup =
+    { product = barcodeFood
+    , lookup = { origin = Foods.OpenFoodFacts, note = Just "Imported from Open Food Facts" }
+    }
+
+
+barcodeFood : Foods.ProductDetail
+barcodeFood =
+    { id = "food-barcode"
+    , source = "OFF"
+    , sourceId = Nothing
+    , visibility = "global"
+    , barcode = Just "12345"
+    , name = "Barcode Food"
+    , brand = Just "Brand"
+    , categories = [ "snack" ]
+    , defaultQuantity = Nothing
+    , defaultUnit = Nothing
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
+    , nutrients = []
+    , servings = []
+    , allowedUnits = []
+    }
+
+
+mealLog : FoodLog
+mealLog =
+    { id = "log-meal-1"
+    , logDate = day
+    , deviceTimezone = Just "Asia/Kolkata"
+    , mealSlot = Just Lunch
+    , item = FoodLog.MealLogItem { id = "meal-1", name = "Lunch meal" }
+    , quantity = recentMeal.quantity
+    , nutrients = []
+    , notes = Nothing
+    }
 
 
 ticket : Int -> Ticket

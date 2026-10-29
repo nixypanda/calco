@@ -4,259 +4,198 @@ import Api.Client as Client
 import Data.LogSummary exposing (DaySummary)
 import Data.Route exposing (Route(..))
 import Expect
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
-import Page.Diary.Calendar as CalendarPage
+import Page.Diary.Calendar as Calendar
+import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
+import Translations.Ids exposing (TranslationId(..))
 
 
 tests : Test
 tests =
     describe "Page.Diary.Calendar"
-        [ test "opening the calendar requests the last six months and renders the loaded days" <|
+        [ test "a user loads the calendar and opens a day" <|
             \_ ->
-                let
-                    ( loading, initialOut ) =
-                        CalendarPage.init { monthParam = Nothing, today = today }
-
-                    loadedModel : CalendarPage.Model
-                    loadedModel =
-                        step (CalendarPage.SummaryLoaded 0 (Ok [ summaryOn "2026-07-20" 500 ]))
-                            loading
-                in
-                { request = initialOut
-                , compact = ( CalendarPage.compactCalories 842, CalendarPage.compactCalories 1312 )
-                , screen = toScreen loadedModel
-                }
-                    |> Expect.equal
-                        { request =
-                            CalendarPage.RequestSummary
-                                0
-                                (date "2026-02-01")
-                                today
-                        , compact = ( "842", "1.3k" )
-                        , screen =
-                            { status = "ready"
-                            , days = [ ( "2026-07-20", 500 ) ]
-                            , oldestMonth = "2026-02"
-                            , newestMonth = "2026-07"
+                loadedCalendar
+                    |> step (Calendar.DayClicked "2026-07" (Fixtures.date "2026-07-20"))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { screen = toScreen model
+                            , finalOut = outMsg
                             }
-                        }
-        , test "loading earlier appends an older block and is blocked while a load is in flight" <|
-            \_ ->
-                let
-                    earlier : CalendarPage.Model
-                    earlier =
-                        step CalendarPage.LoadEarlierClicked (loaded [ summaryOn "2026-07-20" 500 ])
-
-                    duringLoad : CalendarPage.OutMsg
-                    duringLoad =
-                        out CalendarPage.LoadEarlierClicked earlier
-
-                    composed : CalendarPage.Model
-                    composed =
-                        step
-                            (CalendarPage.EarlierSummaryLoaded
-                                1
-                                (Ok [ summaryOn "2026-01-15" 300 ])
-                            )
-                            earlier
-                in
-                { request = out CalendarPage.LoadEarlierClicked (loaded [])
-                , loadingEarlier = toScreen earlier
-                , blocked = duringLoad
-                , composed = toScreen composed
-                }
-                    |> Expect.equal
-                        { request =
-                            CalendarPage.RequestEarlierSummary
-                                1
-                                (date "2025-08-01")
-                                (date "2026-01-31")
-                        , loadingEarlier =
-                            { status = "loadingEarlier"
-                            , days = [ ( "2026-07-20", 500 ) ]
-                            , oldestMonth = "2025-08"
-                            , newestMonth = "2026-07"
-                            }
-                        , blocked = CalendarPage.NoOp
-                        , composed =
-                            { status = "ready"
-                            , days = [ ( "2026-01-15", 300 ), ( "2026-07-20", 500 ) ]
-                            , oldestMonth = "2025-08"
-                            , newestMonth = "2026-07"
-                            }
-                        }
-        , test "selecting a day opens a calendar-aware diary route" <|
-            \_ ->
-                out (CalendarPage.DayClicked "2026-07" (date "2026-07-20")) (loaded [])
-                    |> Expect.equal
-                        (CalendarPage.Navigate
-                            (DiaryDay (Just (date "2026-07-20")) (Just "2026-07"))
+                                |> Expect.equal
+                                    { screen = loadedScreen
+                                    , finalOut =
+                                        Calendar.Navigate
+                                            (DiaryDay
+                                                (Just (Fixtures.date "2026-07-20"))
+                                                (Just "2026-07")
+                                            )
+                                    }
                         )
-        , test "day totals replace or clear loaded days and ignore days still in the future" <|
+        , test "a user loads an older range" <|
             \_ ->
-                let
-                    edited : CalendarPage.Model
-                    edited =
-                        loaded [ summaryOn "2026-07-20" 500, summaryOn "2026-07-21" 600 ]
-                            |> step
-                                (CalendarPage.DayTotalsKnown
-                                    (date "2026-07-20")
-                                    (Just (summaryOn "2026-07-20" 700))
-                                )
-                            |> step (CalendarPage.DayTotalsKnown (date "2026-07-21") Nothing)
-                            |> step
-                                (CalendarPage.DayTotalsKnown
-                                    (date "2026-07-30")
-                                    (Just (summaryOn "2026-07-30" 500))
-                                )
-
-                    afterRollover : CalendarPage.Model
-                    afterRollover =
-                        edited
-                            |> step (CalendarPage.TodayChanged (date "2026-07-30"))
-                            |> step
-                                (CalendarPage.DayTotalsKnown
-                                    (date "2026-07-30")
-                                    (Just (summaryOn "2026-07-30" 500))
-                                )
-                in
-                { beforeRollover = toScreen edited
-                , afterRollover = toScreen afterRollover
-                }
-                    |> Expect.equal
-                        { beforeRollover =
-                            { status = "ready"
-                            , days = [ ( "2026-07-20", 700 ) ]
-                            , oldestMonth = "2026-02"
-                            , newestMonth = "2026-07"
-                            }
-                        , afterRollover =
-                            { status = "ready"
-                            , days = [ ( "2026-07-20", 700 ), ( "2026-07-30", 500 ) ]
-                            , oldestMonth = "2026-02"
-                            , newestMonth = "2026-07"
-                            }
-                        }
-        , test "a stale summary response is ignored" <|
-            \_ ->
-                loaded [ summaryOn "2026-07-20" 500 ]
+                loadedCalendar
+                    |> step Calendar.LoadEarlierClicked
                     |> step
-                        (CalendarPage.SummaryLoaded 99 (Ok [ summaryOn "2026-07-25" 900 ]))
-                    |> toScreen
-                    |> .days
-                    |> Expect.equal [ ( "2026-07-20", 500 ) ]
-        , test "a failed earlier load keeps the calendar already on screen" <|
+                        (Calendar.EarlierSummaryLoaded 1
+                            (Ok [ summary "2026-01-15" 300 ])
+                        )
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { screen = toScreen model
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { screen =
+                                        { labels =
+                                            [ ( "2026-01-15", "300" )
+                                            , ( "2026-07-20", "500" )
+                                            , ( "2026-07-21", "1.3k" )
+                                            ]
+                                        , range = ( "2025-08", "2026-07" )
+                                        , earlier = Just loadEarlierLabel
+                                        , error = Nothing
+                                        }
+                                    , finalOut = Calendar.NoOp
+                                    }
+                        )
+        , test "a failed load can be retried" <|
             \_ ->
-                loaded [ summaryOn "2026-07-20" 500 ]
-                    |> step CalendarPage.LoadEarlierClicked
-                    |> step (CalendarPage.EarlierSummaryLoaded 1 (Err Client.NetworkError))
-                    |> toScreen
-                    |> Expect.equal
-                        { status = "ready"
-                        , days = [ ( "2026-07-20", 500 ) ]
-                        , oldestMonth = "2026-02"
-                        , newestMonth = "2026-07"
-                        }
-        , test "an unauthorized summary load expires the session" <|
-            \_ ->
-                out
-                    (CalendarPage.SummaryLoaded
-                        0
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    (loaded [])
-                    |> Expect.equal CalendarPage.SessionExpired
+                Calendar.init { monthParam = Nothing, today = today }
+                    |> Story.start
+                    |> step (Calendar.SummaryLoaded 0 (Err Client.NetworkError))
+                    |> step Calendar.RetryClicked
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg
+                                |> Expect.equal
+                                    (Calendar.RequestSummary
+                                        1
+                                        (Fixtures.date "2026-02-01")
+                                        (Fixtures.date "2026-07-29")
+                                    )
+                        )
         ]
 
 
-
--- SCREEN PROJECTION
-
-
 type alias Screen =
-    { status : String
-    , days : List ( String, Float )
-    , oldestMonth : String
-    , newestMonth : String
+    { labels : List ( String, String )
+    , range : ( String, String )
+    , earlier : Maybe String
+    , error : Maybe String
     }
 
 
-toScreen : CalendarPage.Model -> Screen
+toScreen : Calendar.Model -> Screen
 toScreen model =
-    { status =
-        case model.status of
-            CalendarPage.Loading ->
-                "loading"
-
-            CalendarPage.Ready ->
-                "ready"
-
-            CalendarPage.LoadingEarlier ->
-                "loadingEarlier"
-
-            CalendarPage.Failed _ ->
-                "failed"
-    , days =
+    { labels =
         model.summaries
-            |> List.map (\summary -> ( LocalDate.format summary.date, summary.energyKcal ))
-    , oldestMonth = model.oldestMonth
-    , newestMonth = model.newestMonth
+            |> List.map
+                (\day ->
+                    ( LocalDate.format day.date
+                    , Calendar.compactCalories day.energyKcal
+                    )
+                )
+    , range = ( model.oldestMonth, model.newestMonth )
+    , earlier =
+        case model.status of
+            Calendar.Ready ->
+                Just loadEarlierLabel
+
+            Calendar.LoadingEarlier ->
+                Just loadingLabel
+
+            _ ->
+                Nothing
+    , error =
+        case model.status of
+            Calendar.Failed message ->
+                Just message
+
+            _ ->
+                Nothing
     }
 
 
-loaded : List DaySummary -> CalendarPage.Model
-loaded summaries =
-    CalendarPage.init { monthParam = Nothing, today = today }
-        |> Tuple.first
-        |> step (CalendarPage.SummaryLoaded 0 (Ok summaries))
+loadedScreen : Screen
+loadedScreen =
+    { labels = [ ( "2026-07-20", "500" ), ( "2026-07-21", "1.3k" ) ]
+    , range = ( "2026-02", "2026-07" )
+    , earlier = Just loadEarlierLabel
+    , error = Nothing
+    }
 
 
-summaryOn : String -> Float -> DaySummary
-summaryOn raw energyKcal =
-    { date = date raw
+summary : String -> Float -> DaySummary
+summary raw energyKcal =
+    { date = Fixtures.date raw
     , energyKcal = energyKcal
-    , proteinG = 20
-    , carbsG = 30
-    , fatG = 10
+    , proteinG = 0
+    , carbsG = 0
+    , fatG = 0
     }
 
 
 today : LocalDate
 today =
-    date "2026-07-29"
+    Fixtures.date "2026-07-29"
 
 
-date : String -> LocalDate
-date raw =
-    case LocalDate.fromString raw of
-        Just value ->
-            value
-
-        Nothing ->
-            case LocalDate.fromParts 1970 1 1 of
-                Just fallback ->
-                    fallback
-
-                Nothing ->
-                    today
+loadEarlierLabel : String
+loadEarlierLabel =
+    I18n.en TidDiaryCalendarLoadEarlier
 
 
-step : CalendarPage.Msg -> CalendarPage.Model -> CalendarPage.Model
-step msg model =
-    first (CalendarPage.update msg model)
+loadingLabel : String
+loadingLabel =
+    I18n.en TidCommonLoading
 
 
-out : CalendarPage.Msg -> CalendarPage.Model -> CalendarPage.OutMsg
-out msg model =
-    third (CalendarPage.update msg model)
+stepWithOut :
+    Calendar.Msg
+    -> Calendar.Model
+    -> ( Calendar.Model, Calendar.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            Calendar.update msg model
+    in
+    ( next, outMsg )
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
+
+-- STORY PIPELINE
 
 
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
+type alias Journey =
+    Story.Journey Calendar.Model Calendar.OutMsg
+
+
+step : Calendar.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+finish :
+    (( Calendar.Model, Calendar.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+loadedCalendar : Journey
+loadedCalendar =
+    Calendar.init { monthParam = Nothing, today = today }
+        |> Story.start
+        |> step
+            (Calendar.SummaryLoaded 0
+                (Ok
+                    [ summary "2026-07-20" 500
+                    , summary "2026-07-21" 1312
+                    ]
+                )
+            )

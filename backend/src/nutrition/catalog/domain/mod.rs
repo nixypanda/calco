@@ -1069,6 +1069,8 @@ pub trait UnitRepo: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use rstest::rstest;
 
     #[test]
     fn product_search_query_parse_extracts_category_filters() {
@@ -1089,28 +1091,6 @@ mod tests {
             ProductSearchScope::parse(Some("private")),
             Err(NutritionError::Validation(_))
         ));
-    }
-
-    #[test]
-    fn product_search_scope_maps_catalog_scopes_and_rejects_history() {
-        assert_eq!(
-            ProductSearchScope::All.catalog_scope(),
-            Some(CatalogSearchScope::All)
-        );
-        assert_eq!(
-            ProductSearchScope::Custom.catalog_scope(),
-            Some(CatalogSearchScope::Custom)
-        );
-        assert_eq!(ProductSearchScope::History.catalog_scope(), None);
-    }
-
-    #[test]
-    fn category_normalize_list_trims_lowercases_and_deduplicates() {
-        let categories = Category::normalize_list([" Snacks ", "snacks", "", "Beverages"]);
-        assert_eq!(
-            categories.iter().map(|c| c.0.as_str()).collect::<Vec<_>>(),
-            vec!["snacks", "beverages"]
-        );
     }
 
     fn nutrient_input(amount_per_100g: Decimal) -> ProductNutrientInput {
@@ -1179,18 +1159,6 @@ mod tests {
     }
 
     #[test]
-    fn external_product_creation_normalizes_blank_barcode_to_none() {
-        let product = Product::new_external(
-            ExternalSource::Off,
-            ExternalProductBuilder::new("source-id", "Food").barcode(Some("  ".into())),
-            &test_catalog(),
-        )
-        .unwrap();
-
-        assert_eq!(product.origin.barcode(), None);
-    }
-
-    #[test]
     fn external_product_creation_rejects_blank_source_id() {
         let blank_source_id = Product::new_external(
             ExternalSource::Off,
@@ -1203,116 +1171,151 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn custom_product_creation_rejects_invalid_values() {
-        let user_id = Uuid::new_v4();
-        let catalog = test_catalog();
-
-        assert!(
-            Product::new_custom(
-                user_id,
-                CustomProductBuilder::new(" ")
-                    .nutrients(vec![nutrient_input(Decimal::ZERO)])
-                    .servings(vec![serving_input(Decimal::new(100, 0))]),
-                &catalog,
-            )
-            .is_err()
-        );
-
-        assert!(
-            Product::new_custom(
-                user_id,
-                CustomProductBuilder::new("Food")
-                    .nutrients(vec![nutrient_input(Decimal::new(-1, 0))])
-                    .servings(vec![serving_input(Decimal::new(100, 0))]),
-                &catalog,
-            )
-            .is_err()
-        );
-
-        assert!(
-            Product::new_custom(
-                user_id,
-                CustomProductBuilder::new("Food")
-                    .nutrients(vec![nutrient_input(Decimal::ZERO)])
-                    .servings(vec![serving_input(Decimal::ZERO)]),
-                &catalog,
-            )
-            .is_err()
-        );
+    #[derive(Debug, Clone, Copy)]
+    enum CustomProductOperation {
+        Create,
+        Update,
     }
 
-    #[test]
-    fn amount_per_100g_rounds_to_storage_scale() {
-        let amount =
-            AmountPer100g::new("0.08333333333333333333333333333".parse().unwrap()).unwrap();
-
-        assert_eq!(amount.value(), Decimal::new(83333, 6));
+    #[derive(Debug, Clone, Copy)]
+    enum CustomProductMutation {
+        BlankName,
+        NegativeNutrientAmount,
+        ZeroServing,
+        MissingRequiredNutrients,
+        DuplicateServingUnit,
+        DefaultUnitNotConfigured,
+        DuplicateNutrientCode,
     }
 
-    #[test]
-    fn custom_product_creation_rejects_missing_required_macros() {
-        let user_id = Uuid::new_v4();
-        let catalog = test_catalog();
-        let result = Product::new_custom(
-            user_id,
-            CustomProductBuilder::new("Food")
-                .nutrients(vec![nutrient_input(Decimal::new(100, 0))])
-                .servings(vec![serving_input(Decimal::new(100, 0))]),
-            &catalog,
-        );
-        match result {
-            Err(NutritionError::Validation(msg)) => {
-                assert!(msg.contains("PROTEIN_G"), "msg: {msg}");
-                assert!(msg.contains("CARBS_G"), "msg: {msg}");
-                assert!(msg.contains("FAT_G"), "msg: {msg}");
-                assert!(!msg.contains("ENERGY_KCAL"), "msg: {msg}");
-            }
-            other => panic!("expected Validation error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn custom_product_update_rejects_missing_required_macros() {
-        let user_id = Uuid::new_v4();
-        let catalog = test_catalog();
-        let product = Product::new_custom(
-            user_id,
-            CustomProductBuilder::new("Original")
-                .nutrients(required_nutrient_inputs(Decimal::new(100, 0)))
-                .servings(vec![serving_input(Decimal::new(100, 0))]),
-            &catalog,
-        )
-        .unwrap();
-
-        let input = CustomProductBuilder::new("Updated")
-            .nutrients(vec![nutrient_input(Decimal::new(200, 0))])
-            .servings(vec![serving_input(Decimal::new(100, 0))]);
-        let result = product.update_custom(input, &catalog);
-        match result {
-            Err(NutritionError::Validation(msg)) => {
-                assert!(msg.contains("PROTEIN_G"), "msg: {msg}");
-                assert!(msg.contains("CARBS_G"), "msg: {msg}");
-                assert!(msg.contains("FAT_G"), "msg: {msg}");
-            }
-            other => panic!("expected Validation error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn custom_product_creation_rejects_duplicate_serving_units() {
-        let catalog = test_catalog();
-        let result = Product::new_custom(
-            Uuid::new_v4(),
-            CustomProductBuilder::new("Food")
-                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
-                .servings(vec![
+    impl CustomProductMutation {
+        fn apply(self, input: CustomProductBuilder) -> CustomProductBuilder {
+            match self {
+                Self::BlankName => custom_product_input(" "),
+                Self::NegativeNutrientAmount => {
+                    input.nutrients(vec![nutrient_input(Decimal::new(-1, 0))])
+                }
+                Self::ZeroServing => input.servings(vec![serving_input(Decimal::ZERO)]),
+                Self::MissingRequiredNutrients => {
+                    input.nutrients(vec![nutrient_input(Decimal::new(100, 0))])
+                }
+                Self::DuplicateServingUnit => input.servings(vec![
                     serving_input(Decimal::new(100, 0)),
                     serving_input(Decimal::new(200, 0)),
                 ]),
-            &catalog,
-        );
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
+                Self::DefaultUnitNotConfigured => {
+                    input.default_portion(Decimal::new(2, 0), "slice")
+                }
+                Self::DuplicateNutrientCode => {
+                    let mut nutrients = required_nutrient_inputs(Decimal::new(10, 0));
+                    nutrients.push(nutrient_input_for("PROTEIN_G", Decimal::new(5, 0)));
+                    input.nutrients(nutrients)
+                }
+            }
+        }
+    }
+
+    fn custom_product_input(name: &str) -> CustomProductBuilder {
+        CustomProductBuilder::new(name)
+            .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
+            .servings(vec![serving_input(Decimal::new(100, 0))])
+    }
+
+    #[rstest]
+    #[case::create_blank_name(
+        CustomProductOperation::Create,
+        CustomProductMutation::BlankName,
+        &["food name is required"],
+        None
+    )]
+    #[case::create_negative_nutrient_amount(
+        CustomProductOperation::Create,
+        CustomProductMutation::NegativeNutrientAmount,
+        &["nutrient amount must be non-negative"],
+        None
+    )]
+    #[case::create_zero_serving(
+        CustomProductOperation::Create,
+        CustomProductMutation::ZeroServing,
+        &["serving grams per unit must be positive"],
+        None
+    )]
+    #[case::create_missing_required_macros(
+        CustomProductOperation::Create,
+        CustomProductMutation::MissingRequiredNutrients,
+        &[
+            "custom food is missing required nutrient(s)",
+            "PROTEIN_G",
+            "CARBS_G",
+            "FAT_G",
+        ],
+        Some("ENERGY_KCAL")
+    )]
+    #[case::update_missing_required_macros(
+        CustomProductOperation::Update,
+        CustomProductMutation::MissingRequiredNutrients,
+        &[
+            "custom food is missing required nutrient(s)",
+            "PROTEIN_G",
+            "CARBS_G",
+            "FAT_G",
+        ],
+        Some("ENERGY_KCAL")
+    )]
+    #[case::create_duplicate_serving_unit(
+        CustomProductOperation::Create,
+        CustomProductMutation::DuplicateServingUnit,
+        &["duplicate serving unit: serving"],
+        None
+    )]
+    #[case::create_default_unit_not_configured(
+        CustomProductOperation::Create,
+        CustomProductMutation::DefaultUnitNotConfigured,
+        &["default portion must be grams or use a configured serving unit: slice"],
+        None
+    )]
+    #[case::create_duplicate_nutrient_code(
+        CustomProductOperation::Create,
+        CustomProductMutation::DuplicateNutrientCode,
+        &["duplicate nutrient code: PROTEIN_G"],
+        None
+    )]
+    fn custom_product_rejects_invalid_input(
+        #[case] operation: CustomProductOperation,
+        #[case] mutation: CustomProductMutation,
+        #[case] expected_fragments: &[&str],
+        #[case] unexpected_fragment: Option<&str>,
+    ) {
+        let catalog = test_catalog();
+        let user_id = Uuid::new_v4();
+        let input = mutation.apply(custom_product_input("Food"));
+        let result = match operation {
+            CustomProductOperation::Create => Product::new_custom(user_id, input, &catalog),
+            CustomProductOperation::Update => {
+                let product =
+                    Product::new_custom(user_id, custom_product_input("Original"), &catalog)
+                        .unwrap();
+                product.update_custom(input, &catalog)
+            }
+        };
+
+        match result {
+            Err(NutritionError::Validation(message)) => {
+                for expected in expected_fragments {
+                    assert!(
+                        message.contains(expected),
+                        "expected {expected:?} in message: {message}"
+                    );
+                }
+                if let Some(unexpected) = unexpected_fragment {
+                    assert!(
+                        !message.contains(unexpected),
+                        "unexpected {unexpected:?} in message: {message}"
+                    );
+                }
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1327,77 +1330,6 @@ mod tests {
             missing_quantity,
             Err(NutritionError::Validation(_))
         ));
-    }
-
-    #[test]
-    fn custom_product_creation_rejects_default_with_unconfigured_serving_unit() {
-        let catalog = test_catalog();
-        let result = Product::new_custom(
-            Uuid::new_v4(),
-            CustomProductBuilder::new("Food")
-                .default_portion(Decimal::new(2, 0), "slice")
-                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
-                .servings(vec![serving_input(Decimal::new(100, 0))]),
-            &catalog,
-        );
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[test]
-    fn custom_product_creation_accepts_arbitrary_default_quantity_for_serving_unit() {
-        let catalog = test_catalog();
-        let product = Product::new_custom(
-            Uuid::new_v4(),
-            CustomProductBuilder::new("Food")
-                .default_portion(Decimal::new(3, 0), "serving")
-                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
-                .servings(vec![serving_input(Decimal::new(100, 0))]),
-            &catalog,
-        )
-        .unwrap();
-        assert_eq!(product.default_quantity, Some(Decimal::new(3, 0)));
-        assert_eq!(product.default_unit.unwrap().0, "serving");
-    }
-
-    #[test]
-    fn quantity_to_grams_multiplies_amount_by_grams_per_unit() {
-        let product = Product::new_custom(
-            Uuid::new_v4(),
-            CustomProductBuilder::new("Food")
-                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
-                .servings(vec![serving_input(Decimal::new(14, 0))]),
-            &test_catalog(),
-        )
-        .unwrap();
-        let quantity = Quantity::new(Decimal::new(3, 0), UnitCode("serving".into())).unwrap();
-        let converter = UnitConverter::from_entries([]);
-
-        assert_eq!(
-            product.quantity_to_grams(&quantity, &converter),
-            Ok(Decimal::new(42, 0))
-        );
-    }
-
-    #[test]
-    fn custom_product_creation_rejects_duplicate_nutrient_codes() {
-        let catalog = test_catalog();
-        let mut nutrients = required_nutrient_inputs(Decimal::new(10, 0));
-        nutrients.push(nutrient_input_for("PROTEIN_G", Decimal::new(5, 0)));
-
-        let result = Product::new_custom(
-            Uuid::new_v4(),
-            CustomProductBuilder::new("Food")
-                .nutrients(nutrients)
-                .servings(vec![serving_input(Decimal::new(100, 0))]),
-            &catalog,
-        );
-        match result {
-            Err(NutritionError::Validation(msg)) => {
-                assert!(msg.contains("duplicate"), "msg: {msg}");
-                assert!(msg.contains("PROTEIN_G"), "msg: {msg}");
-            }
-            other => panic!("expected Validation error, got {other:?}"),
-        }
     }
 
     #[test]
@@ -1425,40 +1357,525 @@ mod tests {
         }
     }
 
-    #[test]
-    fn catalog_policy_shares_reads_but_limits_custom_food_writes_to_creator() {
-        let owner = Uuid::new_v4();
-        let other = Uuid::new_v4();
-        let product = Product::new_custom(
-            owner,
-            CustomProductBuilder::new("Shared food")
-                .nutrients(required_nutrient_inputs(Decimal::new(10, 0))),
-            &test_catalog(),
-        )
-        .unwrap();
-        let policy = CatalogPolicy;
+    const PROPERTY_NUTRIENT_CODES: &[&str] = &["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"];
+    const PROPERTY_SERVING_UNITS: &[&str] = &["serving", "slice", "piece", "tbsp"];
 
-        assert!(policy.authorize_view(other, &product).is_ok());
-        assert!(policy.authorize_mutation(owner, &product).is_ok());
-        assert!(matches!(
-            policy.authorize_mutation(other, &product),
-            Err(NutritionError::Forbidden(_))
-        ));
+    fn bounded_arbitrary_string() -> impl Strategy<Value = String> {
+        proptest::collection::vec(any::<char>(), 0..=12)
+            .prop_map(|chars| chars.into_iter().collect())
     }
 
-    #[test]
-    fn catalog_policy_keeps_imported_products_read_only() {
-        let actor = Uuid::new_v4();
-        let product = Product::new_external(
-            ExternalSource::Off,
-            ExternalProductBuilder::new("imported-food", "Imported food"),
-            &test_catalog(),
+    fn alphanumeric_string() -> impl Strategy<Value = String> {
+        proptest::collection::vec(
+            prop_oneof![
+                proptest::char::range('a', 'z'),
+                proptest::char::range('A', 'Z'),
+                proptest::char::range('0', '9'),
+            ],
+            1..=8,
         )
-        .unwrap();
+        .prop_map(|chars| chars.into_iter().collect())
+    }
 
-        assert!(matches!(
-            CatalogPolicy.authorize_mutation(actor, &product),
-            Err(NutritionError::Forbidden(_))
-        ));
+    fn external_source() -> impl Strategy<Value = ExternalSource> {
+        prop_oneof![
+            Just(ExternalSource::Off),
+            Just(ExternalSource::Usda),
+            Just(ExternalSource::Ifct),
+            Just(ExternalSource::Indb),
+        ]
+    }
+
+    fn padded_source_id() -> impl Strategy<Value = String> {
+        (
+            alphanumeric_string(),
+            proptest::collection::vec(prop_oneof![Just(' '), Just('\t')], 0..=2),
+        )
+            .prop_map(|(base, leading)| {
+                let leading: String = leading.into_iter().collect();
+                let trailing: String = leading.chars().rev().collect();
+                format!("{leading}{base}{trailing}")
+            })
+    }
+
+    fn nutrient_code_list() -> impl Strategy<Value = Vec<String>> {
+        proptest::collection::vec(proptest::sample::select(PROPERTY_NUTRIENT_CODES), 0..=4)
+            .prop_map(|codes| {
+                let mut unique: Vec<String> = Vec::new();
+                for code in codes {
+                    if !unique.iter().any(|existing| existing == code) {
+                        unique.push(code.to_owned());
+                    }
+                }
+                unique
+            })
+    }
+
+    fn serving_unit_list() -> impl Strategy<Value = Vec<String>> {
+        proptest::collection::vec(proptest::sample::select(PROPERTY_SERVING_UNITS), 0..=4).prop_map(
+            |units| {
+                let mut unique: Vec<String> = Vec::new();
+                for unit in units {
+                    if !unique.iter().any(|existing| existing == unit) {
+                        unique.push(unit.to_owned());
+                    }
+                }
+                unique
+            },
+        )
+    }
+
+    fn decimal_amount() -> impl Strategy<Value = Decimal> {
+        prop_oneof![
+            4 => Just(Decimal::ZERO),
+            3 => Just(Decimal::new(-1, 12)),
+            3 => Just(Decimal::new(1, 12)),
+            3 => Just(Decimal::new(-5, 7)),
+            3 => Just(Decimal::new(5, 7)),
+            16 => (-1_000_000_000i64..=1_000_000_000i64, 0u32..=6)
+                .prop_map(|(mantissa, scale)| Decimal::new(mantissa, scale)),
+            16 => (-1_000_000_000i64..=1_000_000_000i64, 7u32..=12)
+                .prop_map(|(mantissa, scale)| Decimal::new(mantissa, scale)),
+        ]
+    }
+
+    fn valid_external_product(
+        source: ExternalSource,
+        source_id: &str,
+        name: &str,
+        nutrient_codes: &[String],
+        serving_units: &[String],
+        catalog: &NutrientCatalog,
+    ) -> Product {
+        let nutrients = nutrient_codes
+            .iter()
+            .map(|code| nutrient_input_for(code, Decimal::new(10, 0)))
+            .collect();
+        let servings = serving_units
+            .iter()
+            .map(|unit| ProductServingInput {
+                unit: unit.clone(),
+                grams_per_unit: Decimal::new(100, 0),
+            })
+            .collect();
+
+        Product::new_external(
+            source,
+            ExternalProductBuilder::new(source_id, name)
+                .nutrients(nutrients)
+                .servings(servings),
+            catalog,
+        )
+        .expect("generated external product should be valid")
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum PolicyProductCase {
+        CustomOwned,
+        CustomForeign,
+        External(ExternalSource),
+    }
+
+    fn policy_product_case() -> impl Strategy<Value = PolicyProductCase> {
+        prop_oneof![
+            Just(PolicyProductCase::CustomOwned),
+            Just(PolicyProductCase::CustomForeign),
+            external_source().prop_map(PolicyProductCase::External),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn category_normalize_list_is_idempotent_and_normalized(
+            generated_values in proptest::collection::vec(bounded_arbitrary_string(), 0..=12),
+        ) {
+            let mut values = generated_values;
+            // Guarantee case/padding collisions so deduplication is always exercised.
+            values.extend(
+                ["Snacks", " snacks ", "SNACKS", " Beverages"]
+                    .into_iter()
+                    .map(str::to_owned),
+            );
+
+            let normalized = Category::normalize_list(values.iter().map(String::as_str));
+            let renormalized =
+                Category::normalize_list(normalized.iter().map(|category| category.0.as_str()));
+
+            prop_assert_eq!(&renormalized, &normalized);
+
+            let mut distinct_nonblank_inputs: Vec<String> = Vec::new();
+            for value in &values {
+                let normalized_input = value.trim().to_lowercase();
+                if !normalized_input.is_empty()
+                    && !distinct_nonblank_inputs.contains(&normalized_input)
+                {
+                    distinct_nonblank_inputs.push(normalized_input);
+                }
+            }
+
+            let actual: Vec<String> = normalized
+                .iter()
+                .map(|category| category.0.clone())
+                .collect();
+            prop_assert_eq!(actual, distinct_nonblank_inputs);
+
+            let mut seen: Vec<String> = Vec::new();
+            for category in &normalized {
+                let value = category.0.as_str();
+                prop_assert!(!value.is_empty(), "normalized categories must not be blank");
+                prop_assert_eq!(value.to_owned(), value.trim().to_owned());
+                prop_assert_eq!(value.to_owned(), value.to_lowercase());
+                prop_assert!(
+                    seen.iter().all(|existing| existing != value),
+                    "duplicate normalized category: {value}"
+                );
+                seen.push(value.to_owned());
+            }
+        }
+
+        #[test]
+        fn amount_per_100g_accepts_exactly_non_negative_values_at_six_places(
+            amount in decimal_amount(),
+        ) {
+            match AmountPer100g::new(amount) {
+                Ok(accepted) => {
+                    prop_assert!(amount >= Decimal::ZERO);
+                    prop_assert!(accepted.value() >= Decimal::ZERO);
+                    prop_assert!(accepted.value().scale() <= 6);
+                    prop_assert_eq!(accepted.value(), amount.round_dp(6));
+                    if amount.scale() <= 6 {
+                        prop_assert_eq!(accepted.value(), amount);
+                    }
+                }
+                Err(error) => {
+                    prop_assert!(
+                        amount < Decimal::ZERO,
+                        "only negative amounts should be rejected: amount {amount}, error {error:?}"
+                    );
+                    prop_assert!(matches!(error, NutritionError::Validation(_)));
+                }
+            }
+        }
+
+        #[test]
+        fn external_product_batch_rejects_identities_colliding_after_trimming(
+            source in external_source(),
+            source_id in padded_source_id(),
+            extra_count in 0usize..=3,
+        ) {
+            let catalog = test_catalog();
+            let mut products = vec![
+                valid_external_product(source, &source_id, "Food One", &[], &[], &catalog),
+                valid_external_product(
+                    source,
+                    &format!(" \t {source_id} \t "),
+                    "Food Two",
+                    &[],
+                    &[],
+                    &catalog,
+                ),
+            ];
+            for index in 0..extra_count {
+                products.push(valid_external_product(
+                    source,
+                    &format!("extra-{source_id}-{index}"),
+                    &format!("Extra {index}"),
+                    &[],
+                    &[],
+                    &catalog,
+                ));
+            }
+
+            let expected_message = format!(
+                "duplicate external product identity: ({}, {})",
+                source.as_str(),
+                source_id.trim()
+            );
+            match ExternalProductBatch::new(products) {
+                Err(NutritionError::Validation(message)) => {
+                    prop_assert_eq!(message, expected_message);
+                }
+                other => prop_assert!(
+                    false,
+                    "expected duplicate identity validation error, got {other:?}"
+                ),
+            }
+        }
+
+        #[test]
+        fn external_product_batch_rejects_duplicate_nutrient_codes(
+            source in external_source(),
+            nutrient_codes in nutrient_code_list()
+                .prop_filter("at least one nutrient", |codes| !codes.is_empty()),
+            duplicate_index in 0usize..=3,
+            target_position in 0usize..=5,
+            suffix in alphanumeric_string(),
+            extra_count in 0usize..=4,
+        ) {
+            let catalog = test_catalog();
+            let mut target = valid_external_product(
+                source,
+                &format!("target-{suffix}"),
+                "Target food",
+                &nutrient_codes,
+                &[],
+                &catalog,
+            );
+            // The public constructor already rejects duplicates. Mutate the aggregate
+            // afterwards to exercise the batch's defense-in-depth validation, keeping
+            // the code equal while changing the amount.
+            let index = duplicate_index % target.nutrients.len();
+            let original = target.nutrients[index].clone();
+            let duplicated_code = original.nutrient_code.0.clone();
+            let mut duplicate = original.clone();
+            duplicate.amount_per_100g =
+                AmountPer100g::new(duplicate.amount_per_100g.value() + Decimal::new(1, 0))
+                    .expect("adjusted duplicate amount should be valid");
+            prop_assert_ne!(
+                duplicate.amount_per_100g.value(),
+                original.amount_per_100g.value()
+            );
+            target.nutrients.push(duplicate);
+
+            let mut products: Vec<Product> = (0..extra_count)
+                .map(|index| {
+                    valid_external_product(
+                        source,
+                        &format!("extra-{suffix}-{index}"),
+                        &format!("Extra {index}"),
+                        &[],
+                        &[],
+                        &catalog,
+                    )
+                })
+                .collect();
+            let target_position = target_position % (products.len() + 1);
+            products.insert(target_position, target);
+
+            let expected_message = format!(
+                "duplicate nutrient code for external product: {duplicated_code}"
+            );
+            match ExternalProductBatch::new(products) {
+                Err(NutritionError::Validation(message)) => {
+                    prop_assert_eq!(message, expected_message);
+                }
+                other => prop_assert!(
+                    false,
+                    "expected duplicate nutrient validation error, got {other:?}"
+                ),
+            }
+        }
+
+        #[test]
+        fn external_product_batch_rejects_duplicate_serving_units(
+            source in external_source(),
+            serving_units in serving_unit_list()
+                .prop_filter("at least one serving", |units| !units.is_empty()),
+            target_position in 0usize..=5,
+            suffix in alphanumeric_string(),
+            extra_count in 0usize..=4,
+        ) {
+            let catalog = test_catalog();
+            let mut target = valid_external_product(
+                source,
+                &format!("target-{suffix}"),
+                "Target food",
+                &[],
+                &serving_units,
+                &catalog,
+            );
+            // As with nutrients, the constructor rejects duplicates; mutate the
+            // aggregate to exercise the batch's defense-in-depth validation, keeping
+            // the unit equal while changing the grams per unit.
+            let original = target.servings[0].clone();
+            let duplicated_unit = original.unit.0.clone();
+            let mut duplicate = original.clone();
+            duplicate.grams_per_unit += Decimal::new(1, 0);
+            prop_assert_ne!(duplicate.grams_per_unit, original.grams_per_unit);
+            target.servings.push(duplicate);
+
+            let mut products: Vec<Product> = (0..extra_count)
+                .map(|index| {
+                    valid_external_product(
+                        source,
+                        &format!("extra-{suffix}-{index}"),
+                        &format!("Extra {index}"),
+                        &[],
+                        &[],
+                        &catalog,
+                    )
+                })
+                .collect();
+            let target_position = target_position % (products.len() + 1);
+            products.insert(target_position, target);
+
+            let expected_message =
+                format!("duplicate serving unit for external product: {duplicated_unit}");
+            match ExternalProductBatch::new(products) {
+                Err(NutritionError::Validation(message)) => {
+                    prop_assert_eq!(message, expected_message);
+                }
+                other => prop_assert!(
+                    false,
+                    "expected duplicate serving validation error, got {other:?}"
+                ),
+            }
+        }
+
+        #[test]
+        fn external_product_batch_accepts_valid_products_and_preserves_order(
+            product_count in 0usize..=5,
+            prefix in alphanumeric_string(),
+            nutrient_codes in nutrient_code_list(),
+            serving_units in serving_unit_list(),
+        ) {
+            let catalog = test_catalog();
+            // Reverse the generated order so a sort by name or source ID cannot
+            // accidentally satisfy the order-preservation assertion.
+            let mut products: Vec<Product> = (0..product_count)
+                .map(|index| {
+                    valid_external_product(
+                        ExternalSource::Off,
+                        &format!("{prefix}-{index}"),
+                        &format!("Food {index}"),
+                        &nutrient_codes,
+                        &serving_units,
+                        &catalog,
+                    )
+                })
+                .collect();
+            products.reverse();
+            let expected: Vec<(Uuid, String)> = products
+                .iter()
+                .map(|product| (product.id.0, product.name.as_str().to_owned()))
+                .collect();
+
+            let batch = ExternalProductBatch::new(products)
+                .expect("generated batch with unique identities should be accepted");
+            let actual: Vec<(Uuid, String)> = batch
+                .products()
+                .iter()
+                .map(|product| (product.id.0, product.name.as_str().to_owned()))
+                .collect();
+
+            prop_assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn catalog_policy_allows_every_view_and_only_owner_custom_mutations(
+            case in policy_product_case(),
+            actor_bits in any::<u128>(),
+        ) {
+            let catalog = test_catalog();
+            let actor = Uuid::from_u128(actor_bits);
+            let (product, mutation_allowed) = match case {
+                PolicyProductCase::CustomOwned => (
+                    Product::new_custom(actor, custom_product_input("Owned food"), &catalog)
+                        .expect("generated custom product should be valid"),
+                    true,
+                ),
+                PolicyProductCase::CustomForeign => (
+                    Product::new_custom(
+                        Uuid::from_u128(actor_bits ^ 1),
+                        custom_product_input("Foreign food"),
+                        &catalog,
+                    )
+                    .expect("generated custom product should be valid"),
+                    false,
+                ),
+                PolicyProductCase::External(source) => (
+                    valid_external_product(
+                        source,
+                        &format!("external-{}", source.as_str().to_lowercase()),
+                        &format!("External {} food", source.as_str()),
+                        &[],
+                        &[],
+                        &catalog,
+                    ),
+                    false,
+                ),
+            };
+
+            prop_assert!(
+                CatalogPolicy.authorize_view(actor, &product).is_ok(),
+                "every product should be viewable"
+            );
+            let mutation = CatalogPolicy.authorize_mutation(actor, &product);
+            if mutation_allowed {
+                prop_assert!(
+                    mutation.is_ok(),
+                    "owner should be allowed to mutate their custom product: {mutation:?}"
+                );
+            } else {
+                let expected_message = match case {
+                    PolicyProductCase::CustomForeign => {
+                        "only the creator may modify this custom food"
+                    }
+                    PolicyProductCase::External(_) => "system catalog products are read-only",
+                    PolicyProductCase::CustomOwned => {
+                        unreachable!("owned custom products are allowed to mutate")
+                    }
+                };
+                match mutation {
+                    Err(NutritionError::Forbidden(message)) => {
+                        prop_assert_eq!(message, expected_message.to_owned());
+                    }
+                    other => prop_assert!(
+                        false,
+                        "expected forbidden mutation error, got {other:?}"
+                    ),
+                }
+            }
+        }
+    }
+
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        // High-value: branch selection across mass, configured serving, and unknown units.
+        #[test]
+        fn product_quantity_to_grams_branch_selection(
+            amount in 1i64..=1000i64,
+            mass_factor in 1i64..=100i64,
+            serving_grams in 1i64..=100i64,
+        ) {
+            let amount = Decimal::from(amount);
+            let uc = UnitConverter::from_entries([("g".to_string(), Decimal::from(mass_factor))]);
+            let product = Product {
+                id: ProductId(Uuid::new_v4()),
+                origin: ProductOrigin::Custom { user_id: Uuid::nil() },
+                visibility: ProductVisibility::Global,
+                name: ProductName::new("Food").unwrap(),
+                brand: None,
+                categories: vec![],
+                default_quantity: None,
+                default_unit: None,
+                nutrients: vec![],
+                servings: vec![ProductServing {
+                    unit: UnitCode("serving".into()),
+                    grams_per_unit: Decimal::from(serving_grams),
+                }],
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            };
+
+            let mass_qty = Quantity::new(amount, UnitCode("g".into())).unwrap();
+            prop_assert_eq!(
+                product.quantity_to_grams(&mass_qty, &uc).unwrap(),
+                amount * Decimal::from(mass_factor)
+            );
+
+            let serving_qty = Quantity::new(amount, UnitCode("serving".into())).unwrap();
+            prop_assert_eq!(
+                product.quantity_to_grams(&serving_qty, &uc).unwrap(),
+                amount * Decimal::from(serving_grams)
+            );
+
+            let unknown_qty = Quantity::new(amount, UnitCode("unknown".into())).unwrap();
+            prop_assert!(product.quantity_to_grams(&unknown_qty, &uc).is_err());
+        }
     }
 }

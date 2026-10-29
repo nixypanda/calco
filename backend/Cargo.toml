@@ -37,3 +37,5 @@ rust-fuzzy-search = "=0.1.1"
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+rstest = "0.28.0"
+proptest = "1.12.0"

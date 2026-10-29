@@ -659,68 +659,8 @@ impl FoodLogPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nutrition::catalog::domain::calculation::Quantity;
-    use crate::nutrition::catalog::domain::{
-        AmountPer100g, ProductName, ProductNutrient, ProductOrigin, ProductVisibility,
-    };
-    use crate::nutrition::meal::domain::{MealComponent, MealComponentItem};
-    use std::str::FromStr;
-
-    fn sample_product() -> Product {
-        Product {
-            id: ProductId(Uuid::nil()),
-            origin: ProductOrigin::Custom {
-                user_id: Uuid::nil(),
-            },
-            visibility: ProductVisibility::Global,
-            name: ProductName::new("Test").unwrap(),
-            brand: None,
-            categories: vec![],
-            default_quantity: None,
-            default_unit: None,
-            nutrients: vec![ProductNutrient {
-                nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
-                amount_per_100g: AmountPer100g::new(Decimal::new(250, 0)).unwrap(),
-                unit: UnitCode("kcal".to_string()),
-                source: None,
-                confidence: None,
-            }],
-            servings: vec![],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
-    }
-
-    fn sample_meal() -> Meal {
-        Meal {
-            id: MealId(Uuid::nil()),
-            user_id: Uuid::nil(),
-            name: crate::nutrition::meal::domain::MealName::new("Test").unwrap(),
-            notes: None,
-            total_quantity_amount: Some(Decimal::new(100, 0)),
-            total_quantity_unit: Some(UnitCode("g".into())),
-            components: vec![MealComponent {
-                id: Uuid::new_v4(),
-                item: MealComponentItem::Product(ProductId(Uuid::nil())),
-                quantity_amount: Decimal::new(100, 0),
-                quantity_unit: UnitCode("g".into()),
-            }],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
-    }
-
-    fn sample_unit_converter() -> UnitConverter {
-        UnitConverter::from_entries([
-            ("g".to_string(), Decimal::from(1)),
-            ("kg".to_string(), Decimal::from(1000)),
-            ("mg".to_string(), Decimal::from_str("0.001").unwrap()),
-        ])
-    }
-
-    fn sample_log_date() -> NaiveDate {
-        NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()
-    }
+    use proptest::prelude::*;
+    use rstest::rstest;
 
     #[test]
     fn test_meal_slot_from_str_invalid() {
@@ -729,106 +669,368 @@ mod tests {
         assert!("LUNCH".parse::<MealSlot>().is_err());
     }
 
-    #[test]
-    fn update_product_log_preserves_identity_and_replaces_editable_fields() {
-        let user_id = Uuid::new_v4();
-        let product = sample_product();
-        let meal = sample_meal();
-        let converter = sample_unit_converter();
-        let quantity = Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap();
-        let nutrition = meal
-            .nutrition_for(&quantity, &[(product.id, product.clone())], &converter)
-            .unwrap();
-        let original = FoodLogBuilder::new(
-            user_id,
-            sample_log_date(),
-            FoodLogItemSnapshot::from_meal(&meal),
-            quantity,
-            nutrition,
+    fn ad_hoc_date() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 9, 14).unwrap()
+    }
+
+    fn serving_quantity(amount: Decimal) -> Quantity {
+        Quantity::new(amount, UnitCode("serving".into())).unwrap()
+    }
+
+    fn snapshot(code: &str, amount: Decimal, unit: &str) -> FoodLogNutrientSnapshot {
+        FoodLogNutrientSnapshot {
+            nutrient_code: NutrientCode(code.into()),
+            amount,
+            unit: UnitCode(unit.into()),
+        }
+    }
+
+    fn required_snapshots() -> Vec<FoodLogNutrientSnapshot> {
+        vec![
+            snapshot("ENERGY_KCAL", Decimal::new(520, 0), "kcal"),
+            snapshot("PROTEIN_G", Decimal::new(24, 0), "g"),
+            snapshot("CARBS_G", Decimal::new(48, 0), "g"),
+            snapshot("FAT_G", Decimal::new(25, 0), "g"),
+        ]
+    }
+
+    fn build_ad_hoc_log() -> FoodLog {
+        FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            "Paneer tikka wrap".into(),
+            None,
+            serving_quantity(Decimal::ONE),
+            required_snapshots(),
         )
-        .meal_slot(Some(MealSlot::Lunch))
-        .build();
-        let original_id = original.id;
-        let log_date = NaiveDate::from_ymd_opt(2026, 6, 2).unwrap();
+        .unwrap()
+        .build()
+    }
 
-        let updated = original
-            .update_product_log(
-                log_date,
-                Some(MealSlot::Snack),
-                Some("America/New_York".into()),
-                &product,
-                Quantity::new(Decimal::new(50, 0), UnitCode("g".into())).unwrap(),
-                &converter,
-                Some("updated".into()),
-            )
-            .unwrap();
+    #[derive(Debug, Clone, Copy)]
+    enum AdHocMutation {
+        BlankName,
+        MissingRequiredNutrient,
+        DuplicateRequiredNutrient,
+        WrongUnitForRequiredNutrient,
+        NegativeNutrientAmount,
+    }
 
-        assert_eq!(updated.id, original_id);
-        assert_eq!(updated.user_id, user_id);
-        assert_eq!(updated.log_date, log_date);
-        assert_eq!(updated.meal_slot, Some(MealSlot::Snack));
-        assert_eq!(updated.device_timezone.as_deref(), Some("America/New_York"));
-        assert_eq!(
-            updated.item,
-            FoodLogItemSnapshot::Product {
-                id: product.id,
-                name: "Test".into(),
-                brand: None,
+    fn required_snapshot_mut<'a>(
+        nutrients: &'a mut [FoodLogNutrientSnapshot],
+        code: &str,
+    ) -> &'a mut FoodLogNutrientSnapshot {
+        nutrients
+            .iter_mut()
+            .find(|snapshot| snapshot.nutrient_code.0 == code)
+            .expect("required snapshot should be present")
+    }
+
+    impl AdHocMutation {
+        fn apply(self, name: &mut String, nutrients: &mut Vec<FoodLogNutrientSnapshot>) {
+            match self {
+                Self::BlankName => *name = "   ".into(),
+                Self::MissingRequiredNutrient => {
+                    nutrients.retain(|snapshot| snapshot.nutrient_code.0 != "FAT_G");
+                }
+                Self::DuplicateRequiredNutrient => {
+                    nutrients.push(snapshot("ENERGY_KCAL", Decimal::new(10, 0), "kcal"));
+                }
+                Self::WrongUnitForRequiredNutrient => {
+                    required_snapshot_mut(nutrients, "ENERGY_KCAL").unit = UnitCode("g".into());
+                }
+                Self::NegativeNutrientAmount => {
+                    required_snapshot_mut(nutrients, "PROTEIN_G").amount = Decimal::new(-1, 0);
+                }
             }
+        }
+    }
+
+    #[rstest]
+    #[case::blank_name(AdHocMutation::BlankName, "ad-hoc food name must not be blank")]
+    #[case::missing_required_nutrient(
+        AdHocMutation::MissingRequiredNutrient,
+        "missing required ad-hoc nutrient: FAT_G"
+    )]
+    #[case::duplicate_required_nutrient(
+        AdHocMutation::DuplicateRequiredNutrient,
+        "duplicate ad-hoc nutrient: ENERGY_KCAL"
+    )]
+    #[case::wrong_unit_for_required_nutrient(
+        AdHocMutation::WrongUnitForRequiredNutrient,
+        "ENERGY_KCAL must use unit kcal"
+    )]
+    #[case::negative_nutrient_amount(
+        AdHocMutation::NegativeNutrientAmount,
+        "PROTEIN_G amount must not be negative"
+    )]
+    fn new_ad_hoc_rejects_invalid_input(
+        #[case] mutation: AdHocMutation,
+        #[case] expected_message: &str,
+    ) {
+        let mut name = "Paneer tikka wrap".to_string();
+        let mut nutrients = required_snapshots();
+        mutation.apply(&mut name, &mut nutrients);
+
+        let result = FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            name,
+            None,
+            serving_quantity(Decimal::ONE),
+            nutrients,
         );
-        assert_eq!(updated.quantity_amount, Decimal::new(50, 0));
-        // 250 kcal/100g * 50g / 100 = 125
-        assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(125, 0));
-        assert_eq!(updated.notes.as_deref(), Some("updated"));
+
+        match result {
+            Err(NutritionError::Validation(message)) => {
+                assert!(
+                    message.contains(expected_message),
+                    "unexpected message: {message}"
+                );
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
     }
 
     #[test]
-    fn update_meal_log_preserves_identity_and_replaces_editable_fields() {
-        let user_id = Uuid::new_v4();
-        let product = sample_product();
-        let meal = sample_meal();
-        let converter = sample_unit_converter();
-        let quantity = Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap();
-        let nutrition = product.nutrition_for(&quantity, &converter).unwrap();
-        let original = FoodLogBuilder::new(
-            user_id,
-            sample_log_date(),
-            FoodLogItemSnapshot::from_product(&product),
-            quantity,
-            nutrition,
+    fn new_ad_hoc_accepts_zero_required_amounts_and_optional_nutrient() {
+        let mut nutrients = required_snapshots();
+        for nutrient in &mut nutrients {
+            nutrient.amount = Decimal::ZERO;
+        }
+        nutrients.push(snapshot("FIBER_G", Decimal::new(7, 0), "g"));
+
+        let log = FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            "Paneer tikka wrap".into(),
+            None,
+            serving_quantity(Decimal::ONE),
+            nutrients,
         )
-        .device_timezone(Some("Asia/Kolkata".into()))
+        .unwrap()
         .build();
-        let original_id = original.id;
-        let log_date = NaiveDate::from_ymd_opt(2026, 6, 3).unwrap();
 
-        let updated = original
-            .update_meal_log(
-                log_date,
-                Some(MealSlot::Dinner),
-                None,
-                &meal,
-                Quantity::new(Decimal::new(50, 0), UnitCode("g".into())).unwrap(),
-                &[(product.id, product.clone())],
-                &converter,
-                None,
-            )
-            .unwrap();
+        assert_eq!(log.nutrient_snapshots().len(), 5);
+    }
 
-        assert_eq!(updated.id, original_id);
-        assert_eq!(updated.user_id, user_id);
-        assert_eq!(updated.log_date, log_date);
-        assert_eq!(updated.meal_slot, Some(MealSlot::Dinner));
-        assert_eq!(updated.device_timezone, None);
-        assert_eq!(
-            updated.item,
-            FoodLogItemSnapshot::Meal {
-                id: meal.id,
-                name: "Test".into(),
+    #[test]
+    fn update_ad_hoc_log_rejects_changing_unit() {
+        let log = build_ad_hoc_log();
+        let grams = Quantity::new(Decimal::new(2, 0), UnitCode("g".into())).unwrap();
+
+        let result = log.update_ad_hoc_log(ad_hoc_date(), None, None, grams, None);
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    const REQUIRED_NUTRIENTS: [(&str, &str); 4] = [
+        ("ENERGY_KCAL", "kcal"),
+        ("PROTEIN_G", "g"),
+        ("CARBS_G", "g"),
+        ("FAT_G", "g"),
+    ];
+
+    fn valid_ad_hoc_name() -> impl Strategy<Value = String> {
+        "[A-Za-z][A-Za-z0-9 ]{0,24}"
+    }
+
+    type GeneratedNutrient = (NutrientCode, Decimal, UnitCode);
+
+    /// Positive quantities in `0.000001..=10_000`, including real fractional values.
+    fn positive_quantity_amount() -> impl Strategy<Value = Decimal> {
+        prop_oneof![
+            Just(Decimal::new(1, 6)),
+            Just(Decimal::new(25, 1)),
+            (1i64..=10_000i64, 0u32..=2)
+                .prop_map(|(mantissa, scale)| Decimal::new(mantissa, scale)),
+        ]
+    }
+
+    /// Non-negative required-nutrient amounts in `0..=1_000_000`, including fractions.
+    fn bounded_required_amount() -> impl Strategy<Value = Decimal> {
+        prop_oneof![
+            Just(Decimal::ZERO),
+            Just(Decimal::new(1, 6)),
+            Just(Decimal::new(25, 1)),
+            (0i64..=1_000_000i64, 0u32..=6)
+                .prop_map(|(mantissa, scale)| Decimal::new(mantissa, scale)),
+        ]
+    }
+
+    fn required_nutrients_strategy() -> impl Strategy<Value = Vec<GeneratedNutrient>> {
+        (
+            bounded_required_amount(),
+            bounded_required_amount(),
+            bounded_required_amount(),
+            bounded_required_amount(),
+        )
+            .prop_map(|(energy, protein, carbs, fat)| {
+                vec![
+                    (
+                        NutrientCode("ENERGY_KCAL".into()),
+                        energy,
+                        UnitCode("kcal".into()),
+                    ),
+                    (
+                        NutrientCode("PROTEIN_G".into()),
+                        protein,
+                        UnitCode("g".into()),
+                    ),
+                    (NutrientCode("CARBS_G".into()), carbs, UnitCode("g".into())),
+                    (NutrientCode("FAT_G".into()), fat, UnitCode("g".into())),
+                ]
+            })
+    }
+
+    fn shuffled_required_nutrients_strategy() -> impl Strategy<Value = Vec<GeneratedNutrient>> {
+        (
+            required_nutrients_strategy(),
+            proptest::array::uniform4(any::<u8>()),
+        )
+            .prop_map(|(nutrients, keys)| {
+                let mut order: Vec<usize> = (0..nutrients.len()).collect();
+                order.sort_by_key(|&index| (keys[index], index));
+                order
+                    .into_iter()
+                    .map(|index| nutrients[index].clone())
+                    .collect()
+            })
+    }
+
+    fn snapshots_from_generated(nutrients: &[GeneratedNutrient]) -> Vec<FoodLogNutrientSnapshot> {
+        nutrients
+            .iter()
+            .map(|(code, amount, unit)| FoodLogNutrientSnapshot {
+                nutrient_code: code.clone(),
+                amount: *amount,
+                unit: unit.clone(),
+            })
+            .collect()
+    }
+
+    fn build_log_with_quantity(
+        name: String,
+        quantity_amount: Decimal,
+        nutrients: &[GeneratedNutrient],
+    ) -> FoodLog {
+        FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            ad_hoc_date(),
+            name,
+            None,
+            serving_quantity(quantity_amount),
+            snapshots_from_generated(nutrients),
+        )
+        .expect("valid ad-hoc input must be accepted")
+        .build()
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn new_ad_hoc_accepts_valid_required_nutrients(
+            name in valid_ad_hoc_name(),
+            quantity_amount in positive_quantity_amount(),
+            nutrients in required_nutrients_strategy(),
+        ) {
+            let expected_name = name.trim().to_string();
+            let log = build_log_with_quantity(name, quantity_amount, &nutrients);
+
+            prop_assert_eq!(log.quantity_amount(), quantity_amount);
+            prop_assert_eq!(log.quantity_unit(), &UnitCode("serving".into()));
+            prop_assert_eq!(
+                log.item(),
+                &FoodLogItemSnapshot::AdHoc {
+                    name: expected_name,
+                    brand: None,
+                }
+            );
+            prop_assert_eq!(log.nutrient_snapshots().len(), nutrients.len());
+            for (snapshot, (code, amount, unit)) in
+                log.nutrient_snapshots().iter().zip(nutrients.iter())
+            {
+                prop_assert_eq!(&snapshot.nutrient_code, code);
+                prop_assert_eq!(snapshot.amount, *amount);
+                prop_assert_eq!(&snapshot.unit, unit);
             }
-        );
-        assert_eq!(updated.quantity_amount, Decimal::new(50, 0));
-        assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(125, 0));
-        assert!(updated.notes.is_none());
+            for (code, _) in REQUIRED_NUTRIENTS {
+                let count = log
+                    .nutrient_snapshots()
+                    .iter()
+                    .filter(|snapshot| snapshot.nutrient_code.0 == code)
+                    .count();
+                prop_assert_eq!(count, 1, "expected exactly one {}", code);
+            }
+            for snapshot in log.nutrient_snapshots() {
+                prop_assert!(snapshot.amount >= Decimal::ZERO);
+            }
+        }
+
+        #[test]
+        fn new_ad_hoc_accepts_required_nutrients_in_shuffled_order(
+            name in valid_ad_hoc_name(),
+            quantity_amount in positive_quantity_amount(),
+            nutrients in shuffled_required_nutrients_strategy(),
+        ) {
+            let log = build_log_with_quantity(name, quantity_amount, &nutrients);
+
+            prop_assert_eq!(log.nutrient_snapshots().len(), nutrients.len());
+            for (snapshot, (code, amount, unit)) in
+                log.nutrient_snapshots().iter().zip(nutrients.iter())
+            {
+                prop_assert_eq!(&snapshot.nutrient_code, code);
+                prop_assert_eq!(snapshot.amount, *amount);
+                prop_assert_eq!(&snapshot.unit, unit);
+            }
+            for (code, _) in REQUIRED_NUTRIENTS {
+                let count = log
+                    .nutrient_snapshots()
+                    .iter()
+                    .filter(|snapshot| snapshot.nutrient_code.0 == code)
+                    .count();
+                prop_assert_eq!(count, 1, "expected exactly one {}", code);
+            }
+        }
+
+        #[test]
+        fn update_ad_hoc_log_preserves_snapshots_and_scales_by_quantity_ratio(
+            name in valid_ad_hoc_name(),
+            old_amount in positive_quantity_amount(),
+            new_amount in positive_quantity_amount(),
+            nutrients in required_nutrients_strategy(),
+        ) {
+            let log = build_log_with_quantity(name, old_amount, &nutrients);
+            let original_item = log.item().clone();
+            let original_unit = log.quantity_unit().clone();
+            let original_snapshots = log.nutrient_snapshots().to_vec();
+
+            let updated = log
+                .update_ad_hoc_log(
+                    ad_hoc_date(),
+                    None,
+                    None,
+                    serving_quantity(new_amount),
+                    None,
+                )
+                .expect("positive same-unit update must succeed");
+
+            prop_assert_eq!(updated.item(), &original_item);
+            prop_assert_eq!(updated.quantity_amount(), new_amount);
+            prop_assert_eq!(updated.quantity_unit(), &original_unit);
+            prop_assert_eq!(updated.nutrient_snapshots().len(), original_snapshots.len());
+
+            let scale = new_amount / old_amount;
+            for (snapshot, original) in updated
+                .nutrient_snapshots()
+                .iter()
+                .zip(original_snapshots.iter())
+            {
+                prop_assert_eq!(&snapshot.nutrient_code, &original.nutrient_code);
+                prop_assert_eq!(&snapshot.unit, &original.unit);
+                prop_assert_eq!(snapshot.amount, original.amount * scale);
+            }
+        }
     }
 }

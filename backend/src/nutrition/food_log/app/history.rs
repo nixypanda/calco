@@ -346,13 +346,16 @@ mod tests {
     use super::super::{FoodLogService, LogFoodInput};
     use super::{MAX_TOP_QUANTITIES, item_name, recent_items_from_logs};
     use crate::nutrition::catalog::domain::calculation::Quantity;
-    use crate::nutrition::catalog::domain::{ProductId, UnitCode};
+    use crate::nutrition::catalog::domain::{NutrientCode, ProductId, UnitCode};
     use crate::nutrition::food_log::domain::{
-        FoodLog, FoodLogId, FoodLogItemRef, FoodLogItemSnapshot, MealSlot, NutritionError,
-        QuantityUsage,
+        FoodLog, FoodLogBuilder, FoodLogId, FoodLogItemRef, FoodLogItemSnapshot,
+        FoodLogNutrientSnapshot, MealSlot, NutritionError, QuantityUsage,
     };
+    use crate::nutrition::meal::domain::MealId;
     use chrono::{DateTime, Duration, NaiveDate};
+    use proptest::prelude::*;
     use rust_decimal::Decimal;
+    use std::cmp::Reverse;
     use std::str::FromStr;
     use uuid::Uuid;
 
@@ -457,25 +460,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn history_lists_recent_items_through_repository() {
-        let (services, history_services) = make_services_and_history(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
-        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
-
-        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
-        log_test_product(&services, user_id, monday, MealSlot::Dinner, 150).await;
-
-        let recent = history_services
-            .list_recent_items(user_id, friday, monday, Some(MealSlot::Breakfast))
-            .await
-            .unwrap();
-
-        assert_eq!(recent.len(), 1);
-        assert_eq!(recent[0].meal_slot, Some(MealSlot::Breakfast));
-    }
-
-    #[tokio::test]
     async fn history_summarizes_logs_by_date_for_requested_user() {
         let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
@@ -511,30 +495,6 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[tokio::test]
-    async fn history_finds_last_used_items_through_repository() {
-        let (services, history_services) = make_services_and_history(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
-        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
-
-        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
-
-        let recent = history_services
-            .find_last_used_items(
-                user_id,
-                friday,
-                monday,
-                None,
-                &[FoodLogItemRef::Product(ProductId(Uuid::nil()))],
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(recent.len(), 1);
-        assert_eq!(recent[0].quantity_amount, Decimal::new(100, 0));
     }
 
     #[test]
@@ -660,26 +620,6 @@ mod tests {
     }
 
     #[test]
-    fn recent_items_break_score_ties_by_log_date_then_name() {
-        let logs = vec![
-            aged_log("Cherry", 3, 1, "100"),
-            aged_log("Banana", 2, 0, "100"),
-            aged_log("Apple", 1, 0, "100"),
-        ];
-
-        let items = recent_items_from_logs(logs, reference_date());
-
-        assert!(items.iter().all(|item| item.score == 8));
-        assert_eq!(
-            items
-                .iter()
-                .map(|item| item_name(&item.item))
-                .collect::<Vec<_>>(),
-            vec!["Apple", "Banana", "Cherry"]
-        );
-    }
-
-    #[test]
     fn recent_items_report_the_most_recently_logged_quantity_as_last_used() {
         let mut logs = vec![aged_log("Test Food", 1, 0, "250")];
         logs.extend((0..5).map(|_| aged_log("Test Food", 1, 10, "100")));
@@ -694,6 +634,603 @@ mod tests {
         );
         assert_eq!(items[0].quantity_amount, Decimal::from_str("250").unwrap());
         assert_eq!(items[0].log_date, reference_date());
+    }
+
+    #[test]
+    fn recent_items_use_newest_created_at_when_latest_log_dates_match() {
+        let item = product_snapshot("Tie Food", 50);
+        let logs = vec![
+            item_log(
+                item.clone(),
+                reference_date(),
+                MealSlot::Lunch,
+                100,
+                "g",
+                10,
+            ),
+            item_log(item, reference_date(), MealSlot::Dinner, 2, "serving", 20),
+        ];
+
+        let items = recent_items_from_logs(logs, reference_date());
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].quantity_amount, Decimal::new(2, 0));
+        assert_eq!(items[0].quantity_unit, UnitCode("serving".to_string()));
+        assert_eq!(items[0].log_date, reference_date());
+        assert_eq!(items[0].meal_slot, Some(MealSlot::Dinner));
+        assert_eq!(
+            items[0].top_quantities,
+            vec![usage_in(2, "serving", 1, 8), usage_in(100, "g", 1, 8),]
+        );
+    }
+
+    #[test]
+    fn recent_items_use_first_input_log_when_latest_timestamps_tie() {
+        let item = product_snapshot("Stable Tie", 51);
+        let logs = vec![
+            item_log(
+                item.clone(),
+                reference_date(),
+                MealSlot::Breakfast,
+                100,
+                "g",
+                42,
+            ),
+            item_log(item, reference_date(), MealSlot::Dinner, 200, "g", 42),
+        ];
+
+        let items = recent_items_from_logs(logs, reference_date());
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].quantity_amount, Decimal::new(100, 0));
+        assert_eq!(items[0].meal_slot, Some(MealSlot::Breakfast));
+        assert_eq!(
+            items[0].top_quantities,
+            vec![usage_in(100, "g", 1, 8), usage_in(200, "g", 1, 8)]
+        );
+    }
+
+    #[test]
+    fn recent_items_rank_meals_and_break_score_ties_by_name() {
+        let logs = vec![
+            item_log(
+                meal_snapshot("Zulu Meal", 900),
+                reference_date(),
+                MealSlot::Dinner,
+                2,
+                "serving",
+                100,
+            ),
+            item_log(
+                product_snapshot("Alpha Product", 901),
+                reference_date(),
+                MealSlot::Lunch,
+                150,
+                "g",
+                200,
+            ),
+        ];
+
+        let items = recent_items_from_logs(logs, reference_date());
+
+        assert_eq!(items.len(), 2);
+        assert!(items.iter().all(|item| item.score == 8));
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item_name(&item.item))
+                .collect::<Vec<_>>(),
+            vec!["Alpha Product", "Zulu Meal"]
+        );
+        assert_eq!(items[1].item, meal_snapshot("Zulu Meal", 900));
+        assert_eq!(items[1].quantity_unit, UnitCode("serving".to_string()));
+        assert_eq!(items[1].top_quantities, vec![usage_in(2, "serving", 1, 8)]);
+    }
+
+    #[test]
+    fn recent_items_group_product_logs_by_id_across_snapshot_changes() {
+        let product_id = 77;
+        let old_item = FoodLogItemSnapshot::Product {
+            id: ProductId(Uuid::from_u128(product_id)),
+            name: "Old Product Name".to_string(),
+            brand: Some("Old Brand".to_string()),
+        };
+        let new_item = FoodLogItemSnapshot::Product {
+            id: ProductId(Uuid::from_u128(product_id)),
+            name: "New Product Name".to_string(),
+            brand: None,
+        };
+        let logs = vec![
+            item_log(
+                old_item,
+                reference_date() - Duration::days(1),
+                MealSlot::Lunch,
+                100,
+                "g",
+                10,
+            ),
+            item_log(
+                new_item.clone(),
+                reference_date(),
+                MealSlot::Dinner,
+                100,
+                "g",
+                20,
+            ),
+        ];
+
+        let items = recent_items_from_logs(logs, reference_date());
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].item, new_item);
+        assert_eq!(items[0].quantity_amount, Decimal::new(100, 0));
+        assert_eq!(items[0].quantity_unit, UnitCode("g".to_string()));
+        assert_eq!(items[0].log_date, reference_date());
+        assert_eq!(items[0].meal_slot, Some(MealSlot::Dinner));
+        assert_eq!(items[0].score, 16);
+        assert_eq!(items[0].top_quantities, vec![usage_in(100, "g", 2, 16)]);
+    }
+
+    #[test]
+    fn recent_items_aggregate_meal_logs_by_meal_id() {
+        let meal_id = 902;
+        let older_item = FoodLogItemSnapshot::Meal {
+            id: MealId(Uuid::from_u128(meal_id)),
+            name: "Old Meal Name".to_string(),
+        };
+        let newest_item = meal_snapshot("New Meal Name", meal_id);
+        let logs = vec![
+            item_log(
+                older_item,
+                reference_date() - Duration::days(7),
+                MealSlot::Lunch,
+                3,
+                "serving",
+                10,
+            ),
+            item_log(
+                newest_item.clone(),
+                reference_date(),
+                MealSlot::Breakfast,
+                3,
+                "serving",
+                30,
+            ),
+            item_log(
+                meal_snapshot("Other Meal Name", meal_id),
+                reference_date(),
+                MealSlot::Dinner,
+                5,
+                "g",
+                20,
+            ),
+        ];
+
+        let items = recent_items_from_logs(logs, reference_date());
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].item, newest_item);
+        assert_eq!(items[0].quantity_amount, Decimal::new(3, 0));
+        assert_eq!(items[0].quantity_unit, UnitCode("serving".to_string()));
+        assert_eq!(items[0].log_date, reference_date());
+        assert_eq!(items[0].meal_slot, Some(MealSlot::Breakfast));
+        assert_eq!(items[0].score, 18);
+        assert_eq!(
+            items[0].top_quantities,
+            vec![usage_in(3, "serving", 2, 10), usage_in(5, "g", 1, 8)]
+        );
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn recent_items_rank_by_score_then_recency_then_name(specs in generated_log_specs()) {
+            let logs = build_generated_logs(&specs);
+            let items = recent_items_from_logs(logs, reference_date());
+
+            for pair in items.windows(2) {
+                let left = &pair[0];
+                let right = &pair[1];
+                prop_assert!(
+                    (
+                        Reverse(left.score),
+                        Reverse(left.log_date),
+                        item_name(&left.item)
+                    ) <= (
+                        Reverse(right.score),
+                        Reverse(right.log_date),
+                        item_name(&right.item)
+                    ),
+                    "items out of ranking order: {:?} before {:?}",
+                    (left.score, left.log_date, item_name(&left.item)),
+                    (right.score, right.log_date, item_name(&right.item))
+                );
+            }
+        }
+
+        #[test]
+        fn recent_items_keep_top_quantity_invariants(specs in generated_log_specs()) {
+            let logs = build_generated_logs(&specs);
+            let items = recent_items_from_logs(logs.clone(), reference_date());
+
+            for item in &items {
+                let identity = item_identity(&item.item);
+                prop_assert!(identity.is_some(), "generated items must be products");
+                let source_units = logs
+                    .iter()
+                    .filter(|log| item_identity(log.item()) == identity)
+                    .map(|log| log.quantity_unit().clone())
+                    .collect::<Vec<_>>();
+
+                prop_assert!(item.score >= 1);
+                prop_assert!(item.top_quantities.len() <= MAX_TOP_QUANTITIES);
+                for usage in &item.top_quantities {
+                    prop_assert!(usage.log_count >= 1);
+                    prop_assert!(usage.score >= 1);
+                    prop_assert!(
+                        source_units.iter().any(|unit| unit == &usage.unit),
+                        "usage unit {:?} was not present in the item's source logs",
+                        usage.unit
+                    );
+                }
+                for pair in item.top_quantities.windows(2) {
+                    prop_assert!(
+                        pair[0].score >= pair[1].score,
+                        "top quantities are not sorted: {:?}",
+                        item.top_quantities
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn recent_items_report_fields_from_the_latest_log(specs in generated_log_specs()) {
+            let logs = build_generated_logs(&specs);
+            let items = recent_items_from_logs(logs.clone(), reference_date());
+
+            for item in &items {
+                let Some(identity) = item_identity(&item.item) else {
+                    prop_assert!(false, "generated items must be products");
+                    continue;
+                };
+                let latest =
+                    latest_log_for(&logs, identity).expect("every item must have a source log");
+                prop_assert_eq!(&item.item, latest.item());
+                prop_assert_eq!(item.quantity_amount, latest.quantity_amount());
+                prop_assert_eq!(&item.quantity_unit, latest.quantity_unit());
+                prop_assert_eq!(item.log_date, latest.log_date());
+                prop_assert_eq!(item.meal_slot, latest.meal_slot());
+                prop_assert!(!latest.nutrient_snapshots().is_empty());
+                prop_assert_eq!(
+                    nutrient_snapshot_fields(&item.nutrient_snapshots),
+                    nutrient_snapshot_fields(latest.nutrient_snapshots())
+                );
+            }
+        }
+
+        #[test]
+        fn recent_items_ignore_input_order(specs in generated_log_specs()) {
+            let logs = build_generated_logs(&specs);
+            let mut shuffled: Vec<(FoodLog, u64)> = logs
+                .iter()
+                .cloned()
+                .zip(specs.iter().map(|spec| spec.shuffle_key))
+                .collect();
+            shuffled.sort_by_key(|(_, shuffle_key)| *shuffle_key);
+            let shuffled_logs = shuffled
+                .into_iter()
+                .map(|(log, _)| log)
+                .collect::<Vec<_>>();
+
+            let expected = recent_items_from_logs(logs, reference_date());
+            let actual = recent_items_from_logs(shuffled_logs, reference_date());
+
+            prop_assert_eq!(expected.len(), actual.len());
+            for (left, right) in expected.iter().zip(actual.iter()) {
+                prop_assert_eq!(&left.item, &right.item);
+                prop_assert_eq!(left.quantity_amount, right.quantity_amount);
+                prop_assert_eq!(&left.quantity_unit, &right.quantity_unit);
+                prop_assert_eq!(left.log_date, right.log_date);
+                prop_assert_eq!(left.meal_slot, right.meal_slot);
+                prop_assert_eq!(
+                    nutrient_snapshot_fields(&left.nutrient_snapshots),
+                    nutrient_snapshot_fields(&right.nutrient_snapshots)
+                );
+                prop_assert_eq!(left.score, right.score);
+                prop_assert_eq!(&left.top_quantities, &right.top_quantities);
+            }
+        }
+
+        #[test]
+        fn recent_items_exclude_ad_hoc_logs(
+            specs in non_empty_generated_log_specs(),
+            ad_hoc_count in 1usize..=4,
+        ) {
+            let mut logs = build_generated_logs(&specs);
+            prop_assert!(!logs.is_empty());
+            let first_ad_hoc_offset = GENERATED_LOG_EPOCH + logs.len() as i64;
+            for index in 0..ad_hoc_count {
+                logs.push(ad_hoc_log(
+                    first_ad_hoc_offset + index as i64,
+                    index as i64 % 31,
+                    &format!("Ad Hoc {index}"),
+                    1 + index as i64,
+                ));
+            }
+
+            prop_assert_eq!(
+                logs.iter()
+                    .filter(|log| matches!(log.item(), FoodLogItemSnapshot::AdHoc { .. }))
+                    .count(),
+                ad_hoc_count
+            );
+
+            let items = recent_items_from_logs(logs.clone(), reference_date());
+            let mut expected_identities = Vec::new();
+            for identity in logs.iter().filter_map(|log| item_identity(log.item())) {
+                if !expected_identities.contains(&identity) {
+                    expected_identities.push(identity);
+                }
+            }
+
+            prop_assert!(!items.is_empty());
+            prop_assert_eq!(items.len(), expected_identities.len());
+            for item in &items {
+                let is_product = matches!(&item.item, FoodLogItemSnapshot::Product { .. });
+                prop_assert!(is_product, "ad-hoc logs must be excluded");
+                let identity = item_identity(&item.item).expect("items must not be ad-hoc");
+                prop_assert!(expected_identities.contains(&identity));
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct GeneratedLogSpec {
+        product_index: usize,
+        days_ago: i64,
+        meal_slot_index: usize,
+        amount: i64,
+        unit_index: usize,
+        shuffle_key: u64,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ItemIdentity {
+        Product(ProductId),
+        Meal(MealId),
+    }
+
+    const GENERATED_LOG_EPOCH: i64 = 1_800_000_000;
+    const GENERATED_UNITS: [&str; 4] = ["g", "kg", "serving", "ml"];
+
+    fn generated_log_specs() -> impl Strategy<Value = Vec<GeneratedLogSpec>> {
+        (1usize..=4).prop_flat_map(|product_count| {
+            proptest::collection::vec(log_spec_strategy(product_count), 0..=12)
+        })
+    }
+
+    fn non_empty_generated_log_specs() -> impl Strategy<Value = Vec<GeneratedLogSpec>> {
+        (1usize..=4).prop_flat_map(|product_count| {
+            proptest::collection::vec(log_spec_strategy(product_count), 1..=12)
+        })
+    }
+
+    fn log_spec_strategy(product_count: usize) -> impl Strategy<Value = GeneratedLogSpec> {
+        (
+            0usize..product_count,
+            0i64..=30,
+            0usize..MealSlot::ALL.len(),
+            1i64..=500,
+            0usize..GENERATED_UNITS.len(),
+            any::<u64>(),
+        )
+            .prop_map(
+                |(product_index, days_ago, meal_slot_index, amount, unit_index, shuffle_key)| {
+                    GeneratedLogSpec {
+                        product_index,
+                        days_ago,
+                        meal_slot_index,
+                        amount,
+                        unit_index,
+                        shuffle_key,
+                    }
+                },
+            )
+    }
+
+    fn build_generated_logs(specs: &[GeneratedLogSpec]) -> Vec<FoodLog> {
+        specs
+            .iter()
+            .enumerate()
+            .map(|(index, spec)| {
+                generated_product_log(
+                    spec.product_index,
+                    spec.days_ago,
+                    MealSlot::ALL[spec.meal_slot_index],
+                    spec.amount,
+                    GENERATED_UNITS[spec.unit_index],
+                    index,
+                    GENERATED_LOG_EPOCH + index as i64,
+                )
+            })
+            .collect()
+    }
+
+    fn generated_product_log(
+        product_index: usize,
+        days_ago: i64,
+        meal_slot: MealSlot,
+        amount: i64,
+        unit: &str,
+        log_index: usize,
+        created_at_offset_secs: i64,
+    ) -> FoodLog {
+        item_log_with_snapshots(
+            product_snapshot(
+                &format!("Product {product_index}"),
+                1 + product_index as u128,
+            ),
+            reference_date() - Duration::days(days_ago),
+            meal_slot,
+            amount,
+            unit,
+            created_at_offset_secs,
+            generated_product_nutrients(amount, log_index),
+        )
+    }
+
+    fn generated_product_nutrients(amount: i64, log_index: usize) -> Vec<FoodLogNutrientSnapshot> {
+        vec![
+            FoodLogNutrientSnapshot {
+                nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
+                amount: Decimal::new(amount * 4 + log_index as i64, 0),
+                unit: UnitCode("kcal".to_string()),
+            },
+            FoodLogNutrientSnapshot {
+                nutrient_code: NutrientCode("PROTEIN_G".to_string()),
+                amount: Decimal::new(amount / 10 + log_index as i64, 0),
+                unit: UnitCode("g".to_string()),
+            },
+        ]
+    }
+
+    fn product_snapshot(name: &str, item_id: u128) -> FoodLogItemSnapshot {
+        FoodLogItemSnapshot::Product {
+            id: ProductId(Uuid::from_u128(item_id)),
+            name: name.to_string(),
+            brand: None,
+        }
+    }
+
+    fn meal_snapshot(name: &str, item_id: u128) -> FoodLogItemSnapshot {
+        FoodLogItemSnapshot::Meal {
+            id: MealId(Uuid::from_u128(item_id)),
+            name: name.to_string(),
+        }
+    }
+
+    fn item_log(
+        item: FoodLogItemSnapshot,
+        log_date: NaiveDate,
+        meal_slot: MealSlot,
+        amount: i64,
+        unit: &str,
+        created_at_offset_secs: i64,
+    ) -> FoodLog {
+        item_log_with_snapshots(
+            item,
+            log_date,
+            meal_slot,
+            amount,
+            unit,
+            created_at_offset_secs,
+            Vec::new(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn item_log_with_snapshots(
+        item: FoodLogItemSnapshot,
+        log_date: NaiveDate,
+        meal_slot: MealSlot,
+        amount: i64,
+        unit: &str,
+        created_at_offset_secs: i64,
+        nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
+    ) -> FoodLog {
+        let created_at = DateTime::from_timestamp(created_at_offset_secs, 0).unwrap();
+
+        FoodLog::restore(
+            FoodLogId::new(),
+            Uuid::nil(),
+            log_date,
+            Some(meal_slot),
+            None,
+            item,
+            Decimal::new(amount, 0),
+            UnitCode(unit.to_string()),
+            nutrient_snapshots,
+            None,
+            created_at,
+            created_at,
+        )
+    }
+
+    fn ad_hoc_log(created_at_offset_secs: i64, days_ago: i64, name: &str, amount: i64) -> FoodLog {
+        let log_date = reference_date() - Duration::days(days_ago);
+        let created_at = DateTime::from_timestamp(created_at_offset_secs, 0).unwrap();
+        let built = FoodLogBuilder::new_ad_hoc(
+            Uuid::nil(),
+            log_date,
+            name.to_string(),
+            None,
+            Quantity::new(Decimal::new(amount, 0), UnitCode("g".to_string())).unwrap(),
+            required_ad_hoc_snapshots(),
+        )
+        .expect("generated ad-hoc logs must be valid")
+        .meal_slot(Some(MealSlot::Snack))
+        .build();
+
+        FoodLog::restore(
+            FoodLogId::new(),
+            Uuid::nil(),
+            built.log_date(),
+            built.meal_slot(),
+            None,
+            built.item().clone(),
+            built.quantity_amount(),
+            built.quantity_unit().clone(),
+            built.nutrient_snapshots().to_vec(),
+            None,
+            created_at,
+            created_at,
+        )
+    }
+
+    fn required_ad_hoc_snapshots() -> Vec<FoodLogNutrientSnapshot> {
+        [
+            ("ENERGY_KCAL", Decimal::new(100, 0), "kcal"),
+            ("PROTEIN_G", Decimal::new(10, 0), "g"),
+            ("CARBS_G", Decimal::new(20, 0), "g"),
+            ("FAT_G", Decimal::new(5, 0), "g"),
+        ]
+        .into_iter()
+        .map(|(code, amount, unit)| FoodLogNutrientSnapshot {
+            nutrient_code: NutrientCode(code.to_string()),
+            amount,
+            unit: UnitCode(unit.to_string()),
+        })
+        .collect()
+    }
+
+    fn item_identity(item: &FoodLogItemSnapshot) -> Option<ItemIdentity> {
+        match item {
+            FoodLogItemSnapshot::Product { id, .. } => Some(ItemIdentity::Product(*id)),
+            FoodLogItemSnapshot::Meal { id, .. } => Some(ItemIdentity::Meal(*id)),
+            FoodLogItemSnapshot::AdHoc { .. } => None,
+        }
+    }
+
+    fn latest_log_for<'a>(logs: &'a [FoodLog], identity: ItemIdentity) -> Option<&'a FoodLog> {
+        logs.iter()
+            .filter(|log| item_identity(log.item()) == Some(identity))
+            .max_by_key(|log| (log.log_date(), log.created_at()))
+    }
+
+    fn nutrient_snapshot_fields(
+        snapshots: &[FoodLogNutrientSnapshot],
+    ) -> Vec<(String, Decimal, String)> {
+        snapshots
+            .iter()
+            .map(|snapshot| {
+                (
+                    snapshot.nutrient_code.0.clone(),
+                    snapshot.amount,
+                    snapshot.unit.0.clone(),
+                )
+            })
+            .collect()
     }
 
     fn reference_date() -> NaiveDate {
@@ -750,6 +1287,15 @@ mod tests {
         QuantityUsage {
             amount: Decimal::from_str(amount).unwrap(),
             unit: UnitCode("g".to_string()),
+            log_count,
+            score,
+        }
+    }
+
+    fn usage_in(amount: i64, unit: &str, log_count: u32, score: u32) -> QuantityUsage {
+        QuantityUsage {
+            amount: Decimal::new(amount, 0),
+            unit: UnitCode(unit.to_string()),
             log_count,
             score,
         }

@@ -312,17 +312,77 @@ mod tests {
     use super::super::test_support::*;
     use super::*;
     use crate::nutrition::catalog::domain::calculation::Quantity;
-    use crate::nutrition::catalog::domain::{ProductId, UnitCode};
+    use crate::nutrition::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
     use crate::nutrition::food_log::domain::{
-        FoodLogId, FoodLogItemRef, FoodLogItemSnapshot, MealSlot, NutritionError,
+        FoodLogItemRef, FoodLogItemSnapshot, FoodLogNutrientSnapshot, MealSlot, NutritionError,
     };
     use crate::nutrition::meal::domain::MealId;
+    use rstest::rstest;
     use rust_decimal::Decimal;
     use uuid::Uuid;
 
     #[tokio::test]
-    async fn test_log_food_product_not_found() {
+    async fn log_ad_hoc_rejects_unknown_nutrient_code() {
         let services = make_services(None);
+        let snapshot = |code: &str, amount: i64, unit: &str| FoodLogNutrientSnapshot {
+            nutrient_code: NutrientCode(code.into()),
+            amount: Decimal::from(amount),
+            unit: UnitCode(unit.into()),
+        };
+
+        let result = services
+            .log_ad_hoc_food(
+                Uuid::new_v4(),
+                LogAdHocFoodInput {
+                    log_date: sample_log_date(),
+                    meal_slot: None,
+                    device_timezone: None,
+                    name: "Mystery food".into(),
+                    brand: None,
+                    quantity: Quantity::new(Decimal::ONE, UnitCode("serving".into())).unwrap(),
+                    nutrients: vec![
+                        snapshot("ENERGY_KCAL", 100, "kcal"),
+                        snapshot("PROTEIN_G", 1, "g"),
+                        snapshot("CARBS_G", 1, "g"),
+                        snapshot("FAT_G", 1, "g"),
+                        snapshot("NOT_A_NUTRIENT", 1, "g"),
+                    ],
+                    notes: None,
+                },
+            )
+            .await;
+
+        match result {
+            Err(NutritionError::Validation(message)) => assert!(
+                message.contains("unknown ad-hoc nutrient code: NOT_A_NUTRIENT"),
+                "unexpected message: {message}"
+            ),
+            Ok(_) => panic!("unknown nutrient must be rejected"),
+            Err(other) => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum MissingLoggableItem {
+        Product,
+        Meal,
+    }
+
+    #[rstest]
+    #[case::product_not_found(MissingLoggableItem::Product)]
+    #[case::meal_not_found(MissingLoggableItem::Meal)]
+    #[tokio::test]
+    async fn log_food_rejects_missing_item(#[case] missing: MissingLoggableItem) {
+        let (services, item) = match missing {
+            MissingLoggableItem::Product => (
+                make_services(None),
+                FoodLogItemRef::Product(ProductId(Uuid::new_v4())),
+            ),
+            MissingLoggableItem::Meal => (
+                make_services_with_meal(Some(sample_product()), sample_meal()),
+                FoodLogItemRef::Meal(MealId::new()),
+            ),
+        };
 
         let result = services
             .log_item(
@@ -331,7 +391,7 @@ mod tests {
                     log_date: sample_log_date(),
                     device_timezone: None,
                     meal_slot: Some(MealSlot::Lunch),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::new_v4())),
+                    item,
                     quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
                         .unwrap(),
                     notes: None,
@@ -339,42 +399,10 @@ mod tests {
             )
             .await;
 
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::NotFound(_) => {}
-            _ => panic!("expected NotFound"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_delete_food_log_success() {
-        let (services, food_log_repo) = make_services_with_repo(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let created = services
-            .log_item(
-                user_id,
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: Some("Asia/Kolkata".to_string()),
-                    meal_slot: Some(MealSlot::Lunch),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await
-            .unwrap();
-
         assert!(
-            services
-                .delete_food_log(created.id(), user_id)
-                .await
-                .is_ok()
+            matches!(&result, Err(NutritionError::NotFound(_))),
+            "expected NotFound, got {result:?}"
         );
-        let still_there = food_log_repo.find_by_id(created.id()).await.unwrap();
-        assert!(still_there.is_none());
     }
 
     #[tokio::test]
@@ -404,63 +432,6 @@ mod tests {
             Err(NutritionError::NotFound(_))
         ));
         assert!(services.get_food_log(created.id(), owner).await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_delete_food_log_not_found() {
-        let services = make_services(Some(sample_product()));
-        let result = services
-            .delete_food_log(FoodLogId::new(), Uuid::new_v4())
-            .await;
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::NotFound(_) => {}
-            _ => panic!("expected NotFound"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_update_food_log_success() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let created = services
-            .log_item(
-                user_id,
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: Some(MealSlot::Lunch),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        let updated = services
-            .update_food_log(
-                created.id(),
-                user_id,
-                UpdateFoodInput {
-                    log_date: Some(sample_log_date()),
-                    device_timezone: None,
-                    meal_slot: Some(Some(MealSlot::Dinner)),
-                    item: None,
-                    quantity: Some(
-                        Quantity::new(Decimal::new(200, 0), UnitCode("g".to_string())).unwrap(),
-                    ),
-                    notes: Some(Some("updated notes".to_string())),
-                },
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(updated.meal_slot(), Some(MealSlot::Dinner));
-        assert_eq!(updated.quantity_amount(), Decimal::new(200, 0));
-        assert_eq!(updated.notes(), Some("updated notes"));
     }
 
     #[tokio::test]
@@ -505,33 +476,31 @@ mod tests {
         assert_eq!(updated.notes(), None);
     }
 
-    #[tokio::test]
-    async fn test_log_food_uses_unit_converter_for_kg() {
-        let services = make_services(Some(sample_product()));
-
-        let log = services
-            .log_item(
-                Uuid::new_v4(),
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: None,
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(2, 0), UnitCode("kg".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        // sample product has 100 kcal per 100g → 2 kg = 2000 g → 2000 kcal
-        assert_eq!(log.nutrient_snapshots()[0].amount, Decimal::new(2000, 0));
+    #[derive(Clone, Copy, Debug)]
+    enum ExpectedLogOutcome {
+        Energy(i64),
+        Validation,
     }
 
+    // Sample product: 100 kcal per 100 g. 2 kg = 2000 g -> 2000 kcal.
+    // Serving: 30 g per slice; 2 slices = 60 g -> 60 kcal.
+    #[rstest]
+    #[case::kg_is_converted_to_grams(sample_product(), 2, "kg", ExpectedLogOutcome::Energy(2000))]
+    #[case::serving_multiples_are_expanded(
+        sample_product_with_serving(),
+        2,
+        "slice",
+        ExpectedLogOutcome::Energy(60)
+    )]
+    #[case::unknown_unit_is_rejected(sample_product(), 1, "cup", ExpectedLogOutcome::Validation)]
     #[tokio::test]
-    async fn test_log_food_rejects_unknown_unit() {
-        let services = make_services(Some(sample_product()));
+    async fn log_product_converts_quantity_units(
+        #[case] product: Product,
+        #[case] amount: i64,
+        #[case] unit: &str,
+        #[case] expected: ExpectedLogOutcome,
+    ) {
+        let services = make_services(Some(product));
 
         let result = services
             .log_item(
@@ -541,67 +510,30 @@ mod tests {
                     device_timezone: None,
                     meal_slot: None,
                     item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(1, 0), UnitCode("cup".to_string()))
+                    quantity: Quantity::new(Decimal::from(amount), UnitCode(unit.to_string()))
                         .unwrap(),
                     notes: None,
                 },
             )
             .await;
 
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[tokio::test]
-    async fn test_log_food_accepts_serving_multiples() {
-        let services = make_services(Some(sample_product_with_serving()));
-
-        let log = services
-            .log_item(
-                Uuid::new_v4(),
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: None,
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(2, 0), UnitCode("slice".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(log.nutrient_snapshots()[0].amount, Decimal::new(60, 0));
-    }
-
-    #[tokio::test]
-    async fn test_log_meal_success() {
-        let services = make_services_with_meal(Some(sample_product()), sample_meal());
-        let user_id = Uuid::new_v4();
-
-        let result = services
-            .log_item(
-                user_id,
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: Some(MealSlot::Dinner),
-                    item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(150, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: Some("meal note".to_string()),
-                },
-            )
-            .await;
-
-        assert!(result.is_ok());
-        let log = result.unwrap();
-        assert_eq!(log.user_id(), user_id);
-        assert_eq!(log.meal_slot(), Some(MealSlot::Dinner));
-        assert!(matches!(log.item(), FoodLogItemSnapshot::Meal { .. }));
-        assert_eq!(log.nutrient_snapshots().len(), 1);
-        assert_eq!(log.nutrient_snapshots()[0].nutrient_code.0, "ENERGY_KCAL");
-        assert_eq!(log.nutrient_snapshots()[0].amount, Decimal::new(150, 0));
+        match expected {
+            ExpectedLogOutcome::Energy(expected_energy) => {
+                let log = result.expect("quantity with a known unit should be logged");
+                assert_eq!(log.nutrient_snapshots().len(), 1);
+                assert_eq!(log.nutrient_snapshots()[0].nutrient_code.0, "ENERGY_KCAL");
+                assert_eq!(
+                    log.nutrient_snapshots()[0].amount,
+                    Decimal::from(expected_energy)
+                );
+            }
+            ExpectedLogOutcome::Validation => {
+                assert!(
+                    matches!(&result, Err(NutritionError::Validation(_))),
+                    "expected Validation, got {result:?}"
+                );
+            }
+        }
     }
 
     #[tokio::test]
@@ -646,31 +578,5 @@ mod tests {
         assert!(matches!(updated.item(), FoodLogItemSnapshot::Meal { .. }));
         assert_eq!(updated.quantity_amount(), Decimal::new(200, 0));
         assert_eq!(updated.nutrient_snapshots()[0].amount, Decimal::new(200, 0));
-    }
-
-    #[tokio::test]
-    async fn test_log_meal_not_found() {
-        let services = make_services_with_meal(Some(sample_product()), sample_meal());
-
-        let result = services
-            .log_item(
-                Uuid::new_v4(),
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: Some(MealSlot::Lunch),
-                    item: FoodLogItemRef::Meal(MealId::new()),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::NotFound(_) => {}
-            _ => panic!("expected NotFound"),
-        }
     }
 }

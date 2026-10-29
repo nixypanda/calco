@@ -13,7 +13,6 @@ module Data.FoodAssistant exposing
     , assistantStatusDecoder
     , assistantTurn
     , conversation
-    , conversationEncoder
     , conversationEncoderFor
     , foodDraftTurnDecoder
     , turnRole
@@ -313,11 +312,6 @@ assistantMessage turn =
 
         DraftReady details ->
             details.assistantMessage
-
-
-conversationEncoder : Conversation -> Encode.Value
-conversationEncoder =
-    conversationEncoderFor CustomFood
 
 
 conversationEncoderFor : FoodDraftPurpose -> Conversation -> Encode.Value

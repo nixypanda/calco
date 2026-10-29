@@ -9,7 +9,6 @@ module Page.Food.Search exposing
     , SearchScope(..)
     , contentView
     , init
-    , quickAddChipState
     , retarget
     , update
     )

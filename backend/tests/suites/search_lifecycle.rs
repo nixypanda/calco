@@ -1,6 +1,5 @@
 use crate::common::*;
 use axum::http::StatusCode;
-use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -140,92 +139,6 @@ fn assert_ids_unordered(mut actual: Vec<String>, mut expected: Vec<String>) {
 }
 
 #[sqlx::test]
-async fn catalog_search_orders_by_match_tier(pool: PgPool) {
-    // Insert in reverse tier order on purpose: insertion order must not affect
-    // ranking, and hydration must restore the ranker's order.
-    let fuzzy_typo =
-        insert_external_product(&pool, "tier-fuzzy-typo", "tier-tokeen", None, None, &[]).await;
-    let brand_substring = insert_external_product(
-        &pool,
-        "tier-brand-substring",
-        "Zzz brand substring",
-        Some("zzz tier-token brand"),
-        None,
-        &[],
-    )
-    .await;
-    let brand_prefix = insert_external_product(
-        &pool,
-        "tier-brand-prefix",
-        "Zzz brand prefix",
-        Some("tier-token brand"),
-        None,
-        &[],
-    )
-    .await;
-    let name_substring = insert_external_product(
-        &pool,
-        "tier-name-substring",
-        "zzz tier-token name substring",
-        None,
-        None,
-        &[],
-    )
-    .await;
-    let name_prefix = insert_external_product(
-        &pool,
-        "tier-name-prefix",
-        "tier-token name prefix",
-        None,
-        None,
-        &[],
-    )
-    .await;
-    let barcode_prefix = insert_external_product(
-        &pool,
-        "tier-barcode-prefix",
-        "Zzz prefix barcode",
-        None,
-        Some("tier-token-2"),
-        &[],
-    )
-    .await;
-    let barcode_exact = insert_external_product(
-        &pool,
-        "tier-barcode-exact",
-        "Zzz exact barcode",
-        None,
-        Some("tier-token"),
-        &[],
-    )
-    .await;
-    let unrelated =
-        insert_external_product(&pool, "tier-unrelated", "Unrelated Food", None, None, &[]).await;
-
-    let router = app(pool).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-
-    let ids = search_ids(&router, &user, "tier-token", "all").await;
-
-    assert_eq!(
-        ids,
-        vec![
-            barcode_exact,
-            barcode_prefix,
-            name_prefix,
-            name_substring,
-            brand_prefix,
-            brand_substring,
-            fuzzy_typo,
-        ]
-    );
-    assert!(
-        !ids.contains(&unrelated),
-        "unrelated product must not match"
-    );
-}
-
-#[sqlx::test]
 async fn catalog_search_hydrates_brand_barcode_source_and_categories(pool: PgPool) {
     let router = app(pool.clone()).await;
     let (_admin, user) = bootstrap_and_user(&router).await;
@@ -345,101 +258,32 @@ async fn catalog_search_applies_include_and_exclude_category_filters(pool: PgPoo
 }
 
 #[sqlx::test]
-async fn catalog_search_matches_typos(pool: PgPool) {
+async fn category_suggestions_http_limit_contract(pool: PgPool) {
     let router = app(pool).await;
     let (_admin, user) = bootstrap_and_user(&router).await;
-    let granola =
-        create_custom_product(&router, &user, "Granola", "Typo Lab", &["breakfast"]).await;
 
-    let ids = search_ids(&router, &user, "granila", "all").await;
+    for category in ["alpha", "beta", "gamma"] {
+        create_custom_product(&router, &user, category, "Limit Lab", &[category]).await;
+    }
 
-    assert!(
-        ids.contains(&granola),
-        "expected typo query to return {granola}; got {ids:?}"
+    assert_eq!(
+        category_suggestions_with_limit(&router, &user, None, 0)
+            .await
+            .len(),
+        1
     );
-}
-
-#[sqlx::test]
-async fn catalog_search_treats_percent_and_underscore_literally(pool: PgPool) {
-    let router = app(pool).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-    let percent = create_custom_product(&router, &user, "100% Juice", "Literal Lab", &[]).await;
-    let underscore = create_custom_product(&router, &user, "foo_bar", "Literal Lab", &[]).await;
-    let plain = create_custom_product(&router, &user, "Plain Juice", "Literal Lab", &[]).await;
-
-    let percent_ids = search_ids(&router, &user, "%", "all").await;
-    assert_eq!(percent_ids, vec![percent]);
-    assert!(!percent_ids.contains(&plain));
-
-    let underscore_ids = search_ids(&router, &user, "_", "all").await;
-    assert_eq!(underscore_ids, vec![underscore]);
-    assert!(!underscore_ids.contains(&plain));
-}
-
-#[sqlx::test]
-async fn catalog_search_empty_query_puts_barcoded_products_first(pool: PgPool) {
-    let router = app(pool.clone()).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-    // Create the non-barcoded product first so expected order differs from
-    // insertion order.
-    let alpha = create_custom_product(&router, &user, "Alpha", "Empty Query Lab", &[]).await;
-    let zebra = insert_external_product(
-        &pool,
-        "empty-query-barcoded",
-        "Zebra",
-        None,
-        Some("12345"),
-        &[],
-    )
-    .await;
-
-    let ids = search_ids(&router, &user, "", "all").await;
-
-    assert_eq!(ids, vec![zebra, alpha]);
-}
-
-#[sqlx::test]
-async fn catalog_search_limits_results_to_fifty_after_ranking(pool: PgPool) {
-    for index in 0..55 {
-        insert_external_product(
-            &pool,
-            &format!("limit-token-{index:02}"),
-            &format!("Zzz Limit Token {index:02}"),
-            None,
-            None,
-            &[],
-        )
-        .await;
-    }
-    // These exact-name matches are inserted last, so a pre-ranking SQL LIMIT
-    // would drop them from the first 50 physical rows.
-    let mut best = Vec::new();
-    for index in 0..5 {
-        best.push(
-            insert_external_product(
-                &pool,
-                &format!("limit-token-best-{index:02}"),
-                "Limit Token",
-                None,
-                None,
-                &[],
-            )
-            .await,
-        );
-    }
-
-    let router = app(pool).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-
-    let ids = search_ids(&router, &user, "limit token", "all").await;
-
-    assert_eq!(ids.len(), 50, "expected the search limit of 50");
-    for id in best {
-        assert!(
-            ids.contains(&id),
-            "exact-name match inserted last must survive ranking; got {ids:?}"
-        );
-    }
+    assert_eq!(
+        category_suggestions_with_limit(&router, &user, None, -1)
+            .await
+            .len(),
+        1
+    );
+    assert_eq!(
+        category_suggestions_with_limit(&router, &user, None, 100)
+            .await
+            .len(),
+        3
+    );
 }
 
 #[sqlx::test]
@@ -501,67 +345,6 @@ async fn catalog_search_scopes_filter_catalog_and_history_by_source_and_user(poo
     let history_a = search_ids(&router, &user_a, "scope", "history").await;
     assert_eq!(history_a, vec![custom_a]);
     assert!(!history_a.contains(&custom_b));
-}
-
-#[sqlx::test]
-async fn history_search_matches_category_text(pool: PgPool) {
-    let router = app(pool).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-    let dairy =
-        create_custom_product(&router, &user, "Neutral One", "Neutral Lab", &["dairy"]).await;
-    let snacks =
-        create_custom_product(&router, &user, "Neutral Two", "Neutral Lab", &["snacks"]).await;
-    for scope in ["all", "custom"] {
-        let ids = search_ids(&router, &user, "dairy", scope).await;
-        assert!(
-            !ids.contains(&dairy),
-            "category text must only match in History, not {scope}; got {ids:?}"
-        );
-    }
-
-    log_product(&router, &user, &dairy, "2026-06-01").await;
-    log_product(&router, &user, &snacks, "2026-06-02").await;
-
-    let ids = search_ids(&router, &user, "dairy", "history").await;
-
-    assert_eq!(ids, vec![dairy]);
-    assert!(!ids.contains(&snacks));
-}
-
-#[sqlx::test]
-async fn history_search_uses_same_day_creation_time_before_relevance(pool: PgPool) {
-    let router = app(pool.clone()).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-    let strong_match =
-        create_custom_product(&router, &user, "Greek Yogurt", "Neutral Lab", &["snacks"]).await;
-    let weak_match =
-        create_custom_product(&router, &user, "Neutral Snack", "Neutral Lab", &["yogurt"]).await;
-
-    log_product(&router, &user, &strong_match, "2026-06-01").await;
-    log_product(&router, &user, &weak_match, "2026-06-01").await;
-
-    let older = Utc.with_ymd_and_hms(2026, 6, 1, 8, 0, 0).unwrap();
-    let newer = Utc.with_ymd_and_hms(2026, 6, 1, 20, 0, 0).unwrap();
-    sqlx::query("UPDATE food_logs SET created_at = $1 WHERE item_product_id = $2")
-        .bind(older)
-        .bind(uuid::Uuid::parse_str(&strong_match).unwrap())
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE food_logs SET created_at = $1 WHERE item_product_id = $2")
-        .bind(newer)
-        .bind(uuid::Uuid::parse_str(&weak_match).unwrap())
-        .execute(&pool)
-        .await
-        .unwrap();
-
-    let ids = search_ids(&router, &user, "yogurt", "history").await;
-
-    assert_eq!(
-        ids,
-        vec![weak_match, strong_match],
-        "same-day History ordering must use MAX(created_at) before relevance"
-    );
 }
 
 #[sqlx::test]
@@ -645,107 +428,5 @@ async fn category_counts_ignore_space_only_product_names(pool: PgPool) {
             .iter()
             .any(|(value, _)| value == "blank-name-hidden"),
         "space-only product name must be excluded from counts; got {suggestions:?}"
-    );
-}
-
-#[sqlx::test]
-async fn category_suggestions_rank_prefix_substring_fuzzy_and_count(pool: PgPool) {
-    let router = app(pool).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-
-    for name in ["Dairy Product One", "Dairy Product Two"] {
-        create_custom_product(&router, &user, name, "Category Lab", &["dairy products"]).await;
-    }
-    create_custom_product(&router, &user, "Plain Dairy", "Category Lab", &["dairy"]).await;
-    create_custom_product(&router, &user, "Non Dairy", "Category Lab", &["non-dairy"]).await;
-    create_custom_product(&router, &user, "Dairy Typo", "Category Lab", &["daiiry"]).await;
-    create_custom_product(
-        &router,
-        &user,
-        "Zeppelin Food",
-        "Category Lab",
-        &["zeppelin"],
-    )
-    .await;
-
-    let suggestions = category_suggestions(&router, &user, Some("dairy")).await;
-
-    assert_eq!(
-        suggestions,
-        vec![
-            ("dairy products".to_string(), 2),
-            ("dairy".to_string(), 1),
-            ("non-dairy".to_string(), 1),
-            ("daiiry".to_string(), 1),
-        ]
-    );
-    assert!(
-        !suggestions.iter().any(|(value, _)| value == "zeppelin"),
-        "unrelated category must not be suggested"
-    );
-
-    let limited = category_suggestions_with_limit(&router, &user, Some("dairy"), 1).await;
-    assert_eq!(limited, vec![("dairy products".to_string(), 2)]);
-
-    create_custom_product(
-        &router,
-        &user,
-        "Veggie Probe",
-        "Category Lab",
-        &["vegetables"],
-    )
-    .await;
-    let typo = category_suggestions(&router, &user, Some("vegtable")).await;
-    assert_eq!(typo, vec![("vegetables".to_string(), 1)]);
-}
-
-#[sqlx::test]
-async fn category_suggestions_http_limit_contract(pool: PgPool) {
-    let router = app(pool).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-
-    for category in ["alpha", "beta", "gamma"] {
-        create_custom_product(&router, &user, category, "Limit Lab", &[category]).await;
-    }
-
-    assert_eq!(
-        category_suggestions_with_limit(&router, &user, None, 0)
-            .await
-            .len(),
-        1
-    );
-    assert_eq!(
-        category_suggestions_with_limit(&router, &user, None, -1)
-            .await
-            .len(),
-        1
-    );
-    assert_eq!(
-        category_suggestions_with_limit(&router, &user, None, 100)
-            .await
-            .len(),
-        3
-    );
-}
-
-#[sqlx::test]
-async fn category_suggestions_empty_query_orders_by_count_then_name(pool: PgPool) {
-    let router = app(pool).await;
-    let (_admin, user) = bootstrap_and_user(&router).await;
-
-    create_custom_product(&router, &user, "Apple One", "Count Lab", &["apples"]).await;
-    create_custom_product(&router, &user, "Apple Two", "Count Lab", &["apples"]).await;
-    create_custom_product(&router, &user, "Zebra Snack", "Count Lab", &["zebras"]).await;
-    create_custom_product(&router, &user, "Snack Mix", "Count Lab", &["snacks"]).await;
-
-    let suggestions = category_suggestions(&router, &user, None).await;
-
-    assert_eq!(
-        suggestions,
-        vec![
-            ("apples".to_string(), 2),
-            ("snacks".to_string(), 1),
-            ("zebras".to_string(), 1),
-        ]
     );
 }

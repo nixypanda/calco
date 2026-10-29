@@ -56,6 +56,14 @@ frontend-web: http://localhost:1234
 backend API:  http://localhost:3001
 ```
 
+## Tests
+
+`elm-test` is DOM-less: it does not launch a browser, so browser events,
+layout, and scroll behavior are out of scope. It is not pure-function-only:
+tests may render an Elm UI value with `Element.layout` and query visible text
+or ARIA with `Test.Html.Query`. There are no mocks or HTTP calls; async
+behavior is driven by feeding simulated completion messages into `update`.
+
 ## Quality Gates
 
 Before committing frontend changes, run these from the repository root:

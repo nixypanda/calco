@@ -183,11 +183,26 @@ Examples:
   - `MYSTERY` → `"MYSTERY"` (no recognized unit)
 
 A recognized unit is the suffix token if it matches one of `G`, `MG`,
-`UG`, or `KCAL` (case-insensitive).
+`UG`, or `KCAL` (case-insensitive). Codes that render only blank tokens
+(e.g. `_` or `__`) fall back to the raw code so a label is always shown.
 
 -}
 genericNutrientLabel : String -> String
 genericNutrientLabel code =
+    let
+        rendered : String
+        rendered =
+            renderGenericNutrientLabel code
+    in
+    if String.trim rendered == "" then
+        code
+
+    else
+        rendered
+
+
+renderGenericNutrientLabel : String -> String
+renderGenericNutrientLabel code =
     let
         tokens : List String
         tokens =

@@ -163,7 +163,7 @@ displayError error =
             I18n.en TidApiErrorNetwork
 
         BadStatus _ code message ->
-            if String.isEmpty code || code == "unknown" then
+            if String.isEmpty code || code == "unknown" || String.trim message == "" then
                 I18n.en TidApiErrorServer
 
             else

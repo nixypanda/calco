@@ -2,210 +2,152 @@ module Page.FoodLog.CreateAdHocTest exposing (tests)
 
 import Api.Client as Client
 import Component.FoodEditor as Editor
+import Data.FoodLog as FoodLog exposing (FoodLog)
+import Data.LocalCtx exposing (LocalCtx)
+import Data.MealSlot exposing (MealSlot(..))
 import Expect
-import Lib.Date as LocalDate exposing (LocalDate)
 import Page.FoodLog.CreateAdHoc as CreateAdHoc
+import Page.FoodLog.ReviewStory as ReviewStory
+import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
     describe "Page.FoodLog.CreateAdHoc"
-        [ test "saving off logs an ad-hoc entry with the entered nutrition" <|
+        [ test "a user logs an ad-hoc food" <|
             \_ ->
-                out CreateAdHoc.SubmitClicked validModel
-                    |> adHocPayload
-                    |> Expect.equal
-                        (Just
-                            { name = "Paneer wrap"
-                            , amount = "1"
-                            , nutrients = [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G" ]
-                            }
+                prepared
+                    |> step (CreateAdHoc.FormMsg (Editor.NameChanged "Paneer wrap"))
+                    |> step CreateAdHoc.SubmitClicked
+                    |> step (CreateAdHoc.AdHocLogCompleted (Ok adHocLog))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (CreateAdHoc.LogCreated adHocLog)
                         )
-        , test "saving on creates the custom food and then logs the saved product" <|
+        , test "a user saves an ad-hoc food as a custom food and logs it" <|
             \_ ->
-                let
-                    afterSubmit : CreateAdHoc.Model
-                    afterSubmit =
-                        step CreateAdHoc.SubmitClicked saveModel
-
-                    afterFood : CreateAdHoc.Model
-                    afterFood =
-                        step (CreateAdHoc.CustomFoodCompleted (Ok { id = "food-1" })) afterSubmit
-                in
-                { food =
-                    out CreateAdHoc.SubmitClicked saveModel
-                        |> requestDefaultUnit
-                , product =
-                    out (CreateAdHoc.CustomFoodCompleted (Ok { id = "food-1" })) afterSubmit
-                        |> requestProductId
-                , loggedFoodId = savedProductId afterFood
-                }
-                    |> Expect.equal
-                        { food = Just "serving"
-                        , product = Just "food-1"
-                        , loggedFoodId = Just "food-1"
-                        }
-        , test "a failed product log after saving the food retries the same product" <|
+                prepared
+                    |> step (CreateAdHoc.FormMsg (Editor.NameChanged "Paneer wrap"))
+                    |> step (CreateAdHoc.FormMsg Editor.LogPersistenceToggled)
+                    |> step (CreateAdHoc.FormMsg (Editor.PortionWeightChanged "160"))
+                    |> step CreateAdHoc.SubmitClicked
+                    |> step (CreateAdHoc.CustomFoodCompleted (Ok { id = "food-1" }))
+                    |> step (CreateAdHoc.ProductLogCompleted (Err Client.NetworkError))
+                    |> step CreateAdHoc.SubmitClicked
+                    |> step (CreateAdHoc.ProductLogCompleted (Ok productLog))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (CreateAdHoc.LogCreated productLog)
+                        )
+        , test "a blank date waits for local context before logging" <|
             \_ ->
-                let
-                    failed : CreateAdHoc.Model
-                    failed =
-                        saveModel
-                            |> step CreateAdHoc.SubmitClicked
-                            |> step (CreateAdHoc.CustomFoodCompleted (Ok { id = "food-1" }))
-                            |> step (CreateAdHoc.ProductLogCompleted (Err Client.NetworkError))
-                in
-                Expect.all
-                    [ \_ ->
-                        out CreateAdHoc.SubmitClicked failed
-                            |> requestProductId
-                            |> Expect.equal (Just "food-1")
-                    , \_ ->
-                        submitError failed
-                            |> Expect.equal
-                                (Just "Food was saved to My Foods, but it could not be logged.")
-                    ]
-                    ()
-        , test "a missing diary date asks the host for the device context" <|
-            \_ ->
-                validModel
-                    |> step (CreateAdHoc.FormMsg (Editor.LogDateChanged ""))
-                    |> out CreateAdHoc.SubmitClicked
-                    |> Expect.equal CreateAdHoc.RequestLocalCtx
+                blankDate
+                    |> step (CreateAdHoc.FormMsg (Editor.NameChanged "Paneer wrap"))
+                    |> step CreateAdHoc.SubmitClicked
+                    |> step (CreateAdHoc.LocalCtxReceived context)
+                    |> step (CreateAdHoc.AdHocLogCompleted (Ok adHocLog))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (CreateAdHoc.LogCreated adHocLog)
+                        )
         ]
 
 
-
--- PROJECTIONS
-
-
-type alias AdHocPayload =
-    { name : String, amount : String, nutrients : List String }
-
-
-adHocPayload : CreateAdHoc.OutMsg -> Maybe AdHocPayload
-adHocPayload outMsg =
-    case outMsg of
-        CreateAdHoc.RequestAdHocLog request ->
-            Just
-                { name = request.name
-                , amount = request.quantity.amount
-                , nutrients = List.map .code request.nutrients
-                }
-
-        _ ->
-            Nothing
-
-
-requestDefaultUnit : CreateAdHoc.OutMsg -> Maybe String
-requestDefaultUnit outMsg =
-    case outMsg of
-        CreateAdHoc.RequestCreateFood request ->
-            request.defaultUnit
-
-        _ ->
-            Nothing
-
-
-requestProductId : CreateAdHoc.OutMsg -> Maybe String
-requestProductId outMsg =
-    case outMsg of
-        CreateAdHoc.RequestProductLog request ->
-            Just request.item.id
-
-        _ ->
-            Nothing
-
-
-savedProductId : CreateAdHoc.Model -> Maybe String
-savedProductId model =
-    case model.submit of
-        CreateAdHoc.LoggingSavedFood productId ->
-            Just productId
-
-        CreateAdHoc.LogFailedAfterFoodSaved saved ->
-            Just saved.productId
-
-        _ ->
-            Nothing
-
-
-submitError : CreateAdHoc.Model -> Maybe String
-submitError model =
-    case model.submit of
-        CreateAdHoc.SubmitFailed message ->
-            Just message
-
-        CreateAdHoc.LogFailedAfterFoodSaved saved ->
-            Just saved.message
-
-        _ ->
-            Nothing
-
-
-step : CreateAdHoc.Msg -> CreateAdHoc.Model -> CreateAdHoc.Model
-step msg model =
-    first (CreateAdHoc.update msg model)
-
-
-out : CreateAdHoc.Msg -> CreateAdHoc.Model -> CreateAdHoc.OutMsg
-out msg model =
-    third (CreateAdHoc.update msg model)
-
-
-validModel : CreateAdHoc.Model
-validModel =
+stepWithOut :
+    CreateAdHoc.Msg
+    -> CreateAdHoc.Model
+    -> ( CreateAdHoc.Model, CreateAdHoc.OutMsg )
+stepWithOut msg model =
     let
-        model : CreateAdHoc.Model
-        model =
-            CreateAdHoc.init (Just (date "2026-09-14")) Nothing
-
-        form : Editor.FormModel
-        form =
-            model.form
+        ( next, _, outMsg ) =
+            CreateAdHoc.update msg model
     in
-    { model
-        | form =
-            { form
-                | name = "Paneer wrap"
-                , nutrients =
-                    [ { code = "ENERGY_KCAL", amount = "520", unit = "kcal" }
-                    , { code = "PROTEIN_G", amount = "24", unit = "g" }
-                    , { code = "CARBS_G", amount = "48", unit = "g" }
-                    , { code = "FAT_G", amount = "25", unit = "g" }
-                    ]
-            }
+    ( next, outMsg )
+
+
+
+-- STORY PIPELINE
+
+
+type alias Journey =
+    Story.Journey CreateAdHoc.Model CreateAdHoc.OutMsg
+
+
+step : CreateAdHoc.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+finish :
+    (( CreateAdHoc.Model, CreateAdHoc.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+prepared : Journey
+prepared =
+    Story.start
+        ( CreateAdHoc.init (Just ReviewStory.day) (Just Lunch)
+            |> stepModel (CreateAdHoc.UnitsLoaded (Ok { items = ReviewStory.units }))
+            |> stepModel (CreateAdHoc.NutrientsLoaded (Ok { items = ReviewStory.catalog }))
+            |> runSteps stepModel ReviewStory.fillNutrients
+        , CreateAdHoc.NoOp
+        )
+
+
+blankDate : Journey
+blankDate =
+    Story.start
+        ( CreateAdHoc.init Nothing Nothing
+            |> stepModel (CreateAdHoc.UnitsLoaded (Ok { items = ReviewStory.units }))
+            |> stepModel (CreateAdHoc.NutrientsLoaded (Ok { items = ReviewStory.catalog }))
+            |> runSteps stepModel ReviewStory.fillNutrients
+        , CreateAdHoc.NoOp
+        )
+
+
+stepModel : CreateAdHoc.Msg -> CreateAdHoc.Model -> CreateAdHoc.Model
+stepModel msg model =
+    Fixtures.tupleFirst (CreateAdHoc.update msg model)
+
+
+runSteps : (msg -> model -> model) -> List msg -> model -> model
+runSteps =
+    Story.runSteps
+
+
+context : LocalCtx
+context =
+    { date = Fixtures.date "2026-09-16", timezone = "Asia/Kolkata" }
+
+
+adHocLog : FoodLog
+adHocLog =
+    { id = "log-1"
+    , logDate = ReviewStory.day
+    , deviceTimezone = Nothing
+    , mealSlot = Just Lunch
+    , item = FoodLog.AdHocLogItem { name = "Paneer wrap", brand = Nothing }
+    , quantity = { amount = "1", unit = "serving" }
+    , nutrients =
+        [ { code = "ENERGY_KCAL", amount = "520", unit = "kcal" }
+        , { code = "PROTEIN_G", amount = "24", unit = "g" }
+        , { code = "CARBS_G", amount = "48", unit = "g" }
+        , { code = "FAT_G", amount = "25", unit = "g" }
+        ]
+    , notes = Nothing
     }
 
 
-saveModel : CreateAdHoc.Model
-saveModel =
-    validModel
-        |> step (CreateAdHoc.FormMsg Editor.LogPersistenceToggled)
-        |> step (CreateAdHoc.FormMsg (Editor.PortionWeightChanged "160"))
-
-
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
-
-
-date : String -> LocalDate
-date raw =
-    case LocalDate.fromString raw of
-        Just value ->
-            value
-
-        Nothing ->
-            case LocalDate.fromParts 1970 1 1 of
-                Just fallback ->
-                    fallback
-
-                Nothing ->
-                    date raw
+productLog : FoodLog
+productLog =
+    { adHocLog
+        | id = "log-2"
+        , item =
+            FoodLog.ProductLogItem
+                { id = "food-1", name = "Paneer wrap", brand = Nothing }
+    }

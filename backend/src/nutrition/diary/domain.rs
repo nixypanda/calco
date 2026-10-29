@@ -69,3 +69,15 @@ pub trait DiaryPrefsRepo: Send + Sync {
 
     async fn save(&self, prefs: &DiaryPrefs) -> Result<(), NutritionError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enabled_meal_slots_rejects_empty() {
+        let result = EnabledMealSlots::new(std::iter::empty());
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+}

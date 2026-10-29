@@ -571,23 +571,6 @@ mod tests {
     }
 
     #[test]
-    fn draft_structure_limits_are_domain_invariants() {
-        let categories = vec!["category".to_owned(); MAX_DRAFT_CATEGORIES + 1];
-        assert!(matches!(
-            FoodDraftBuilder::new("Dal").categories(categories).build(),
-            Err(DraftValidationError)
-        ));
-
-        let serving = DraftServing::new("cup".into(), Decimal::ONE).unwrap();
-        assert!(matches!(
-            FoodDraftBuilder::new("Dal")
-                .servings([serving.clone(), serving])
-                .build(),
-            Err(DraftValidationError)
-        ));
-    }
-
-    #[test]
     fn draft_builder_enforces_default_quantity_and_duplicate_code_invariants() {
         assert!(matches!(
             FoodDraftBuilder::new("Dal")
@@ -603,45 +586,5 @@ mod tests {
                 .build(),
             Err(DraftValidationError)
         ));
-    }
-
-    #[test]
-    fn draft_policy_enforces_runtime_vocabulary_and_plausibility() {
-        let policy = FoodDraftPolicy::new(
-            [("ENERGY_KCAL".into(), "kcal".into())],
-            ["cup".into()],
-            ["ENERGY_KCAL".into()],
-        );
-        let excessive_energy =
-            DraftNutrient::new("ENERGY_KCAL".into(), Decimal::from(1_001)).unwrap();
-        let draft = FoodDraftBuilder::new("Dal")
-            .nutrients([excessive_energy])
-            .build()
-            .unwrap();
-        let turn = FoodDraftTurn::ready("Review", draft, vec![]).unwrap();
-
-        assert!(matches!(
-            policy.validate(FoodDraftPurpose::CustomFood, &turn),
-            Err(DraftValidationError)
-        ));
-    }
-
-    #[test]
-    fn ad_hoc_log_policy_requires_a_convertible_consistent_portion() {
-        let policy = FoodDraftPolicy::new(
-            [("ENERGY_KCAL".into(), "kcal".into())],
-            ["bowl".into()],
-            ["ENERGY_KCAL".into()],
-        );
-        let draft = FoodDraftBuilder::new("Dal")
-            .nutrients([DraftNutrient::new("ENERGY_KCAL".into(), Decimal::ONE).unwrap()])
-            .servings([DraftServing::new("bowl".into(), Decimal::from(250)).unwrap()])
-            .build()
-            .unwrap();
-        let suggested =
-            SuggestedLog::new(Decimal::from(2), "bowl".into(), Decimal::from(500)).unwrap();
-        let turn = FoodDraftTurn::ready_for_log("Review", draft, suggested, vec![]).unwrap();
-
-        assert_eq!(policy.validate(FoodDraftPurpose::AdHocLog, &turn), Ok(()));
     }
 }

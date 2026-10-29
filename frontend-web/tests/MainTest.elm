@@ -1,88 +1,220 @@
 module MainTest exposing (tests)
 
+{-| Laws for the device-class decision and the chrome navigation rewrite.
+
+Width classification is one full-range property: every width has exactly one
+class according to the documented breakpoints. The 1439/1440 workspace boundary
+is asserted deterministically inside that property, not as a separate example.
+
+-}
+
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
-import Element
-import Expect
-import Lib.Date as LocalDate exposing (LocalDate)
+import Element exposing (DeviceClass(..), Orientation(..))
+import Expect exposing (Expectation)
+import Fuzz exposing (Fuzzer)
 import Main
-import Test exposing (Test, describe, test)
+import Support.Fuzz as FuzzSupport
+import Test exposing (Test, describe, fuzz, fuzz2, fuzz3)
 
 
 tests : Test
 tests =
     describe "Main"
-        [ normalizeChromeNavigationTests
-        , reclassifyDeviceTests
+        [ describe "classifyDevice"
+            [ fullWidthRange
+            , classDependsOnlyOnWidth
+            , orientationLaw
+            ]
+        , describe "reclassifyDevice"
+            [ reclassifyLaw ]
+        , describe "normalizeChromeNavigation"
+            [ genericSearchNavigation
+            , navigationIsUnchangedOtherwise
+            ]
         ]
 
 
-reclassifyDeviceTests : Test
-reclassifyDeviceTests =
-    describe "Main.reclassifyDevice"
-        [ test "reports a resize that crosses into another device class" <|
-            \_ ->
-                Main.reclassifyDevice 1500
-                    800
-                    (Main.classifyDevice 420 900)
-                    |> Expect.equal
-                        (Just (Main.classifyDevice 1500 800))
-        , test "reports a resize that only flips orientation" <|
-            \_ ->
-                Main.reclassifyDevice 550
-                    400
-                    (Main.classifyDevice 500 900)
-                    |> Expect.equal
-                        (Just (Main.classifyDevice 550 400))
-        , test "does not change class when only height crosses an elm-ui breakpoint" <|
-            \_ ->
-                Main.reclassifyDevice 1000
-                    700
-                    (Main.classifyDevice 1000 500)
-                    |> Expect.equal Nothing
-        , test "uses the safe workspace width as the desktop breakpoint" <|
-            \_ ->
-                ( Main.classifyDevice 1439 900 |> .class
-                , Main.classifyDevice 1440 900 |> .class
+fullWidthRange : Test
+fullWidthRange =
+    fuzz widthFuzzer "every width maps to exactly one device class" <|
+        \widthValue ->
+            Expect.all
+                [ \_ ->
+                    Main.classifyDevice widthValue 900
+                        |> .class
+                        |> Expect.equal (expectedClass widthValue)
+                , \_ -> boundaryCases |> List.map boundaryExpectation |> expectAll
+                ]
+                ()
+
+
+boundaryCases : List ( Int, DeviceClass )
+boundaryCases =
+    [ ( 599, Phone )
+    , ( 600, Tablet )
+    , ( 1439, Tablet )
+    , ( 1440, Desktop )
+    , ( 1920, Desktop )
+    , ( 1921, BigDesktop )
+    ]
+
+
+boundaryExpectation : ( Int, DeviceClass ) -> Expectation
+boundaryExpectation ( widthValue, expected ) =
+    Main.classifyDevice widthValue 900
+        |> .class
+        |> Expect.equal expected
+        |> Expect.onFail ("width " ++ String.fromInt widthValue)
+
+
+expectedClass : Int -> DeviceClass
+expectedClass widthValue =
+    if widthValue < 600 then
+        Phone
+
+    else if widthValue < 1440 then
+        Tablet
+
+    else if widthValue <= 1920 then
+        Desktop
+
+    else
+        BigDesktop
+
+
+classDependsOnlyOnWidth : Test
+classDependsOnlyOnWidth =
+    fuzz3 widthFuzzer
+        heightFuzzer
+        heightFuzzer
+        "the device class depends only on width, not height"
+        (\widthValue firstHeight secondHeight ->
+            (Main.classifyDevice widthValue firstHeight |> .class)
+                |> Expect.equal (Main.classifyDevice widthValue secondHeight |> .class)
+        )
+
+
+orientationLaw : Test
+orientationLaw =
+    fuzz2 widthFuzzer
+        heightFuzzer
+        "orientation is portrait exactly when width is less than height"
+        (\widthValue heightValue ->
+            ((Main.classifyDevice widthValue heightValue |> .orientation) == Portrait)
+                |> Expect.equal (widthValue < heightValue)
+        )
+
+
+{-| The full two-branch law: a changed classification is returned as `Just` the
+new device, and reclassifying the current classification is a no-op.
+-}
+reclassifyLaw : Test
+reclassifyLaw =
+    fuzz3 widthFuzzer
+        heightFuzzer
+        FuzzSupport.device
+        "reclassify returns Just the new device exactly when it differs"
+        (\widthValue heightValue current ->
+            let
+                next : Element.Device
+                next =
+                    Main.classifyDevice widthValue heightValue
+            in
+            Expect.all
+                [ \_ ->
+                    Main.reclassifyDevice widthValue heightValue current
+                        |> Expect.equal
+                            (if next == current then
+                                Nothing
+
+                             else
+                                Just next
+                            )
+                , \_ ->
+                    Main.reclassifyDevice widthValue heightValue next
+                        |> Expect.equal Nothing
+                ]
+                ()
+        )
+
+
+genericSearchNavigation : Test
+genericSearchNavigation =
+    fuzz routeFuzzer
+        "a generic food search inherits a date only from a dated diary page"
+        (\current ->
+            let
+                expected : Route
+                expected =
+                    case current of
+                        DiaryDay (Just date) _ ->
+                            FoodSearch (Just date) Nothing
+
+                        _ ->
+                            FoodSearch Nothing Nothing
+            in
+            Main.normalizeChromeNavigation current (FoodSearch Nothing Nothing)
+                |> Expect.equal expected
+        )
+
+
+{-| The converse half of the rewrite law: every target other than the generic
+`FoodSearch Nothing Nothing` is left untouched, whatever the current route.
+-}
+navigationIsUnchangedOtherwise : Test
+navigationIsUnchangedOtherwise =
+    fuzz2 routeFuzzer
+        navigableTarget
+        "navigation is unchanged unless a dated diary page targets a generic search"
+        (\current target ->
+            Main.normalizeChromeNavigation current target
+                |> Expect.equal target
+        )
+
+
+{-| Any target except the generic `FoodSearch Nothing Nothing`, which is the one
+route a chrome navigation rewrites. Mapping the excluded case avoids
+`Fuzz.filter` retries and keeps the law total.
+-}
+navigableTarget : Fuzzer Route
+navigableTarget =
+    Fuzz.oneOf
+        [ routeFuzzer
+            |> Fuzz.map
+                (\target ->
+                    case target of
+                        FoodSearch Nothing Nothing ->
+                            FoodSearch Nothing (Just Lunch)
+
+                        _ ->
+                            target
                 )
-                    |> Expect.equal ( Element.Tablet, Element.Desktop )
+        , Fuzz.map (\slot -> FoodSearch Nothing (Just slot)) FuzzSupport.mealSlot
         ]
 
 
-normalizeChromeNavigationTests : Test
-normalizeChromeNavigationTests =
-    describe "Main.normalizeChromeNavigation"
-        [ test "adds current diary date to generic food search navigation" <|
-            \_ ->
-                Main.normalizeChromeNavigation
-                    (DiaryDay (Just (date "2026-05-29")) Nothing)
-                    (FoodSearch Nothing Nothing)
-                    |> Expect.equal (FoodSearch (Just (date "2026-05-29")) Nothing)
-        , test "leaves generic food search unchanged without a diary date" <|
-            \_ ->
-                Main.normalizeChromeNavigation
-                    (DiaryDay Nothing Nothing)
-                    (FoodSearch Nothing Nothing)
-                    |> Expect.equal (FoodSearch Nothing Nothing)
-        , test "leaves explicit food search context unchanged" <|
-            \_ ->
-                Main.normalizeChromeNavigation
-                    (DiaryDay (Just (date "2026-05-29")) Nothing)
-                    (FoodSearch (Just (date "2026-06-01")) (Just Lunch))
-                    |> Expect.equal (FoodSearch (Just (date "2026-06-01")) (Just Lunch))
+routeFuzzer : Fuzzer Route
+routeFuzzer =
+    Fuzz.oneOf [ FuzzSupport.route, Fuzz.constant NotFound ]
+
+
+widthFuzzer : Fuzzer Int
+widthFuzzer =
+    Fuzz.frequency
+        [ ( 4, Fuzz.intRange 0 100000 )
+        , ( 1, Fuzz.oneOfValues [ 0, 599, 600, 1439, 1440, 1920, 1921, 100000 ] )
         ]
 
 
-date : String -> LocalDate
-date raw =
-    case LocalDate.fromString raw of
-        Just value ->
-            value
+heightFuzzer : Fuzzer Int
+heightFuzzer =
+    Fuzz.frequency
+        [ ( 4, Fuzz.intRange 0 100000 )
+        , ( 1, Fuzz.oneOfValues [ 0, 1, 599, 600, 1439, 1440, 1920, 1921, 100000 ] )
+        ]
 
-        Nothing ->
-            case LocalDate.fromParts 1970 1 1 of
-                Just fallback ->
-                    fallback
 
-                Nothing ->
-                    date raw
+expectAll : List Expectation -> Expectation
+expectAll expectations =
+    Expect.all (List.map (\expectation _ -> expectation) expectations) ()

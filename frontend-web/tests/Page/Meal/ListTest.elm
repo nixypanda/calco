@@ -5,86 +5,50 @@ import Api.Meals exposing (Meal)
 import Data.Route exposing (Route(..))
 import Expect
 import Page.Meal.List as MealList
+import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
-
-
-networkErrorMessage : String
-networkErrorMessage =
-    "Could not reach the server. Check your connection and try again."
-
-
-unauthorized : Client.ApiError
-unauthorized =
-    Client.BadStatus 401 "unauthorized" "Sign in again"
 
 
 tests : Test
 tests =
     describe "Page.Meal.List"
-        [ test "loading the meal list requests meals and renders each meal summary" <|
+        [ test "a loaded list opens a meal" <|
             \_ ->
-                let
-                    loaded : MealList.Model
-                    loaded =
-                        step
-                            (MealList.MealsLoaded (Ok { items = [ mealWithNotes ] }))
-                            (Tuple.first MealList.init)
-                in
-                { initial = Tuple.second MealList.init
-                , phase = toScreen loaded |> .phase
-                , summaries = toScreen loaded |> .summaries
-                }
-                    |> Expect.equal
-                        { initial = MealList.RequestMeals
-                        , phase = "loaded"
-                        , summaries = [ "420 kcal ⋅ 0 components" ]
-                        }
-        , test "a failed meal list load shows the error and a 401 expires the session" <|
+                loadedList
+                    |> step (MealList.OpenMealClicked "meal-1")
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg
+                                |> Expect.equal (MealList.Navigate (MealShow "meal-1"))
+                        )
+        , test "a loaded list starts meal creation" <|
             \_ ->
-                let
-                    loading : MealList.Model
-                    loading =
-                        Tuple.first MealList.init
-
-                    failed : MealList.Model
-                    failed =
-                        step (MealList.MealsLoaded (Err Client.NetworkError)) loading
-                in
-                { phase = toScreen failed |> .phase
-                , error = toScreen failed |> .error
-                , unauthorized = out (MealList.MealsLoaded (Err unauthorized)) loading
-                }
-                    |> Expect.equal
-                        { phase = "failed"
-                        , error = Just networkErrorMessage
-                        , unauthorized = MealList.SessionExpired
-                        }
-        , test "list actions navigate to detail, create, and back to the diary" <|
+                loadedList
+                    |> step MealList.CreateMealClicked
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg
+                                |> Expect.equal (MealList.Navigate MealCreate)
+                        )
+        , test "a failed load shows the error" <|
             \_ ->
-                let
-                    loading : MealList.Model
-                    loading =
-                        Tuple.first MealList.init
-                in
-                { open = out (MealList.OpenMealClicked "meal-1") loading
-                , create = out MealList.CreateMealClicked loading
-                , back = out MealList.BackClicked loading
-                }
-                    |> Expect.equal
-                        { open = MealList.Navigate (MealShow "meal-1")
-                        , create = MealList.Navigate MealCreate
-                        , back = MealList.Navigate (DiaryDay Nothing Nothing)
-                        }
+                MealList.init
+                    |> Story.start
+                    |> step (MealList.MealsLoaded (Err Client.NetworkError))
+                    |> finish
+                        (\( model, _ ) ->
+                            toScreen model
+                                |> Expect.equal
+                                    { names = []
+                                    , error = Just Fixtures.networkErrorMessage
+                                    }
+                        )
         ]
 
 
-
--- SCREEN PROJECTION
-
-
 type alias Screen =
-    { phase : String
-    , summaries : List String
+    { names : List String
     , error : Maybe String
     }
 
@@ -93,63 +57,87 @@ toScreen : MealList.Model -> Screen
 toScreen model =
     case model of
         MealList.Loaded meals ->
-            { phase = "loaded"
-            , summaries = List.map MealList.mealSummaryText meals
-            , error = Nothing
-            }
+            { names = List.map .name meals, error = Nothing }
 
         MealList.LoadFailed message ->
-            { phase = "failed"
-            , summaries = []
-            , error = Just message
-            }
+            { names = [], error = Just message }
 
         MealList.Loading ->
-            { phase = "loading"
-            , summaries = []
-            , error = Nothing
-            }
+            { names = [], error = Nothing }
+
+
+stepWithOut :
+    MealList.Msg
+    -> MealList.Model
+    -> ( MealList.Model, MealList.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            MealList.update msg model
+    in
+    ( next, outMsg )
 
 
 
--- HELPERS
+-- STORY PIPELINE
 
 
-step : MealList.Msg -> MealList.Model -> MealList.Model
-step msg model =
-    first (MealList.update msg model)
+type alias Journey =
+    Story.Journey MealList.Model MealList.OutMsg
 
 
-out : MealList.Msg -> MealList.Model -> MealList.OutMsg
-out msg model =
-    third (MealList.update msg model)
+step : MealList.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
 
 
-mealWithNotes : Meal
-mealWithNotes =
+finish :
+    (( MealList.Model, MealList.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+loadedList : Journey
+loadedList =
+    MealList.init
+        |> Story.start
+        |> step (MealList.MealsLoaded (Ok { items = [ lunchMeal, sideMeal ] }))
+
+
+lunchMeal : Meal
+lunchMeal =
     { id = "meal-1"
     , name = "Lunch"
-    , notes = Just "Prep on Sunday"
+    , notes = Nothing
     , totalQuantity = Nothing
     , nutritionSummary =
         Just
             { energyKcal = Just "420"
-            , proteinG = Nothing
-            , carbsG = Nothing
-            , fatG = Nothing
+            , proteinG = Just "35"
+            , carbsG = Just "45"
+            , fatG = Just "12"
             , fiberG = Nothing
             }
     , components = []
-    , createdAt = "now"
-    , updatedAt = "now"
+    , createdAt = "2026-08-18T10:00:00Z"
+    , updatedAt = "2026-08-18T10:00:00Z"
     }
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
+sideMeal : Meal
+sideMeal =
+    { lunchMeal
+        | id = "meal-2"
+        , name = "Side salad"
+        , nutritionSummary =
+            Just
+                { energyKcal = Just "180"
+                , proteinG = Nothing
+                , carbsG = Nothing
+                , fatG = Nothing
+                , fiberG = Nothing
+                }
+        , components = []
+    }

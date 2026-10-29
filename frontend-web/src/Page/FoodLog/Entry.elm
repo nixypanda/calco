@@ -13,7 +13,6 @@ module Page.FoodLog.Entry exposing
     , loadId
     , modalView
     , modelId
-    , nutrientsForDisplay
     , update
     )
 

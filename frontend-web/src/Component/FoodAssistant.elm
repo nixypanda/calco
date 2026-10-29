@@ -10,7 +10,6 @@ module Component.FoodAssistant exposing
     , init
     , modalView
     , previewUrls
-    , removeAt
     , update
     , updateFor
     , validatePhotoMeta

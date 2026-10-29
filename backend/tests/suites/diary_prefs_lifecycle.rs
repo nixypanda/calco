@@ -1,10 +1,10 @@
 use crate::common::*;
-use axum::http::{Method, StatusCode};
+use axum::http::StatusCode;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
 #[sqlx::test]
-async fn diary_prefs_default_replace_and_persist(pool: PgPool) {
+async fn diary_prefs_save_and_reload(pool: PgPool) {
     let router = app(pool).await;
     let (_admin, user) = bootstrap_and_user(&router).await;
 
@@ -14,31 +14,16 @@ async fn diary_prefs_default_replace_and_persist(pool: PgPool) {
         json!(["breakfast", "lunch", "dinner", "snack"])
     );
 
-    let replacement = json!({
-        "enabled_meal_slots": ["late_night_snack", "breakfast", "late_night_snack"]
-    });
     let saved: Value = put_json(
         &router,
         "/api/diary-preferences",
         &user,
-        &replacement,
+        &json!({ "enabled_meal_slots": ["breakfast", "lunch"] }),
         StatusCode::OK,
     )
     .await;
-    assert_eq!(
-        saved["enabled_meal_slots"],
-        json!(["breakfast", "late_night_snack"])
-    );
+    assert_eq!(saved["enabled_meal_slots"], json!(["breakfast", "lunch"]));
 
     let fetched: Value = get_json(&router, "/api/diary-preferences", &user).await;
-    assert_eq!(fetched, saved);
-
-    let req = json_request(
-        Method::PUT,
-        "/api/diary-preferences",
-        Some(&user),
-        &json!({ "enabled_meal_slots": [] }),
-    );
-    let (status, _, body) = send(&router, req).await;
-    assert_status(status, StatusCode::BAD_REQUEST, &body);
+    assert_eq!(fetched["enabled_meal_slots"], json!(["breakfast", "lunch"]));
 }

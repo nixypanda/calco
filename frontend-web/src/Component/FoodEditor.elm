@@ -25,7 +25,6 @@ module Component.FoodEditor exposing
     , emptyLogForm
     , foodLogFields
     , fromProductDetail
-    , hasManualInput
     , isSubmitting
     , logPortionWeight
     , toAdHocLogRequest
@@ -593,26 +592,6 @@ logPortionWeight form =
             Nothing
 
 
-hasManualInput : FormModel -> Bool
-hasManualInput form =
-    List.any (not << String.isEmpty << String.trim)
-        [ form.name, form.brand, form.categoryInput.query, form.defaultQuantity ]
-        || not (List.isEmpty form.categoryInput.selected)
-        || not (String.isEmpty (String.trim form.defaultUnit))
-        || List.any
-            (\row ->
-                not (String.isEmpty (String.trim row.code))
-                    || not (String.isEmpty (String.trim row.amount))
-            )
-            form.nutrients
-        || List.any
-            (\row ->
-                not (String.isEmpty (String.trim row.gramsPerUnit))
-                    || not (String.isEmpty (String.trim row.unit))
-            )
-            form.servings
-
-
 
 -- UPDATE
 
@@ -623,7 +602,6 @@ type Msg
     | DefaultQuantityChanged String
     | DefaultUnitChanged String
     | ToggleDefaultUnitDropdown
-    | NutrientsLoaded (List NutrientItem)
     | CategoryQueryChanged String
     | AddCategory String
     | RemoveCategory String
@@ -1156,9 +1134,6 @@ update msg formIn =
             , Cmd.none
             , NoOutMsg
             )
-
-        NutrientsLoaded items ->
-            ( withNutrientCatalog items form, Cmd.none, NoOutMsg )
 
         CategoryQueryChanged value ->
             let

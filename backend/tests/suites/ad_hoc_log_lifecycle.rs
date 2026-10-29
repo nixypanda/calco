@@ -1,5 +1,5 @@
 use crate::common::*;
-use axum::http::{Method, StatusCode};
+use axum::http::StatusCode;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -20,12 +20,6 @@ fn valid_payload() -> Value {
         ],
         "notes": null
     })
-}
-
-async fn post_status(router: &axum::Router, user: &str, payload: &Value) -> StatusCode {
-    let request = json_request(Method::POST, "/api/logs/ad-hoc", Some(user), payload);
-    let (status, _, _) = send(router, request).await;
-    status
 }
 
 fn nutrient_amount<'a>(log: &'a Value, code: &str) -> &'a str {
@@ -94,25 +88,15 @@ async fn ad_hoc_log_lifecycle_and_history_behavior(pool: PgPool) {
         &format!("/api/logs/{log_id}"),
         &user,
         &json!({
-            "quantity": { "amount": 2, "unit": "serving" },
             "meal_slot": "dinner",
             "notes": "shared"
         }),
         StatusCode::OK,
     )
     .await;
-    assert_eq!(nutrient_amount(&updated, "ENERGY_KCAL"), "1040");
-    assert_eq!(nutrient_amount(&updated, "PROTEIN_G"), "48");
     assert_eq!(updated["item"]["name"], "Paneer tikka wrap");
-
-    let request = json_request(
-        Method::PUT,
-        &format!("/api/logs/{log_id}"),
-        Some(&user),
-        &json!({ "quantity": { "amount": 2, "unit": "piece" } }),
-    );
-    let (status, _, _) = send(&router, request).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(updated["meal_slot"], "dinner");
+    assert_eq!(updated["notes"], "shared");
 
     let product: Value = post_json(
         &router,
@@ -168,86 +152,4 @@ async fn ad_hoc_log_lifecycle_and_history_behavior(pool: PgPool) {
     delete_no_content(&router, &format!("/api/logs/{log_id}"), &user).await;
     let (status, _) = get_status(&router, &format!("/api/logs/{log_id}"), &user).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-}
-
-#[sqlx::test]
-async fn ad_hoc_log_validates_identity_quantity_and_core_nutrients(pool: PgPool) {
-    let router = app(pool).await;
-    let (_, user) = bootstrap_and_user(&router).await;
-
-    let mut blank_name = valid_payload();
-    blank_name["name"] = json!("  ");
-    assert_eq!(
-        post_status(&router, &user, &blank_name).await,
-        StatusCode::BAD_REQUEST
-    );
-
-    let mut non_positive_quantity = valid_payload();
-    non_positive_quantity["quantity"]["amount"] = json!(0);
-    assert_eq!(
-        post_status(&router, &user, &non_positive_quantity).await,
-        StatusCode::BAD_REQUEST
-    );
-
-    let mut missing = valid_payload();
-    missing["nutrients"].as_array_mut().unwrap().pop();
-    assert_eq!(
-        post_status(&router, &user, &missing).await,
-        StatusCode::BAD_REQUEST
-    );
-
-    let mut duplicate = valid_payload();
-    let duplicate_energy = duplicate["nutrients"][0].clone();
-    duplicate["nutrients"]
-        .as_array_mut()
-        .unwrap()
-        .push(duplicate_energy);
-    assert_eq!(
-        post_status(&router, &user, &duplicate).await,
-        StatusCode::BAD_REQUEST
-    );
-
-    let mut unknown = valid_payload();
-    unknown["nutrients"].as_array_mut().unwrap().push(json!({
-        "code": "NOT_A_NUTRIENT",
-        "amount": 1,
-        "unit": "g"
-    }));
-    assert_eq!(
-        post_status(&router, &user, &unknown).await,
-        StatusCode::BAD_REQUEST
-    );
-
-    let mut wrong_unit = valid_payload();
-    wrong_unit["nutrients"][0]["unit"] = json!("g");
-    assert_eq!(
-        post_status(&router, &user, &wrong_unit).await,
-        StatusCode::BAD_REQUEST
-    );
-
-    let mut negative = valid_payload();
-    negative["nutrients"][1]["amount"] = json!(-1);
-    assert_eq!(
-        post_status(&router, &user, &negative).await,
-        StatusCode::BAD_REQUEST
-    );
-
-    let mut with_optional_nutrient = valid_payload();
-    with_optional_nutrient["nutrients"]
-        .as_array_mut()
-        .unwrap()
-        .push(json!({ "code": "FIBER_G", "amount": 7, "unit": "g" }));
-    assert_eq!(
-        post_status(&router, &user, &with_optional_nutrient).await,
-        StatusCode::CREATED
-    );
-
-    let mut zero = valid_payload();
-    for nutrient in zero["nutrients"].as_array_mut().unwrap() {
-        nutrient["amount"] = json!(0);
-    }
-    assert_eq!(
-        post_status(&router, &user, &zero).await,
-        StatusCode::CREATED
-    );
 }

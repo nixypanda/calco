@@ -743,6 +743,9 @@ fn category_tier(kind: MatchKind) -> CategoryTier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use rstest::rstest;
+    use std::collections::HashSet;
     use uuid::Uuid;
 
     fn matcher(threshold: f64) -> TextMatcher {
@@ -812,48 +815,26 @@ mod tests {
         ProductId(Uuid::from_u128(value))
     }
 
-    #[test]
-    fn normalize_trims_lowercases_and_collapses_whitespace() {
+    #[rstest]
+    #[case::exact("greek yogurt", "  Greek   Yogurt ", Some(MatchKind::Exact))]
+    #[case::prefix("greek", "Greek Yogurt", Some(MatchKind::Prefix))]
+    #[case::substring("yog", "Greek Yogurt", Some(MatchKind::Substring))]
+    #[case::fuzzy("yogrt", "yogurt", Some(MatchKind::Fuzzy))]
+    #[case::rejected("zzzz", "Greek Yogurt", None)]
+    fn match_value_classifies_exact_prefix_substring_fuzzy_and_rejected(
+        #[case] query: &str,
+        #[case] value: &str,
+        #[case] expected_kind: Option<MatchKind>,
+    ) {
         let matcher = TextMatcher::default();
 
-        assert_eq!(
-            matcher.normalize("  Greek \t  Yogurt\n").as_str(),
-            "greek yogurt"
-        );
+        let matched = matcher.match_value(&matcher.normalize(query), value);
+
+        assert_eq!(matched.map(|matched| matched.kind), expected_kind);
     }
 
     #[test]
-    fn match_value_classifies_exact_prefix_substring_fuzzy_and_rejected() {
-        let matcher = TextMatcher::default();
-
-        let exact = matcher
-            .match_value(&matcher.normalize("greek yogurt"), "  Greek   Yogurt ")
-            .unwrap();
-        assert_eq!(exact.kind, MatchKind::Exact);
-
-        let prefix = matcher
-            .match_value(&matcher.normalize("greek"), "Greek Yogurt")
-            .unwrap();
-        assert_eq!(prefix.kind, MatchKind::Prefix);
-
-        let substring = matcher
-            .match_value(&matcher.normalize("yog"), "Greek Yogurt")
-            .unwrap();
-        assert_eq!(substring.kind, MatchKind::Substring);
-
-        let fuzzy = matcher
-            .match_value(&matcher.normalize("yogrt"), "yogurt")
-            .unwrap();
-        assert_eq!(fuzzy.kind, MatchKind::Fuzzy);
-
-        assert_eq!(
-            matcher.match_value(&matcher.normalize("zzzz"), "Greek Yogurt"),
-            None
-        );
-    }
-
-    #[test]
-    fn fuzzy_threshold_is_enforced_and_similarity_is_bounded() {
+    fn fuzzy_threshold_is_enforced() {
         let strict = matcher(0.99);
         assert_eq!(
             strict.match_value(&strict.normalize("yogrt"), "yogurt"),
@@ -868,30 +849,23 @@ mod tests {
                 .kind,
             MatchKind::Exact
         );
-
-        assert_eq!(Similarity::new(-1.0).value(), 0.0);
-        assert_eq!(Similarity::new(2.0).value(), 1.0);
-        assert_eq!(Similarity::new(f64::NAN).value(), 0.0);
-        assert_eq!(Similarity::new(0.25).value(), 0.25);
-        assert_eq!(Similarity::default().value(), 0.0);
-        assert_eq!(
-            Similarity::new(0.25).total_cmp(&Similarity::new(0.5)),
-            Ordering::Less
-        );
     }
 
-    #[test]
-    fn fuzzy_threshold_rejects_invalid_values() {
-        for value in [f64::NAN, -0.1, 1.1, f64::INFINITY, f64::NEG_INFINITY] {
-            assert!(
-                FuzzyThreshold::new(value).is_none(),
-                "expected {value} to be rejected"
-            );
-        }
+    #[rstest]
+    #[case::lower_boundary(Some(0.0), 0.0)]
+    #[case::upper_boundary(Some(1.0), 1.0)]
+    #[case::default(None, DEFAULT_FUZZY_THRESHOLD)]
+    fn fuzzy_threshold_accepts_valid_boundaries_and_default(
+        #[case] value: Option<f64>,
+        #[case] expected: f64,
+    ) {
+        let threshold = match value {
+            Some(value) => FuzzyThreshold::new(value).expect("boundary must be valid"),
+            // `None` exercises the `Default` impl rather than `new`.
+            None => FuzzyThreshold::default(),
+        };
 
-        assert_eq!(FuzzyThreshold::default().value(), DEFAULT_FUZZY_THRESHOLD);
-        assert_eq!(FuzzyThreshold::new(0.0).unwrap().value(), 0.0);
-        assert_eq!(FuzzyThreshold::new(1.0).unwrap().value(), 1.0);
+        assert_eq!(threshold.value(), expected);
     }
 
     #[test]
@@ -915,92 +889,40 @@ mod tests {
         assert_similarity_eq(matched.similarity.value(), forward.value());
     }
 
-    #[test]
-    fn rust_fuzzy_search_scores_match_documented_goldens() {
+    #[rstest]
+    #[case::chese_cheese_cube("chese", "Cheese Cube", 0.8333)]
+    #[case::chese_chase("chese", "Chase", 0.5)]
+    #[case::milk_almond_almond_milk("milk almond", "Almond Milk", 0.8333)]
+    #[case::yoghurt_greek_yogurt("yoghurt", "Greek Yogurt", 0.5)]
+    #[case::chiken_chicken_breast("chiken", "Chicken Breast", 0.7143)]
+    #[case::chiken_grilled_chicken_breast("chiken", "Grilled Chicken Breast", 0.5714)]
+    #[case::vegtable_other_vegetables("vegtable", "other-vegetables", 0.4444)]
+    #[case::cheese_chess("cheese", "chess", 0.4286)]
+    #[case::coke_cookies("coke", "Cookies", 0.4)]
+    #[case::rice_rce("rice", "rce", 0.4)]
+    #[case::almnd_salmon("almnd", "Salmon", 0.1667)]
+    #[case::granila_rani("granila", "Rani", 0.25)]
+    #[case::vegtable_feta("vegtable", "feta", 0.0)]
+    #[case::dairy_cadbury("dairy", "Cadbury", 0.1667)]
+    #[case::chedar_mature_cheddar("chedar", "Mature Cheddar", 0.7143)]
+    #[case::strawbery_ice_creams_strawberry("strawbery", "Ice Creams, Strawberry", 0.8)]
+    #[case::choclate_almond_chocolate("choclate", "Almond Chocolate", 0.6667)]
+    #[case::brocolli_broccoli_raw("brocolli", "Broccoli, raw", 0.5556)]
+    #[case::avacado_avocado("avacado", "Avocado", 0.625)]
+    #[case::vegtable_vegetables("vegtable", "vegetables", 0.6667)]
+    // Orientation matters: `dairy` -> `dary` is exactly 0.5, while the
+    // reverse (`dary` -> `Dairy`) is 0.6.
+    #[case::dairy_dary("dairy", "dary", 0.5)]
+    #[case::dary_dairy("dary", "Dairy", 0.6)]
+    #[case::abc124_abc123("abc124", "abc123", 0.7143)]
+    fn rust_fuzzy_search_scores_match_documented_goldens(
+        #[case] query: &str,
+        #[case] candidate: &str,
+        #[case] expected: f64,
+    ) {
         let matcher = TextMatcher::default();
-
-        // Orientation matters: `dairy` -> `dary` is exactly 0.5, while the
-        // reverse (`dary` -> `Dairy`) is 0.6.
-        for (query, candidate, expected) in [
-            ("chese", "Cheese Cube", 0.8333),
-            ("chese", "Chase", 0.5),
-            ("milk almond", "Almond Milk", 0.8333),
-            ("yoghurt", "Greek Yogurt", 0.5),
-            ("chiken", "Chicken Breast", 0.7143),
-            ("chiken", "Grilled Chicken Breast", 0.5714),
-            ("vegtable", "other-vegetables", 0.4444),
-            ("cheese", "chess", 0.4286),
-            ("coke", "Cookies", 0.4),
-            ("rice", "rce", 0.4),
-            ("almnd", "Salmon", 0.1667),
-            ("granila", "Rani", 0.25),
-            ("vegtable", "feta", 0.0),
-            ("dairy", "Cadbury", 0.1667),
-            ("chedar", "Mature Cheddar", 0.7143),
-            ("strawbery", "Ice Creams, Strawberry", 0.8),
-            ("choclate", "Almond Chocolate", 0.6667),
-            ("brocolli", "Broccoli, raw", 0.5556),
-            ("avacado", "Avocado", 0.625),
-            ("vegtable", "vegetables", 0.6667),
-            ("dairy", "dary", 0.5),
-            ("dary", "Dairy", 0.6),
-            ("abc124", "abc123", 0.7143),
-        ] {
-            let actual = text_similarity(&matcher.normalize(query), &matcher.normalize(candidate));
-            assert_similarity_eq(actual.value(), expected);
-        }
-    }
-
-    #[test]
-    fn word_order_and_typo_queries_match_at_default_threshold() {
-        for (query, name) in [
-            ("chese", "Cheese Cube"),
-            ("chese", "Chase"),
-            ("milk almond", "Almond Milk"),
-            ("yoghurt", "Greek Yogurt"),
-            ("chiken", "Chicken Breast"),
-            ("chiken", "Grilled Chicken Breast"),
-            ("chedar", "Mature Cheddar"),
-            ("strawbery", "Ice Creams, Strawberry"),
-            ("choclate", "Almond Chocolate"),
-            ("brocolli", "Broccoli, raw"),
-            ("avacado", "Avocado"),
-            ("vegtable", "vegetables"),
-            ("dary", "Dairy"),
-            ("abc124", "abc123"),
-        ] {
-            assert_eq!(
-                rank_catalog(query, vec![fields(1, name, None, None)], 10),
-                vec![product_id(1)],
-                "{query} should fuzzy-match {name}"
-            );
-        }
-    }
-
-    #[test]
-    fn documented_fuzzy_near_misses_are_rejected() {
-        let matcher = TextMatcher::default();
-
-        for (query, name) in [
-            ("vegtable", "other-vegetables"),
-            ("cheese", "chess"),
-            ("coke", "Cookies"),
-            ("rice", "rce"),
-            ("almnd", "Salmon"),
-            ("granila", "Rani"),
-            ("vegtable", "feta"),
-            ("dairy", "Cadbury"),
-        ] {
-            assert_eq!(
-                matcher.match_value(&matcher.normalize(query), name),
-                None,
-                "{query} should be rejected against {name}"
-            );
-            assert!(
-                rank_catalog(query, vec![fields(1, name, None, None)], 10).is_empty(),
-                "{query} should not be ranked against {name}"
-            );
-        }
+        let actual = text_similarity(&matcher.normalize(query), &matcher.normalize(candidate));
+        assert_similarity_eq(actual.value(), expected);
     }
 
     #[test]
@@ -1034,10 +956,11 @@ mod tests {
         );
     }
 
-    #[test]
-    fn short_unrelated_queries_do_not_match() {
-        assert!(rank_catalog("rice", vec![fields(1, "beans", None, None)], 10).is_empty());
-        assert!(rank_catalog("coke", vec![fields(1, "milk", None, None)], 10).is_empty());
+    #[rstest]
+    #[case::rice_does_not_match_beans("rice", "beans")]
+    #[case::coke_does_not_match_milk("coke", "milk")]
+    fn short_unrelated_queries_do_not_match(#[case] query: &str, #[case] candidate_name: &str) {
+        assert!(rank_catalog(query, vec![fields(1, candidate_name, None, None)], 10).is_empty());
     }
 
     #[test]
@@ -1088,50 +1011,6 @@ mod tests {
                 count: 1,
             }],
             "the trigram near-miss passes; the old match and unrelated category are rejected"
-        );
-    }
-
-    #[test]
-    fn inclusive_and_exclusive_threshold_gates_use_trigram_containment() {
-        let default_matcher = TextMatcher::default();
-
-        let product_match = default_matcher
-            .match_value(&default_matcher.normalize("chese"), "Chase")
-            .expect("product fuzzy gate is inclusive at exactly 0.5");
-        assert_eq!(product_match.kind, MatchKind::Fuzzy);
-        assert_similarity_eq(product_match.similarity.value(), 0.5);
-
-        let counts = vec![category_count("chase", 1)];
-        assert!(
-            rank_category_suggestions_with(&default_matcher, "chese", counts.clone(), 10)
-                .is_empty(),
-            "category fuzzy gate is exclusive at exactly 0.5"
-        );
-
-        let below = matcher(DEFAULT_FUZZY_THRESHOLD - 0.000_001);
-        assert_eq!(
-            rank_category_suggestions_with(&below, "chese", counts, 10),
-            vec![CategorySuggestion {
-                value: "chase".into(),
-                count: 1,
-            }]
-        );
-
-        let yoghurt_match = default_matcher
-            .match_value(&default_matcher.normalize("yoghurt"), "Greek Yogurt")
-            .expect("product fuzzy gate accepts the 0.5 word-order match");
-        assert_eq!(yoghurt_match.kind, MatchKind::Fuzzy);
-        assert_similarity_eq(yoghurt_match.similarity.value(), 0.5);
-
-        assert!(
-            rank_category_suggestions_with(
-                &default_matcher,
-                "yoghurt",
-                vec![category_count("greek yogurt", 1)],
-                10,
-            )
-            .is_empty(),
-            "category gate rejects the 0.5 word-order match"
         );
     }
 
@@ -1231,52 +1110,6 @@ mod tests {
         assert_eq!(matches.term, None);
         assert_eq!(matches.name_similarity.value(), 1.0);
         assert!(matches.brand_similarity.value() > 0.0);
-    }
-
-    #[test]
-    fn identifier_matching_never_uses_fuzzy_similarity() {
-        let matcher = TextMatcher::default();
-        let query = matcher.normalize("abc124");
-
-        assert_eq!(
-            matcher.match_value(&query, "abc123").unwrap().kind,
-            MatchKind::Fuzzy
-        );
-
-        let document = SearchDocument {
-            name: "zzzzzz",
-            brand: None,
-            identifier: Some("abc123"),
-            terms: &[],
-        };
-        let matches = matcher.match_document(&query, &document);
-
-        assert_eq!(matches.identifier, None);
-        assert!(!matches.is_match());
-    }
-
-    #[test]
-    fn identifier_matches_have_zero_similarity() {
-        let matcher = TextMatcher::default();
-
-        for (query, expected_kind) in [
-            ("abc123", MatchKind::Exact),
-            ("abc", MatchKind::Prefix),
-            ("bc1", MatchKind::Substring),
-        ] {
-            let query = matcher.normalize(query);
-            let document = SearchDocument {
-                name: "Plain base",
-                brand: None,
-                identifier: Some("abc123"),
-                terms: &[],
-            };
-
-            let matches = matcher.match_document(&query, &document);
-            let identifier = matches.identifier.expect("identifier should match");
-            assert_eq!(identifier.kind, expected_kind);
-            assert_eq!(identifier.similarity.value(), 0.0);
-        }
     }
 
     #[test]
@@ -1572,35 +1405,477 @@ mod tests {
         assert_eq!(ranked.len(), PRODUCT_SEARCH_LIMIT);
     }
 
-    #[test]
-    fn limit_is_applied_after_ranking() {
-        let candidates = vec![
-            fields(1, "Yogurt", None, None),
-            fields(2, "Yogurt cup", None, None),
-            fields(3, "Greek yogurt", None, None),
-        ];
-        assert_eq!(
-            rank_catalog("yogurt", candidates, 2),
-            vec![product_id(1), product_id(2)]
-        );
+    type GeneratedProduct = (String, Option<String>, Option<String>);
+    type GeneratedCategory = (String, i64);
 
-        let counts = vec![
-            category_count("dairy bar", 5),
-            category_count("dairy", 2),
-            category_count("non dairy", 100),
-        ];
-        assert_eq!(
-            rank_category_suggestions("dairy", counts, 2),
-            vec![
-                CategorySuggestion {
-                    value: "dairy bar".into(),
-                    count: 5,
-                },
-                CategorySuggestion {
-                    value: "dairy".into(),
-                    count: 2,
-                },
-            ]
-        );
+    const NEAR_MISS_PAIRS: &[(&str, &str)] = &[
+        ("chese", "Chase"),
+        ("chiken", "Grilled Chicken Breast"),
+        ("vegtable", "other-vegetables"),
+        ("chedar", "Mature Cheddar"),
+        ("yoghurt", "Greek Yogurt"),
+        ("brocolli", "Broccoli, raw"),
+        ("avacado", "Avocado"),
+    ];
+
+    fn bounded_string() -> impl Strategy<Value = String> {
+        proptest::collection::vec(any::<char>(), 0..16)
+            .prop_map(|chars| chars.into_iter().collect())
+    }
+
+    fn whitespace_heavy_string() -> impl Strategy<Value = String> {
+        proptest::collection::vec(
+            prop_oneof![
+                8 => proptest::sample::select(vec![
+                    ' ', '\t', '\n', '\r', '\u{00A0}', '\u{2003}', '\u{3000}',
+                ]),
+                1 => any::<char>(),
+            ],
+            0..24,
+        )
+        .prop_map(|chars| chars.into_iter().collect())
+    }
+
+    fn wildcard_string() -> impl Strategy<Value = String> {
+        (
+            bounded_string(),
+            proptest::sample::select(vec!['%', '_']),
+            bounded_string(),
+        )
+            .prop_map(|(prefix, wildcard, suffix)| format!("{prefix}{wildcard}{suffix}"))
+    }
+
+    fn generated_products() -> impl Strategy<Value = Vec<GeneratedProduct>> {
+        proptest::collection::vec(
+            (
+                bounded_string(),
+                proptest::option::of(bounded_string()),
+                proptest::option::of(bounded_string()),
+            ),
+            1..20,
+        )
+    }
+
+    fn catalog_case()
+    -> impl Strategy<Value = (Vec<GeneratedProduct>, usize, u8, String, usize, Vec<u64>)> {
+        generated_products().prop_flat_map(|products| {
+            let len = products.len();
+            (
+                Just(products),
+                0..len,
+                prop_oneof![6 => 0..4u8, 1 => Just(4u8), 1 => Just(5u8)],
+                bounded_string(),
+                any::<usize>(),
+                proptest::collection::vec(any::<u64>(), len),
+            )
+        })
+    }
+
+    fn generated_categories() -> impl Strategy<Value = Vec<GeneratedCategory>> {
+        proptest::collection::vec((bounded_string(), 0i64..=100), 1..20)
+    }
+
+    fn category_case()
+    -> impl Strategy<Value = (Vec<GeneratedCategory>, usize, u8, String, usize, Vec<u64>)> {
+        generated_categories().prop_flat_map(|categories| {
+            let len = categories.len();
+            (
+                Just(categories),
+                0..len,
+                prop_oneof![6 => 0..4u8, 1 => Just(4u8), 1 => Just(5u8)],
+                bounded_string(),
+                any::<usize>(),
+                proptest::collection::vec(any::<u64>(), len),
+            )
+        })
+    }
+
+    fn identifier_case() -> impl Strategy<Value = (String, u8, String)> {
+        prop_oneof![bounded_string(), wildcard_string()].prop_flat_map(|identifier| {
+            (
+                Just(identifier),
+                prop_oneof![6 => 0..3u8, 1 => Just(3u8)],
+                bounded_string(),
+            )
+        })
+    }
+
+    fn fields_for(
+        index: usize,
+        (suffix, brand, barcode): &GeneratedProduct,
+    ) -> ProductSearchFields {
+        fields(
+            index as u128 + 1,
+            &format!("Item {index} {suffix}"),
+            brand.as_deref(),
+            barcode.as_deref(),
+        )
+    }
+
+    fn permute<T: Clone>(values: &[T], keys: &[u64]) -> Vec<T> {
+        let mut order = (0..values.len()).collect::<Vec<_>>();
+        order.sort_by_key(|&index| (keys[index], index));
+        order
+            .into_iter()
+            .map(|index| values[index].clone())
+            .collect()
+    }
+
+    fn drop_last_char(value: &mut String) {
+        if let Some((index, _)) = value.char_indices().next_back() {
+            value.truncate(index);
+        }
+    }
+
+    fn duplicate_first_char(value: &mut String) {
+        if let Some(first) = value.chars().next() {
+            value.insert(0, first);
+        }
+    }
+
+    fn swapped_first_two(value: &str) -> String {
+        let mut chars = value.chars().collect::<Vec<_>>();
+        if chars.len() >= 2 {
+            chars.swap(0, 1);
+        }
+        chars.into_iter().collect()
+    }
+
+    fn swap_first_two_chars(value: &mut String) {
+        *value = swapped_first_two(value);
+    }
+
+    fn prefix_half(value: &str) -> String {
+        let chars = value.chars().collect::<Vec<_>>();
+        let take = (chars.len() / 2).max(1).min(chars.len());
+        chars[..take].iter().collect()
+    }
+
+    fn suffix_half(value: &str) -> String {
+        let chars = value.chars().collect::<Vec<_>>();
+        let start = chars.len() / 2;
+        chars[start..].iter().collect()
+    }
+
+    fn catalog_query(
+        products: &[GeneratedProduct],
+        index: usize,
+        variant: u8,
+        arbitrary: String,
+    ) -> String {
+        let name = format!("Item {index} {}", products[index].0);
+        match variant {
+            0 => name,
+            1 => format!("Item {index}"),
+            2 => index.to_string(),
+            3 => swapped_first_two(&name),
+            4 => arbitrary,
+            _ => String::new(),
+        }
+    }
+
+    fn category_query(
+        categories: &[GeneratedCategory],
+        index: usize,
+        variant: u8,
+        arbitrary: String,
+    ) -> String {
+        let name = format!("Category {index} {}", categories[index].0);
+        match variant {
+            0 => name,
+            1 => format!("Category {index}"),
+            2 => index.to_string(),
+            3 => swapped_first_two(&name),
+            4 => arbitrary,
+            _ => String::new(),
+        }
+    }
+
+    fn near_miss_case() -> impl Strategy<Value = (String, String)> {
+        (0..NEAR_MISS_PAIRS.len(), 0..7u8).prop_map(|(pair_index, variant)| {
+            let (query, candidate) = NEAR_MISS_PAIRS[pair_index];
+            let mut query = query.to_owned();
+            let mut candidate = candidate.to_owned();
+            match variant {
+                0 => {}
+                1 => drop_last_char(&mut query),
+                2 => duplicate_first_char(&mut query),
+                3 => swap_first_two_chars(&mut query),
+                4 => drop_last_char(&mut candidate),
+                5 => duplicate_first_char(&mut candidate),
+                _ => swap_first_two_chars(&mut candidate),
+            }
+            (query, candidate)
+        })
+    }
+
+    #[test]
+    fn fuzzy_threshold_negative_zero_and_default_round_trip() {
+        let negative_zero =
+            FuzzyThreshold::new(-0.0).expect("negative zero is finite and in range");
+
+        assert_eq!(negative_zero.value(), 0.0);
+        assert_eq!(negative_zero.value().to_bits(), (-0.0f64).to_bits());
+        assert_eq!(FuzzyThreshold::default().value(), DEFAULT_FUZZY_THRESHOLD);
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn normalize_is_idempotent_lowercase_trimmed_and_collapsed(
+            raw in prop_oneof![bounded_string(), whitespace_heavy_string()],
+        ) {
+            let matcher = TextMatcher::default();
+            let once = matcher.normalize(&raw);
+            let twice = matcher.normalize(once.as_str());
+            let normalized = once.as_str();
+
+            prop_assert_eq!(normalized, twice.as_str(), "normalize must be idempotent");
+            prop_assert_eq!(normalized, normalized.trim(), "normalize must trim");
+            prop_assert_eq!(
+                normalized,
+                normalized.to_lowercase(),
+                "normalize must lowercase"
+            );
+            prop_assert!(
+                normalized
+                    .chars()
+                    .all(|value| value == ' ' || !value.is_whitespace()),
+                "normalize must collapse all whitespace to spaces"
+            );
+            prop_assert!(
+                !normalized.contains("  "),
+                "normalize must not leave repeated spaces"
+            );
+            prop_assert!(!normalized.starts_with(' '));
+            prop_assert!(!normalized.ends_with(' '));
+        }
+
+        #[test]
+        fn fuzzy_threshold_accepts_exactly_finite_unit_interval(value in any::<f64>()) {
+            let threshold = FuzzyThreshold::new(value);
+            let expected = value.is_finite() && (0.0..=1.0).contains(&value);
+
+            prop_assert_eq!(
+                threshold.is_some(),
+                expected,
+                "FuzzyThreshold::new({:?})",
+                value
+            );
+            if let Some(threshold) = threshold {
+                prop_assert_eq!(
+                    threshold.value().to_bits(),
+                    value.to_bits(),
+                    "accepted thresholds must round-trip exactly"
+                );
+            }
+        }
+
+        #[test]
+        fn near_miss_similarity_is_inclusive_for_product_matches(
+            (query, candidate) in near_miss_case(),
+        ) {
+            let matcher = TextMatcher::default();
+            let query = matcher.normalize(&query);
+            let candidate = matcher.normalize(&candidate);
+
+            prop_assume!(!query.as_str().is_empty());
+            prop_assume!(!candidate.as_str().contains(query.as_str()));
+            let similarity = text_similarity(&query, &candidate).value();
+            prop_assume!(similarity > 0.0 && similarity < 1.0);
+
+            let at_similarity = TextMatcher::new(
+                FuzzyThreshold::new(similarity).expect("similarity is a valid threshold"),
+            );
+            let matched = at_similarity
+                .match_value(&query, candidate.as_str())
+                .expect("inclusive gate accepts at exact similarity");
+            prop_assert_eq!(matched.kind, MatchKind::Fuzzy);
+            prop_assert_eq!(matched.similarity.value(), similarity);
+
+            let above = TextMatcher::new(
+                FuzzyThreshold::new(f64::next_up(similarity)).expect("next threshold is valid"),
+            );
+            prop_assert!(above.match_value(&query, candidate.as_str()).is_none());
+        }
+
+        #[test]
+        fn near_miss_similarity_is_exclusive_for_category_suggestions(
+            (query, candidate) in near_miss_case(),
+        ) {
+            let matcher = TextMatcher::default();
+            let query = matcher.normalize(&query);
+            let candidate = matcher.normalize(&candidate);
+
+            prop_assume!(!query.as_str().is_empty());
+            prop_assume!(!candidate.as_str().contains(query.as_str()));
+            let similarity = text_similarity(&query, &candidate).value();
+            prop_assume!(similarity > 0.0 && similarity < 1.0);
+
+            let counts = vec![
+                CategoryCount::new(Category(candidate.as_str().to_owned()), 1)
+                    .expect("non-empty category"),
+            ];
+
+            let at_similarity = TextMatcher::new(
+                FuzzyThreshold::new(similarity).expect("similarity is a valid threshold"),
+            );
+            prop_assert!(
+                rank_category_suggestions_with(&at_similarity, query.as_str(), counts.clone(), 10)
+                    .is_empty(),
+                "exclusive gate rejects at exact similarity"
+            );
+
+            let below = TextMatcher::new(
+                FuzzyThreshold::new(f64::next_down(similarity))
+                    .expect("previous threshold is valid"),
+            );
+            prop_assert_eq!(
+                rank_category_suggestions_with(&below, query.as_str(), counts, 10),
+                vec![CategorySuggestion {
+                    value: candidate.as_str().to_owned(),
+                    count: 1,
+                }]
+            );
+        }
+
+        #[test]
+        fn catalog_ranking_is_unique_bounded_permutation_invariant_and_limit_prefix(
+            (products, query_index, query_variant, arbitrary_query, limit_seed, order_keys) in
+                catalog_case(),
+        ) {
+            let query = catalog_query(&products, query_index, query_variant, arbitrary_query);
+            let limit = limit_seed % (products.len() + 4);
+            let candidates = products
+                .iter()
+                .enumerate()
+                .map(|(index, product)| fields_for(index, product))
+                .collect::<Vec<_>>();
+
+            let unlimited = rank_catalog_candidates(&query, candidates.clone(), usize::MAX);
+            let limited = rank_catalog_candidates(&query, candidates.clone(), limit);
+
+            if query_variant <= 2 {
+                prop_assert!(
+                    !unlimited.is_empty(),
+                    "derived query {:?} should match candidate data",
+                    query
+                );
+            }
+
+            prop_assert_eq!(limited.len(), unlimited.len().min(limit));
+            prop_assert_eq!(&limited[..], &unlimited[..limited.len()]);
+
+            let input_ids = candidates
+                .iter()
+                .map(ProductSearchFields::id)
+                .collect::<HashSet<_>>();
+            let output_ids = unlimited.iter().copied().collect::<HashSet<_>>();
+            prop_assert_eq!(output_ids.len(), unlimited.len(), "output ids must be unique");
+            prop_assert!(
+                unlimited.iter().all(|id| input_ids.contains(id)),
+                "output ids must be drawn from the input"
+            );
+
+            let permuted = permute(&candidates, &order_keys);
+            prop_assert_eq!(
+                rank_catalog_candidates(&query, permuted, usize::MAX),
+                unlimited,
+                "ranking must not depend on candidate order"
+            );
+        }
+
+        #[test]
+        fn category_suggestions_are_bounded_permutation_invariant_and_limit_prefix(
+            (categories, query_index, query_variant, arbitrary_query, limit_seed, order_keys) in
+                category_case(),
+        ) {
+            let query = category_query(&categories, query_index, query_variant, arbitrary_query);
+            let limit = limit_seed % (categories.len() + 4);
+            let counts = categories
+                .iter()
+                .enumerate()
+                .map(|(index, (suffix, count))| {
+                    category_count(&format!("Category {index} {suffix}"), *count)
+                })
+                .collect::<Vec<_>>();
+
+            let unlimited = rank_category_suggestions(&query, counts.clone(), usize::MAX);
+            let limited = rank_category_suggestions(&query, counts.clone(), limit);
+
+            if query_variant <= 2 {
+                prop_assert!(
+                    !unlimited.is_empty(),
+                    "derived query {:?} should match category data",
+                    query
+                );
+            }
+
+            prop_assert_eq!(limited.len(), unlimited.len().min(limit));
+            prop_assert_eq!(&limited[..], &unlimited[..limited.len()]);
+
+            let permuted = permute(&counts, &order_keys);
+            prop_assert_eq!(
+                rank_category_suggestions(&query, permuted, usize::MAX),
+                unlimited,
+                "suggestions must not depend on input order"
+            );
+        }
+
+        #[test]
+        fn identifier_matching_is_literal_never_fuzzy_and_has_zero_similarity(
+            (identifier, query_variant, arbitrary_query) in identifier_case(),
+        ) {
+            prop_assume!(!identifier.trim().is_empty());
+
+            let query = match query_variant {
+                0 => identifier.clone(),
+                1 => prefix_half(&identifier),
+                2 => suffix_half(&identifier),
+                _ => arbitrary_query,
+            };
+
+            let matcher = TextMatcher::default();
+            let query = matcher.normalize(&query);
+            let normalized_identifier = matcher.normalize(&identifier);
+            let document = SearchDocument {
+                name: "zzzzzz",
+                brand: None,
+                identifier: Some(identifier.as_str()),
+                terms: &[],
+            };
+
+            let matches = matcher.match_document(&query, &document);
+            let expected_kind = if query.as_str().is_empty() {
+                Some(MatchKind::Prefix)
+            } else if normalized_identifier.as_str() == query.as_str() {
+                Some(MatchKind::Exact)
+            } else if normalized_identifier.as_str().starts_with(query.as_str()) {
+                Some(MatchKind::Prefix)
+            } else if normalized_identifier.as_str().contains(query.as_str()) {
+                Some(MatchKind::Substring)
+            } else {
+                None
+            };
+
+            if query_variant <= 2 {
+                prop_assert!(
+                    matches.identifier.is_some(),
+                    "derived identifier query {:?} should match",
+                    query.as_str()
+                );
+            }
+
+            prop_assert_eq!(
+                matches.identifier.map(|identifier| identifier.kind),
+                expected_kind,
+                "identifier matching must be literal containment only"
+            );
+            if let Some(identifier) = matches.identifier {
+                prop_assert_ne!(identifier.kind, MatchKind::Fuzzy);
+                prop_assert_eq!(identifier.similarity.value(), 0.0);
+            }
+        }
     }
 }

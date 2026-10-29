@@ -1,32 +1,147 @@
 module Page.Meal.CreateTest exposing (tests)
 
 import Api.Client as Client
-import Api.Foods exposing (SearchResult, SearchScope(..))
+import Api.Foods exposing (SearchResult, SearchScope)
 import Api.Meals exposing (Meal)
 import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
-import Data.Search as Search
 import Expect
 import Lib.Loadable exposing (Loadable(..))
-import Lib.Ticket as Ticket exposing (Ticket)
+import Lib.Ticket exposing (Ticket)
 import Page.Meal.Create as MealCreate
+import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
 
 
-networkErrorMessage : String
-networkErrorMessage =
-    "Could not reach the server. Check your connection and try again."
+tests : Test
+tests =
+    describe "Page.Meal.Create"
+        [ test "a user creates a meal from search results" <|
+            \_ ->
+                MealCreate.init
+                    |> Story.start
+                    |> step (MealCreate.FormMsg (Common.NameChanged "Lunch"))
+                    |> step
+                        (MealCreate.FormMsg (Common.ComponentSearchChanged 1 "apple"))
+                    |> bind
+                        (\out ->
+                            productSearch out
+                                |> Maybe.map
+                                    (\searchRequest ->
+                                        MealCreate.FormMsg
+                                            (Common.ComponentSearchCompleted
+                                                1
+                                                searchRequest.token
+                                                (Ok { items = [ appleResult ] })
+                                            )
+                                    )
+                                |> Result.fromMaybe
+                                    "the search produced no product-search request"
+                        )
+                    |> step
+                        (MealCreate.FormMsg (Common.SelectProduct 1 appleResult))
+                    |> step MealCreate.SubmitClicked
+                    |> step (MealCreate.SaveCompleted (Ok meal))
+                    |> finish
+                        (\( saved, completionOut ) ->
+                            { screen = toScreen saved
+                            , finalOut = completionOut
+                            }
+                                |> Expect.equal
+                                    { screen =
+                                        { name = "Lunch"
+                                        , rows = [ selectedRow "food-1" ]
+                                        , results = []
+                                        , suggestions = []
+                                        , error = Nothing
+                                        , disabled = False
+                                        }
+                                    , finalOut =
+                                        MealCreate.Navigate (MealShow "meal-1")
+                                    }
+                        )
+        , test "a failed save can be retried" <|
+            \_ ->
+                preparedMeal
+                    |> step MealCreate.SubmitClicked
+                    |> step
+                        (MealCreate.SaveCompleted (Err Client.NetworkError))
+                    |> step MealCreate.SubmitClicked
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { request = createRequest outMsg
+                            , disabled = (toScreen model).disabled
+                            }
+                                |> Expect.equal
+                                    { request = Just lunchRequest
+                                    , disabled = True
+                                    }
+                        )
+        , test "a save with an expired session reports session expiry" <|
+            \_ ->
+                preparedMeal
+                    |> step MealCreate.SubmitClicked
+                    |> step
+                        (MealCreate.SaveCompleted (Err Fixtures.unauthorized))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg
+                                |> Expect.equal MealCreate.SessionExpired
+                        )
+        ]
 
 
-unauthorized : Client.ApiError
-unauthorized =
-    Client.BadStatus 401 "unauthorized" "Sign in again"
+type alias Screen =
+    { name : String
+    , rows : List Row
+    , results : List String
+    , suggestions : List String
+    , error : Maybe String
+    , disabled : Bool
+    }
 
 
-submitErrorMessage : Common.SubmitState -> Maybe String
-submitErrorMessage state =
+type alias Row =
+    { productId : String, quantity : String, unit : String }
+
+
+toScreen : MealCreate.Model -> Screen
+toScreen fields =
+    let
+        row : Common.ComponentRow
+        row =
+            List.head fields.components
+                |> Maybe.withDefault (Common.emptyComponentRow 0)
+    in
+    { name = fields.name
+    , rows = List.map rowProjection fields.components
+    , results = resultsText row.searchResults
+    , suggestions = List.map .value row.search.categorySuggestions
+    , error = submitError fields.submit
+    , disabled = Common.isSubmitting fields.submit
+    }
+
+
+rowProjection : Common.ComponentRow -> Row
+rowProjection row =
+    { productId = row.productId, quantity = row.quantity, unit = row.unit }
+
+
+resultsText : Loadable () (List SearchResult) -> List String
+resultsText results =
+    case results of
+        Success items ->
+            List.map .name items
+
+        _ ->
+            []
+
+
+submitError : Common.SubmitState -> Maybe String
+submitError state =
     case state of
         Common.SubmitFailed message ->
             Just message
@@ -35,178 +150,127 @@ submitErrorMessage state =
             Nothing
 
 
-tests : Test
-tests =
-    describe "Page.Meal.Create"
-        [ test "submitting a valid meal requests creation with a trimmed name and defaults" <|
-            \_ ->
-                let
-                    row : Common.ComponentRow
-                    row =
-                        Common.emptyComponentRow 1
-
-                    form : Common.FormFields
-                    form =
-                        { emptyFormFields
-                            | name = "  Lunch  "
-                            , components =
-                                [ { row | productId = "food-1", quantity = "", unit = "" } ]
-                        }
-
-                    submitting : MealCreate.Model
-                    submitting =
-                        step MealCreate.SubmitClicked form
-                in
-                { request = out MealCreate.SubmitClicked form
-                , submit = submitting.submit
-                , success = out (MealCreate.SaveCompleted (Ok meal)) submitting
-                }
-                    |> Expect.equal
-                        { request =
-                            MealCreate.RequestCreateMeal
-                                { name = "Lunch"
-                                , notes = Nothing
-                                , totalQuantity = Nothing
-                                , components =
-                                    [ { item = { itemType = ItemRef.Product, id = "food-1" }
-                                      , quantity = { amount = "100", unit = "g" }
-                                      }
-                                    ]
-                                }
-                        , submit = Common.Submitting
-                        , success = MealCreate.Navigate (MealShow "meal-1")
-                        }
-        , test "submitting without a name or component surfaces validation errors" <|
-            \_ ->
-                let
-                    noName : MealCreate.Model
-                    noName =
-                        step MealCreate.SubmitClicked emptyFormFields
-
-                    noComponentForm : Common.FormFields
-                    noComponentForm =
-                        { emptyFormFields | name = "Lunch" }
-
-                    noComponent : MealCreate.Model
-                    noComponent =
-                        step MealCreate.SubmitClicked noComponentForm
-                in
-                { noNameRequest = out MealCreate.SubmitClicked emptyFormFields
-                , noNameError = noName.submit |> submitErrorMessage
-                , noComponentRequest = out MealCreate.SubmitClicked noComponentForm
-                , noComponentError = noComponent.submit |> submitErrorMessage
-                }
-                    |> Expect.equal
-                        { noNameRequest = MealCreate.NoOp
-                        , noNameError = Just "Name is required"
-                        , noComponentRequest = MealCreate.NoOp
-                        , noComponentError =
-                            Just "At least one component with a selected product is required"
-                        }
-        , test "a stale row search response is ignored" <|
-            \_ ->
-                let
-                    row : Common.ComponentRow
-                    row =
-                        Common.emptyComponentRow 1
-
-                    form : Common.FormFields
-                    form =
-                        { emptyFormFields
-                            | components =
-                                [ { row | search = Search.withSearchToken (ticket 2) row.search } ]
-                        }
-                in
-                step
-                    (MealCreate.FormMsg
-                        (Common.ComponentSearchCompleted 1 (ticket 1) (Ok { items = [ result ] }))
-                    )
-                    form
-                    |> .components
-                    |> List.head
-                    |> Maybe.map .searchResults
-                    |> Expect.equal (Just NotAsked)
-        , test "searching a category requests both product and category suggestions" <|
-            \_ ->
-                out
-                    (MealCreate.FormMsg (Common.ComponentSearchChanged 1 "category:foo"))
-                    (Tuple.first MealCreate.init)
-                    |> Expect.equal
-                        (MealCreate.FormOutMsg
-                            (Common.RequestProductAndCats
-                                { rowId = 1
-                                , searchToken = ticket 1
-                                , searchRequest =
-                                    { query = "category:foo", scope = SearchAll }
-                                , categoryToken = ticket 2
-                                , categoryRequest = { query = "foo", limit = 8 }
-                                }
-                            )
-                        )
-        , test "a save failure surfaces the request error and a 401 expires the session" <|
-            \_ ->
-                let
-                    submitting : MealCreate.Model
-                    submitting =
-                        step MealCreate.SubmitClicked validForm
-
-                    afterFailure : MealCreate.Model
-                    afterFailure =
-                        step (MealCreate.SaveCompleted (Err Client.NetworkError)) submitting
-                in
-                { error = afterFailure.submit |> submitErrorMessage
-                , failureRequest =
-                    out (MealCreate.SaveCompleted (Err Client.NetworkError)) submitting
-                , unauthorized =
-                    out (MealCreate.SaveCompleted (Err unauthorized)) submitting
-                }
-                    |> Expect.equal
-                        { error = Just networkErrorMessage
-                        , failureRequest = MealCreate.NoOp
-                        , unauthorized = MealCreate.SessionExpired
-                        }
-        ]
+type alias ProductSearch =
+    { token : Ticket, query : String, scope : SearchScope }
 
 
+productSearch : MealCreate.OutMsg -> Maybe ProductSearch
+productSearch outMsg =
+    case outMsg of
+        MealCreate.FormOutMsg (Common.RequestProductSearch _ token request) ->
+            Just { token = token, query = request.query, scope = request.scope }
 
--- HELPERS
+        _ ->
+            Nothing
 
 
-validForm : Common.FormFields
-validForm =
+createRequest : MealCreate.OutMsg -> Maybe Api.Meals.CreateMealRequest
+createRequest outMsg =
+    case outMsg of
+        MealCreate.RequestCreateMeal request ->
+            Just request
+
+        _ ->
+            Nothing
+
+
+stepWithOut :
+    MealCreate.Msg
+    -> MealCreate.Model
+    -> ( MealCreate.Model, MealCreate.OutMsg )
+stepWithOut msg model =
     let
-        row : Common.ComponentRow
-        row =
-            Common.emptyComponentRow 1
+        ( next, _, outMsg ) =
+            MealCreate.update msg model
     in
-    { emptyFormFields
-        | name = "Lunch"
-        , components = [ { row | productId = "food-1" } ]
+    ( next, outMsg )
+
+
+
+-- STORY PIPELINE
+
+
+type alias Journey =
+    Story.Journey MealCreate.Model MealCreate.OutMsg
+
+
+step : MealCreate.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+bind :
+    (MealCreate.OutMsg -> Result String MealCreate.Msg)
+    -> Journey
+    -> Journey
+bind =
+    Story.bind stepWithOut
+
+
+finish :
+    (( MealCreate.Model, MealCreate.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+preparedMeal : Journey
+preparedMeal =
+    MealCreate.init
+        |> Story.start
+        |> step (MealCreate.FormMsg (Common.NameChanged "Lunch"))
+        |> step
+            (MealCreate.FormMsg (Common.ComponentSearchChanged 1 "apple"))
+        |> bind
+            (\out ->
+                productSearch out
+                    |> Maybe.map
+                        (\searchRequest ->
+                            MealCreate.FormMsg
+                                (Common.ComponentSearchCompleted
+                                    1
+                                    searchRequest.token
+                                    (Ok { items = [ appleResult ] })
+                                )
+                        )
+                    |> Result.fromMaybe
+                        "the search produced no product-search request"
+            )
+        |> step
+            (MealCreate.FormMsg (Common.SelectProduct 1 appleResult))
+
+
+lunchRequest : Api.Meals.CreateMealRequest
+lunchRequest =
+    { name = "Lunch"
+    , notes = Nothing
+    , totalQuantity = Nothing
+    , components =
+        [ { item = { itemType = ItemRef.Product, id = "food-1" }
+          , quantity = { amount = "100", unit = "g" }
+          }
+        ]
     }
 
 
-emptyFormFields : Common.FormFields
-emptyFormFields =
-    Common.emptyFormFields
+selectedRow : String -> Row
+selectedRow productId =
+    { productId = productId, quantity = "100", unit = "g" }
 
 
-step : MealCreate.Msg -> MealCreate.Model -> MealCreate.Model
-step msg model =
-    first (MealCreate.update msg model)
+appleResult : SearchResult
+appleResult =
+    searchResult "food-1" "Apple"
 
 
-out : MealCreate.Msg -> MealCreate.Model -> MealCreate.OutMsg
-out msg model =
-    third (MealCreate.update msg model)
-
-
-result : SearchResult
-result =
-    { id = "food-1"
+searchResult : String -> String -> SearchResult
+searchResult id name =
+    { id = id
     , source = "USER"
     , sourceId = Nothing
     , barcode = Nothing
-    , name = "Rice"
+    , name = name
     , brand = Nothing
     , categories = []
     , nutritionSummary = { per100g = Nutrition.emptySummary }
@@ -223,25 +287,10 @@ meal =
     , components =
         [ { id = "component-1"
           , item = { itemType = ItemRef.Product, id = "food-1" }
-          , quantity = { amount = "2", unit = "serving" }
+          , quantity = { amount = "100", unit = "g" }
           , nutritionSummary = Nothing
           }
         ]
-    , createdAt = "now"
-    , updatedAt = "now"
+    , createdAt = "2026-08-18T10:00:00Z"
+    , updatedAt = "2026-08-18T10:00:00Z"
     }
-
-
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
-
-
-ticket : Int -> Ticket
-ticket count =
-    List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)

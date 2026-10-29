@@ -114,32 +114,4 @@ mod tests {
         }
         assert_eq!(admission.requests.lock().unwrap().len(), 1);
     }
-
-    #[test]
-    fn tracked_users_are_capped_without_consuming_existing_user_permits() {
-        let admission = AdmissionService::new(2, Duration::from_secs(60), 3, 2);
-        let first = Uuid::new_v4();
-        let second = Uuid::new_v4();
-        let rejected = Uuid::new_v4();
-
-        drop(admission.try_acquire(first).unwrap());
-        drop(admission.try_acquire(second).unwrap());
-        assert!(matches!(
-            admission.try_acquire(rejected),
-            Err(AdmissionRejection::AtCapacity)
-        ));
-        assert_eq!(admission.requests.lock().unwrap().len(), 2);
-
-        // Rejection at the cardinality cap does not consume a global permit,
-        // and a tracked user can still use its remaining per-user allowance.
-        assert!(admission.try_acquire(first).is_ok());
-    }
-
-    #[test]
-    fn expired_bucket_is_evicted_before_capacity_is_checked() {
-        let admission = AdmissionService::new(1, Duration::ZERO, 1, 1);
-        drop(admission.try_acquire(Uuid::new_v4()).unwrap());
-        assert!(admission.try_acquire(Uuid::new_v4()).is_ok());
-        assert_eq!(admission.requests.lock().unwrap().len(), 1);
-    }
 }

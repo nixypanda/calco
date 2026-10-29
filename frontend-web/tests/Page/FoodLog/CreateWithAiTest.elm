@@ -1,144 +1,146 @@
 module Page.FoodLog.CreateWithAiTest exposing (tests)
 
 import Api.Client as Client
-import Api.Foods exposing (NutrientItem)
+import Api.Foods exposing (UnitItem)
 import Component.FoodAssistant as Assistant
 import Component.FoodEditor as Editor
 import Data.FoodAssistant exposing (FoodDraftTurn(..))
+import Data.FoodLog as FoodLog exposing (FoodLog)
+import Data.LocalCtx exposing (LocalCtx)
+import Data.MealSlot exposing (MealSlot(..))
 import Expect
-import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Date exposing (LocalDate)
 import Page.FoodLog.CreateAdHoc as Review
 import Page.FoodLog.CreateWithAi as CreateWithAi
+import Page.FoodLog.ReviewStory as ReviewStory
+import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
     describe "Page.FoodLog.CreateWithAi"
-        [ test "a completed estimate becomes an editable portion review" <|
+        [ test "a draft without a date asks for local context, then logs" <|
             \_ ->
-                reviewedModel
-                    |> .review
-                    |> Maybe.map
-                        (\review ->
-                            ( review.form.name
-                            , Editor.logPortionWeight review.form
-                            , List.map .amount review.form.nutrients
-                            )
-                        )
-                    |> Expect.equal
-                        (Just
-                            ( "Paneer wrap"
-                            , Just "250"
-                            , [ "500", "25", "50", "30", "12.5" ]
-                            )
-                        )
-        , test "save-on review creates a custom food first" <|
-            \_ ->
-                reviewedModel
-                    |> CreateWithAi.update
+                Story.start ( draftedModel, CreateWithAi.NoOp )
+                    |> step
                         (CreateWithAi.ReviewMsg
-                            (Review.FormMsg Editor.LogPersistenceToggled)
+                            (Review.FormMsg (Editor.LogQuantityChanged "2"))
                         )
-                    |> first
-                    |> CreateWithAi.update (CreateWithAi.ReviewMsg Review.SubmitClicked)
-                    |> third
-                    |> (\outMsg ->
-                            case outMsg of
-                                CreateWithAi.RequestCreateFood request ->
-                                    Expect.equal
-                                        ( request.categories, request.servings )
-                                        ( [ "wrap" ]
-                                        , [ { unit = "serving", gramsPerUnit = 250 }
-                                          , { unit = "piece", gramsPerUnit = 125 }
-                                          ]
-                                        )
-
-                                _ ->
-                                    Expect.fail "expected a custom-food request"
-                       )
-        , test "retry after a product-log failure reuses the saved food id" <|
+                    |> step (CreateWithAi.ReviewMsg Review.SubmitClicked)
+                    |> step (CreateWithAi.ReviewMsg (Review.LocalCtxReceived context))
+                    |> step (CreateWithAi.ReviewMsg (Review.AdHocLogCompleted (Ok localAdHocLog)))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (CreateWithAi.LogCreated localAdHocLog)
+                        )
+        , test "save-on creates the food once and retries the failed product log" <|
             \_ ->
-                let
-                    saving : CreateWithAi.Model
-                    saving =
-                        reviewedModel
-                            |> CreateWithAi.update
-                                (CreateWithAi.ReviewMsg
-                                    (Review.FormMsg Editor.LogPersistenceToggled)
-                                )
-                            |> first
-                            |> CreateWithAi.update
-                                (CreateWithAi.ReviewMsg Review.SubmitClicked)
-                            |> first
-
-                    logging : CreateWithAi.Model
-                    logging =
-                        saving
-                            |> CreateWithAi.update
-                                (CreateWithAi.ReviewMsg
-                                    (Review.CustomFoodCompleted (Ok { id = "food-1" }))
-                                )
-                            |> first
-
-                    failed : CreateWithAi.Model
-                    failed =
-                        logging
-                            |> CreateWithAi.update
-                                (CreateWithAi.ReviewMsg
-                                    (Review.ProductLogCompleted (Err Client.NetworkError))
-                                )
-                            |> first
-                in
-                failed
-                    |> CreateWithAi.update
-                        (CreateWithAi.ReviewMsg Review.SubmitClicked)
-                    |> third
-                    |> (\outMsg ->
-                            case outMsg of
-                                CreateWithAi.RequestProductLog request ->
-                                    Expect.equal request.item.id "food-1"
-
-                                _ ->
-                                    Expect.fail "retry should log the existing product"
-                       )
+                Story.start ( estimatedModel, CreateWithAi.NoOp )
+                    |> step (CreateWithAi.ReviewMsg (Review.FormMsg Editor.LogPersistenceToggled))
+                    |> step
+                        (CreateWithAi.ReviewMsg
+                            (Review.FormMsg (Editor.PortionWeightChanged "240"))
+                        )
+                    |> step (CreateWithAi.ReviewMsg Review.SubmitClicked)
+                    |> step
+                        (CreateWithAi.ReviewMsg
+                            (Review.CustomFoodCompleted (Ok { id = "food-1" }))
+                        )
+                    |> step
+                        (CreateWithAi.ReviewMsg
+                            (Review.ProductLogCompleted (Err Client.NetworkError))
+                        )
+                    |> step (CreateWithAi.ReviewMsg Review.SubmitClicked)
+                    |> step (CreateWithAi.ReviewMsg (Review.ProductLogCompleted (Ok productLog)))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (CreateWithAi.LogCreated productLog)
+                        )
         ]
 
 
-reviewedModel : CreateWithAi.Model
-reviewedModel =
+stepWithOut :
+    CreateWithAi.Msg
+    -> CreateWithAi.Model
+    -> ( CreateWithAi.Model, CreateWithAi.OutMsg )
+stepWithOut msg model =
     let
-        initial : CreateWithAi.Model
-        initial =
-            CreateWithAi.init (Just (date "2026-09-14")) Nothing |> Tuple.first
+        ( next, _, outMsg ) =
+            CreateWithAi.update msg model
     in
-    initial
-        |> CreateWithAi.update
-            (CreateWithAi.NutrientsLoaded (Ok { items = catalog }))
-        |> first
-        |> CreateWithAi.update
-            (CreateWithAi.UnitsLoaded
-                (Ok
-                    { items =
-                        [ { code = "g", name = "Gram", kind = "mass" }
-                        , { code = "serving", name = "Serving", kind = "serving" }
-                        , { code = "piece", name = "Piece", kind = "serving" }
-                        ]
-                    }
-                )
-            )
-        |> first
-        |> CreateWithAi.update
-            (CreateWithAi.AssistantMsg
-                (Assistant.StatusLoaded (Ok { enabled = True, supportsImages = True }))
-            )
-        |> first
-        |> CreateWithAi.update
-            (CreateWithAi.AssistantMsg (Assistant.DraftCompleted (Ok readyTurn)))
-        |> first
-        |> CreateWithAi.update
-            (CreateWithAi.AssistantMsg (Assistant.ApplyDraftClicked False))
-        |> first
+    ( next, outMsg )
+
+
+
+-- STORY PIPELINE
+
+
+type alias Journey =
+    Story.Journey CreateWithAi.Model CreateWithAi.OutMsg
+
+
+step : CreateWithAi.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+finish :
+    (( CreateWithAi.Model, CreateWithAi.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+draftedModel : CreateWithAi.Model
+draftedModel =
+    draftModel Nothing Nothing
+
+
+estimatedModel : CreateWithAi.Model
+estimatedModel =
+    draftModel (Just ReviewStory.day) (Just Lunch)
+
+
+draftModel :
+    Maybe LocalDate
+    -> Maybe MealSlot
+    -> CreateWithAi.Model
+draftModel date mealSlot =
+    Story.runSteps stepModel
+        [ CreateWithAi.NutrientsLoaded (Ok { items = ReviewStory.catalog })
+        , CreateWithAi.UnitsLoaded (Ok { items = unitOptions })
+        , CreateWithAi.AssistantMsg
+            (Assistant.StatusLoaded (Ok { enabled = True, supportsImages = True }))
+        , CreateWithAi.AssistantMsg
+            (Assistant.DescriptionChanged "Paneer wrap with paneer and spices")
+        , CreateWithAi.AssistantMsg Assistant.SendClicked
+        , CreateWithAi.AssistantMsg (Assistant.DraftCompleted (Ok readyTurn))
+        , CreateWithAi.AssistantMsg (Assistant.ApplyDraftClicked False)
+        ]
+        (CreateWithAi.init date mealSlot |> Tuple.first)
+
+
+stepModel : CreateWithAi.Msg -> CreateWithAi.Model -> CreateWithAi.Model
+stepModel msg model =
+    Fixtures.tupleFirst (CreateWithAi.update msg model)
+
+
+context : LocalCtx
+context =
+    { date = Fixtures.date "2026-06-04", timezone = "Asia/Kolkata" }
+
+
+unitOptions : List UnitItem
+unitOptions =
+    [ ReviewStory.gram, ReviewStory.serving, piece ]
+
+
+piece : UnitItem
+piece =
+    { code = "piece", name = "Piece", kind = "serving" }
 
 
 readyTurn : FoodDraftTurn
@@ -169,41 +171,46 @@ readyTurn =
         }
 
 
-catalog : List NutrientItem
-catalog =
-    [ nutrient "ENERGY_KCAL" "Calories" "kcal"
-    , nutrient "PROTEIN_G" "Protein" "g"
-    , nutrient "CARBS_G" "Carbohydrates" "g"
-    , nutrient "FAT_G" "Fat" "g"
-    , nutrient "FIBER_G" "Fiber" "g"
-    ]
+localAdHocLog : FoodLog
+localAdHocLog =
+    { adHocLog
+        | logDate = context.date
+        , deviceTimezone = Just context.timezone
+    }
 
 
-nutrient : String -> String -> String -> NutrientItem
-nutrient code name unit =
-    { code = code, name = name, unit = unit, category = "Core" }
+adHocLog : FoodLog
+adHocLog =
+    { id = "log-1"
+    , logDate = ReviewStory.day
+    , deviceTimezone = Nothing
+    , mealSlot = Just Lunch
+    , item = FoodLog.AdHocLogItem { name = "Paneer wrap", brand = Nothing }
+    , quantity = { amount = "2", unit = "serving" }
+    , nutrients =
+        [ { code = "ENERGY_KCAL", amount = "1000", unit = "kcal" }
+        , { code = "PROTEIN_G", amount = "50", unit = "g" }
+        , { code = "CARBS_G", amount = "100", unit = "g" }
+        , { code = "FAT_G", amount = "60", unit = "g" }
+        , { code = "FIBER_G", amount = "25", unit = "g" }
+        ]
+    , notes = Nothing
+    }
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
-
-
-date : String -> LocalDate
-date raw =
-    case LocalDate.fromString raw of
-        Just value ->
-            value
-
-        Nothing ->
-            case LocalDate.fromParts 1970 1 1 of
-                Just fallback ->
-                    fallback
-
-                Nothing ->
-                    date raw
+productLog : FoodLog
+productLog =
+    { adHocLog
+        | id = "log-2"
+        , item =
+            FoodLog.ProductLogItem
+                { id = "food-1", name = "Paneer wrap", brand = Nothing }
+        , quantity = { amount = "1", unit = "serving" }
+        , nutrients =
+            [ { code = "ENERGY_KCAL", amount = "500", unit = "kcal" }
+            , { code = "PROTEIN_G", amount = "25", unit = "g" }
+            , { code = "CARBS_G", amount = "50", unit = "g" }
+            , { code = "FAT_G", amount = "30", unit = "g" }
+            , { code = "FIBER_G", amount = "12.5", unit = "g" }
+            ]
+    }

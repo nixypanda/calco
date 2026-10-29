@@ -157,7 +157,7 @@ check-frontend-review:
 # Run frontend coverage.
 [working-directory("frontend-web")]
 coverage-frontend:
-    npm run coverage
+    npx --no-install elm-coverage src --tests tests --silent --elm-test "$(command -v elm-test)"
 
 # Lint and type-check data-source import tools.
 [working-directory("tools/importers/data-sources")]

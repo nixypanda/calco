@@ -45,7 +45,11 @@ shiftMonth offset period =
 
 monthsDescending : Int -> String -> List String
 monthsDescending count first =
-    List.range 0 (max 0 (count - 1)) |> List.map (\offset -> shiftMonth -offset first)
+    if count <= 0 then
+        []
+
+    else
+        List.range 0 (count - 1) |> List.map (\offset -> shiftMonth -offset first)
 
 
 monthCells : String -> List (Maybe Int)

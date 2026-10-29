@@ -15,9 +15,7 @@ module Data.Search exposing
     , onQueryChangedDebounced
     , previousCompletion
     , setCategorySuggestions
-    , withCategoryToken
     , withQuery
-    , withSearchToken
     )
 
 import Lib.Text as Text
@@ -161,16 +159,6 @@ setCategorySuggestions token suggestions state =
 withQuery : String -> QueryState -> QueryState
 withQuery query state =
     { state | query = query }
-
-
-withSearchToken : Ticket -> QueryState -> QueryState
-withSearchToken token state =
-    { state | searchToken = token }
-
-
-withCategoryToken : Ticket -> QueryState -> QueryState
-withCategoryToken token state =
-    { state | categoryToken = token }
 
 
 completions : String -> List { a | value : String, count : Int } -> List Completion

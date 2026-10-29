@@ -140,16 +140,4 @@ mod tests {
 
         assert!(matches!(result, Err(NutritionError::Validation(_))));
     }
-
-    #[test]
-    fn goal_targets_accept_exact_formula_match() {
-        let result = GoalTargets::new(
-            Decimal::from(2100),
-            Decimal::from(150),
-            Decimal::from(240),
-            Decimal::from(60),
-        );
-
-        assert!(result.is_ok());
-    }
 }

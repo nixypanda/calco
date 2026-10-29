@@ -49,7 +49,8 @@ just test-frontend
 ### Notes
 
 - Tests live in `frontend-web/tests/`.
-- Elm tests are pure unit tests (no DOM, no mocks).
+- Elm tests run without a browser or network. Most are pure unit/property
+  tests; UI tests may query rendered Elm output with `Test.Html.Query`.
 - Don't add constructor or field-assignment tests; see `docs/testing.md` for
   the keep/delete bar.
 

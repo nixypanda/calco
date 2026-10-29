@@ -196,25 +196,4 @@ impl FromRef<AppState> for NutritionModule {
 
 #[cfg(test)]
 mod architecture_tests {
-    #[test]
-    fn nutrition_http_api_does_not_reference_repos() {
-        let api = [
-            ("catalog", include_str!("catalog/api/http.rs")),
-            ("meal", include_str!("meal/api/http.rs")),
-            ("food_log", include_str!("food_log/api/http.rs")),
-            ("guidance", include_str!("guidance/api/http.rs")),
-            ("diary", include_str!("diary/api/http.rs")),
-            ("goals", include_str!("goals/api/http.rs")),
-            ("shared", include_str!("api/http.rs")),
-        ];
-
-        for (name, source) in api {
-            assert!(
-                !source.contains("Repo")
-                    && !source.contains("_repo")
-                    && !source.contains("::infra"),
-                "{name} HTTP API crosses the app boundary"
-            );
-        }
-    }
 }

@@ -1,167 +1,101 @@
 module Data.ApiKeyTest exposing (tests)
 
 import Data.ApiKey as ApiKey exposing (ApiKeyScope(..), CreatableScope(..))
+import Dict exposing (Dict)
 import Expect
+import Fuzz
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Test exposing (Test, describe, test)
+import Test exposing (Test, describe, fuzz, test)
 
 
 tests : Test
 tests =
     describe "Data.ApiKey"
-        [ test "decodes metadata with nullable timestamps and an unknown scope" <|
+        [ fuzz createRequestFuzzer
+            "createRequestEncoder keeps the name, maps the scope, and includes expiry only when set"
+          <|
+            \request ->
+                let
+                    encoded : Encode.Value
+                    encoded =
+                        ApiKey.createRequestEncoder request
+                in
+                case Decode.decodeValue (Decode.dict Decode.value) encoded of
+                    Err _ ->
+                        Expect.fail "createRequestEncoder did not produce a JSON object"
+
+                    Ok fields ->
+                        Expect.all
+                            (List.map always
+                                [ expectField "name" Decode.string request.name fields
+                                , expectField "scope" Decode.string (scopeCode request.scope) fields
+                                , case request.expiresInDays of
+                                    Just days ->
+                                        expectField "expires_in_days" Decode.int days fields
+
+                                    Nothing ->
+                                        Dict.member "expires_in_days" fields
+                                            |> Expect.equal False
+                                ]
+                            )
+                            ()
+
+        {- This is one of the three allowed negative decoder invariants from
+           the overhaul plan (§6.5): an unrecognised server scope must degrade
+           to `UnknownScope` instead of rejecting the metadata. It survives
+           because the fallback is deliberate leniency, not field-by-field
+           decoder restatement.
+        -}
+        , test "decoder maps an unknown scope to UnknownScope" <|
             \_ ->
-                Decode.decodeString ApiKey.decoder metadataJson
-                    |> Result.map
-                        (\key ->
-                            { name = key.name
-                            , tokenHint = key.tokenHint
-                            , scope = key.scope
-                            , lastUsedAt = key.lastUsedAt
-                            , expiresAt = key.expiresAt
-                            }
-                        )
-                    |> Expect.equal
-                        (Ok
-                            { name = "Build script"
-                            , tokenHint = "calco_pat_1234abcd"
-                            , scope = UnknownScope
-                            , lastUsedAt = Nothing
-                            , expiresAt = Nothing
-                            }
-                        )
-        , test "decodes a list response with both known scopes" <|
-            \_ ->
-                Decode.decodeString ApiKey.listDecoder listJson
-                    |> Result.map (List.map (\key -> ( key.name, key.scope )))
-                    |> Expect.equal
-                        (Ok
-                            [ ( "Build script", Read )
-                            , ( "Phone shortcut", ReadWrite )
-                            ]
-                        )
-        , test "decodes the raw token only from the create response" <|
-            \_ ->
-                Decode.decodeString ApiKey.createdDecoder createdJson
-                    |> Result.map (\created -> ( created.apiKey.name, created.token ))
-                    |> Expect.equal (Ok ( "Build script", "token-once" ))
-        , test "a create response without a token is rejected" <|
-            \_ ->
-                Decode.decodeString ApiKey.createdDecoder missingTokenJson
-                    |> Result.toMaybe
-                    |> Expect.equal Nothing
-        , test "encodes a create request with the scope and expiry" <|
-            \_ ->
-                ApiKey.createRequestEncoder
-                    { name = "Build script"
-                    , scope = CreatableReadWrite
-                    , expiresInDays = Just 90
-                    }
-                    |> Encode.encode 0
-                    |> Expect.equal
-                        ("{\"name\":\"Build script\",\"scope\":\"read_write\","
-                            ++ "\"expires_in_days\":90}"
-                        )
-        , test "encodes the 30-day and 1-year expiry choices" <|
-            \_ ->
-                [ 30, 365 ]
-                    |> List.map
-                        (\days ->
-                            ApiKey.createRequestEncoder
-                                { name = "Build script"
-                                , scope = CreatableRead
-                                , expiresInDays = Just days
-                                }
-                                |> Encode.encode 0
-                        )
-                    |> Expect.equal
-                        [ "{\"name\":\"Build script\",\"scope\":\"read\","
-                            ++ "\"expires_in_days\":30}"
-                        , "{\"name\":\"Build script\",\"scope\":\"read\","
-                            ++ "\"expires_in_days\":365}"
-                        ]
-        , test "omits expires_in_days for a never-expiring key" <|
-            \_ ->
-                ApiKey.createRequestEncoder
-                    { name = "Build script"
-                    , scope = CreatableRead
-                    , expiresInDays = Nothing
-                    }
-                    |> Encode.encode 0
-                    |> Expect.equal "{\"name\":\"Build script\",\"scope\":\"read\"}"
+                metadataWithScope "future_scope"
+                    |> Decode.decodeValue ApiKey.decoder
+                    |> Result.map .scope
+                    |> Expect.equal (Ok UnknownScope)
         ]
 
 
-metadataJson : String
-metadataJson =
-    """
-    {
-      "id": "key-1",
-      "name": "Build script",
-      "token_hint": "calco_pat_1234abcd",
-      "scope": "future_scope",
-      "created_at": "2026-10-26T10:00:00Z",
-      "last_used_at": null,
-      "expires_at": null
-    }
-    """
+createRequestFuzzer : Fuzz.Fuzzer ApiKey.CreateRequest
+createRequestFuzzer =
+    Fuzz.map3
+        (\name scope expiresInDays ->
+            { name = name, scope = scope, expiresInDays = expiresInDays }
+        )
+        Fuzz.string
+        (Fuzz.oneOfValues [ CreatableRead, CreatableReadWrite ])
+        (Fuzz.maybe (Fuzz.intRange 0 3650))
 
 
-listJson : String
-listJson =
-    """
-    {
-      "items": [
-        {
-          "id": "key-1",
-          "name": "Build script",
-          "token_hint": "calco_pat_1234abcd",
-          "scope": "read",
-          "created_at": "2026-10-26T10:00:00Z",
-          "last_used_at": null,
-          "expires_at": null
-        },
-        {
-          "id": "key-2",
-          "name": "Phone shortcut",
-          "token_hint": "calco_pat_5678efgh",
-          "scope": "read_write",
-          "created_at": "2026-10-25T09:00:00Z",
-          "last_used_at": "2026-10-25T09:30:00Z",
-          "expires_at": "2027-01-24T10:00:00Z"
-        }
-      ]
-    }
-    """
+scopeCode : CreatableScope -> String
+scopeCode scope =
+    case scope of
+        CreatableRead ->
+            "read"
+
+        CreatableReadWrite ->
+            "read_write"
 
 
-createdJson : String
-createdJson =
-    """
-    {
-      "id": "key-1",
-      "name": "Build script",
-      "token_hint": "calco_pat_1234abcd",
-      "scope": "read",
-      "created_at": "2026-10-26T10:00:00Z",
-      "last_used_at": null,
-      "expires_at": "2027-01-24T10:00:00Z",
-      "token": "token-once"
-    }
-    """
+expectField : String -> Decode.Decoder a -> a -> Dict String Decode.Value -> Expect.Expectation
+expectField key decoder expected fields =
+    case Dict.get key fields of
+        Just raw ->
+            Decode.decodeValue decoder raw
+                |> Expect.equal (Ok expected)
+
+        Nothing ->
+            Expect.fail ("missing encoded key: " ++ key)
 
 
-missingTokenJson : String
-missingTokenJson =
-    """
-    {
-      "id": "key-1",
-      "name": "Build script",
-      "token_hint": "calco_pat_1234abcd",
-      "scope": "read",
-      "created_at": "2026-10-26T10:00:00Z",
-      "last_used_at": null,
-      "expires_at": "2027-01-24T10:00:00Z"
-    }
-    """
+metadataWithScope : String -> Decode.Value
+metadataWithScope scope =
+    Encode.object
+        [ ( "id", Encode.string "key-1" )
+        , ( "name", Encode.string "Build script" )
+        , ( "token_hint", Encode.string "calco_pat_1234abcd" )
+        , ( "scope", Encode.string scope )
+        , ( "created_at", Encode.string "2026-10-26T10:00:00Z" )
+        , ( "last_used_at", Encode.null )
+        , ( "expires_at", Encode.null )
+        ]

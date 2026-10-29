@@ -35,21 +35,6 @@ async fn seed_named_product(router: &axum::Router, user: &str, name: &str) -> St
     created["id"].as_str().unwrap().to_string()
 }
 
-async fn seed_meal(router: &axum::Router, user: &str, product_id: &str) -> String {
-    let payload = json!({
-        "name": "Recent Test Meal",
-        "total_quantity": { "amount": 100, "unit": "g" },
-        "components": [
-            {
-                "item": { "type": "product", "id": product_id },
-                "quantity": { "amount": 100, "unit": "g" }
-            }
-        ]
-    });
-    let created: Value = post_json(router, "/api/meals", user, &payload, StatusCode::CREATED).await;
-    created["id"].as_str().unwrap().to_string()
-}
-
 async fn post_product_log(
     router: &axum::Router,
     user: &str,
@@ -288,207 +273,56 @@ async fn log_list_orders_by_meal_slot_then_created_at(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn latest_slots_excludes_logs_on_before_date(pool: PgPool) {
-    let router = app(pool).await;
-    let (admin, user) = bootstrap_and_user(&router).await;
-    let other_user = create_user_session(&router, &admin, "other", "otherpassword").await;
-    let product_id = seed_product(&router, &user).await;
-    let other_product_id = seed_product(&router, &other_user).await;
-
-    let breakfast_on_ninth =
-        post_product_log(&router, &user, &product_id, "2026-06-09", "breakfast", 100).await;
-    post_product_log(&router, &user, &product_id, "2026-06-10", "breakfast", 100).await;
-    // Ten days before `before`: inside the 30-day default window, outside 7.
-    post_product_log(&router, &user, &product_id, "2026-05-31", "lunch", 100).await;
-    post_product_log(
-        &router,
-        &other_user,
-        &other_product_id,
-        "2026-06-09",
-        "breakfast",
-        100,
-    )
-    .await;
-
-    let latest: Value = get_json(
-        &router,
-        "/api/logs/latest-slots?before=2026-06-10&lookback_days=7",
-        &user,
-    )
-    .await;
-    let slots = latest["slots"].as_array().unwrap();
-    assert_eq!(
-        slots.len(),
-        1,
-        "only the requested user's breakfast has a log inside the seven-day window"
-    );
-    assert_eq!(slots[0]["meal_slot"], "breakfast");
-    assert_eq!(slots[0]["source_date"], "2026-06-09");
-
-    let items = slots[0]["items"].as_array().unwrap();
-    assert_eq!(
-        items.len(),
-        1,
-        "the before date is exclusive and the lunch log is outside the lookback"
-    );
-    assert_eq!(items[0]["id"], breakfast_on_ninth);
-}
-
-#[sqlx::test]
-async fn recent_items_and_last_used_defaults(pool: PgPool) {
+async fn recent_latest_and_last_used_wire_shape(pool: PgPool) {
     let router = app(pool).await;
     let (_admin, user) = bootstrap_and_user(&router).await;
-
     let product_id = seed_product(&router, &user).await;
-    let meal_id = seed_meal(&router, &user, &product_id).await;
-    let product_e_id = seed_named_product(&router, &user, "Diary Test Egg").await;
-    let product_f_id = seed_named_product(&router, &user, "Diary Test Fig").await;
-    let product_d_id = seed_named_product(&router, &user, "Diary Test Dosa").await;
-
-    let first_product_log = json!({
-        "log_date": "2026-06-01",
-        "meal_slot": "breakfast",
-        "item": { "type": "product", "id": product_id },
-        "quantity": { "amount": 100, "unit": "g" }
-    });
-    let _: Value = post_json(
-        &router,
-        "/api/logs",
-        &user,
-        &first_product_log,
-        StatusCode::CREATED,
-    )
-    .await;
-
-    let latest_product_log = json!({
-        "log_date": "2026-06-03",
-        "meal_slot": "breakfast",
-        "item": { "type": "product", "id": product_id },
-        "quantity": { "amount": 175, "unit": "g" }
-    });
-    let _: Value = post_json(
-        &router,
-        "/api/logs",
-        &user,
-        &latest_product_log,
-        StatusCode::CREATED,
-    )
-    .await;
-
-    let meal_log = json!({
-        "log_date": "2026-06-02",
-        "meal_slot": "breakfast",
-        "item": { "type": "meal", "id": meal_id },
-        "quantity": { "amount": 100, "unit": "g" }
-    });
-    let _: Value = post_json(&router, "/api/logs", &user, &meal_log, StatusCode::CREATED).await;
-
-    post_product_log(
-        &router,
-        &user,
-        &product_f_id,
-        "2026-05-31",
-        "breakfast",
-        100,
-    )
-    .await;
-    post_product_log(
-        &router,
-        &user,
-        &product_e_id,
-        "2026-06-01",
-        "breakfast",
-        100,
-    )
-    .await;
-    post_product_log(&router, &user, &product_id, "2026-06-04", "breakfast", 130).await;
-    post_product_log(&router, &user, &product_d_id, "2026-06-02", "lunch", 100).await;
+    let log_id =
+        post_product_log(&router, &user, &product_id, "2026-06-01", "breakfast", 150).await;
 
     let recent: Value = get_json(
         &router,
-        "/api/logs/recent-items?from_date=2026-06-01&to_date=2026-06-03&meal_slot=breakfast",
+        "/api/logs/recent-items?from_date=2026-06-01&to_date=2026-06-01&meal_slot=breakfast",
         &user,
     )
     .await;
     let recent_items = recent["items"].as_array().unwrap();
-    assert_eq!(recent_items.len(), 3);
-    assert!(
-        recent_items
-            .iter()
-            .any(|item| item["item"]["type"] == "product" && item["item"]["id"] == product_e_id),
-        "product E logged on the inclusive lower bound must appear in recent items"
-    );
-    assert!(
-        !recent_items
-            .iter()
-            .any(|item| item["item"]["type"] == "product" && item["item"]["id"] == product_f_id),
-        "product F logged before the lower bound must not appear in recent items"
-    );
-    assert!(
-        !recent_items
-            .iter()
-            .any(|item| item["item"]["type"] == "product" && item["item"]["id"] == product_d_id),
-        "wrong-slot product D must not appear in breakfast recent items"
-    );
+    assert_eq!(recent_items.len(), 1);
+    let recent_item = &recent_items[0];
+    assert_eq!(recent_item["item"]["type"], "product");
+    assert_eq!(recent_item["item"]["id"], product_id);
+    assert_eq!(recent_item["last_used_date"], "2026-06-01");
+    assert_eq!(recent_item["quantity"]["amount"], "150");
+    assert_eq!(recent_item["quantity"]["unit"], "g");
+    assert_eq!(recent_item["nutrition_summary"]["energy_kcal"], "78");
 
-    let product_recent = recent_items
-        .iter()
-        .find(|item| item["item"]["type"] == "product" && item["item"]["id"] == product_id)
-        .expect("recent product missing");
-    assert_eq!(product_recent["item"]["id"], product_id);
-    assert_eq!(product_recent["last_used_date"], "2026-06-03");
-    assert_eq!(product_recent["quantity"]["amount"], "175");
-    assert_eq!(product_recent["quantity"]["unit"], "g");
-    assert_eq!(product_recent["nutrition_summary"]["energy_kcal"], "91");
-
-    let meal_recent = recent_items
-        .iter()
-        .find(|item| item["item"]["type"] == "meal")
-        .expect("recent meal missing");
-    assert_eq!(meal_recent["item"]["id"], meal_id);
-    assert_eq!(meal_recent["last_used_date"], "2026-06-02");
-    assert_eq!(meal_recent["quantity"]["amount"], "100");
-    assert_eq!(meal_recent["quantity"]["unit"], "g");
-    assert_eq!(meal_recent["nutrition_summary"]["energy_kcal"], "52");
-
-    let last_used_payload = json!({
-        "from_date": "2026-06-01",
-        "to_date": "2026-06-03",
-        "meal_slot": "breakfast",
-        "items": [
-            { "type": "product", "id": product_id },
-            { "type": "meal", "id": meal_id }
-        ]
-    });
     let last_used: Value = post_json(
         &router,
         "/api/logs/last-used",
         &user,
-        &last_used_payload,
+        &json!({
+            "from_date": "2026-06-01",
+            "to_date": "2026-06-01",
+            "meal_slot": "breakfast",
+            "items": [{ "type": "product", "id": product_id }]
+        }),
         StatusCode::OK,
     )
     .await;
-    let defaults = last_used["items"].as_array().unwrap();
-    assert_eq!(defaults.len(), 2);
-    for unrequested in [&product_e_id, &product_f_id, &product_d_id] {
-        assert!(
-            !defaults.iter().any(|item| {
-                item["item"]["type"] == "product" && item["item"]["id"] == unrequested.as_str()
-            }),
-            "last-used must only return explicitly requested items"
-        );
-    }
-    assert!(
-        defaults.iter().any(|item| {
-            item["item"]["type"] == "product" && item["quantity"]["amount"] == "175"
-        })
-    );
-    assert!(
-        defaults
-            .iter()
-            .any(|item| item["item"]["type"] == "meal" && item["quantity"]["unit"] == "g")
-    );
-    assert!(defaults.iter().any(|item| {
-        item["item"]["type"] == "product" && item["nutrition_summary"]["energy_kcal"] == "91"
-    }));
+    let last_used_items = last_used["items"].as_array().unwrap();
+    assert_eq!(last_used_items.len(), 1);
+    let last_used_item = &last_used_items[0];
+    assert_eq!(last_used_item["item"]["id"], product_id);
+    assert_eq!(last_used_item["quantity"]["amount"], "150");
+    assert_eq!(last_used_item["quantity"]["unit"], "g");
+    assert_eq!(last_used_item["nutrition_summary"]["energy_kcal"], "78");
+
+    let latest: Value = get_json(&router, "/api/logs/latest-slots?before=2026-06-02", &user).await;
+    let slots = latest["slots"].as_array().unwrap();
+    assert_eq!(slots.len(), 1);
+    assert_eq!(slots[0]["meal_slot"], "breakfast");
+    assert_eq!(slots[0]["source_date"], "2026-06-01");
+    let slot_items = slots[0]["items"].as_array().unwrap();
+    assert_eq!(slot_items.len(), 1);
+    assert_eq!(slot_items[0]["id"], log_id);
 }

@@ -1,43 +1,129 @@
 module View.NutrientsTest exposing (tests)
 
-{-| Tests for `View.Nutrients.nutrientLabel`.
+{-| Laws for the generic fallback in `View.Nutrients.nutrientLabel`.
 
-Only the generic parser is covered: the curated code-to-label table is
-data, and asserting its entries back would just restate the source.
+The curated code-to-label table is data, so it is not asserted here. Rendered
+DOM structure is not asserted either.
 
 -}
 
 import Expect
-import Test exposing (Test, describe, test)
+import Fuzz exposing (Fuzzer)
+import Test exposing (Test, describe, fuzz)
 import Translations.Util as Util
-import View.Nutrients
+import View.Nutrients as Nutrients
 
 
 tests : Test
 tests =
     describe "View.Nutrients"
-        [ genericFallback
+        [ describe "nutrientLabel generic fallback"
+            [ fuzz unitCode "a recognized unit suffix becomes a canonical parenthesized unit" <|
+                \generated ->
+                    Nutrients.nutrientLabel Util.EN_US generated.code
+                        |> Expect.equal generated.label
+            , fuzz plainCode "a code without a recognized unit becomes title-cased words" <|
+                \generated ->
+                    Nutrients.nutrientLabel Util.EN_US generated.code
+                        |> Expect.equal generated.label
+            ]
         ]
 
 
-assertCode : String -> String -> Expect.Expectation
-assertCode code expected =
-    View.Nutrients.nutrientLabel Util.EN_US code
-        |> Expect.equal expected
+type alias GeneratedCode =
+    { code : String
+    , label : String
+    }
 
 
-genericFallback : Test
-genericFallback =
-    describe "nutrientLabel generic parser fallback"
-        [ test "derives a title-cased label and unit from the nutrient code" <|
-            \_ ->
-                Expect.all
-                    [ \_ -> assertCode "RIBOFLAVIN_MG" "Riboflavin (mg)"
-                    , \_ -> assertCode "BETA_CAROTENE_UG" "Beta Carotene (ug)"
-                    , \_ -> assertCode "LYCOPENE_G" "Lycopene (g)"
-                    , \_ -> assertCode "BETA_CAROTENE_KCAL" "Beta Carotene (kcal)"
-                    , \_ -> assertCode "BETA_CAROTENE" "Beta Carotene"
-                    , \_ -> assertCode "riboflavin_mg" "Riboflavin (mg)"
-                    ]
-                    ()
+{-| Words that can never start a curated nutrient code, so every generated code
+reaches the generic fallback. None of them is a unit token either.
+-}
+safeWords : List String
+safeWords =
+    [ "alpha"
+    , "Beta"
+    , "GAMMA"
+    , "mystery"
+    , "custom"
+    , "riboflavin"
+    , "lycopene"
+    , "boron"
+    , "selenium"
+    , "copper"
+    , "manganese"
+    , "chromium"
+    , "iodine"
+    , "niacin"
+    , "biotin"
+    , "choline"
+    ]
+
+
+nameTokens : Fuzzer (List String)
+nameTokens =
+    Fuzz.map2 (::)
+        (Fuzz.oneOfValues safeWords)
+        (Fuzz.list (Fuzz.oneOfValues safeWords))
+
+
+{-| Case-insensitive spellings of the recognized unit suffixes.
+-}
+unitToken : Fuzzer ( String, String )
+unitToken =
+    Fuzz.oneOfValues
+        [ ( "G", "g" )
+        , ( "g", "g" )
+        , ( "MG", "mg" )
+        , ( "mg", "mg" )
+        , ( "Mg", "mg" )
+        , ( "UG", "ug" )
+        , ( "ug", "ug" )
+        , ( "Ug", "ug" )
+        , ( "KCAL", "kcal" )
+        , ( "kcal", "kcal" )
+        , ( "Kcal", "kcal" )
+        , ( "kCal", "kcal" )
         ]
+
+
+unitCode : Fuzzer GeneratedCode
+unitCode =
+    Fuzz.map2
+        (\tokens ( rawUnit, canonicalUnit ) ->
+            let
+                rendered : String
+                rendered =
+                    if List.isEmpty tokens then
+                        rawUnit
+
+                    else
+                        String.join " " (List.map titleCase tokens)
+            in
+            { code = String.join "_" (tokens ++ [ rawUnit ])
+            , label = rendered ++ " (" ++ canonicalUnit ++ ")"
+            }
+        )
+        (Fuzz.list (Fuzz.oneOfValues safeWords))
+        unitToken
+
+
+plainCode : Fuzzer GeneratedCode
+plainCode =
+    Fuzz.map
+        (\tokens ->
+            { code = String.join "_" tokens
+            , label = String.join " " (List.map titleCase tokens)
+            }
+        )
+        nameTokens
+
+
+titleCase : String -> String
+titleCase word =
+    case String.uncons word of
+        Just ( head, rest ) ->
+            String.fromChar (Char.toUpper head) ++ String.toLower rest
+
+        Nothing ->
+            word

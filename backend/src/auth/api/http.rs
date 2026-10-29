@@ -836,3 +836,49 @@ fn build_clear_cookie(config: &SessionCookieConfig) -> CookieHeader {
     }
     (header::SET_COOKIE, cookie)
 }
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    fn header_value(raw: &str) -> header::HeaderValue {
+        header::HeaderValue::from_str(raw).unwrap()
+    }
+
+    fn assert_invalid(value: &header::HeaderValue) {
+        let error = parse_bearer_token(value).unwrap_err();
+        assert_eq!(error.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(error.body.error.code, "invalid_api_key");
+    }
+
+    #[rstest]
+    #[case::canonical_spacing("Bearer token", "token")]
+    #[case::lowercase_scheme("bearer token", "token")]
+    #[case::uppercase_scheme("BEARER token", "token")]
+    #[case::extra_spacing("Bearer    token", "token")]
+    fn parse_bearer_token_accepts_valid_scheme_and_spacing(
+        #[case] raw: &str,
+        #[case] expected: &str,
+    ) {
+        match parse_bearer_token(&header_value(raw)) {
+            Ok(token) => assert_eq!(token, expected, "{raw}"),
+            Err(_) => panic!("expected {raw:?} to parse"),
+        }
+    }
+
+    #[rstest]
+    #[case::missing_scheme(header_value("token"))]
+    #[case::leading_space(header_value(" Bearer token"))]
+    #[case::wrong_scheme(header_value("Basic abc"))]
+    #[case::scheme_without_token(header_value("Bearer"))]
+    #[case::single_trailing_space(header_value("Bearer "))]
+    #[case::multiple_trailing_spaces(header_value("Bearer   "))]
+    #[case::space_inside_token(header_value("Bearer tok en"))]
+    #[case::token_trailing_space(header_value("Bearer token "))]
+    #[case::non_utf8_token(header::HeaderValue::from_bytes(b"Bearer \x80").unwrap())]
+    fn parse_bearer_token_rejects_malformed_values(#[case] value: header::HeaderValue) {
+        assert_invalid(&value);
+    }
+}

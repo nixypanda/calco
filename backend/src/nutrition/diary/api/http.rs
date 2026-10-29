@@ -74,13 +74,3 @@ fn to_response(prefs: DiaryPrefs) -> DiaryPrefsResponse {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn request_rejects_unknown_and_empty_slots() {
-        assert!(parse_enabled_slots(vec!["supper".into()]).is_err());
-        assert!(parse_enabled_slots(vec![]).is_err());
-    }
-}

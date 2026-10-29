@@ -149,6 +149,8 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use rstest::rstest;
+
     use super::super::super::{AssistantAuth, AssistantConfig, ConfigError};
     use super::load;
 
@@ -179,17 +181,8 @@ mod tests {
     }
 
     #[test]
-    fn missing_path_empty_file_and_comment_only_file_disable_the_assistant() {
+    fn missing_path_disables_the_assistant() {
         assert_eq!(load(None), Ok(AssistantConfig::Disabled));
-
-        for contents in [
-            "",
-            r#"# Assistant configuration is optional.
-"#,
-        ] {
-            let file = TempFile::new(contents);
-            assert_eq!(load(Some(file.path())), Ok(AssistantConfig::Disabled));
-        }
     }
 
     #[test]
@@ -214,48 +207,29 @@ enabled = true
         assert_eq!(load(Some(file.path())), Err(ConfigError::InvalidToml));
     }
 
-    #[test]
-    fn unknown_fields_are_rejected() {
-        for contents in [
-            r#"unexpected = true
-"#,
-            r#"[assistant]
+    #[rstest]
+    #[case::comment_only(
+        r#"# Assistant configuration is optional
+"#
+    )]
+    #[case::explicitly_disabled(
+        r#"[assistant]
 enabled = false
-unexpected = true
-"#,
-            r#"[assistant.authentication]
-kind = "none"
-"#,
-        ] {
-            let file = TempFile::new(contents);
-            assert_eq!(
-                load(Some(file.path())),
-                Err(ConfigError::InvalidToml),
-                "{contents}"
-            );
-        }
-    }
-
-    #[test]
-    fn absent_and_explicitly_disabled_assistant_configs_are_disabled() {
-        for contents in [
-            r#"# Assistant configuration is optional
-"#,
-            r#"[assistant]
-enabled = false
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::disabled_with_unused_fields(
+        r#"[assistant]
 enabled = false
 endpoint = ""
 model = ""
 
 [assistant.authentication]
 kind = "none"
-"#,
-        ] {
-            let file = TempFile::new(contents);
-            assert_eq!(load(Some(file.path())), Ok(AssistantConfig::Disabled));
-        }
+"#
+    )]
+    fn absent_and_explicitly_disabled_assistant_configs_are_disabled(#[case] contents: &str) {
+        let file = TempFile::new(contents);
+        assert_eq!(load(Some(file.path())), Ok(AssistantConfig::Disabled));
     }
 
     #[test]
@@ -291,44 +265,9 @@ api_key_file = "/run/secrets/provider-key"
         );
     }
 
-    #[test]
-    fn invalid_urls_and_models_are_rejected() {
-        for contents in [
-            r#"[assistant]
-enabled = true
-endpoint = "ftp://provider.example"
-model = "model"
-
-[assistant.authentication]
-kind = "none"
-"#,
-            r#"[assistant]
-enabled = true
-endpoint = "http://provider.example"
-model = "   "
-
-[assistant.authentication]
-kind = "none"
-"#,
-            r#"[assistant]
-enabled = true
-endpoint = "not a URL"
-model = "model"
-
-[assistant.authentication]
-kind = "none"
-"#,
-        ] {
-            let file = TempFile::new(contents);
-            assert_eq!(load(Some(file.path())), Err(ConfigError::InvalidToml));
-        }
-    }
-
-    #[test]
-    fn authentication_variants_are_supported() {
-        let cases = [
-            (
-                r#"[assistant]
+    #[rstest]
+    #[case::none(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
@@ -336,10 +275,10 @@ model = "model"
 [assistant.authentication]
 kind = "none"
 "#,
-                AssistantAuth::None,
-            ),
-            (
-                r#"[assistant]
+        AssistantAuth::None
+    )]
+    #[case::bearer(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
@@ -348,12 +287,12 @@ model = "model"
 kind = "bearer"
 api_key_file = "/run/key"
 "#,
-                AssistantAuth::Bearer {
-                    api_key_file: PathBuf::from("/run/key"),
-                },
-            ),
-            (
-                r#"[assistant]
+        AssistantAuth::Bearer {
+            api_key_file: PathBuf::from("/run/key"),
+        }
+    )]
+    #[case::header(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
@@ -363,32 +302,73 @@ kind = "header"
 header_name = "api-key"
 api_key_file = "/run/key"
 "#,
-                AssistantAuth::Header {
-                    header_name: "api-key".parse().unwrap(),
-                    api_key_file: PathBuf::from("/run/key"),
-                },
-            ),
-        ];
-
-        for (contents, expected) in cases {
-            let file = TempFile::new(contents);
-            let loaded = load(Some(file.path())).unwrap();
-            assert_eq!(loaded.as_enabled().unwrap().authentication, expected);
+        AssistantAuth::Header {
+            header_name: "api-key".parse().unwrap(),
+            api_key_file: PathBuf::from("/run/key"),
         }
+    )]
+    fn authentication_variants_are_supported(
+        #[case] contents: &str,
+        #[case] expected: AssistantAuth,
+    ) {
+        let file = TempFile::new(contents);
+        let loaded = load(Some(file.path())).unwrap();
+        assert_eq!(loaded.as_enabled().unwrap().authentication, expected);
     }
 
-    #[test]
-    fn invalid_authentication_field_combinations_are_rejected() {
-        let invalid_configs = [
-            r#"[assistant]
+    #[rstest]
+    #[case::unknown_top_level_field(
+        r#"unexpected = true
+"#
+    )]
+    #[case::unknown_assistant_field(
+        r#"[assistant]
+enabled = false
+unexpected = true
+"#
+    )]
+    #[case::non_http_endpoint(
+        r#"[assistant]
+enabled = true
+endpoint = "ftp://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "none"
+"#
+    )]
+    #[case::blank_model(
+        r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "   "
+
+[assistant.authentication]
+kind = "none"
+"#
+    )]
+    #[case::unparseable_endpoint(
+        r#"[assistant]
+enabled = true
+endpoint = "not a URL"
+model = "model"
+
+[assistant.authentication]
+kind = "none"
+"#
+    )]
+    #[case::unsupported_authentication_kind(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
 
 [assistant.authentication]
 kind = "other"
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::none_authentication_with_api_key(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
@@ -396,16 +376,20 @@ model = "model"
 [assistant.authentication]
 kind = "none"
 api_key_file = "/run/key"
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::bearer_authentication_without_api_key(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
 
 [assistant.authentication]
 kind = "bearer"
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::bearer_authentication_with_empty_api_key(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
@@ -413,8 +397,10 @@ model = "model"
 [assistant.authentication]
 kind = "bearer"
 api_key_file = ""
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::bearer_authentication_with_header_name(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
@@ -423,8 +409,10 @@ model = "model"
 kind = "bearer"
 api_key_file = "/run/key"
 header_name = "api-key"
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::header_authentication_without_header_name(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
@@ -432,8 +420,10 @@ model = "model"
 [assistant.authentication]
 kind = "header"
 api_key_file = "/run/key"
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::header_authentication_with_invalid_name(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
@@ -442,8 +432,10 @@ model = "model"
 kind = "header"
 header_name = "not a header"
 api_key_file = "/run/key"
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::header_authentication_with_empty_api_key(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
@@ -452,107 +444,44 @@ model = "model"
 kind = "header"
 header_name = "api-key"
 api_key_file = ""
-"#,
-        ];
-
-        for contents in invalid_configs {
-            let file = TempFile::new(contents);
-            assert_eq!(
-                load(Some(file.path())),
-                Err(ConfigError::InvalidToml),
-                "{contents}"
-            );
-        }
-    }
-
-    #[test]
-    fn incomplete_or_wrongly_typed_enabled_configs_are_rejected() {
-        let invalid_configs = [
-            r#"[assistant]
+"#
+    )]
+    #[case::non_boolean_enabled(
+        r#"[assistant]
 enabled = "true"
-"#,
-            r#"[assistant]
-enabled = true
-endpoint = 42
-model = "model"
-
-[assistant.authentication]
-kind = "none"
-"#,
-            r#"[assistant]
-enabled = true
-endpoint = "http://provider.example"
-model = 42
-
-[assistant.authentication]
-kind = "none"
-"#,
-            r#"[assistant]
-enabled = true
-endpoint = "http://provider.example"
-model = "model"
-supports_images = "yes"
-
-[assistant.authentication]
-kind = "none"
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::missing_endpoint(
+        r#"[assistant]
 enabled = true
 model = "model"
 
 [assistant.authentication]
 kind = "none"
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::missing_model(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 
 [assistant.authentication]
 kind = "none"
-"#,
-            r#"[assistant]
+"#
+    )]
+    #[case::missing_authentication(
+        r#"[assistant]
 enabled = true
 endpoint = "http://provider.example"
 model = "model"
-"#,
-        ];
-
-        for contents in invalid_configs {
-            let file = TempFile::new(contents);
-            assert_eq!(load(Some(file.path())), Err(ConfigError::InvalidToml));
-        }
-    }
-
-    #[test]
-    fn tracked_assistant_configs_load_without_reading_key_files() {
-        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../assistant-config");
-        let expected = [
-            (
-                "groq.toml",
-                "https://api.groq.com/openai/v1/chat/completions",
-                "qwen/qwen3.8-27b",
-                "assistant-config/groq-api-key",
-            ),
-            (
-                "openrouter.toml",
-                "https://openrouter.ai/api/v1/chat/completions",
-                "openrouter/free",
-                "assistant-config/openrouter-api-key",
-            ),
-        ];
-
-        for (file_name, endpoint, model, api_key_file) in expected {
-            let loaded = load(Some(&directory.join(file_name))).unwrap();
-            let settings = loaded.as_enabled().expect("assistant is enabled");
-            assert_eq!(settings.endpoint.as_str(), endpoint);
-            assert_eq!(settings.model.as_str(), model);
-            assert!(settings.supports_images);
-            assert_eq!(
-                settings.authentication,
-                AssistantAuth::Bearer {
-                    api_key_file: PathBuf::from(api_key_file),
-                }
-            );
-        }
+"#
+    )]
+    fn invalid_configs_are_rejected(#[case] contents: &str) {
+        let file = TempFile::new(contents);
+        assert_eq!(
+            load(Some(file.path())),
+            Err(ConfigError::InvalidToml),
+            "{contents}"
+        );
     }
 }

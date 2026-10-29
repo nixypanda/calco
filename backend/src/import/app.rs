@@ -735,6 +735,113 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn staging_rejects_non_pending_jobs() {
+        let import_repo = Arc::new(MockImportRepo::new());
+        let services = ImportService::new(
+            import_repo.clone(),
+            Arc::new(MockExternalProductWriter {
+                result: ProductUpsertResult::default(),
+                upserted: Mutex::new(vec![]),
+            }),
+            Arc::new(MockNutrientCatalogReader),
+        );
+        let mut job = ImportJob::new("USDA".into(), None);
+        job.status = ImportStatus::Running;
+        import_repo.create_job(&job).await.unwrap();
+
+        let food_error = services
+            .stage_foods(
+                job.id,
+                vec![StagedImportProduct {
+                    source: "USDA".into(),
+                    source_id: "food-1".into(),
+                    barcode: None,
+                    name: "Food".into(),
+                    brand: None,
+                    categories: vec![],
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(food_error, ImportError::InvalidStatus(_)));
+
+        let nutrient_error = services
+            .stage_nutrients(
+                job.id,
+                vec![StagedImportNutrient {
+                    source: "USDA".into(),
+                    source_id: "food-1".into(),
+                    nutrient_code: "ENERGY_KCAL".into(),
+                    amount_per_100g: rust_decimal::Decimal::ONE,
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(nutrient_error, ImportError::InvalidStatus(_)));
+
+        let serving_error = services
+            .stage_servings(
+                job.id,
+                vec![StagedImportServing {
+                    source: "USDA".into(),
+                    source_id: "food-1".into(),
+                    unit: "cup".into(),
+                    grams_per_unit: rust_decimal::Decimal::ONE,
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(serving_error, ImportError::InvalidStatus(_)));
+
+        assert!(import_repo.foods.lock().unwrap().is_empty());
+        assert!(import_repo.nutrients.lock().unwrap().is_empty());
+        assert!(import_repo.servings.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn validation_failure_marks_import_failed() {
+        let import_repo = Arc::new(MockImportRepo::new());
+        let services = ImportService::new(
+            import_repo.clone(),
+            Arc::new(FailingExternalProductWriter {
+                error_is_validation: true,
+            }),
+            Arc::new(MockNutrientCatalogReader),
+        );
+        let job = make_pending_job(&services, "USDA").await;
+        services
+            .stage_foods(
+                job.id,
+                vec![StagedImportProduct {
+                    source: "USDA".into(),
+                    source_id: "food-1".into(),
+                    barcode: None,
+                    name: "Food".into(),
+                    brand: None,
+                    categories: vec![],
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap();
+
+        let error = services.commit_job(job.id).await.unwrap_err();
+
+        assert!(matches!(error, ImportError::Validation(_)));
+        assert_eq!(
+            import_repo.find_job(job.id).await.unwrap().unwrap().status,
+            ImportStatus::Failed
+        );
+    }
+
     #[test]
     fn aggregate_assembly_reports_children_without_a_staged_product() {
         let batch = StagedImportBatch {

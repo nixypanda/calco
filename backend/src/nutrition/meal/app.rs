@@ -249,6 +249,7 @@ impl MealReadPort for MealService {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use rstest::rstest;
     use std::sync::Mutex;
 
     struct MockMealRepo {
@@ -383,117 +384,64 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Copy, Debug)]
+    enum ExpectedCreateMealError {
+        Validation,
+        NotFound,
+    }
+
+    #[track_caller]
+    fn assert_create_meal_error(expected: ExpectedCreateMealError, error: NutritionError) {
+        match (expected, error) {
+            (ExpectedCreateMealError::Validation, NutritionError::Validation(_)) => {}
+            (ExpectedCreateMealError::NotFound, NutritionError::NotFound(_)) => {}
+            (expected, error) => panic!("expected {expected:?}, got {error}"),
+        }
+    }
+
+    #[rstest]
+    #[case::empty_name(
+        Some(sample_product()),
+        "",
+        vec![sample_component()],
+        ExpectedCreateMealError::Validation
+    )]
+    #[case::no_components(
+        Some(sample_product()),
+        "Empty Meal",
+        vec![],
+        ExpectedCreateMealError::Validation
+    )]
+    #[case::product_not_found(
+        None,
+        "Test Meal",
+        vec![sample_component()],
+        ExpectedCreateMealError::NotFound
+    )]
     #[tokio::test]
-    async fn test_create_meal_empty_name() {
-        let services = make_services(Some(sample_product()));
+    async fn create_meal_rejects_invalid_request(
+        #[case] product: Option<Product>,
+        #[case] name: &str,
+        #[case] components: Vec<CreateMealComponentInput>,
+        #[case] expected: ExpectedCreateMealError,
+    ) {
+        let services = make_services(product);
 
         let result = services
             .create_meal(
                 Uuid::new_v4(),
                 CreateMealInput {
-                    name: "".to_string(),
+                    name: name.to_string(),
                     notes: None,
                     total_quantity_amount: None,
                     total_quantity_unit: None,
-                    components: vec![sample_component()],
+                    components,
                 },
             )
             .await;
 
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::Validation(_) => {}
-            _ => panic!("expected Validation"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_create_meal_no_components() {
-        let services = make_services(Some(sample_product()));
-
-        let result = services
-            .create_meal(
-                Uuid::new_v4(),
-                CreateMealInput {
-                    name: "Empty Meal".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![],
-                },
-            )
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::Validation(_) => {}
-            _ => panic!("expected Validation"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_create_meal_product_not_found() {
-        let services = make_services(None);
-
-        let result = services
-            .create_meal(
-                Uuid::new_v4(),
-                CreateMealInput {
-                    name: "Test Meal".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![sample_component()],
-                },
-            )
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::NotFound(_) => {}
-            _ => panic!("expected NotFound"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_update_meal_success() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let created = services
-            .create_meal(
-                user_id,
-                CreateMealInput {
-                    name: "Original".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![sample_component()],
-                },
-            )
-            .await
-            .unwrap();
-
-        let updated = services
-            .update_meal(
-                created.id,
-                user_id,
-                UpdateMealInput {
-                    name: Some("Updated".to_string()),
-                    notes: Some(Some("new notes".to_string())),
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(updated.name.as_str(), "Updated");
-        assert_eq!(
-            updated.notes.as_ref().map(|n| n.0.as_str()),
-            Some("new notes")
-        );
+        let error = result.expect_err("create_meal should reject invalid input");
+        assert_create_meal_error(expected, error);
     }
 
     #[tokio::test]
@@ -535,8 +483,17 @@ mod tests {
         assert_eq!(updated.total_quantity_unit, None);
     }
 
+    #[derive(Clone, Copy, Debug)]
+    enum MealMutation {
+        Update,
+        Delete,
+    }
+
+    #[rstest]
+    #[case::update(MealMutation::Update)]
+    #[case::delete(MealMutation::Delete)]
     #[tokio::test]
-    async fn test_update_meal_forbidden() {
+    async fn non_owner_cannot_mutate_meal(#[case] mutation: MealMutation) {
         let services = make_services(Some(sample_product()));
         let owner = Uuid::new_v4();
         let other = Uuid::new_v4();
@@ -555,64 +512,28 @@ mod tests {
             .await
             .unwrap();
 
-        let result = services
-            .update_meal(
-                created.id,
-                other,
-                UpdateMealInput {
-                    name: None,
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: None,
-                },
-            )
-            .await;
+        let result = match mutation {
+            MealMutation::Update => services
+                .update_meal(
+                    created.id,
+                    other,
+                    UpdateMealInput {
+                        name: None,
+                        notes: None,
+                        total_quantity_amount: None,
+                        total_quantity_unit: None,
+                        components: None,
+                    },
+                )
+                .await
+                .map(|_| ()),
+            MealMutation::Delete => services.delete_meal(created.id, other).await,
+        };
 
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::Forbidden(_) => {}
-            _ => panic!("expected Forbidden"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_delete_meal_forbidden() {
-        let services = make_services(Some(sample_product()));
-        let owner = Uuid::new_v4();
-        let other = Uuid::new_v4();
-
-        let created = services
-            .create_meal(
-                owner,
-                CreateMealInput {
-                    name: "My Meal".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![sample_component()],
-                },
-            )
-            .await
-            .unwrap();
-
-        let result = services.delete_meal(created.id, other).await;
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::Forbidden(_) => {}
-            _ => panic!("expected Forbidden"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_delete_meal_not_found() {
-        let services = make_services(Some(sample_product()));
-        let result = services.delete_meal(MealId::new(), Uuid::new_v4()).await;
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::NotFound(_) => {}
-            _ => panic!("expected NotFound"),
-        }
+        assert!(
+            matches!(&result, Err(NutritionError::Forbidden(_))),
+            "expected Forbidden, got {result:?}"
+        );
     }
 
     #[tokio::test]

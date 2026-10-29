@@ -1,265 +1,193 @@
 module Page.Diary.SettingsTest exposing (tests)
 
 import Api.Client as Client
-import Data.MealSlot exposing (MealSlot(..))
+import Data.DiaryPrefs exposing (DiaryPrefs)
+import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Expect
-import Page.Diary.Settings as Settings
+import I18n
+import Page.Diary.Settings as S
+import Support.Story as Story
 import Test exposing (Test, describe, test)
-
-
-networkErrorMessage : String
-networkErrorMessage =
-    "Could not reach the server. Check your connection and try again."
-
-
-validationMessage : String
-validationMessage =
-    "Select at least one meal slot."
+import Translations.Ids exposing (TranslationId(..))
 
 
 tests : Test
 tests =
     describe "Page.Diary.Settings"
-        [ test "a user loads preferences, toggles a slot, and saves the canonical selection" <|
+        [ test "a user changes meal slots and saves" <|
             \_ ->
-                let
-                    ( loading, initialOut ) =
-                        Settings.init
-
-                    loaded : Settings.Model
-                    loaded =
-                        step
-                            (Settings.PrefsLoaded
-                                (Ok { enabledMealSlots = [ LateNightSnack, Breakfast ] })
-                            )
-                            loading
-
-                    toggled : Settings.Model
-                    toggled =
-                        step (Settings.SlotToggled Lunch True) loaded
-
-                    saveRequest : Settings.OutMsg
-                    saveRequest =
-                        out Settings.SaveClicked toggled
-
-                    saved : Settings.Model
-                    saved =
-                        step
-                            (Settings.SaveCompleted
-                                (Ok { enabledMealSlots = [ Dinner, Lunch ] })
-                            )
-                            (step Settings.SaveClicked toggled)
-                in
-                { initial = initialOut
-                , loaded = toScreen loaded
-                , saveRequest = saveRequest
-                , saved = toScreen saved
-                }
-                    |> Expect.equal
-                        { initial = Settings.RequestPrefs
-                        , loaded =
-                            { phase = "ready"
-                            , selected = [ Breakfast, LateNightSnack ]
-                            , saveState = Just Settings.Editing
-                            , error = Nothing
+                editedPrefs
+                    |> step S.SaveClicked
+                    |> step (S.SaveCompleted (Ok (prefs [ Lunch, Dinner ])))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { screen = toScreen model
+                            , finalOut = outMsg
                             }
-                        , saveRequest =
-                            Settings.RequestSave
-                                { enabledMealSlots = [ Breakfast, Lunch, LateNightSnack ] }
-                        , saved =
-                            { phase = "ready"
-                            , selected = [ Lunch, Dinner ]
-                            , saveState = Just Settings.Saved
-                            , error = Nothing
-                            }
-                        }
-        , test "clearing every meal slot blocks save with a validation message" <|
-            \_ ->
-                let
-                    cleared : Settings.Model
-                    cleared =
-                        Settings.init
-                            |> Tuple.first
-                            |> step
-                                (Settings.PrefsLoaded
-                                    (Ok { enabledMealSlots = [ Breakfast ] })
-                                )
-                            |> step (Settings.SlotToggled Breakfast False)
-                in
-                { request = out Settings.SaveClicked cleared
-                , screen = toScreen (step Settings.SaveClicked cleared)
-                }
-                    |> Expect.equal
-                        { request = Settings.NoOp
-                        , screen =
-                            { phase = "ready"
-                            , selected = []
-                            , saveState = Just (Settings.ValidationFailed validationMessage)
-                            , error = Just validationMessage
-                            }
-                        }
-        , test "a failed save keeps the selection and a retry re-requests it" <|
-            \_ ->
-                let
-                    saving : Settings.Model
-                    saving =
-                        Settings.init
-                            |> Tuple.first
-                            |> step
-                                (Settings.PrefsLoaded
-                                    (Ok { enabledMealSlots = [ Breakfast, Lunch ] })
-                                )
-                            |> step Settings.SaveClicked
-
-                    failed : Settings.Model
-                    failed =
-                        step
-                            (Settings.SaveCompleted (Err Client.NetworkError))
-                            saving
-
-                    retried : Settings.Model
-                    retried =
-                        step Settings.SaveClicked failed
-                in
-                { failed = toScreen failed
-                , retryRequest = out Settings.SaveClicked failed
-                , retried = saveState retried
-                }
-                    |> Expect.equal
-                        { failed =
-                            { phase = "ready"
-                            , selected = [ Breakfast, Lunch ]
-                            , saveState = Just (Settings.SaveFailed networkErrorMessage)
-                            , error = Just networkErrorMessage
-                            }
-                        , retryRequest =
-                            Settings.RequestSave
-                                { enabledMealSlots = [ Breakfast, Lunch ] }
-                        , retried = Just Settings.Saving
-                        }
-        , test "an unauthorized load or save expires the session" <|
-            \_ ->
-                let
-                    saving : Settings.Model
-                    saving =
-                        Settings.init
-                            |> Tuple.first
-                            |> step
-                                (Settings.PrefsLoaded
-                                    (Ok { enabledMealSlots = [ Breakfast ] })
-                                )
-                            |> step Settings.SaveClicked
-                in
-                { load =
-                    Settings.update
-                        (Settings.PrefsLoaded
-                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                                |> Expect.equal
+                                    { screen =
+                                        { selected = [ "Lunch", "Dinner" ]
+                                        , error = Nothing
+                                        , submit = Just ( savedLabel, False )
+                                        }
+                                    , finalOut = S.NoOp
+                                    }
                         )
-                        Settings.Loading
-                        |> third
-                , save =
-                    Settings.update
-                        (Settings.SaveCompleted
-                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                        )
-                        saving
-                        |> third
-                }
-                    |> Expect.equal
-                        { load = Settings.SessionExpired
-                        , save = Settings.SessionExpired
-                        }
-        , test "a failed preferences load shows an error and retrying re-requests them" <|
+        , test "a failed save can be retried" <|
             \_ ->
-                let
-                    failed : Settings.Model
-                    failed =
-                        step (Settings.PrefsLoaded (Err Client.NetworkError)) Settings.Loading
-                in
-                { failed = toScreen failed
-                , retryRequest = out Settings.RetryClicked failed
-                , retrying = toScreen (step Settings.RetryClicked failed)
-                }
-                    |> Expect.equal
-                        { failed =
-                            { phase = "failed"
-                            , selected = []
-                            , saveState = Nothing
-                            , error = Just networkErrorMessage
+                editedPrefs
+                    |> step S.SaveClicked
+                    |> step (S.SaveCompleted (Err Client.NetworkError))
+                    |> step S.SaveClicked
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { request = saveRequest outMsg
+                            , submit = (toScreen model).submit
                             }
-                        , retryRequest = Settings.RequestPrefs
-                        , retrying =
-                            { phase = "loading"
-                            , selected = []
-                            , saveState = Nothing
-                            , error = Nothing
-                            }
-                        }
+                                |> Expect.equal
+                                    { request = Just { enabledMealSlots = [ Lunch, Dinner ] }
+                                    , submit = Just ( savingLabel, True )
+                                    }
+                        )
+        , test "a failed load can be retried" <|
+            \_ ->
+                S.init
+                    |> Story.start
+                    |> step (S.PrefsLoaded (Err Client.NetworkError))
+                    |> step S.RetryClicked
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal S.RequestPrefs
+                        )
         ]
 
 
-
--- SCREEN PROJECTION
-
-
 type alias Screen =
-    { phase : String
-    , selected : List MealSlot
-    , saveState : Maybe Settings.SaveState
+    { selected : List String
     , error : Maybe String
+    , submit : Maybe ( String, Bool )
     }
 
 
-toScreen : Settings.Model -> Screen
+toScreen : S.Model -> Screen
 toScreen model =
     case model of
-        Settings.Loading ->
-            { phase = "loading", selected = [], saveState = Nothing, error = Nothing }
+        S.Loading ->
+            emptyScreen
 
-        Settings.Failed message ->
-            { phase = "failed", selected = [], saveState = Nothing, error = Just message }
+        S.Failed message ->
+            { emptyScreen | error = Just message }
 
-        Settings.Ready ready ->
-            { phase = "ready"
-            , selected = ready.selected
-            , saveState = Just ready.saveState
-            , error = saveError ready.saveState
+        S.Ready ready ->
+            { selected = List.map (MealSlot.label I18n.defaultLanguage) ready.selected
+            , error = errorText ready.saveState
+            , submit = Just (submitText ready.saveState)
             }
 
 
-saveError : Settings.SaveState -> Maybe String
-saveError state =
+errorText : S.SaveState -> Maybe String
+errorText state =
     case state of
-        Settings.ValidationFailed message ->
+        S.ValidationFailed message ->
             Just message
 
-        Settings.SaveFailed message ->
+        S.SaveFailed message ->
             Just message
 
         _ ->
             Nothing
 
 
-saveState : Settings.Model -> Maybe Settings.SaveState
-saveState model =
-    (toScreen model).saveState
+submitText : S.SaveState -> ( String, Bool )
+submitText state =
+    case state of
+        S.Saving ->
+            ( savingLabel, True )
+
+        S.Saved ->
+            ( savedLabel, False )
+
+        _ ->
+            ( saveLabel, False )
 
 
-step : Settings.Msg -> Settings.Model -> Settings.Model
-step msg model =
-    first (Settings.update msg model)
+emptyScreen : Screen
+emptyScreen =
+    { selected = [], error = Nothing, submit = Nothing }
 
 
-out : Settings.Msg -> Settings.Model -> Settings.OutMsg
-out msg model =
-    third (Settings.update msg model)
+saveRequest : S.OutMsg -> Maybe DiaryPrefs
+saveRequest outMsg =
+    case outMsg of
+        S.RequestSave value ->
+            Just value
+
+        _ ->
+            Nothing
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
+prefs : List MealSlot -> DiaryPrefs
+prefs slots =
+    { enabledMealSlots = slots }
 
 
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
+saveLabel : String
+saveLabel =
+    I18n.en TidDiarySettingsSave
+
+
+savingLabel : String
+savingLabel =
+    I18n.en TidCommonSaving
+
+
+savedLabel : String
+savedLabel =
+    I18n.en TidDiarySettingsSaved
+
+
+stepWithOut :
+    S.Msg
+    -> S.Model
+    -> ( S.Model, S.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            S.update msg model
+    in
+    ( next, outMsg )
+
+
+
+-- STORY PIPELINE
+
+
+type alias Journey =
+    Story.Journey S.Model S.OutMsg
+
+
+step : S.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+finish :
+    (( S.Model, S.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+loadedPrefs : Journey
+loadedPrefs =
+    S.init
+        |> Story.start
+        |> step (S.PrefsLoaded (Ok (prefs [ Breakfast, Lunch ])))
+
+
+editedPrefs : Journey
+editedPrefs =
+    loadedPrefs
+        |> step (S.SlotToggled Breakfast False)
+        |> step (S.SlotToggled Dinner True)

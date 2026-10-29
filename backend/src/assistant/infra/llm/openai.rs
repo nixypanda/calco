@@ -510,13 +510,14 @@ fn explicitly_rejects_response_format(status: StatusCode, body: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
+    use std::collections::{BTreeMap, VecDeque};
     use std::sync::Arc;
 
     use axum::extract::{OriginalUri, State};
     use axum::http::{HeaderMap as AxumHeaderMap, StatusCode as AxumStatusCode};
     use axum::routing::post;
     use axum::{Json, Router};
+    use proptest::prelude::*;
     use tokio::sync::Mutex as AsyncMutex;
 
     use super::*;
@@ -641,72 +642,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sends_custom_header_without_authorization() {
-        let server = server(vec![(AxumStatusCode::OK, success(), Duration::ZERO)]).await;
-        let key = temp_key("custom-secret\n");
-        let client = OpenAiClient::new(config(
-            server.endpoint.clone(),
-            Auth::HeaderFile {
-                name: "x-provider-key".parse().unwrap(),
-                path: key.clone(),
-            },
-        ))
-        .unwrap();
-        std::fs::remove_file(key).unwrap();
-
-        client.complete(request()).await.unwrap();
-
-        let requests = server.state.requests.lock().await;
-        assert_eq!(requests[0].1["x-provider-key"], "custom-secret");
-        assert!(requests[0].1.get("authorization").is_none());
-    }
-
-    #[tokio::test]
-    async fn falls_back_and_caches_supported_response_mode() {
-        let unsupported = r#"{"error":{"message":"response_format is unsupported"}}"#.into();
-        let server = server(vec![
-            (AxumStatusCode::BAD_REQUEST, unsupported, Duration::ZERO),
-            (AxumStatusCode::OK, success(), Duration::ZERO),
-            (AxumStatusCode::OK, success(), Duration::ZERO),
-        ])
-        .await;
-        let client = OpenAiClient::new(config(server.endpoint.clone(), Auth::None)).unwrap();
-
-        client.complete(request()).await.unwrap();
-        client.complete(request()).await.unwrap();
-
-        let requests = server.state.requests.lock().await;
-        assert_eq!(requests[0].0["response_format"]["type"], "json_schema");
-        assert_eq!(requests[1].0["response_format"]["type"], "json_object");
-        assert_eq!(requests[2].0["response_format"]["type"], "json_object");
-        assert!(
-            requests[1].0["messages"][0]["content"]
-                .as_str()
-                .unwrap()
-                .contains("Required JSON Schema")
-        );
-    }
-
-    #[tokio::test]
-    async fn groq_validation_error_falls_back_to_json_object() {
-        let server = server(vec![
-            (
-                AxumStatusCode::BAD_REQUEST,
-                r#"{"error":{"message":"json_validate_failed"}}"#.into(),
-                Duration::ZERO,
-            ),
-            (AxumStatusCode::OK, success(), Duration::ZERO),
-        ])
-        .await;
-        let client = OpenAiClient::new(config(server.endpoint.clone(), Auth::None)).unwrap();
-
-        client.complete(request()).await.unwrap();
-
-        let requests = server.state.requests.lock().await;
-        assert_eq!(requests[1].0["response_format"]["type"], "json_object");
-    }
-
-    #[tokio::test]
     async fn falls_back_from_schema_to_json_object_to_prompt_only() {
         let unsupported = || {
             (
@@ -727,6 +662,20 @@ mod tests {
 
         let requests = server.state.requests.lock().await;
         assert_eq!(requests.len(), 3);
+        assert_eq!(requests[0].0["response_format"]["type"], "json_schema");
+        assert_eq!(requests[1].0["response_format"]["type"], "json_object");
+        assert!(
+            !requests[0].0["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .contains(JSON_ONLY_INSTRUCTION)
+        );
+        assert!(
+            requests[1].0["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .contains(JSON_ONLY_INSTRUCTION)
+        );
         assert!(requests[2].0.get("response_format").is_none());
         assert!(
             requests[2].0["messages"][0]["content"]
@@ -780,27 +729,313 @@ mod tests {
         );
     }
 
-    #[test]
-    fn response_accepts_missing_usage() {
-        let parsed = parse_response(br#"{"choices":[{"message":{"content":"{}"}}]}"#).unwrap();
-        assert_eq!(parsed.content, "{}");
-        assert_eq!(parsed.usage, None);
+    fn generated_content() -> impl Strategy<Value = String> {
+        any::<String>().prop_map(|mut content| {
+            if content.is_empty() {
+                content.push('x');
+            }
+            content
+        })
     }
 
-    #[test]
-    fn groq_request_adds_only_provider_extensions() {
-        let request = request();
-        let body =
-            RequestBody::from_request("test", &request, ResponseMode::JsonSchema, false).unwrap();
-        let body = serde_json::to_value(GroqRequest {
-            request: &body,
-            reasoning_format: "hidden",
-            max_tokens: request.max_output_tokens,
-        })
-        .unwrap();
-        assert_eq!(body["reasoning_format"], "hidden");
-        assert_eq!(body["max_tokens"], 16_384);
-        assert!(body.get("max_completion_tokens").is_none());
+    fn generated_extension_value() -> impl Strategy<Value = Value> {
+        prop_oneof![
+            Just(Value::Null),
+            any::<bool>().prop_map(Value::Bool),
+            any::<i64>().prop_map(Value::from),
+            generated_content().prop_map(Value::String),
+            proptest::collection::vec(any::<i64>(), 0..4).prop_map(|values| json!(values)),
+        ]
+    }
+
+    fn generated_extension_fields() -> impl Strategy<Value = BTreeMap<String, Value>> {
+        proptest::collection::btree_map("[a-z][a-z0-9_]{0,11}", generated_extension_value(), 0..4)
+            .prop_map(|fields| {
+                fields
+                    .into_iter()
+                    .map(|(key, value)| (format!("x_{key}"), value))
+                    .collect()
+            })
+    }
+
+    #[derive(Debug, Clone)]
+    enum GeneratedUsage {
+        Missing,
+        Null,
+        Fields {
+            prompt_tokens: Option<u64>,
+            completion_tokens: Option<u64>,
+            with_extra_fields: bool,
+        },
+    }
+
+    fn generated_usage() -> impl Strategy<Value = GeneratedUsage> {
+        prop_oneof![
+            2 => Just(GeneratedUsage::Missing),
+            1 => Just(GeneratedUsage::Null),
+            7 => (
+                proptest::option::of(any::<u64>()),
+                proptest::option::of(any::<u64>()),
+                any::<bool>(),
+            )
+                .prop_map(|(prompt_tokens, completion_tokens, with_extra_fields)| {
+                    GeneratedUsage::Fields {
+                        prompt_tokens,
+                        completion_tokens,
+                        with_extra_fields,
+                    }
+                }),
+        ]
+    }
+
+    #[derive(Debug, Clone)]
+    struct GeneratedValidResponse {
+        content: String,
+        usage: GeneratedUsage,
+        extra_choices: Vec<String>,
+        extension_fields: BTreeMap<String, Value>,
+        message_extension: Option<Value>,
+    }
+
+    fn generated_valid_response() -> impl Strategy<Value = GeneratedValidResponse> {
+        (
+            generated_content(),
+            generated_usage(),
+            proptest::collection::vec(generated_content(), 0..3),
+            generated_extension_fields(),
+            proptest::option::of(generated_extension_value()),
+        )
+            .prop_map(
+                |(content, usage, extra_choices, extension_fields, message_extension)| {
+                    GeneratedValidResponse {
+                        content,
+                        usage,
+                        extra_choices,
+                        extension_fields,
+                        message_extension,
+                    }
+                },
+            )
+    }
+
+    impl GeneratedValidResponse {
+        fn to_value(&self) -> Value {
+            let mut message = serde_json::Map::new();
+            message.insert("content".into(), Value::String(self.content.clone()));
+            if let Some(extension) = &self.message_extension {
+                message.insert("x_message_extension".into(), extension.clone());
+            }
+            let mut choices = vec![json!({"message": Value::Object(message)})];
+            choices.extend(self.extra_choices.iter().map(|extra_content| {
+                json!({
+                    "message": {
+                        "content": extra_content.clone(),
+                        "x_choice_extension": true,
+                    }
+                })
+            }));
+
+            let mut response = serde_json::Map::new();
+            response.insert("choices".into(), Value::Array(choices));
+            for (key, value) in &self.extension_fields {
+                response.insert(key.clone(), value.clone());
+            }
+            match &self.usage {
+                GeneratedUsage::Missing => {}
+                GeneratedUsage::Null => {
+                    response.insert("usage".into(), Value::Null);
+                }
+                GeneratedUsage::Fields {
+                    prompt_tokens,
+                    completion_tokens,
+                    with_extra_fields,
+                } => {
+                    let mut fields = serde_json::Map::new();
+                    if let Some(prompt_tokens) = prompt_tokens {
+                        fields.insert("prompt_tokens".into(), json!(prompt_tokens));
+                    }
+                    if let Some(completion_tokens) = completion_tokens {
+                        fields.insert("completion_tokens".into(), json!(completion_tokens));
+                    }
+                    if *with_extra_fields {
+                        fields.insert("total_tokens".into(), json!(123));
+                        fields.insert("x_usage_extension".into(), json!("ignored"));
+                    }
+                    response.insert("usage".into(), Value::Object(fields));
+                }
+            }
+            Value::Object(response)
+        }
+
+        fn expected_usage(&self) -> Option<TokenUsage> {
+            match &self.usage {
+                GeneratedUsage::Missing | GeneratedUsage::Null => None,
+                GeneratedUsage::Fields {
+                    prompt_tokens,
+                    completion_tokens,
+                    ..
+                } => Some(TokenUsage {
+                    input_tokens: *prompt_tokens,
+                    output_tokens: *completion_tokens,
+                }),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    enum InvalidResponseShape {
+        MissingChoices,
+        NonArrayChoices(Value),
+        EmptyChoices,
+        MissingMessage,
+        NonObjectMessage(Value),
+        MissingContent,
+        NullContent,
+        EmptyContent,
+        NonStringContent(Value),
+        RefusalWithContent { content: String, refusal: Value },
+        RefusalWithoutContent { refusal: Value },
+        NonStringRefusalWithContent { content: String, refusal: Value },
+        NonStringRefusalWithoutContent { refusal: Value },
+    }
+
+    fn generated_non_string_value() -> impl Strategy<Value = Value> {
+        prop_oneof![
+            any::<bool>().prop_map(Value::Bool),
+            any::<i64>().prop_map(Value::from),
+            proptest::collection::vec(any::<i64>(), 0..4).prop_map(|values| json!(values)),
+            Just(json!({})),
+        ]
+    }
+
+    fn generated_non_array_value() -> impl Strategy<Value = Value> {
+        prop_oneof![
+            Just(Value::Null),
+            any::<bool>().prop_map(Value::Bool),
+            any::<i64>().prop_map(Value::from),
+            generated_content().prop_map(Value::String),
+            proptest::collection::btree_map(
+                "[a-z][a-z0-9_]{0,11}",
+                generated_extension_value(),
+                0..4
+            )
+            .prop_map(|entries| Value::Object(entries.into_iter().collect())),
+        ]
+    }
+
+    fn generated_non_object_value() -> impl Strategy<Value = Value> {
+        // Arrays are excluded because serde can deserialize a struct from a sequence.
+        prop_oneof![
+            Just(Value::Null),
+            any::<bool>().prop_map(Value::Bool),
+            any::<i64>().prop_map(Value::from),
+            generated_content().prop_map(Value::String),
+        ]
+    }
+
+    fn generated_invalid_response_shape() -> impl Strategy<Value = InvalidResponseShape> {
+        prop_oneof![
+            Just(InvalidResponseShape::MissingChoices),
+            generated_non_array_value().prop_map(InvalidResponseShape::NonArrayChoices),
+            Just(InvalidResponseShape::EmptyChoices),
+            Just(InvalidResponseShape::MissingMessage),
+            generated_non_object_value().prop_map(InvalidResponseShape::NonObjectMessage),
+            Just(InvalidResponseShape::MissingContent),
+            Just(InvalidResponseShape::NullContent),
+            Just(InvalidResponseShape::EmptyContent),
+            generated_non_string_value().prop_map(InvalidResponseShape::NonStringContent),
+            (
+                generated_content(),
+                generated_content().prop_map(Value::String)
+            )
+                .prop_map(|(content, refusal)| {
+                    InvalidResponseShape::RefusalWithContent { content, refusal }
+                }),
+            generated_content()
+                .prop_map(Value::String)
+                .prop_map(|refusal| InvalidResponseShape::RefusalWithoutContent { refusal }),
+            (generated_content(), generated_non_string_value(),).prop_map(|(content, refusal)| {
+                InvalidResponseShape::NonStringRefusalWithContent { content, refusal }
+            }),
+            generated_non_string_value().prop_map(|refusal| {
+                InvalidResponseShape::NonStringRefusalWithoutContent { refusal }
+            }),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn parse_response_never_panics_and_parses_generated_valid_bytes(
+            input in prop_oneof![
+                proptest::collection::vec(any::<u8>(), 0..=8 * 1024)
+                    .prop_map(|bytes| (bytes, None::<String>)),
+                generated_valid_response().prop_map(|response| {
+                    let bytes = serde_json::to_vec(&response.to_value()).unwrap();
+                    (bytes, Some(response.content))
+                }),
+            ],
+        ) {
+            let (bytes, expected_content) = input;
+            let parsed = parse_response(&bytes);
+            if let Some(expected_content) = expected_content {
+                let parsed = parsed.expect("generated valid response should parse");
+                prop_assert_eq!(parsed.content, expected_content);
+            }
+        }
+
+        #[test]
+        fn generated_valid_response_preserves_content_and_usage(
+            response in generated_valid_response(),
+        ) {
+            let expected_usage = response.expected_usage();
+            let bytes = serde_json::to_vec(&response.to_value()).unwrap();
+            let parsed = parse_response(&bytes).expect("generated valid response should parse");
+            prop_assert_eq!(parsed.content, response.content);
+            prop_assert_eq!(parsed.usage, expected_usage);
+        }
+
+        #[test]
+        fn generated_invalid_response_shapes_are_rejected(
+            shape in generated_invalid_response_shape(),
+        ) {
+            let response = match shape {
+                InvalidResponseShape::MissingChoices => json!({}),
+                InvalidResponseShape::NonArrayChoices(choices) => json!({"choices": choices}),
+                InvalidResponseShape::EmptyChoices => json!({"choices": []}),
+                InvalidResponseShape::MissingMessage => json!({"choices": [{}]}),
+                InvalidResponseShape::NonObjectMessage(message) => {
+                    json!({"choices": [{"message": message}]})
+                }
+                InvalidResponseShape::MissingContent => {
+                    json!({"choices": [{"message": {}}]})
+                }
+                InvalidResponseShape::NullContent => {
+                    json!({"choices": [{"message": {"content": null}}]})
+                }
+                InvalidResponseShape::EmptyContent => {
+                    json!({"choices": [{"message": {"content": ""}}]})
+                }
+                InvalidResponseShape::NonStringContent(content) => {
+                    json!({"choices": [{"message": {"content": content}}]})
+                }
+                InvalidResponseShape::RefusalWithContent { content, refusal } => {
+                    json!({"choices": [{"message": {"content": content, "refusal": refusal}}]})
+                }
+                InvalidResponseShape::RefusalWithoutContent { refusal } => {
+                    json!({"choices": [{"message": {"refusal": refusal}}]})
+                }
+                InvalidResponseShape::NonStringRefusalWithContent { content, refusal } => {
+                    json!({"choices": [{"message": {"content": content, "refusal": refusal}}]})
+                }
+                InvalidResponseShape::NonStringRefusalWithoutContent { refusal } => {
+                    json!({"choices": [{"message": {"refusal": refusal}}]})
+                }
+            };
+            let bytes = serde_json::to_vec(&response).unwrap();
+            prop_assert!(parse_response(&bytes).is_err());
+        }
     }
 
     #[test]

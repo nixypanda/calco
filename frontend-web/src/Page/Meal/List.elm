@@ -4,7 +4,6 @@ module Page.Meal.List exposing
     , OutMsg(..)
     , contentView
     , init
-    , mealSummaryText
     , update
     )
 
@@ -57,7 +56,6 @@ type Msg
     = MealsLoaded (Result Client.ApiError MealsApi.MealListResponse)
     | OpenMealClicked String
     | CreateMealClicked
-    | BackClicked
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -76,9 +74,6 @@ update msg model =
 
         CreateMealClicked ->
             ( model, Cmd.none, Navigate MealCreate )
-
-        BackClicked ->
-            ( model, Cmd.none, Navigate (DiaryDay Nothing Nothing) )
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
