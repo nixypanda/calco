@@ -297,3 +297,76 @@ impl MealPolicy {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+    use uuid::Uuid;
+
+    fn sample_component() -> MealComponent {
+        MealComponent::new(
+            MealComponentItem::Product(ProductId(Uuid::nil())),
+            Quantity::new(Decimal::ONE, UnitCode("g".into())).unwrap(),
+        )
+    }
+
+    fn make_meal(total_amount: Option<Decimal>, total_unit: Option<UnitCode>) -> Meal {
+        Meal::create(
+            Uuid::nil(),
+            "Meal".into(),
+            None,
+            total_amount,
+            total_unit,
+            vec![sample_component()],
+            Utc::now(),
+        )
+        .expect("meal should be valid")
+    }
+
+    fn mass_converter() -> UnitConverter {
+        UnitConverter::from_entries([
+            ("g".to_string(), Decimal::ONE),
+            ("kg".to_string(), Decimal::new(1000, 0)),
+        ])
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        // High-value: exposes that the non-mass total path can never succeed because
+        // declared_grams requires a mass unit while quantity_to_grams only reaches
+        // that branch for a unit already absent from the converter.
+        #[test]
+        fn meal_quantity_to_grams_non_mass_matching_total_errors(
+            amount in 1i64..=1_000_000i64,
+            total_amount in 1i64..=1_000_000i64,
+        ) {
+            let amount = Decimal::new(amount, 0);
+            let total_amount = Decimal::new(total_amount, 0);
+            let meal = make_meal(Some(total_amount), Some(UnitCode("serving".into())));
+            let uc = mass_converter();
+            let quantity = Quantity::new(amount, UnitCode("serving".into())).unwrap();
+            prop_assert!(meal.quantity_to_grams(&quantity, &uc).is_err());
+        }
+
+        // High-value: declared_grams error contract (missing/non-positive/non-mass total).
+        #[test]
+        fn meal_declared_grams_rejects_non_mass_or_missing_total(
+            total_amount in 0i64..=1_000_000i64,
+        ) {
+            let uc = mass_converter();
+            let meal = make_meal(None, None);
+            prop_assert!(meal.declared_grams(&uc).is_err());
+
+            let meal = make_meal(Some(Decimal::ZERO), Some(UnitCode("g".into())));
+            prop_assert!(meal.declared_grams(&uc).is_err());
+
+            let meal = make_meal(
+                Some(Decimal::new(total_amount.max(1), 0)),
+                Some(UnitCode("serving".into())),
+            );
+            prop_assert!(meal.declared_grams(&uc).is_err());
+        }
+    }
+}

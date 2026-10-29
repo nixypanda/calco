@@ -1830,4 +1830,52 @@ mod tests {
             }
         }
     }
+
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        // High-value: branch selection across mass, configured serving, and unknown units.
+        #[test]
+        fn product_quantity_to_grams_branch_selection(
+            amount in 1i64..=1000i64,
+            mass_factor in 1i64..=100i64,
+            serving_grams in 1i64..=100i64,
+        ) {
+            let amount = Decimal::from(amount);
+            let uc = UnitConverter::from_entries([("g".to_string(), Decimal::from(mass_factor))]);
+            let product = Product {
+                id: ProductId(Uuid::new_v4()),
+                origin: ProductOrigin::Custom { user_id: Uuid::nil() },
+                visibility: ProductVisibility::Global,
+                name: ProductName::new("Food").unwrap(),
+                brand: None,
+                categories: vec![],
+                default_quantity: None,
+                default_unit: None,
+                nutrients: vec![],
+                servings: vec![ProductServing {
+                    unit: UnitCode("serving".into()),
+                    grams_per_unit: Decimal::from(serving_grams),
+                }],
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            };
+
+            let mass_qty = Quantity::new(amount, UnitCode("g".into())).unwrap();
+            prop_assert_eq!(
+                product.quantity_to_grams(&mass_qty, &uc).unwrap(),
+                amount * Decimal::from(mass_factor)
+            );
+
+            let serving_qty = Quantity::new(amount, UnitCode("serving".into())).unwrap();
+            prop_assert_eq!(
+                product.quantity_to_grams(&serving_qty, &uc).unwrap(),
+                amount * Decimal::from(serving_grams)
+            );
+
+            let unknown_qty = Quantity::new(amount, UnitCode("unknown".into())).unwrap();
+            prop_assert!(product.quantity_to_grams(&unknown_qty, &uc).is_err());
+        }
+    }
 }
