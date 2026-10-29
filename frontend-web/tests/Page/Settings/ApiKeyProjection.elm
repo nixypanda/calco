@@ -5,9 +5,7 @@ module Page.Settings.ApiKeyProjection exposing
     , DialogView
     , FormView
     , apiKeysScreen
-    , confirmDialog
     , createScreen
-    , revokingDialog
     )
 
 {-| User-visible projections for the api-key list and create pages. The

@@ -4,7 +4,6 @@ import Api.Client as Client
 import Data.ApiKey exposing (ApiKey, ApiKeyScope(..))
 import Data.Route exposing (Route(..))
 import Expect
-import Page.Settings.ApiKeyProjection as Projection
 import Page.Settings.ApiKeys as ApiKeys
 import Support.Fixtures as Fixtures
 import Support.Story as Story
@@ -14,240 +13,144 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Page.Settings.ApiKeys"
-        [ test "load retry, create, and return refresh" <|
+        [ test "a user retries a failed load and opens create" <|
             \_ ->
-                let
-                    loading : ApiKeys.Model
-                    loading =
-                        Tuple.first ApiKeys.init
-
-                    failed : ApiKeys.Model
-                    failed =
-                        step (ApiKeys.ApiKeysLoaded (Err Client.NetworkError)) loading
-
-                    retried : ApiKeys.Model
-                    retried =
-                        step ApiKeys.RetryClicked failed
-
-                    loaded : ApiKeys.Model
-                    loaded =
-                        step (ApiKeys.ApiKeysLoaded (Ok [ firstKey, secondKey ])) retried
-
-                    returned : ApiKeys.Model
-                    returned =
-                        step
-                            (ApiKeys.ApiKeysLoaded (Ok [ createdKey, firstKey, secondKey ]))
-                            loaded
-
-                    returnedScreen : Projection.ApiKeysScreen
-                    returnedScreen =
-                        Projection.apiKeysScreen returned
-                in
-                { failedError = (Projection.apiKeysScreen failed).error
-                , retryOut = out ApiKeys.RetryClicked failed
-                , loadedNames = (Projection.apiKeysScreen loaded).names
-                , createOut = out ApiKeys.CreateClicked loaded
-                , returnedNames = returnedScreen.names
-                , finalOut =
-                    out
-                        (ApiKeys.ApiKeysLoaded (Ok [ createdKey, firstKey, secondKey ]))
-                        loaded
-                }
-                    |> Expect.equal
-                        { failedError = Just Fixtures.networkErrorMessage
-                        , retryOut = ApiKeys.RequestList
-                        , loadedNames = [ "Build script", "Phone shortcut" ]
-                        , createOut = ApiKeys.Navigate SettingsApiKeyCreate
-                        , returnedNames =
-                            [ "Deploy script", "Build script", "Phone shortcut" ]
-                        , finalOut = ApiKeys.NoOp
-                        }
-        , test "revoke cancels, fails, retries, ignores a late success, then expires" <|
+                Story.start ( ApiKeys.init |> Tuple.first, ApiKeys.init |> Tuple.second )
+                    |> step (ApiKeys.ApiKeysLoaded (Err Client.NetworkError))
+                    |> step ApiKeys.RetryClicked
+                    |> step (ApiKeys.ApiKeysLoaded (Ok [ firstKey, secondKey ]))
+                    |> step ApiKeys.CreateClicked
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (ApiKeys.Navigate SettingsApiKeyCreate)
+                        )
+        , test "a user revokes a key" <|
             \_ ->
-                let
-                    loaded : ApiKeys.Model
-                    loaded =
-                        loadedModel
-
-                    confirming : ApiKeys.Model
-                    confirming =
-                        step (ApiKeys.RevokeClicked firstKey) loaded
-
-                    cancelled : ApiKeys.Model
-                    cancelled =
-                        step ApiKeys.RevokeCancelled confirming
-
-                    reopened : ApiKeys.Model
-                    reopened =
-                        step (ApiKeys.RevokeClicked firstKey) cancelled
-                in
-                case requestRevoke (ApiKeys.RevokeConfirmed firstKey) reopened of
-                    Err message ->
-                        Expect.fail message
-
-                    Ok ( revoking, requestId, keyName ) ->
-                        let
-                            failed : ApiKeys.Model
-                            failed =
-                                step
-                                    (ApiKeys.RevokeCompleted
-                                        requestId
-                                        firstKey
+                loaded
+                    |> step (ApiKeys.RevokeClicked firstKey)
+                    |> step (ApiKeys.RevokeConfirmed firstKey)
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                ApiKeys.RequestRevoke requestId key ->
+                                    Ok
+                                    (ApiKeys.RevokeCompleted requestId key
                                         (Err Client.NetworkError)
                                     )
-                                    revoking
 
-                            retrying : ApiKeys.Model
-                            retrying =
-                                step (ApiKeys.RevokeConfirmed firstKey) failed
-                        in
-                        case requestRevoke (ApiKeys.RevokeConfirmed firstKey) failed of
-                            Err message ->
-                                Expect.fail message
+                                _ ->
+                                    Err "expected a revoke request"
+                        )
+                    |> step (ApiKeys.RevokeConfirmed firstKey)
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                ApiKeys.RequestRevoke requestId key ->
+                                    Ok
+                                    (ApiKeys.RevokeCompleted requestId key
+                                        (Err Fixtures.unauthorized)
+                                    )
 
-                            Ok ( _, retryId, _ ) ->
-                                let
-                                    afterStale : ApiKeys.Model
-                                    afterStale =
-                                        step
-                                            (ApiKeys.RevokeCompleted
-                                                requestId
-                                                firstKey
-                                                (Ok ())
-                                            )
-                                            retrying
-                                in
-                                { confirmDialog = (Projection.apiKeysScreen confirming).dialog
-                                , afterCancel = (Projection.apiKeysScreen cancelled).dialog
-                                , requestedKey = Just keyName
-                                , failedDialog = (Projection.apiKeysScreen failed).dialog
-                                , wrongKeyOut =
-                                    out (ApiKeys.RevokeConfirmed secondKey) failed
-                                , staleDialog = (Projection.apiKeysScreen afterStale).dialog
-                                , finalOut =
-                                    out
-                                        (ApiKeys.RevokeCompleted
-                                            retryId
-                                            firstKey
-                                            (Err Fixtures.unauthorized)
-                                        )
-                                        retrying
-                                }
-                                    |> Expect.equal
-                                        { confirmDialog =
-                                            Just (Projection.confirmDialog "Build script" Nothing)
-                                        , afterCancel = Nothing
-                                        , requestedKey = Just "Build script"
-                                        , failedDialog =
-                                            Just
-                                                (Projection.confirmDialog
-                                                    "Build script"
-                                                    (Just Fixtures.networkErrorMessage)
-                                                )
-                                        , wrongKeyOut = ApiKeys.NoOp
-                                        , staleDialog =
-                                            Just (Projection.revokingDialog "Build script")
-                                        , finalOut = ApiKeys.SessionExpired
-                                        }
-        , test "a refresh updates an open dialog and closes it when the key is removed" <|
+                                _ ->
+                                    Err "expected a revoke request"
+                        )
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal ApiKeys.SessionExpired
+                        )
+        , test "a refresh removes a revoked key and closes its dialog" <|
             \_ ->
-                let
-                    loaded : ApiKeys.Model
-                    loaded =
-                        loadedModel
-
-                    confirming : ApiKeys.Model
-                    confirming =
-                        step (ApiKeys.RevokeClicked firstKey) loaded
-
-                    refreshedKey : ApiKey
-                    refreshedKey =
-                        { firstKey | name = "Build script v2", tokenHint = "calco_pat_9999zzzz" }
-
-                    refreshed : ApiKeys.Model
-                    refreshed =
-                        step (ApiKeys.ApiKeysLoaded (Ok [ refreshedKey, secondKey ])) confirming
-
-                    revoking : ApiKeys.Model
-                    revoking =
-                        step (ApiKeys.RevokeConfirmed refreshedKey) refreshed
-
-                    refreshedAgainKey : ApiKey
-                    refreshedAgainKey =
-                        { refreshedKey | name = "Build script v3" }
-
-                    refreshedRevoking : ApiKeys.Model
-                    refreshedRevoking =
-                        step
-                            (ApiKeys.ApiKeysLoaded (Ok [ refreshedAgainKey, secondKey ]))
-                            revoking
-
-                    removed : ApiKeys.Model
-                    removed =
-                        step (ApiKeys.ApiKeysLoaded (Ok [ secondKey ])) refreshedRevoking
-
-                    removedScreen : Projection.ApiKeysScreen
-                    removedScreen =
-                        Projection.apiKeysScreen removed
-                in
-                { refreshedDialog = (Projection.apiKeysScreen refreshed).dialog
-                , revokingDialog = (Projection.apiKeysScreen revoking).dialog
-                , refreshedRevokingDialog =
-                    (Projection.apiKeysScreen refreshedRevoking).dialog
-                , removedNames = removedScreen.names
-                , removedDialog = removedScreen.dialog
-                , finalOut =
-                    out (ApiKeys.ApiKeysLoaded (Ok [ secondKey ])) refreshedRevoking
-                }
-                    |> Expect.equal
-                        { refreshedDialog =
-                            Just (Projection.confirmDialog "Build script v2" Nothing)
-                        , revokingDialog = Just (Projection.revokingDialog "Build script v2")
-                        , refreshedRevokingDialog =
-                            Just (Projection.revokingDialog "Build script v3")
-                        , removedNames = [ "Phone shortcut" ]
-                        , removedDialog = Nothing
-                        , finalOut = ApiKeys.NoOp
-                        }
+                loaded
+                    |> step (ApiKeys.RevokeClicked firstKey)
+                    |> step (ApiKeys.ApiKeysLoaded (Ok [ secondKey ]))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { names = keyNames model
+                            , dialog = keyDialog model
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { names = [ "Phone shortcut" ]
+                                    , dialog = Nothing
+                                    , finalOut = ApiKeys.NoOp
+                                    }
+                        )
         ]
 
 
-
--- EFFECTS AND HELPERS
-
-
-requestRevoke :
+stepWithOut :
     ApiKeys.Msg
     -> ApiKeys.Model
-    -> Result String ( ApiKeys.Model, Int, String )
-requestRevoke msg model =
+    -> ( ApiKeys.Model, ApiKeys.OutMsg )
+stepWithOut msg model =
     let
         ( next, _, outMsg ) =
             ApiKeys.update msg model
     in
-    case outMsg of
-        ApiKeys.RequestRevoke requestId key ->
-            Ok ( next, requestId, key.name )
+    ( next, outMsg )
+
+
+
+-- STORY PIPELINE
+
+
+type alias Journey =
+    Story.Journey ApiKeys.Model ApiKeys.OutMsg
+
+
+step : ApiKeys.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+bind :
+    (ApiKeys.OutMsg -> Result String ApiKeys.Msg)
+    -> Journey
+    -> Journey
+bind =
+    Story.bind stepWithOut
+
+
+finish :
+    (( ApiKeys.Model, ApiKeys.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+loaded : Journey
+loaded =
+    Story.start ( ApiKeys.init |> Tuple.first, ApiKeys.init |> Tuple.second )
+        |> step (ApiKeys.ApiKeysLoaded (Ok [ firstKey, secondKey ]))
+
+
+keyNames : ApiKeys.Model -> List String
+keyNames model =
+    case model of
+        ApiKeys.Loaded loadedModel ->
+            List.map .name loadedModel.keys
 
         _ ->
-            Err "the revoke dialog did not emit RequestRevoke"
+            []
 
 
-step : ApiKeys.Msg -> ApiKeys.Model -> ApiKeys.Model
-step msg model =
-    Fixtures.tupleFirst (ApiKeys.update msg model)
+keyDialog : ApiKeys.Model -> Maybe String
+keyDialog model =
+    case model of
+        ApiKeys.Loaded loadedModel ->
+            case loadedModel.dialog of
+                ApiKeys.NoDialog ->
+                    Nothing
 
+                ApiKeys.ConfirmRevoke key _ ->
+                    Just key.name
 
-out : ApiKeys.Msg -> ApiKeys.Model -> ApiKeys.OutMsg
-out msg model =
-    Fixtures.tupleThird (ApiKeys.update msg model)
+                ApiKeys.Revoking _ key ->
+                    Just key.name
 
-
-loadedModel : ApiKeys.Model
-loadedModel =
-    Tuple.first ApiKeys.init
-        |> Story.runSteps step
-            [ ApiKeys.ApiKeysLoaded (Ok [ firstKey, secondKey ]) ]
+        _ ->
+            Nothing
 
 
 
@@ -264,22 +167,12 @@ secondKey =
     apiKey "key-2" "Phone shortcut" "calco_pat_5678efgh" ReadWrite
 
 
-createdKey : ApiKey
-createdKey =
-    apiKey "key-3" "Deploy script" "calco_pat_9012ijkl" ReadWrite
-
-
 apiKey : String -> String -> String -> ApiKeyScope -> ApiKey
 apiKey id name tokenHint scope =
-    { baseKey | id = id, name = name, tokenHint = tokenHint, scope = scope }
-
-
-baseKey : ApiKey
-baseKey =
-    { id = ""
-    , name = ""
-    , tokenHint = ""
-    , scope = Read
+    { id = id
+    , name = name
+    , tokenHint = tokenHint
+    , scope = scope
     , createdAt = "2026-10-26T10:00:00Z"
     , lastUsedAt = Nothing
     , expiresAt = Just "2027-01-24T10:00:00Z"

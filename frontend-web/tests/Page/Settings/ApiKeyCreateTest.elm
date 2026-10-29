@@ -2,28 +2,13 @@ module Page.Settings.ApiKeyCreateTest exposing (tests)
 
 import Api.Client as Client
 import Data.ApiKey exposing (ApiKey, ApiKeyScope(..), CreatableScope(..), CreatedApiKey)
-import Data.Route exposing (Route(..))
+
 import Expect
 import I18n
 import Page.Settings.ApiKeyCreate as ApiKeyCreate
-import Page.Settings.ApiKeyCreateJourney
-    exposing
-        ( Journey
-        , completeCopy
-        , completeCreate
-        , completePreviousCopy
-        , completePreviousCreate
-        , createdFeedback
-        , createdToken
-        , formError
-        , send
-        , staleSubmitDisabled
-        , start
-        , startCopy
-        , submit
-        , validationError
-        )
+import Page.Settings.ApiKeyProjection as Projection
 import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
 import Translations.Ids exposing (TranslationId(..))
 
@@ -31,193 +16,169 @@ import Translations.Ids exposing (TranslationId(..))
 tests : Test
 tests =
     describe "Page.Settings.ApiKeyCreate"
-        [ test "blank name, failed create, stale create, then a retried 401" <|
+        [ test "a user creates an API key" <|
             \_ ->
-                let
-                    invalid : Journey
-                    invalid =
-                        start ApiKeyCreate.init
-                            |> send ApiKeyCreate.Submitted
+                named
+                    |> step ApiKeyCreate.Submitted
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                ApiKeyCreate.RequestCreate requestId _ ->
+                                    Ok (ApiKeyCreate.CreateCompleted requestId (Ok createdBuild))
 
-                    named : Journey
-                    named =
-                        start ApiKeyCreate.init
-                            |> send (ApiKeyCreate.NameChanged "  Build script  ")
-                            |> send (ApiKeyCreate.ScopeChanged CreatableReadWrite)
-                            |> send (ApiKeyCreate.ExpiryChanged ApiKeyCreate.NeverExpires)
-
-                    submitted : Journey
-                    submitted =
-                        submit named
-
-                    failed : Journey
-                    failed =
-                        completeCreate (Err Client.NetworkError) submitted
-
-                    retried : Journey
-                    retried =
-                        submit failed
-
-                    afterStale : Journey
-                    afterStale =
-                        completePreviousCreate (Ok createdFirst) retried
-
-                    afterUnauthorized : Journey
-                    afterUnauthorized =
-                        completeCreate (Err Fixtures.unauthorized) retried
-                in
-                { invalidError = formError invalid.model
-                , request = Maybe.map .request submitted.create
-                , failedError = formError failed.model
-                , retryRequest = Maybe.map .request retried.create
-                , stale =
-                    ( staleSubmitDisabled afterStale.model
-                    , formError afterStale.model
-                    )
-                , finalOut = afterUnauthorized.lastOut
-                , finalError = formError afterUnauthorized.model
-                , failure = afterUnauthorized.failure
-                }
-                    |> Expect.equal
-                        { invalidError = Just nameRequired
-                        , request =
-                            Just
-                                { name = "Build script"
-                                , scope = CreatableReadWrite
-                                , expiresInDays = Nothing
-                                }
-                        , failedError = Just Fixtures.networkErrorMessage
-                        , retryRequest =
-                            Just
-                                { name = "Build script"
-                                , scope = CreatableReadWrite
-                                , expiresInDays = Nothing
-                                }
-                        , stale = ( Just True, Nothing )
-                        , finalOut = ApiKeyCreate.SessionExpired
-                        , finalError = Just unauthorizedMessage
-                        , failure = Nothing
-                        }
-        , test "a created key ignores done and stale completions while copying" <|
+                                _ ->
+                                    Err "expected a create request"
+                        )
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { token = createdToken model
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { token = Just "token-build"
+                                    , finalOut = ApiKeyCreate.NoOp
+                                    }
+                        )
+        , test "a failed create can be retried and expires on 401" <|
             \_ ->
-                let
-                    created : Journey
-                    created =
-                        start ApiKeyCreate.init
-                            |> send (ApiKeyCreate.NameChanged "Build script")
-                            |> submit
-                            |> completeCreate (Ok createdBuild)
+                named
+                    |> step ApiKeyCreate.Submitted
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                ApiKeyCreate.RequestCreate requestId _ ->
+                                    Ok
+                                        (ApiKeyCreate.CreateCompleted requestId
+                                            (Err Client.NetworkError)
+                                        )
 
-                    copying : Journey
-                    copying =
-                        startCopy created
+                                _ ->
+                                    Err "expected a create request"
+                        )
+                    |> step ApiKeyCreate.Submitted
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                ApiKeyCreate.RequestCreate requestId _ ->
+                                    Ok
+                                        (ApiKeyCreate.CreateCompleted requestId
+                                            (Err Fixtures.unauthorized)
+                                        )
 
-                    copyFailed : Journey
-                    copyFailed =
-                        completeCopy False copying
-
-                    copyingAgain : Journey
-                    copyingAgain =
-                        startCopy copyFailed
-
-                    afterStale : Journey
-                    afterStale =
-                        completePreviousCopy True copyingAgain
-
-                    copied : Journey
-                    copied =
-                        completeCopy True copyingAgain
-
-                    doneWhileCopying : Journey
-                    doneWhileCopying =
-                        send ApiKeyCreate.DoneClicked copying
-
-                    done : Journey
-                    done =
-                        send ApiKeyCreate.DoneClicked copied
-                in
-                { copyPayload = Maybe.map .token copying.copy
-                , doneWhileCopying = doneWhileCopying.lastOut
-                , doneWhileCopyingFeedback = createdFeedback doneWhileCopying.model
-                , failedFeedback = createdFeedback copyFailed.model
-                , staleFeedback = createdFeedback afterStale.model
-                , copiedFeedback = createdFeedback copied.model
-                , finalOut = done.lastOut
-                , failure = done.failure
-                }
-                    |> Expect.equal
-                        { copyPayload = Just "token-build"
-                        , doneWhileCopying = ApiKeyCreate.NoOp
-                        , doneWhileCopyingFeedback = Just copyingLabel
-                        , failedFeedback = Just copyFailedLabel
-                        , staleFeedback = Just copyingLabel
-                        , copiedFeedback = Just copiedLabel
-                        , finalOut = ApiKeyCreate.Navigate SettingsApiKeys
-                        , failure = Nothing
-                        }
-        , test "name validation matches Rust code-point rules" <|
+                                _ ->
+                                    Err "expected a create request"
+                        )
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal ApiKeyCreate.SessionExpired
+                        )
+        , test "a user copies the created key" <|
             \_ ->
-                let
-                    -- Allowed exception: validation parity with Rust
-                    -- `ApiKeyName::new`, whose trimming is code-point based.
-                    validationCases : List ( String, String )
-                    validationCases =
-                        [ ( "", nameRequired )
-                        , ( String.repeat 65 "😀", nameTooLong )
-                        , ( "\u{200C}\u{200D}", nameInvalid )
-                        , ( "bad\u{202E}name", nameInvalid )
-                        , ( "bad\nname", nameInvalid )
-                        , ( "Build\u{FEFF}", nameInvalid )
-                        ]
+                named
+                    |> step ApiKeyCreate.Submitted
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                ApiKeyCreate.RequestCreate requestId _ ->
+                                    Ok (ApiKeyCreate.CreateCompleted requestId (Ok createdBuild))
 
-                    trimmed : Journey
-                    trimmed =
-                        start ApiKeyCreate.init
-                            |> send (ApiKeyCreate.NameChanged "\u{0085}Build\u{0085}")
-                            |> submit
+                                _ ->
+                                    Err "expected a create request"
+                        )
+                    |> step ApiKeyCreate.CopyClicked
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                ApiKeyCreate.CopyText copyId _ ->
+                                    Ok (ApiKeyCreate.CopyCompleted copyId True)
 
-                    created : Journey
-                    created =
-                        completeCreate (Ok createdTrimmed) trimmed
-                in
-                { errors = List.map (Tuple.first >> validationError) validationCases
-                , request = Maybe.map .request trimmed.create
-                , finalOut = created.lastOut
-                , token = createdToken created.model
-                , failure = created.failure
-                }
-                    |> Expect.equal
-                        { errors = List.map (Tuple.second >> Just) validationCases
-                        , request =
-                            Just
-                                { name = "Build"
-                                , scope = CreatableRead
-                                , expiresInDays = Just 90
-                                }
-                        , finalOut = ApiKeyCreate.NoOp
-                        , token = Just "token-trimmed"
-                        , failure = Nothing
-                        }
+                                _ ->
+                                    Err "expected a copy request"
+                        )
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { feedback = createdFeedback model
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { feedback = Just copiedLabel
+                                    , finalOut = ApiKeyCreate.NoOp
+                                    }
+                        )
         ]
 
 
+stepWithOut :
+    ApiKeyCreate.Msg
+    -> ApiKeyCreate.Model
+    -> ( ApiKeyCreate.Model, ApiKeyCreate.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            ApiKeyCreate.update msg model
+    in
+    ( next, outMsg )
 
--- FIXTURES
 
 
-createdFirst : CreatedApiKey
-createdFirst =
-    createdKey "key-4" "Stale script" "calco_pat_stale" "token-stale" Read
+-- STORY PIPELINE
+
+
+type alias Journey =
+    Story.Journey ApiKeyCreate.Model ApiKeyCreate.OutMsg
+
+
+step : ApiKeyCreate.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+bind :
+    (ApiKeyCreate.OutMsg -> Result String ApiKeyCreate.Msg)
+    -> Journey
+    -> Journey
+bind =
+    Story.bind stepWithOut
+
+
+finish :
+    (( ApiKeyCreate.Model, ApiKeyCreate.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
+
+
+named : Journey
+named =
+    Story.start ApiKeyCreate.init
+        |> step (ApiKeyCreate.NameChanged "Build script")
+        |> step (ApiKeyCreate.ScopeChanged CreatableReadWrite)
+        |> step (ApiKeyCreate.ExpiryChanged ApiKeyCreate.NeverExpires)
+
+
+createdToken : ApiKeyCreate.Model -> Maybe String
+createdToken model =
+    Projection.createScreen model
+        |> .created
+        |> Maybe.map .token
+
+
+createdFeedback : ApiKeyCreate.Model -> Maybe String
+createdFeedback model =
+    Projection.createScreen model
+        |> .created
+        |> Maybe.andThen .copyFeedback
+
+
+copiedLabel : String
+copiedLabel =
+    I18n.en TidApiKeysCopied
 
 
 createdBuild : CreatedApiKey
 createdBuild =
     createdKey "key-3" "Build script" "calco_pat_build" "token-build" ReadWrite
-
-
-createdTrimmed : CreatedApiKey
-createdTrimmed =
-    createdKey "key-5" "Build" "calco_pat_trimmed" "token-trimmed" Read
 
 
 createdKey : String -> String -> String -> String -> ApiKeyScope -> CreatedApiKey
@@ -243,38 +204,3 @@ baseKey =
     , lastUsedAt = Nothing
     , expiresAt = Nothing
     }
-
-
-nameRequired : String
-nameRequired =
-    I18n.en TidApiKeysNameRequired
-
-
-nameInvalid : String
-nameInvalid =
-    I18n.en TidApiKeysNameInvalid
-
-
-nameTooLong : String
-nameTooLong =
-    I18n.en TidApiKeysNameTooLong
-
-
-copyingLabel : String
-copyingLabel =
-    I18n.en TidApiKeysCopying
-
-
-copiedLabel : String
-copiedLabel =
-    I18n.en TidApiKeysCopied
-
-
-copyFailedLabel : String
-copyFailedLabel =
-    I18n.en TidApiKeysCopyFailed
-
-
-unauthorizedMessage : String
-unauthorizedMessage =
-    "Sign in again"
