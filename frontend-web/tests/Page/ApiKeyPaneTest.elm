@@ -91,8 +91,7 @@ tests =
                         afterStaleList
                             |> PaneJourney.sendKeys ApiKeys.CreateClicked
                             |> PaneJourney.apply SettingsApiKeyCreate
-                            |> PaneJourney.sendCreate
-                                (ApiKeyCreate.NameChanged "First script")
+                            |> PaneJourney.sendCreate (ApiKeyCreate.NameChanged "First script")
                             |> PaneJourney.submitCreate
                             |> PaneJourney.completeCreate (Ok createdFirst)
 
@@ -105,15 +104,12 @@ tests =
                         copiedOld
                             |> PaneJourney.apply DiarySettings
                             |> PaneJourney.apply SettingsApiKeyCreate
-                            |> PaneJourney.sendCreate
-                                (ApiKeyCreate.NameChanged "Second script")
+                            |> PaneJourney.sendCreate (ApiKeyCreate.NameChanged "Second script")
                             |> PaneJourney.submitCreate
 
                     afterStaleCreate : Journey
                     afterStaleCreate =
-                        PaneJourney.completePreviousCreate
-                            (Ok createdFirst)
-                            submittedNew
+                        PaneJourney.completePreviousCreate (Ok createdFirst) submittedNew
 
                     createdNew : Journey
                     createdNew =
@@ -174,12 +170,7 @@ absentCreateScreen =
 formScreen : String -> String -> Bool -> Projection.CreateScreen
 formScreen name label disabled =
     { form =
-        Just
-            { name = name
-            , submitLabel = label
-            , submitDisabled = disabled
-            , error = Nothing
-            }
+        Just { name = name, submitLabel = label, submitDisabled = disabled, error = Nothing }
     , created = Nothing
     }
 

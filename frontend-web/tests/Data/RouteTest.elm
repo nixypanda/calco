@@ -17,10 +17,7 @@ tests =
     describe "Data.Route"
         [ fuzz Support.route "routeToPath then fromUrl is the identity" <|
             \route ->
-                route
-                    |> Route.routeToPath
-                    |> parsePath
-                    |> Expect.equal (Just route)
+                route |> Route.routeToPath |> parsePath |> Expect.equal (Just route)
         , fuzz Support.route
             "primaryRoute is idempotent and never maps a known route to NotFound"
           <|
@@ -45,5 +42,4 @@ tests =
 
 parsePath : String -> Maybe Route
 parsePath path =
-    Url.fromString ("http://localhost" ++ path)
-        |> Maybe.map Route.fromUrl
+    Url.fromString ("http://localhost" ++ path) |> Maybe.map Route.fromUrl

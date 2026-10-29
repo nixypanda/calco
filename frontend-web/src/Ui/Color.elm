@@ -18,8 +18,7 @@ mix from to amount =
         mixChannel a b =
             a + (b - a) * amount
     in
-    Element.rgba
-        (mixChannel start.red finish.red)
+    Element.rgba (mixChannel start.red finish.red)
         (mixChannel start.green finish.green)
         (mixChannel start.blue finish.blue)
         (mixChannel start.alpha finish.alpha)

@@ -240,13 +240,11 @@ dateHeader env model =
 
 loadingView : Theme -> Element msg
 loadingView theme =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
         , Surface.card theme
             [ Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
-            , Element.row
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
                 , Skeleton.barCustom theme { width = Element.fill, height = 40 }
                 , Skeleton.barCustom theme { width = Element.fill, height = 40 }
@@ -254,37 +252,31 @@ loadingView theme =
             ]
         , Skeleton.card theme { rows = 3 }
         , Skeleton.card theme { rows = 3 }
-        , Surface.card theme
-            [ Skeleton.bar theme, Skeleton.bar theme ]
+        , Surface.card theme [ Skeleton.bar theme, Skeleton.bar theme ]
         ]
 
 
 reportView : Env -> NutritionDetails -> Set String -> Element Msg
 reportView env report expandedAdvice =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ coverageNotice env report
         , overviewSection env report.nutrients
-        , nutrientSection
-            env
+        , nutrientSection env
             expandedAdvice
             (I18n.t env.language TidNutrientCarbohydrates)
             Details.Carbohydrates
             report.nutrients
-        , nutrientSection
-            env
+        , nutrientSection env
             expandedAdvice
             (I18n.t env.language TidNutritionDetailsFats)
             Details.Fats
             report.nutrients
-        , nutrientSection
-            env
+        , nutrientSection env
             expandedAdvice
             (I18n.t env.language TidNutritionDetailsNutrientsToLimit)
             Details.Limits
             report.nutrients
-        , nutrientSection
-            env
+        , nutrientSection env
             expandedAdvice
             (I18n.t env.language TidNutritionDetailsVitaminsMinerals)
             Details.VitaminsMinerals
@@ -308,8 +300,7 @@ overviewSection env nutrients =
                 )
         , body =
             if List.isEmpty overview then
-                [ Feedback.loading env.theme
-                    (I18n.t env.language TidNutritionDetailsOverviewEmpty)
+                [ Feedback.loading env.theme (I18n.t env.language TidNutritionDetailsOverviewEmpty)
                 ]
 
             else
@@ -372,8 +363,7 @@ nutrientSection env expandedAdvice title section nutrients =
         { header = Just (Typography.subsectionTitle env.theme title)
         , body =
             if List.isEmpty selected then
-                [ Feedback.loading env.theme
-                    (I18n.t env.language TidNutritionDetailsNoNutrientData)
+                [ Feedback.loading env.theme (I18n.t env.language TidNutritionDetailsNoNutrientData)
                 ]
 
             else
@@ -439,14 +429,11 @@ nutrientRow env expandedAdvice nutrient =
         adviceIsExpanded =
             Set.member nutrient.code expandedAdvice
     in
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Input.button
-            [ Element.width Element.fill ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        [ Input.button [ Element.width Element.fill ]
             { onPress = Just (NutrientAdviceToggled nutrient.code)
             , label =
-                Element.column
-                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                     [ Element.row
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                         [ Element.paragraph
@@ -491,15 +478,13 @@ nutrientRow env expandedAdvice nutrient =
 guidanceView : Env -> Nutrient -> Element msg
 guidanceView env nutrient =
     if nutrient.coverage == Details.PartialCoverage then
-        Element.wrappedRow
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        Element.wrappedRow [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ Chip.coloredPill
                 { label = I18n.t env.language TidNutritionDetailsPartialData
                 , bg = env.theme.brandBlueSoft
                 , fg = env.theme.brandBlue
                 }
-            , Element.paragraph
-                [ Font.color env.theme.textPrimary, Typography.caption ]
+            , Element.paragraph [ Font.color env.theme.textPrimary, Typography.caption ]
                 [ Element.text (guidanceSummary env.language nutrient) ]
             ]
 
@@ -719,8 +704,7 @@ referenceSection env report =
                         )
                     )
                 ]
-            , Element.newTabLink
-                [ Font.color env.theme.brandBlue, Font.underline, Typography.body ]
+            , Element.newTabLink [ Font.color env.theme.brandBlue, Font.underline, Typography.body ]
                 { url = report.reference.sourceUrl
                 , label = Element.text (I18n.t env.language TidNutritionDetailsViewReferenceSource)
                 }

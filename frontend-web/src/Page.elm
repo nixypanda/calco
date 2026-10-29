@@ -318,11 +318,7 @@ initPreserving context current =
     in
     case panesForRoute context generation current.panes of
         Nothing ->
-            ( { current
-                | panes = []
-                , waitingForToday = True
-                , nextApiKeysGeneration = generation
-              }
+            ( { current | panes = [], waitingForToday = True, nextApiKeysGeneration = generation }
             , Cmd.none
             , NoOutMsg
             )
@@ -396,8 +392,7 @@ finishReconcile context store generation result =
 
         hydratedPanes : List Pane
         hydratedPanes =
-            List.map
-                (hydrateInitialized (Set.fromList result.initializedKeys) store)
+            List.map (hydrateInitialized (Set.fromList result.initializedKeys) store)
                 retargetedPanes
 
         ( nextStore, sharedCmd ) =
@@ -672,8 +667,7 @@ latestSlotsResource =
     { access = Store.latestSlotsAt
     , fetch =
         \date token ->
-            Api.Logs.latestSlots
-                { before = date, lookbackDays = latestSlotsLookbackDays }
+            Api.Logs.latestSlots { before = date, lookbackDays = latestSlotsLookbackDays }
                 (LatestSlotsStoreLoaded token date)
     , apply = \date result -> updateDiaryPanes date (DiaryDay.LatestSlotsReceived date result)
     }
@@ -910,8 +904,7 @@ panesForRoute context generation existing =
                     (\today ->
                         case calendarMonth of
                             Just month ->
-                                contextualWorkspace
-                                    existing
+                                contextualWorkspace existing
                                     [ calendarDesired context today (Just month) ]
                                     (diaryDesired context today dateParam calendarMonth)
 
@@ -926,8 +919,7 @@ panesForRoute context generation existing =
             context.today
                 |> Maybe.map
                     (\today ->
-                        contextualWorkspace
-                            existing
+                        contextualWorkspace existing
                             [ diaryDesired context today dateParam Nothing ]
                             (nutritionDesired context today dateParam)
                     )
@@ -970,8 +962,7 @@ panesForRoute context generation existing =
 
         CustomFoodShow productId ->
             Just
-                (contextualWorkspace
-                    existing
+                (contextualWorkspace existing
                     [ customFoodListDesired context ]
                     (customFoodShowDesired context productId)
                 )
@@ -990,16 +981,14 @@ panesForRoute context generation existing =
 
         MealShow mealId ->
             Just
-                (contextualWorkspace
-                    existing
+                (contextualWorkspace existing
                     [ mealListDesired context ]
                     (mealDetailDesired context mealId)
                 )
 
         _ ->
             Just
-                [ simpleDesired
-                    "placeholder:unmigrated"
+                [ simpleDesired "placeholder:unmigrated"
                     (PlaceholderPane (I18n.en TidCommonRouteNotMigrated))
                 ]
 
@@ -1062,8 +1051,7 @@ diaryDesired context today dateParam calendarMonth =
 
 dateFromParam : LocalDate -> Maybe LocalDate -> LocalDate
 dateFromParam today dateParam =
-    Maybe.withDefault today dateParam
-        |> LocalDate.clampTo today
+    Maybe.withDefault today dateParam |> LocalDate.clampTo today
 
 
 calendarDesired : InitCtx -> LocalDate -> Maybe String -> DesiredPane
@@ -1162,8 +1150,7 @@ searchWorkspaceDesired :
 searchWorkspaceDesired context existing dateParam mealSlot =
     case ( context.today, dateParam ) of
         ( Just today, Just _ ) ->
-            contextualWorkspace
-                existing
+            contextualWorkspace existing
                 [ diaryDesired context today dateParam Nothing ]
                 (searchDesired context dateParam mealSlot)
 
@@ -1206,9 +1193,7 @@ foodDetailDesired context productId dateParam mealSlot lookupNote =
         contextKey =
             (Maybe.map LocalDate.format dateParam |> Maybe.withDefault "none")
                 ++ ":"
-                ++ Maybe.withDefault
-                    "none"
-                    (Maybe.map MealSlot.toString mealSlot)
+                ++ Maybe.withDefault "none" (Maybe.map MealSlot.toString mealSlot)
 
         key : String
         key =
@@ -1361,8 +1346,7 @@ initialFoodSearchCmd : Maybe LocalDate -> Maybe MealSlot -> Cmd Msg
 initialFoodSearchCmd dateParam mealSlot =
     case recentItemsRequest dateParam mealSlot of
         Just request ->
-            Api.Logs.recentItems
-                request
+            Api.Logs.recentItems request
                 (GotFoodSearchMsg << FoodSearch.RecentItemsLoaded dateParam mealSlot)
 
         Nothing ->
@@ -1461,10 +1445,7 @@ update context msg model =
                             ( refreshedPanes, nextStore, refreshCmd ) =
                                 applyMutation result.mutation result.pane activeModel.store
                         in
-                        ( { activeModel
-                            | panes = refreshedPanes
-                            , store = nextStore
-                          }
+                        ( { activeModel | panes = refreshedPanes, store = nextStore }
                         , Cmd.batch [ result.cmd, refreshCmd ]
                         , result.outMsg
                         )
@@ -1551,10 +1532,7 @@ settleShared resource token result model =
             ( model, Cmd.none, NoOutMsg )
 
         Just store ->
-            ( { model
-                | store = store
-                , panes = List.map (resource.hydrate result) model.panes
-              }
+            ( { model | store = store, panes = List.map (resource.hydrate result) model.panes }
             , Cmd.none
             , outMsgForResult result
             )
@@ -1573,10 +1551,7 @@ settleDate resource token date result model =
             ( model, Cmd.none, NoOutMsg )
 
         Just store ->
-            ( { model
-                | store = store
-                , panes = resource.apply date result model.panes
-              }
+            ( { model | store = store, panes = resource.apply date result model.panes }
             , Cmd.none
             , outMsgForResult result
             )
@@ -2221,11 +2196,7 @@ localCtxReceived pageCtx context model =
                         pane
 
                 DiaryPane _ _ ->
-                    todayChangedIn pageCtx
-                        model
-                        context
-                        pane
-                        (GotDiaryMsg << DiaryDay.TodayChanged)
+                    todayChangedIn pageCtx model context pane (GotDiaryMsg << DiaryDay.TodayChanged)
 
                 DiaryCalendarPane _ _ ->
                     todayChangedIn pageCtx
@@ -2316,10 +2287,7 @@ updateAll updateOne model =
     in
     if final.didUpdate then
         Just
-            ( { model
-                | panes = List.reverse final.panes
-                , store = final.store
-              }
+            ( { model | panes = List.reverse final.panes, store = final.store }
             , Cmd.batch (List.reverse final.cmds)
             , final.outMsg
             )
@@ -2348,8 +2316,7 @@ applySetupOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         BootstrapSetup.RequestCreateAdmin request ->
-            ( Api.Auth.createAdmin request
-                (GotSetupMsg << BootstrapSetup.CreateAdminCompleted)
+            ( Api.Auth.createAdmin request (GotSetupMsg << BootstrapSetup.CreateAdminCompleted)
             , NoOutMsg
             )
 
@@ -2380,8 +2347,7 @@ applyAdminCreateUserOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         AdminCreateUser.RequestCreateUser request ->
-            ( Api.Admin.createUser request
-                (GotAdminCreateUserMsg << AdminCreateUser.Completed)
+            ( Api.Admin.createUser request (GotAdminCreateUserMsg << AdminCreateUser.Completed)
             , NoOutMsg
             )
 
@@ -2402,22 +2368,19 @@ applyAdminEditUserOutMsg _ outMsg =
             ( Api.Admin.getUser userId (GotAdminEditUserMsg << AdminEditUser.UserLoaded), NoOutMsg )
 
         AdminEditUser.RequestResetPassword userId request ->
-            ( Api.Admin.resetPassword
-                userId
+            ( Api.Admin.resetPassword userId
                 request
                 (GotAdminEditUserMsg << AdminEditUser.ResetCompleted)
             , NoOutMsg
             )
 
         AdminEditUser.RequestDisableUser userId ->
-            ( Api.Admin.disableUser userId
-                (GotAdminEditUserMsg << AdminEditUser.DisableCompleted)
+            ( Api.Admin.disableUser userId (GotAdminEditUserMsg << AdminEditUser.DisableCompleted)
             , NoOutMsg
             )
 
         AdminEditUser.RequestEnableUser userId ->
-            ( Api.Admin.enableUser userId
-                (GotAdminEditUserMsg << AdminEditUser.EnableCompleted)
+            ( Api.Admin.enableUser userId (GotAdminEditUserMsg << AdminEditUser.EnableCompleted)
             , NoOutMsg
             )
 
@@ -2438,9 +2401,7 @@ applyDiaryOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         DiaryDay.RequestCopyLatestSlot date requests ->
-            ( Api.Logs.createLogsBatch
-                requests
-                (GotDiaryMsg << DiaryDay.CopyLatestCompleted date)
+            ( Api.Logs.createLogsBatch requests (GotDiaryMsg << DiaryDay.CopyLatestCompleted date)
             , NoOutMsg
             )
 
@@ -2466,15 +2427,13 @@ applyDiaryCalendarOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         DiaryCalendar.RequestSummary token fromDate toDate ->
-            ( Api.Logs.summary
-                { fromDate = fromDate, toDate = toDate }
+            ( Api.Logs.summary { fromDate = fromDate, toDate = toDate }
                 (GotDiaryCalendarMsg << DiaryCalendar.SummaryLoaded token)
             , NoOutMsg
             )
 
         DiaryCalendar.RequestEarlierSummary token fromDate toDate ->
-            ( Api.Logs.summary
-                { fromDate = fromDate, toDate = toDate }
+            ( Api.Logs.summary { fromDate = fromDate, toDate = toDate }
                 (GotDiaryCalendarMsg << DiaryCalendar.EarlierSummaryLoaded token)
             , NoOutMsg
             )
@@ -2493,8 +2452,7 @@ applyNutritionDetailsOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         NutritionDetails.RequestNutritionDetails date ->
-            ( Api.NutritionDetails.get
-                date
+            ( Api.NutritionDetails.get date
                 (GotNutritionDetailsMsg << NutritionDetails.NutritionDetailsLoaded date)
             , NoOutMsg
             )
@@ -2516,8 +2474,7 @@ applyDiarySettingsOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         DiarySettings.RequestSave prefs ->
-            ( Api.DiaryPrefs.put prefs
-                (GotDiarySettingsMsg << DiarySettings.SaveCompleted)
+            ( Api.DiaryPrefs.put prefs (GotDiarySettingsMsg << DiarySettings.SaveCompleted)
             , NoOutMsg
             )
 
@@ -2532,8 +2489,7 @@ applyApiKeysOutMsg _ generation outMsg =
             ( Cmd.none, NoOutMsg )
 
         SettingsApiKeys.RequestList ->
-            ( Api.ApiKeys.list
-                (GotApiKeysMsg generation << SettingsApiKeys.ApiKeysLoaded)
+            ( Api.ApiKeys.list (GotApiKeysMsg generation << SettingsApiKeys.ApiKeysLoaded)
             , NoOutMsg
             )
 
@@ -2593,8 +2549,7 @@ applyGoalsSettingsOutMsg _ outMsg =
             ( Cmd.none, RequestLocalCtx )
 
         GoalsSettings.RequestSaveGoal request ->
-            ( Api.Goals.saveGoal request
-                (GotGoalsSettingsMsg << GoalsSettings.SaveCompleted)
+            ( Api.Goals.saveGoal request (GotGoalsSettingsMsg << GoalsSettings.SaveCompleted)
             , NoOutMsg
             )
 
@@ -2609,14 +2564,12 @@ applyFoodSearchOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         FoodSearch.RequestSearch token request ->
-            ( Api.Foods.searchFoods request
-                (GotFoodSearchMsg << FoodSearch.SearchCompleted token)
+            ( Api.Foods.searchFoods request (GotFoodSearchMsg << FoodSearch.SearchCompleted token)
             , NoOutMsg
             )
 
         FoodSearch.RequestBarcodeScanStopAndSearch token request ->
-            ( Api.Foods.searchFoods request
-                (GotFoodSearchMsg << FoodSearch.SearchCompleted token)
+            ( Api.Foods.searchFoods request (GotFoodSearchMsg << FoodSearch.SearchCompleted token)
             , RequestBarcodeScanStop
             )
 
@@ -2642,8 +2595,7 @@ applyFoodSearchOutMsg _ outMsg =
             ( Cmd.none, RequestBarcodeScanStop )
 
         FoodSearch.RequestCreateLog request ->
-            ( Api.Logs.createLog request
-                (GotFoodSearchMsg << FoodSearch.QuickAddCompleted)
+            ( Api.Logs.createLog request (GotFoodSearchMsg << FoodSearch.QuickAddCompleted)
             , NoOutMsg
             )
 
@@ -2807,8 +2759,7 @@ applyFoodLogDetailOutMsg context outMsg =
             ( Cmd.none, NoOutMsg )
 
         FoodLogEntry.RequestInitialData logId ->
-            ( Api.Logs.getLog logId
-                (GotFoodLogDetailMsg << FoodLogEntry.LogLoaded logId)
+            ( Api.Logs.getLog logId (GotFoodLogDetailMsg << FoodLogEntry.LogLoaded logId)
             , NoOutMsg
             )
 
@@ -2819,15 +2770,12 @@ applyFoodLogDetailOutMsg context outMsg =
             )
 
         FoodLogEntry.RequestUpdateLog logId request ->
-            ( Api.Logs.updateLog logId
-                request
-                (GotFoodLogDetailMsg << FoodLogEntry.UpdateCompleted)
+            ( Api.Logs.updateLog logId request (GotFoodLogDetailMsg << FoodLogEntry.UpdateCompleted)
             , NoOutMsg
             )
 
         FoodLogEntry.RequestDeleteLog logId ->
-            ( Api.Logs.deleteLog logId
-                (GotFoodLogDetailMsg << FoodLogEntry.DeleteCompleted)
+            ( Api.Logs.deleteLog logId (GotFoodLogDetailMsg << FoodLogEntry.DeleteCompleted)
             , NoOutMsg
             )
 
@@ -2975,8 +2923,7 @@ applyCustomFoodsOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         CustomFoodList.RequestFoods ->
-            ( Api.Foods.listCustomFoods
-                (GotCustomFoodsMsg << CustomFoodList.FoodsLoaded)
+            ( Api.Foods.listCustomFoods (GotCustomFoodsMsg << CustomFoodList.FoodsLoaded)
             , NoOutMsg
             )
 
@@ -3038,8 +2985,7 @@ applyMealCreateOutMsg _ outMsg =
             applyMealFormOutMsg { toPageMsg = GotMealCreateMsg << MealCreate.FormMsg } formOutMsg
 
         MealCreate.RequestCreateMeal request ->
-            ( Api.Meals.createMeal request
-                (GotMealCreateMsg << MealCreate.SaveCompleted)
+            ( Api.Meals.createMeal request (GotMealCreateMsg << MealCreate.SaveCompleted)
             , NoOutMsg
             )
 
@@ -3062,17 +3008,14 @@ applyMealEditOutMsg _ outMsg =
         MealEdit.RequestMeal mealId ->
             ( Cmd.batch
                 [ Api.Meals.getMeal mealId (GotMealEditMsg << MealEdit.MealLoaded mealId)
-                , Api.Meals.getMealNutrients
-                    { mealId = mealId, amount = "100", unit = defaultCode }
+                , Api.Meals.getMealNutrients { mealId = mealId, amount = "100", unit = defaultCode }
                     (GotMealEditMsg << MealEdit.NutrientPreviewLoaded mealId)
                 ]
             , NoOutMsg
             )
 
         MealEdit.RequestUpdateMeal mealId request ->
-            ( Api.Meals.updateMeal mealId
-                request
-                (GotMealEditMsg << MealEdit.SaveCompleted)
+            ( Api.Meals.updateMeal mealId request (GotMealEditMsg << MealEdit.SaveCompleted)
             , NoOutMsg
             )
 
@@ -3090,8 +3033,7 @@ applyMealFormOutMsg :
 applyMealFormOutMsg { toPageMsg } outMsg =
     case outMsg of
         MealForm.RequestProductName productId ->
-            ( Api.Foods.getFoodDetail productId
-                (toPageMsg << MealForm.ProductNameLoaded productId)
+            ( Api.Foods.getFoodDetail productId (toPageMsg << MealForm.ProductNameLoaded productId)
             , NoOutMsg
             )
 
@@ -3109,18 +3051,13 @@ applyMealFormOutMsg { toPageMsg } outMsg =
 
         MealForm.RequestProductAndCats requests ->
             ( Cmd.batch
-                [ Api.Foods.searchFoods
-                    requests.searchRequest
+                [ Api.Foods.searchFoods requests.searchRequest
                     (toPageMsg
-                        << MealForm.ComponentSearchCompleted
-                            requests.rowId
-                            requests.searchToken
+                        << MealForm.ComponentSearchCompleted requests.rowId requests.searchToken
                     )
-                , Api.Foods.listCategorySuggestions
-                    requests.categoryRequest
+                , Api.Foods.listCategorySuggestions requests.categoryRequest
                     (toPageMsg
-                        << MealForm.ComponentCategoriesCompleted
-                            requests.rowId
+                        << MealForm.ComponentCategoriesCompleted requests.rowId
                             requests.categoryToken
                     )
                 ]
@@ -3140,16 +3077,14 @@ applyMealDetailOutMsg _ outMsg =
         MealShow.RequestInitialData mealId ->
             ( Cmd.batch
                 [ Api.Meals.getMeal mealId (GotMealDetailMsg << MealShow.MealLoaded mealId)
-                , Api.Meals.getMealNutrients
-                    { mealId = mealId, amount = "100", unit = defaultCode }
+                , Api.Meals.getMealNutrients { mealId = mealId, amount = "100", unit = defaultCode }
                     (GotMealDetailMsg << MealShow.NutrientPreviewLoaded mealId)
                 ]
             , NoOutMsg
             )
 
         MealShow.RequestNutrientPreview mealId amount unit ->
-            ( Api.Meals.getMealNutrients
-                { mealId = mealId, amount = amount, unit = unit }
+            ( Api.Meals.getMealNutrients { mealId = mealId, amount = amount, unit = unit }
                 (GotMealDetailMsg << MealShow.NutrientPreviewLoaded mealId)
             , NoOutMsg
             )
@@ -3311,8 +3246,7 @@ paneModalView env pane =
             AdminEditUser.modalView env sub |> Maybe.map (Element.map GotAdminEditUserMsg)
 
         ApiKeysPane generation sub ->
-            SettingsApiKeys.modalView env sub
-                |> Maybe.map (Element.map (GotApiKeysMsg generation))
+            SettingsApiKeys.modalView env sub |> Maybe.map (Element.map (GotApiKeysMsg generation))
 
         ApiKeyCreatePane generation sub ->
             SettingsApiKeyCreate.modalView env sub

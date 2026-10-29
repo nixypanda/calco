@@ -181,16 +181,14 @@ preparedManualFood =
                 case categoryRequest out of
                     Just token ->
                         Ok
-                            (CustomFoodCreate.CategorySuggestionsLoaded
-                                token
+                            (CustomFoodCreate.CategorySuggestionsLoaded token
                                 (Ok { items = [ dairySuggestion ] })
                             )
 
                     Nothing ->
                         Err "the category query produced no request"
             )
-        |> step
-            (CustomFoodCreate.FormMsg (Form.AcceptCategorySuggestion "dairy"))
+        |> step (CustomFoodCreate.FormMsg (Form.AcceptCategorySuggestion "dairy"))
 
 
 preparedDraft : Journey
@@ -205,10 +203,7 @@ preparedDraft =
                     (Ok { enabled = True, supportsImages = False })
                 )
             )
-        |> step
-            (CustomFoodCreate.AssistantMsg
-                (Assistant.DescriptionChanged "paneer")
-            )
+        |> step (CustomFoodCreate.AssistantMsg (Assistant.DescriptionChanged "paneer"))
         |> step (CustomFoodCreate.AssistantMsg Assistant.SendClicked)
         |> bind
             (\out ->
@@ -222,10 +217,7 @@ preparedDraft =
                     _ ->
                         Err "the assistant send produced no draft request"
             )
-        |> step
-            (CustomFoodCreate.AssistantMsg
-                (Assistant.ApplyDraftClicked False)
-            )
+        |> step (CustomFoodCreate.AssistantMsg (Assistant.ApplyDraftClicked False))
 
 
 categorizedRequest : Api.Foods.CreateFoodRequest

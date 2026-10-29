@@ -70,10 +70,7 @@ confirmModalView env config state =
             , Feedback.maybeErrorBanner env.theme state.error
             ]
         , actions =
-            Element.row
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space12
-                ]
+            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ Element.el [ Element.width Element.fill ]
                     (Button.textButton env.device
                         env.theme

@@ -31,8 +31,7 @@ nameAndRowValidation =
             in
             Expect.all
                 [ \_ ->
-                    Form.toCreateFoodRequest Form.emptyForm
-                        |> Expect.equal (Err Form.NameRequired)
+                    Form.toCreateFoodRequest Form.emptyForm |> Expect.equal (Err Form.NameRequired)
                 , \_ ->
                     Form.toCreateFoodRequest { named | name = "   " }
                         |> Expect.equal (Err Form.NameRequired)
@@ -40,10 +39,7 @@ nameAndRowValidation =
                     Form.toCreateFoodRequest
                         { named
                             | nutrients =
-                                [ { code = "ENERGY_KCAL"
-                                  , amount = "abc"
-                                  , unit = "kcal"
-                                  }
+                                [ { code = "ENERGY_KCAL", amount = "abc", unit = "kcal" }
                                 ]
                         }
                         |> Expect.equal (Err (Form.InvalidNutrientAmount "abc"))
@@ -51,10 +47,7 @@ nameAndRowValidation =
                     Form.toCreateFoodRequest
                         { named
                             | nutrients =
-                                [ { code = "ENERGY_KCAL"
-                                  , amount = "-1"
-                                  , unit = "kcal"
-                                  }
+                                [ { code = "ENERGY_KCAL", amount = "-1", unit = "kcal" }
                                 ]
                         }
                         |> Expect.equal (Err (Form.InvalidNutrientAmount "-1"))
@@ -199,8 +192,7 @@ categoryNormalization =
             in
             Expect.all
                 [ \_ ->
-                    List.take (List.length selected) result
-                        |> Expect.equal selected
+                    List.take (List.length selected) result |> Expect.equal selected
                 , \_ ->
                     case List.drop (List.length selected) result of
                         [] ->
@@ -217,7 +209,6 @@ categoryNormalization =
                         _ ->
                             Expect.fail "addCategoryTag appended more than one tag"
                 , \_ ->
-                    Form.addCategoryTag raw result
-                        |> Expect.equal result
+                    Form.addCategoryTag raw result |> Expect.equal result
                 ]
                 ()

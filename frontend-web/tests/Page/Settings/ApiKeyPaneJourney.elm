@@ -111,8 +111,7 @@ keysLoaded : List ApiKey -> Journey -> Journey
 keysLoaded keys journey =
     case keysGeneration journey.model of
         Ok generation ->
-            send
-                (keysLoadedMsg generation keys)
+            send (keysLoadedMsg generation keys)
                 { journey
                     | previousListGeneration = journey.listGeneration
                     , listGeneration = Just generation
@@ -188,8 +187,7 @@ completePreviousCreate result journey =
     case journey.previousCreate of
         Just ref ->
             stale
-                (Page.GotApiKeyCreateMsg
-                    ref.generation
+                (Page.GotApiKeyCreateMsg ref.generation
                     (ApiKeyCreate.CreateCompleted ref.requestId result)
                 )
                 journey

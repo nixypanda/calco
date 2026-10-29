@@ -173,8 +173,7 @@ update msg model =
             else
                 case result of
                     Ok response ->
-                        ( applyLastUsedDefault
-                            (List.head response.items |> Maybe.map .quantity)
+                        ( applyLastUsedDefault (List.head response.items |> Maybe.map .quantity)
                             model
                         , Cmd.none
                         , NoOp
@@ -220,8 +219,7 @@ update msg model =
                         ( Loaded
                             { loaded
                                 | form =
-                                    FoodLogForm.setSubmitState
-                                        FoodLogForm.SubmitSubmitting
+                                    FoodLogForm.setSubmitState FoodLogForm.SubmitSubmitting
                                         loaded.form
                             }
                         , Cmd.none
@@ -251,8 +249,7 @@ update msg model =
                             Ok log ->
                                 ( model
                                 , Cmd.none
-                                , LogCreated log
-                                    (FoodSearch loaded.logDate loaded.mealSlot)
+                                , LogCreated log (FoodSearch loaded.logDate loaded.mealSlot)
                                 )
 
                             Err error ->
@@ -276,8 +273,7 @@ update msg model =
 createLogFromLocalCtx : LocalCtx -> LoadedModel -> ( Model, Cmd Msg, OutMsg )
 createLogFromLocalCtx context loaded =
     case
-        FoodLogForm.createProductLogRequest
-            (Maybe.withDefault context.date loaded.logDate)
+        FoodLogForm.createProductLogRequest (Maybe.withDefault context.date loaded.logDate)
             (Just context.timezone)
             loaded.productId
             loaded.form
@@ -316,8 +312,7 @@ setLoadedFood food model =
                 { loaded
                     | food = food
                     , form =
-                        formWithLastUsedDefault
-                            loaded.lastUsedDefault
+                        formWithLastUsedDefault loaded.lastUsedDefault
                             (FoodLogForm.initLogFormFromFood loaded.mealSlot food)
                 }
 
@@ -349,8 +344,7 @@ completeLoading loading =
                 , food = food
                 , units = units
                 , form =
-                    formWithLastUsedDefault
-                        loading.lastUsedDefault
+                    formWithLastUsedDefault loading.lastUsedDefault
                         (FoodLogForm.initLogFormFromFood loading.mealSlot food)
                 , lastUsedDefault = loading.lastUsedDefault
                 , lookupNote = loading.lookupNote
@@ -425,8 +419,7 @@ applyLoadedError message model =
 
 contentView : Env -> Model -> Element Msg
 contentView env model =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
             LoadFailed failed ->
                 Feedback.errorBanner env.theme failed.message
@@ -472,8 +465,7 @@ loadedView env loaded =
         categories =
             View.Product.foodCategories env.theme food
     in
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Maybe.withDefault Element.none
             (Maybe.map (Feedback.infoBanner env.theme) loaded.lookupNote)
         , Surface.panel env.theme
@@ -488,8 +480,7 @@ loadedView env loaded =
                 )
                     ++ [ { title =
                             Just
-                                (Typography.subsectionTitle
-                                    env.theme
+                                (Typography.subsectionTitle env.theme
                                     (I18n.t env.language TidFoodShowPortion)
                                 )
                          , body =
@@ -519,8 +510,7 @@ submitActionView env form =
 
 foodNutrientsForDisplay : ProductDetail -> FoodLogForm.Model -> List Nutrition.NutrientAmount
 foodNutrientsForDisplay food form =
-    Nutrition.nutrientsForQuantity
-        { amount = form.amount, unit = form.unit }
+    Nutrition.nutrientsForQuantity { amount = form.amount, unit = form.unit }
         food.servings
         food.nutrients
         |> Maybe.withDefault (View.Product.foodNutrientsPer100g food)
@@ -528,14 +518,10 @@ foodNutrientsForDisplay food form =
 
 foodShowSkeleton : Theme -> Element msg
 foodShowSkeleton theme =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Skeleton.barCustom theme
-            { width = Element.fill, height = 120 }
-        , Skeleton.barCustom theme
-            { width = Element.fillPortion 2, height = 16 }
-        , Skeleton.barCustom theme
-            { width = Element.fillPortion 3, height = 12 }
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ Skeleton.barCustom theme { width = Element.fill, height = 120 }
+        , Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
+        , Skeleton.barCustom theme { width = Element.fillPortion 3, height = 12 }
         , Skeleton.input theme
         , Skeleton.button theme
         , Skeleton.card theme { rows = 3 }

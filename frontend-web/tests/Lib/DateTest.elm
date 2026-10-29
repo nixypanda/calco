@@ -25,8 +25,7 @@ tests =
                         LocalDate.addDays offset (LocalDate.addDays delta date)
                             |> Expect.equal (LocalDate.addDays (offset + delta) date)
                     , \_ ->
-                        LocalDate.compare
-                            (LocalDate.addDays offset date)
+                        LocalDate.compare (LocalDate.addDays offset date)
                             (LocalDate.addDays (offset + delta) date)
                             |> Expect.equal LT
                     , \_ ->
@@ -80,10 +79,7 @@ tests =
                     formatted =
                         LocalDate.format date
                 in
-                Expect.all
-                    [ \_ -> LocalDate.fromString formatted |> Expect.equal (Just date)
-                    ]
-                    ()
+                Expect.all [ \_ -> LocalDate.fromString formatted |> Expect.equal (Just date) ] ()
         , fuzz nearMissDateString "fromString rejects non-canonical date-like strings" <|
             \raw ->
                 LocalDate.fromString raw |> Expect.equal Nothing
@@ -118,12 +114,10 @@ nearMissDateString =
         , fromDate (\formatted -> formatted ++ " ")
         , fromDate (String.dropRight 1)
         , fromDate (\formatted -> formatted ++ "T00:00:00")
-        , Fuzz.map2
-            (\yearValue month -> pad4 yearValue ++ "-" ++ String.fromInt month ++ "-01")
+        , Fuzz.map2 (\yearValue month -> pad4 yearValue ++ "-" ++ String.fromInt month ++ "-01")
             (Fuzz.intRange 1 9999)
             (Fuzz.intRange 1 9)
-        , Fuzz.map2
-            (\yearValue day -> pad4 yearValue ++ "-01-" ++ String.fromInt day)
+        , Fuzz.map2 (\yearValue day -> pad4 yearValue ++ "-01-" ++ String.fromInt day)
             (Fuzz.intRange 1 9999)
             (Fuzz.intRange 1 9)
         ]

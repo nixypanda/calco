@@ -28,10 +28,7 @@ type alias Model =
 
 tests : Test
 tests =
-    describe "Api.Client"
-        [ unauthorizedExpiresSession
-        , displayErrorIsNeverBlank
-        ]
+    describe "Api.Client" [ unauthorizedExpiresSession, displayErrorIsNeverBlank ]
 
 
 {-| Allowed 401 exception: `isUnauthorized` is true exactly for status 401, and
@@ -91,9 +88,7 @@ displayErrorIsNeverBlank : Test
 displayErrorIsNeverBlank =
     fuzz displayErrorInput "displayError never returns a blank message" <|
         \error ->
-            Client.displayError error
-                |> String.trim
-                |> Expect.notEqual ""
+            Client.displayError error |> String.trim |> Expect.notEqual ""
 
 
 displayErrorInput : Fuzzer ApiError
@@ -106,11 +101,7 @@ displayErrorInput =
         ]
 
 
-config :
-    { noOp : OutMsg
-    , sessionExpired : OutMsg
-    , applyError : String -> Model -> Model
-    }
+config : { noOp : OutMsg, sessionExpired : OutMsg, applyError : String -> Model -> Model }
 config =
     { noOp = NoOp
     , sessionExpired = SessionExpired

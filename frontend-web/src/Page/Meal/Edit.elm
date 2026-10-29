@@ -216,8 +216,7 @@ update msg model =
                             ( Editing
                                 { loaded
                                     | fields =
-                                        withSubmit
-                                            (Common.SubmitFailed componentRequiredMessage)
+                                        withSubmit (Common.SubmitFailed componentRequiredMessage)
                                             loaded.fields
                                 }
                             , Cmd.none
@@ -251,8 +250,7 @@ update msg model =
                                             \message current ->
                                                 { current
                                                     | fields =
-                                                        withSubmit
-                                                            (Common.SubmitFailed message)
+                                                        withSubmit (Common.SubmitFailed message)
                                                             current.fields
                                                 }
                                         }

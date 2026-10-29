@@ -356,8 +356,7 @@ nextProductNameRequest completedId loaded =
 componentNameView : Theme -> LoadedModel -> String -> Element Msg
 componentNameView theme loaded id =
     if ItemNameLookup.isLoaded (ItemNameLookup.productRef id) loaded.productNames then
-        Element.el
-            [ Typography.body, Font.color theme.textPrimary ]
+        Element.el [ Typography.body, Font.color theme.textPrimary ]
             (Element.text
                 (ItemNameLookup.nameFor "" (ItemNameLookup.productRef id) loaded.productNames)
             )
@@ -644,8 +643,7 @@ componentView env loaded component =
         quantityText =
             component.quantity.amount ++ " " ++ component.quantity.unit ++ summaryText
     in
-    Element.row
-        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.el
             [ Element.width (Element.px 12)
             , Element.paddingEach { top = DesignTokens.space2, right = 0, bottom = 0, left = 0 }
@@ -655,9 +653,7 @@ componentView env loaded component =
         , Element.column
             [ Element.width Element.fill, Element.spacing DesignTokens.space4, Element.alignTop ]
             [ componentNameView env.theme loaded component.item.id
-            , Element.el
-                [ Font.color env.theme.textMuted ]
-                (Element.text quantityText)
+            , Element.el [ Font.color env.theme.textMuted ] (Element.text quantityText)
             ]
         ]
 

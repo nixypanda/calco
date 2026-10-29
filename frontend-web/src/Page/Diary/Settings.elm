@@ -65,8 +65,7 @@ update msg model =
         PrefsLoaded result ->
             case result of
                 Ok prefs ->
-                    ( Ready
-                        { selected = canonical prefs.enabledMealSlots, saveState = Editing }
+                    ( Ready { selected = canonical prefs.enabledMealSlots, saveState = Editing }
                     , Cmd.none
                     , NoOp
                     )
@@ -127,8 +126,7 @@ update msg model =
         SaveCompleted result ->
             case ( model, result ) of
                 ( Ready _, Ok prefs ) ->
-                    ( Ready
-                        { selected = canonical prefs.enabledMealSlots, saveState = Saved }
+                    ( Ready { selected = canonical prefs.enabledMealSlots, saveState = Saved }
                     , Cmd.none
                     , NoOp
                     )

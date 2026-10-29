@@ -40,14 +40,8 @@ tests =
                                 }
                                 |> Fixtures.tupleFirst
                             )
-                            |> send
-                                (Page.GotDiaryMsg
-                                    (DiaryDay.LogsLoaded date (Ok diaryLogs))
-                                )
-                            |> send
-                                (Page.GotDiaryMsg
-                                    (DiaryDay.GoalLoaded date (Ok goalSnapshot))
-                                )
+                            |> send (Page.GotDiaryMsg (DiaryDay.LogsLoaded date (Ok diaryLogs)))
+                            |> send (Page.GotDiaryMsg (DiaryDay.GoalLoaded date (Ok goalSnapshot)))
 
                     afterAddFood : Journey
                     afterAddFood =
@@ -93,14 +87,11 @@ tests =
                                 |> Fixtures.tupleFirst
                             )
                             |> apply (FoodSearch (Just date) (Just MealSlot.Lunch))
-                            |> send
-                                (Page.GotFoodSearchMsg (FoodSearch.ResultClicked "food-1"))
+                            |> send (Page.GotFoodSearchMsg (FoodSearch.ResultClicked "food-1"))
                             |> apply (FoodShow "food-1" (Just date) (Just MealSlot.Lunch) Nothing)
                             |> apply (FoodSearch (Just date) (Just MealSlot.Lunch))
                             |> send
-                                (Page.GotFoodSearchMsg
-                                    (FoodSearch.RecentItemClicked mealRecent)
-                                )
+                                (Page.GotFoodSearchMsg (FoodSearch.RecentItemClicked mealRecent))
                             |> apply (MealShow "meal-1")
                 in
                 { finalPanes = Page.paneKeys afterMeal.model
@@ -225,9 +216,7 @@ diaryState model =
                         Just
                             { date = LocalDate.format diary.currentDate
                             , logCount =
-                                DiaryDay.currentLogs diary
-                                    |> Maybe.withDefault []
-                                    |> List.length
+                                DiaryDay.currentLogs diary |> Maybe.withDefault [] |> List.length
                             }
 
                     _ ->

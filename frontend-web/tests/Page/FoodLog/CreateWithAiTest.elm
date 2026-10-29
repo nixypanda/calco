@@ -191,8 +191,7 @@ productLog =
     { adHocLog
         | id = "log-2"
         , item =
-            FoodLog.ProductLogItem
-                { id = "food-1", name = "Paneer wrap", brand = Nothing }
+            FoodLog.ProductLogItem { id = "food-1", name = "Paneer wrap", brand = Nothing }
         , quantity = { amount = "1", unit = "serving" }
         , nutrients =
             [ { code = "ENERGY_KCAL", amount = "500", unit = "kcal" }

@@ -207,16 +207,12 @@ update msg model =
                     ( final, Cmd.batch [ dateCmd, contextCmd ] )
 
         GotBarcodeScannerEvent event ->
-            stepPageUpdate
-                (Page.barcodeScannerEventReceived (pageCtx model) event model.page)
-                model
+            stepPageUpdate (Page.barcodeScannerEventReceived (pageCtx model) event model.page) model
 
         GotCopyTextResult result ->
             stepPageUpdate
-                (Page.update
-                    (pageCtx model)
-                    (Page.CopyTextResult
-                        result.generation
+                (Page.update (pageCtx model)
+                    (Page.CopyTextResult result.generation
                         result.requestId
                         result.succeeded
                     )
@@ -426,8 +422,7 @@ stepPageResult ( page, pageCmd, outMsg ) model =
                     )
     in
     ( finalModel
-    , Cmd.batch
-        [ Cmd.map GotPageMsg pageCmd, outCmd, revokePhotoPreviewUrls removedPhotoUrls ]
+    , Cmd.batch [ Cmd.map GotPageMsg pageCmd, outCmd, revokePhotoPreviewUrls removedPhotoUrls ]
     )
 
 
@@ -486,11 +481,7 @@ applyPageOutMsg outMsg model =
 
         Page.CopyText generation requestId text ->
             ( model
-            , copyText
-                { generation = generation
-                , requestId = requestId
-                , text = text
-                }
+            , copyText { generation = generation, requestId = requestId, text = text }
             )
 
         Page.LoginSucceeded loginSession ->
@@ -538,8 +529,7 @@ view model =
 
         modal : Maybe (Element Msg)
         modal =
-            Page.modalView model.env model.page
-                |> Maybe.map (Element.map GotPageMsg)
+            Page.modalView model.env model.page |> Maybe.map (Element.map GotPageMsg)
 
         updateBanner : Maybe (Element Msg)
         updateBanner =
@@ -570,14 +560,11 @@ view model =
                     { borderColor = Nothing, backgroundColor = Nothing, shadow = Nothing }
                 ]
             }
-            (modalLayoutAttrs modal
-                ++ bottomNavAttrs modal model session isLoadingPage
-            )
+            (modalLayoutAttrs modal ++ bottomNavAttrs modal model session isLoadingPage)
           <|
             uiLayout model.env.theme
                 (modalContentAttrs modal)
-                (Chrome.viewFrame
-                    model.env
+                (Chrome.viewFrame model.env
                     model.chrome
                     session
                     model.route
@@ -621,12 +608,7 @@ bottomNavAttrs modal model session isLoadingPage =
             []
 
         Nothing ->
-            Chrome.bottomNavLayoutAttrs
-                model.env
-                session
-                model.route
-                isLoadingPage
-                GotChromeMsg
+            Chrome.bottomNavLayoutAttrs model.env session model.route isLoadingPage GotChromeMsg
 
 
 uiLayout : Theme -> List (Element.Attribute msg) -> Element msg -> Element msg
@@ -640,12 +622,7 @@ uiLayout theme extraAttrs content =
         , Font.size 16
         , uiClass "ui-theme-root"
         ]
-        [ Element.el
-            ([ Element.width Element.fill
-             , Element.height Element.fill
-             ]
-                ++ extraAttrs
-            )
+        [ Element.el ([ Element.width Element.fill, Element.height Element.fill ] ++ extraAttrs)
             content
         ]
 

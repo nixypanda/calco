@@ -114,8 +114,7 @@ bottomNavLayoutAttrs :
 bottomNavLayoutAttrs env session route isLoadingPage toMsg =
     if showBottomNav env session isLoadingPage route then
         [ Element.inFront
-            (Element.el
-                [ Element.width Element.fill, Element.alignBottom ]
+            (Element.el [ Element.width Element.fill, Element.alignBottom ]
                 (View.Chrome.bottomNavBar env route (toMsg << NavigateClicked))
             )
         ]
@@ -146,8 +145,7 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
                 []
 
             else
-                View.Chrome.drawerOverlay
-                    env
+                View.Chrome.drawerOverlay env
                     session
                     route
                     (isMenuOpen DrawerMenu model)
@@ -161,8 +159,7 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
                     && View.Chrome.showsAppChrome session isLoadingPage route
             then
                 Just
-                    (View.Chrome.profileMenu
-                        env
+                    (View.Chrome.profileMenu env
                         session
                         (toMsg << NavigateClicked)
                         (toMsg LogoutClicked)
@@ -181,10 +178,8 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
                 Nothing ->
                     []
     in
-    Element.column
-        ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
-        (View.Chrome.topBarView
-            env
+    Element.column ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
+        (View.Chrome.topBarView env
             session
             route
             isLoadingPage
@@ -210,8 +205,7 @@ pageAttrs useBottomNav =
     , Region.mainContent
     ]
         ++ (if useBottomNav then
-                [ Element.paddingEach
-                    { bottom = bottomNavClearance, top = 0, left = 0, right = 0 }
+                [ Element.paddingEach { bottom = bottomNavClearance, top = 0, left = 0, right = 0 }
                 ]
 
             else

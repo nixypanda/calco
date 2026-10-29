@@ -57,8 +57,7 @@ view theme language tagRows =
 
 tagRow : Theme -> Language -> List CategoryTag -> Element msg
 tagRow theme language cells =
-    Element.row
-        [ Element.spacing space4, Element.alignRight ]
+    Element.row [ Element.spacing space4, Element.alignRight ]
         (List.map (tagCell theme language) cells)
 
 

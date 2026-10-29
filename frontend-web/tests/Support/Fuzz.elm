@@ -59,16 +59,12 @@ generator miss.
 -}
 localDate : Fuzzer LocalDate
 localDate =
-    Fuzz.frequency
-        [ ( 2, arbitraryLocalDate )
-        , ( 1, edgeCaseLocalDate )
-        ]
+    Fuzz.frequency [ ( 2, arbitraryLocalDate ), ( 1, edgeCaseLocalDate ) ]
 
 
 interiorLocalDate : Fuzzer LocalDate
 interiorLocalDate =
-    interiorYearFuzzer
-        |> Fuzz.andThen dateInYear
+    interiorYearFuzzer |> Fuzz.andThen dateInYear
 
 
 year : Fuzzer Int
@@ -76,10 +72,7 @@ year =
     Fuzz.frequency
         [ ( 6, Fuzz.intRange 1 9999 )
         , ( 3, Fuzz.oneOfValues [ 1, 2, 3, 4, 5, 9995, 9996, 9997, 9998, 9999 ] )
-        , ( 2
-          , Fuzz.oneOfValues
-                [ 100, 400, 1899, 1900, 1901, 1999, 2000, 2001, 2100, 2400 ]
-          )
+        , ( 2, Fuzz.oneOfValues [ 100, 400, 1899, 1900, 1901, 1999, 2000, 2001, 2100, 2400 ] )
         ]
 
 
@@ -92,9 +85,7 @@ invalidCanonicalDateStrings yearValue =
             ]
         )
         (List.range 1 12)
-        ++ [ canonicalString yearValue 0 15
-           , canonicalString yearValue 13 15
-           ]
+        ++ [ canonicalString yearValue 0 15, canonicalString yearValue 13 15 ]
 
 
 monthBoundaryCases : Int -> List ( String, Int, String )
@@ -152,14 +143,10 @@ four-digit `YYYY-MM` shape.
 -}
 monthPeriod : Fuzzer String
 monthPeriod =
-    Fuzz.map2
-        (\yearValue month -> pad4 yearValue ++ "-" ++ pad2 month)
+    Fuzz.map2 (\yearValue month -> pad4 yearValue ++ "-" ++ pad2 month)
         (Fuzz.frequency
             [ ( 6, Fuzz.intRange 1000 9998 )
-            , ( 2
-              , Fuzz.oneOfValues
-                    [ 1000, 1900, 2000, 2100, 2400, 9998 ]
-              )
+            , ( 2, Fuzz.oneOfValues [ 1000, 1900, 2000, 2100, 2400, 9998 ] )
             ]
         )
         (Fuzz.intRange 1 12)
@@ -172,10 +159,7 @@ mealSlot =
 
 maybeMealSlot : Fuzzer (Maybe MealSlot)
 maybeMealSlot =
-    Fuzz.oneOf
-        [ Fuzz.constant Nothing
-        , Fuzz.map Just mealSlot
-        ]
+    Fuzz.oneOf [ Fuzz.constant Nothing, Fuzz.map Just mealSlot ]
 
 
 mealSlotList : Fuzzer (List MealSlot)
@@ -185,10 +169,7 @@ mealSlotList =
 
 maybeLocalDate : Fuzzer (Maybe LocalDate)
 maybeLocalDate =
-    Fuzz.oneOf
-        [ Fuzz.constant Nothing
-        , Fuzz.map Just localDate
-        ]
+    Fuzz.oneOf [ Fuzz.constant Nothing, Fuzz.map Just localDate ]
 
 
 {-| Decimal strings, including blank, non-numeric, negative, zero, and large
@@ -251,16 +232,12 @@ remapping changes only the two values a browser cannot carry through a URL.
 -}
 segment : Fuzzer String
 segment =
-    Fuzz.frequency
-        [ ( 8, arbitrarySegment )
-        , ( 1, Fuzz.oneOfValues edgeSegments )
-        ]
+    Fuzz.frequency [ ( 8, arbitrarySegment ), ( 1, Fuzz.oneOfValues edgeSegments ) ]
 
 
 arbitrarySegment : Fuzzer String
 arbitrarySegment =
-    Fuzz.map2
-        (\head tail -> String.fromChar head ++ tail)
+    Fuzz.map2 (\head tail -> String.fromChar head ++ tail)
         Fuzz.char
         (Fuzz.map String.fromList (Fuzz.listOfLengthBetween 0 12 Fuzz.char))
         |> Fuzz.map avoidDotSegments
@@ -333,19 +310,12 @@ route =
 
 maybePeriod : Fuzzer (Maybe String)
 maybePeriod =
-    Fuzz.oneOf
-        [ Fuzz.constant Nothing
-        , Fuzz.map Just monthPeriod
-        , Fuzz.map Just segment
-        ]
+    Fuzz.oneOf [ Fuzz.constant Nothing, Fuzz.map Just monthPeriod, Fuzz.map Just segment ]
 
 
 maybeSegment : Fuzzer (Maybe String)
 maybeSegment =
-    Fuzz.oneOf
-        [ Fuzz.constant Nothing
-        , Fuzz.map Just segment
-        ]
+    Fuzz.oneOf [ Fuzz.constant Nothing, Fuzz.map Just segment ]
 
 
 apiError : Fuzzer ApiError
@@ -367,10 +337,7 @@ apiError =
 
 statusCode : Fuzzer Int
 statusCode =
-    Fuzz.frequency
-        [ ( 2, Fuzz.oneOfValues [ 401, 403, 429 ] )
-        , ( 3, Fuzz.intRange 100 599 )
-        ]
+    Fuzz.frequency [ ( 2, Fuzz.oneOfValues [ 401, 403, 429 ] ), ( 3, Fuzz.intRange 100 599 ) ]
 
 
 deviceClass : Fuzzer DeviceClass
@@ -380,8 +347,7 @@ deviceClass =
 
 device : Fuzzer Element.Device
 device =
-    Fuzz.map2
-        (\class orientation -> { class = class, orientation = orientation })
+    Fuzz.map2 (\class orientation -> { class = class, orientation = orientation })
         deviceClass
         (Fuzz.oneOfValues [ Portrait, Landscape ])
 
@@ -397,8 +363,7 @@ regression in any bucket field is exercised.
 -}
 foodLog : Fuzzer FoodLog
 foodLog =
-    Fuzz.map2
-        (\base notes -> { base | notes = notes })
+    Fuzz.map2 (\base notes -> { base | notes = notes })
         baseFoodLog
         (Fuzz.oneOf [ Fuzz.constant Nothing, Fuzz.map Just segment ])
 
@@ -434,12 +399,8 @@ logItem =
             segment
             segment
             maybeSegment
-        , Fuzz.map2
-            (\id name -> MealLogItem { id = id, name = name })
-            segment
-            segment
-        , Fuzz.map2
-            (\name brand -> AdHocLogItem { name = name, brand = brand })
+        , Fuzz.map2 (\id name -> MealLogItem { id = id, name = name }) segment segment
+        , Fuzz.map2 (\name brand -> AdHocLogItem { name = name, brand = brand })
             segment
             maybeSegment
         ]
@@ -447,16 +408,12 @@ logItem =
 
 quantity : Fuzzer Nutrition.Quantity
 quantity =
-    Fuzz.map2
-        (\amount unit -> { amount = amount, unit = unit })
-        nonNegativeAmountString
-        segment
+    Fuzz.map2 (\amount unit -> { amount = amount, unit = unit }) nonNegativeAmountString segment
 
 
 nutrientAmount : Fuzzer Nutrition.NutrientAmount
 nutrientAmount =
-    Fuzz.map3
-        (\code amount unit -> { code = code, amount = amount, unit = unit })
+    Fuzz.map3 (\code amount unit -> { code = code, amount = amount, unit = unit })
         segment
         amountString
         segment
@@ -464,8 +421,7 @@ nutrientAmount =
 
 arbitraryLocalDate : Fuzzer LocalDate
 arbitraryLocalDate =
-    year
-        |> Fuzz.andThen dateInYear
+    year |> Fuzz.andThen dateInYear
 
 
 dateInYear : Int -> Fuzzer LocalDate
@@ -519,10 +475,7 @@ interiorYearFuzzer =
 
 monthFuzzer : Fuzzer Int
 monthFuzzer =
-    Fuzz.frequency
-        [ ( 4, Fuzz.intRange 1 12 )
-        , ( 2, Fuzz.constant 2 )
-        ]
+    Fuzz.frequency [ ( 4, Fuzz.intRange 1 12 ), ( 2, Fuzz.constant 2 ) ]
 
 
 expectLocalDate : Int -> Int -> Int -> Fuzzer LocalDate

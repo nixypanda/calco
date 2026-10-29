@@ -10,8 +10,7 @@ import Url.Builder as Builder
 
 getStatus : (Result Client.ApiError FoodAssistant.AssistantStatus -> msg) -> Cmd msg
 getStatus toMsg =
-    Client.get
-        (Builder.absolute [ "api", "ai", "food-assistant", "status" ] [])
+    Client.get (Builder.absolute [ "api", "ai", "food-assistant", "status" ] [])
         FoodAssistant.assistantStatusDecoder
         toMsg
 
@@ -23,10 +22,8 @@ requestDraft :
     -> (Result Client.ApiError FoodAssistant.FoodDraftTurn -> msg)
     -> Cmd msg
 requestDraft purpose conversation photos toMsg =
-    Client.postMultipart
-        (Builder.absolute [ "api", "ai", "custom-food", "draft" ] [])
-        (Http.stringPart
-            "conversation"
+    Client.postMultipart (Builder.absolute [ "api", "ai", "custom-food", "draft" ] [])
+        (Http.stringPart "conversation"
             (Encode.encode 0 (FoodAssistant.conversationEncoderFor purpose conversation))
             :: List.map (Http.filePart "photos") photos
         )

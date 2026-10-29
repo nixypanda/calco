@@ -49,18 +49,12 @@ validateLogBranches =
                 duplicate =
                     { form
                         | nutrients =
-                            coreNutrients
-                                ++ [ { code = "FAT_G"
-                                     , amount = "1"
-                                     , unit = "g"
-                                     }
-                                   ]
+                            coreNutrients ++ [ { code = "FAT_G", amount = "1", unit = "g" } ]
                     }
 
                 zeroWeight : FormModel
                 zeroWeight =
-                    logForm
-                        basePortion
+                    logForm basePortion
                         IndependentPortion
                         (SaveCustomFoodThenLog { portionWeight = "0" })
                         coreNutrients
@@ -81,14 +75,12 @@ validateLogBranches =
             in
             Expect.all
                 [ \_ ->
-                    Editor.validateLog negative
-                        |> Expect.equal (Err expectedNegative)
+                    Editor.validateLog negative |> Expect.equal (Err expectedNegative)
                 , \_ ->
                     Editor.validateLog duplicate
                         |> Expect.equal (Err (I18n.en TidFoodEditorErrorDuplicateNutrient))
                 , \_ ->
-                    Editor.validateLog zeroWeight
-                        |> Expect.equal (Err expectedWeight)
+                    Editor.validateLog zeroWeight |> Expect.equal (Err expectedWeight)
                 ]
                 ()
 
@@ -98,8 +90,7 @@ weight and multiplied by 100; serving grams are weight divided by quantity.
 -}
 customFoodFromLogScaling : Test
 customFoodFromLogScaling =
-    fuzz3
-        (Fuzz.intRange 10 1000)
+    fuzz3 (Fuzz.intRange 10 1000)
         (Fuzz.intRange 0 10000)
         (Fuzz.intRange 1 10)
         "custom food payload converts logged totals to per-100-g values"
@@ -137,13 +128,9 @@ customFoodFromLogScaling =
                 |> Result.map
                     (\request ->
                         { amountPer100g =
-                            request.nutrients
-                                |> List.head
-                                |> Maybe.map .amountPer100g
+                            request.nutrients |> List.head |> Maybe.map .amountPer100g
                         , gramsPerUnit =
-                            request.servings
-                                |> List.head
-                                |> Maybe.map .gramsPerUnit
+                            request.servings |> List.head |> Maybe.map .gramsPerUnit
                         , defaultQuantity = request.defaultQuantity
                         , defaultUnit = request.defaultUnit
                         }
@@ -156,8 +143,7 @@ using the suggested weight for every nutrient row.
 -}
 aiDraftScaling : Test
 aiDraftScaling =
-    fuzz2
-        (Fuzz.intRange 1 1000)
+    fuzz2 (Fuzz.intRange 1 1000)
         (Fuzz.intRange 0 10000)
         "AI per-100-g values scale to the suggested portion"
     <|
@@ -174,8 +160,7 @@ aiDraftScaling =
                     , totalWeightGrams = String.fromInt weight
                     }
             in
-            Editor.applyAiLogDraft
-                catalog
+            Editor.applyAiLogDraft catalog
                 (aiDraft (String.fromInt amount))
                 suggested
                 (logForm basePortion IndependentPortion LogAdHocOnly coreNutrients)
@@ -183,8 +168,7 @@ aiDraftScaling =
                     (\form ->
                         { totals = nutrientAmounts form
                         , weight =
-                            Editor.logPortionWeight form
-                                |> Maybe.andThen String.toFloat
+                            Editor.logPortionWeight form |> Maybe.andThen String.toFloat
                         , fields =
                             Editor.foodLogFields form
                                 |> Maybe.map (\fields -> ( fields.quantity, fields.unit ))
@@ -202,8 +186,7 @@ nutrient total by new quantity / old quantity.
 -}
 quantityScaling : Test
 quantityScaling =
-    fuzz2
-        (Fuzz.intRange 1 10)
+    fuzz2 (Fuzz.intRange 1 10)
         (Fuzz.intRange 1 10)
         "changing the log quantity scales the portion and nutrient totals"
     <|
@@ -211,8 +194,7 @@ quantityScaling =
             let
                 base : Result String FormModel
                 base =
-                    Editor.applyAiLogDraft
-                        catalog
+                    Editor.applyAiLogDraft catalog
                         (aiDraft "200")
                         { amount = String.fromInt oldQuantity
                         , unit = "serving"
@@ -234,18 +216,15 @@ quantityScaling =
                         |> (\form ->
                                 { totals = nutrientAmounts form
                                 , weight =
-                                    Editor.logPortionWeight form
-                                        |> Maybe.andThen String.toFloat
+                                    Editor.logPortionWeight form |> Maybe.andThen String.toFloat
                                 , fields =
-                                    Editor.foodLogFields form
-                                        |> Maybe.map .quantity
+                                    Editor.foodLogFields form |> Maybe.map .quantity
                                 }
                            )
                         |> Ok
                         |> expectApplied
                             { totals =
-                                nutrientAmounts baseForm
-                                    |> List.map ((*) ratio)
+                                nutrientAmounts baseForm |> List.map ((*) ratio)
                             , weight = Just (250 * ratio)
                             , fields = Just (String.fromInt newQuantity)
                             }
@@ -256,8 +235,7 @@ rescales the weight and nutrient totals to the same portion.
 -}
 unitScaling : Test
 unitScaling =
-    fuzz2
-        (Fuzz.intRange 1 10)
+    fuzz2 (Fuzz.intRange 1 10)
         (Fuzz.intRange 1 500)
         "changing the log unit uses the serving gram conversion"
     <|
@@ -269,8 +247,7 @@ unitScaling =
 
                 base : Result String FormModel
                 base =
-                    Editor.applyAiLogDraft
-                        catalog
+                    Editor.applyAiLogDraft catalog
                         draft
                         { amount = String.fromInt quantity
                         , unit = "serving"
@@ -292,18 +269,15 @@ unitScaling =
                         |> (\form ->
                                 { totals = nutrientAmounts form
                                 , weight =
-                                    Editor.logPortionWeight form
-                                        |> Maybe.andThen String.toFloat
+                                    Editor.logPortionWeight form |> Maybe.andThen String.toFloat
                                 , fields =
-                                    Editor.foodLogFields form
-                                        |> Maybe.map .unit
+                                    Editor.foodLogFields form |> Maybe.map .unit
                                 }
                            )
                         |> Ok
                         |> expectApplied
                             { totals =
-                                nutrientAmounts baseForm
-                                    |> List.map ((*) ratio)
+                                nutrientAmounts baseForm |> List.map ((*) ratio)
                             , weight = Just (toFloat quantity * toFloat pieceGrams)
                             , fields = Just "piece"
                             }
@@ -470,9 +444,7 @@ aiDraft amountPer100g =
     , defaultQuantity = Just "1"
     , defaultUnit = Just "serving"
     , nutrients =
-        List.map
-            (\code -> { code = code, amountPer100g = amountPer100g })
-            coreCodes
+        List.map (\code -> { code = code, amountPer100g = amountPer100g }) coreCodes
     , servings =
         [ { unit = "serving", gramsPerUnit = "250" }
         , { unit = "piece", gramsPerUnit = "125" }

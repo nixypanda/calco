@@ -73,8 +73,7 @@ type OutMsg
 
 init : String -> ( Model, OutMsg )
 init productId =
-    ( Loading
-        { productId = productId, food = Nothing, nutrients = Nothing, units = Nothing }
+    ( Loading { productId = productId, food = Nothing, nutrients = Nothing, units = Nothing }
     , RequestInitialData productId
     )
 
@@ -244,8 +243,7 @@ submitLoaded loaded =
             ( Loaded
                 { loaded
                     | form =
-                        withSubmit
-                            (Form.SubmitFailed (validationMessage validationError))
+                        withSubmit (Form.SubmitFailed (validationMessage validationError))
                             loaded.form
                 }
             , Cmd.none
@@ -401,8 +399,7 @@ bodyView env model =
     case model of
         Loaded loaded ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-                [ Element.map FormMsg
-                    (Form.view env loaded.nutrients loaded.units loaded.form)
+                [ Element.map FormMsg (Form.view env loaded.nutrients loaded.units loaded.form)
                 , Button.textButton env.device
                     env.theme
                     { tone = Button.Primary

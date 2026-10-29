@@ -43,10 +43,8 @@ loadingHoldsEveryRoute =
             testRoutes
                 |> List.concatMap
                     (\route ->
-                        [ Access.resolveRoute Loading False route
-                            |> Expect.equal Hold
-                        , Access.resolveRoute Loading True route
-                            |> Expect.equal Hold
+                        [ Access.resolveRoute Loading False route |> Expect.equal Hold
+                        , Access.resolveRoute Loading True route |> Expect.equal Hold
                         ]
                     )
                 |> expectAll

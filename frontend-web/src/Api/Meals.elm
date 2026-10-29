@@ -79,8 +79,7 @@ getMeal id toMsg =
 
 createMeal : CreateMealRequest -> (Result Client.ApiError Meal -> msg) -> Cmd msg
 createMeal request toMsg =
-    Client.post
-        (Builder.absolute [ "api", "meals" ] [])
+    Client.post (Builder.absolute [ "api", "meals" ] [])
         (createMealRequestEncoder request)
         mealDecoder
         toMsg
@@ -88,8 +87,7 @@ createMeal request toMsg =
 
 updateMeal : String -> CreateMealRequest -> (Result Client.ApiError Meal -> msg) -> Cmd msg
 updateMeal id request toMsg =
-    Client.put
-        (Builder.absolute [ "api", "meals", id ] [])
+    Client.put (Builder.absolute [ "api", "meals", id ] [])
         (createMealRequestEncoder request)
         mealDecoder
         toMsg
@@ -110,8 +108,7 @@ getMealNutrients :
     -> Cmd msg
 getMealNutrients query toMsg =
     Client.get
-        (Builder.absolute
-            [ "api", "meals", query.mealId, "nutrients" ]
+        (Builder.absolute [ "api", "meals", query.mealId, "nutrients" ]
             [ Builder.string "amount" query.amount, Builder.string "unit" query.unit ]
         )
         mealNutritionDecoder

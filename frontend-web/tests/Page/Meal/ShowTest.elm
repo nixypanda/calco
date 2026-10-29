@@ -20,8 +20,7 @@ tests =
                     |> step MealShow.EditClicked
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal (MealShow.Navigate (MealEdit "meal-1"))
+                            outMsg |> Expect.equal (MealShow.Navigate (MealEdit "meal-1"))
                         )
         , test "changing the amount updates the nutrition preview" <|
             \_ ->
@@ -32,8 +31,7 @@ tests =
                             case out of
                                 MealShow.RequestNutrientPreview mealId amount unit ->
                                     Ok
-                                        (MealShow.NutrientPreviewLoaded
-                                            mealId
+                                        (MealShow.NutrientPreviewLoaded mealId
                                             (Ok (previewFor amount unit [ scaledNutrient ]))
                                         )
 
@@ -59,8 +57,7 @@ tests =
                     |> step (MealShow.DeleteCompleted (Ok ()))
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal (MealShow.Navigate MealList)
+                            outMsg |> Expect.equal (MealShow.Navigate MealList)
                         )
         ]
 
@@ -160,9 +157,7 @@ finish =
 
 loadedMeal : Journey
 loadedMeal =
-    MealShow.init "meal-1"
-        |> Story.start
-        |> step (MealShow.MealLoaded "meal-1" (Ok meal))
+    MealShow.init "meal-1" |> Story.start |> step (MealShow.MealLoaded "meal-1" (Ok meal))
 
 
 previewFor : String -> String -> List NutrientAmount -> MealNutritionResponse

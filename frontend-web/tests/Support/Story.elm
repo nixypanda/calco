@@ -68,10 +68,7 @@ step :
     -> Journey model out
     -> Journey model out
 step update msg (Journey state) =
-    Journey
-        (state
-            |> Result.map (\( model, _ ) -> update msg model)
-        )
+    Journey (state |> Result.map (\( model, _ ) -> update msg model))
 
 
 bind :
@@ -84,8 +81,7 @@ bind update toMsg (Journey state) =
         (state
             |> Result.andThen
                 (\( model, out ) ->
-                    toMsg out
-                        |> Result.map (\msg -> update msg model)
+                    toMsg out |> Result.map (\msg -> update msg model)
                 )
         )
 

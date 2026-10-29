@@ -62,9 +62,7 @@ safeWords =
 
 nameTokens : Fuzzer (List String)
 nameTokens =
-    Fuzz.map2 (::)
-        (Fuzz.oneOfValues safeWords)
-        (Fuzz.list (Fuzz.oneOfValues safeWords))
+    Fuzz.map2 (::) (Fuzz.oneOfValues safeWords) (Fuzz.list (Fuzz.oneOfValues safeWords))
 
 
 {-| Case-insensitive spellings of the recognized unit suffixes.

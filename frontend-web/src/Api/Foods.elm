@@ -184,8 +184,7 @@ createCustomFood :
     -> (Result Client.ApiError CreateFoodResponse -> msg)
     -> Cmd msg
 createCustomFood request toMsg =
-    Client.post
-        (Builder.absolute [ "api", "foods", "custom" ] [])
+    Client.post (Builder.absolute [ "api", "foods", "custom" ] [])
         (createFoodRequestEncoder request)
         createFoodResponseDecoder
         toMsg
@@ -197,8 +196,7 @@ updateCustomFood :
     -> (Result Client.ApiError CreateFoodResponse -> msg)
     -> Cmd msg
 updateCustomFood id request toMsg =
-    Client.put
-        (Builder.absolute [ "api", "foods", "custom", id ] [])
+    Client.put (Builder.absolute [ "api", "foods", "custom", id ] [])
         (createFoodRequestEncoder request)
         createFoodResponseDecoder
         toMsg

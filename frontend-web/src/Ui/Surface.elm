@@ -108,12 +108,7 @@ heroCard :
                 { height : Int
                 , backgroundAttrs : List (Element.Attribute msg)
                 , fade : Bool
-                , contentPadding :
-                    { top : Int
-                    , right : Int
-                    , bottom : Int
-                    , left : Int
-                    }
+                , contentPadding : { top : Int, right : Int, bottom : Int, left : Int }
                 }
         }
     -> Element msg
@@ -160,8 +155,7 @@ heroCard theme config =
         [ headerElement
         , Element.column
             [ Element.width Element.fill
-            , Element.paddingEach
-                { top = 0, right = space20, bottom = space20, left = space20 }
+            , Element.paddingEach { top = 0, right = space20, bottom = space20, left = space20 }
             , Element.spacing space12
             ]
             config.body
@@ -333,8 +327,7 @@ sectionHeader :
     }
     -> Element msg
 sectionHeader config =
-    Element.column
-        [ Element.width Element.fill, Element.spacing space4 ]
+    Element.column [ Element.width Element.fill, Element.spacing space4 ]
         (Element.row
             [ Element.width Element.fill, Element.spacing space12 ]
             (Element.el [ Element.width Element.fill ] config.title
@@ -343,10 +336,7 @@ sectionHeader config =
                         |> Maybe.withDefault []
                    )
             )
-            :: (config.description
-                    |> Maybe.map List.singleton
-                    |> Maybe.withDefault []
-               )
+            :: (config.description |> Maybe.map List.singleton |> Maybe.withDefault [])
         )
 
 
@@ -364,14 +354,12 @@ listRow :
     }
     -> Element msg
 listRow config =
-    Element.wrappedRow
-        listRowAttrs
+    Element.wrappedRow listRowAttrs
         [ Input.button
             [ Element.width Element.fill, uiClass "ui-motion ui-pressable" ]
             { onPress = Just config.onSelect
             , label =
-                Element.row
-                    listRowLabelAttrs
+                Element.row listRowLabelAttrs
                     [ listRowLeading config.leading
                     , listRowText config.title config.subtitle
                     ]
@@ -391,10 +379,8 @@ staticRow :
     }
     -> Element msg
 staticRow config =
-    Element.wrappedRow
-        listRowAttrs
-        [ Element.row
-            listRowLabelAttrs
+    Element.wrappedRow listRowAttrs
+        [ Element.row listRowLabelAttrs
             [ listRowLeading config.leading
             , listRowText config.title config.subtitle
             ]
@@ -429,9 +415,7 @@ listRowTrailing trailing =
         Element.none
 
     else
-        Element.row
-            [ Element.padding space8, Element.spacing space12, Element.alignTop ]
-            trailing
+        Element.row [ Element.padding space8, Element.spacing space12, Element.alignTop ] trailing
 
 
 listRowLeading : List (Element msg) -> Element msg
@@ -453,8 +437,7 @@ listRowLeading leading =
 
 detailRow : Theme -> Language -> String -> Element msg -> Element msg
 detailRow theme language label value =
-    Element.row
-        [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
+    Element.row [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
         [ Element.el [ Font.color theme.textMedium, caption ]
             (Element.text (I18n.t language (TidUiDetailRowLabelSuffix label)))
         , Element.el [ Element.width Element.fill, minWidthZero ] value

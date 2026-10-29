@@ -167,8 +167,7 @@ searchInput theme config =
 
                 LabelInside label ->
                     ( Input.labelHidden label
-                    , Just
-                        (Input.placeholder [ Font.color theme.textMuted ] (Element.text label))
+                    , Just (Input.placeholder [ Font.color theme.textMuted ] (Element.text label))
                     )
     in
     Input.text
@@ -245,8 +244,7 @@ decimalInputWithSuffix theme config =
                 , Font.variant Font.tabularNumbers
                 , uiClass "ui-motion"
                 , inputMode "decimal"
-                , Element.htmlAttribute
-                    (Html.Attributes.attribute "aria-describedby" unitId)
+                , Element.htmlAttribute (Html.Attributes.attribute "aria-describedby" unitId)
                 ]
                 { onChange = config.onChange << Number.normalizeDecimalSeparator
                 , text = config.text
@@ -281,8 +279,7 @@ decimalInputWithSuffix theme config =
                 )
                 [ inputElement, unitElement ]
     in
-    Element.column
-        [ Element.width Element.fill, Element.spacing space4 ]
+    Element.column [ Element.width Element.fill, Element.spacing space4 ]
         [ fieldLabel theme config.label, fieldInput ]
 
 
@@ -381,13 +378,11 @@ optionRowWithState theme config =
         , disabled = config.disabled
         , extraAttributes =
             [ Element.htmlAttribute
-                (Html.Attributes.attribute
-                    "aria-pressed"
+                (Html.Attributes.attribute "aria-pressed"
                     (boolString config.selected)
                 )
             , Element.htmlAttribute
-                (Html.Attributes.attribute
-                    "aria-disabled"
+                (Html.Attributes.attribute "aria-disabled"
                     (boolString config.disabled)
                 )
             ]
@@ -449,8 +444,7 @@ optionRowView theme config =
                 Just config.onPress
         , label =
             Element.row [ Element.width Element.fill, Element.spacing space8, minWidthZero ]
-                [ Element.el
-                    [ Element.width Element.fill, Font.medium, minWidthZero ]
+                [ Element.el [ Element.width Element.fill, Font.medium, minWidthZero ]
                     (Element.text config.label)
                 , Maybe.withDefault Element.none config.trailing
                 ]
@@ -627,13 +621,11 @@ selectDropdownWithState device theme language config =
                         1
                     )
                  , Element.htmlAttribute
-                    (Html.Attributes.attribute
-                        "aria-disabled"
+                    (Html.Attributes.attribute "aria-disabled"
                         (boolString config.disabled)
                     )
                  , Element.htmlAttribute
-                    (Html.Attributes.attribute
-                        "aria-expanded"
+                    (Html.Attributes.attribute "aria-expanded"
                         (boolString (config.isOpen && not config.disabled))
                     )
                  , uiClass "ui-motion"
@@ -719,8 +711,7 @@ toggleSwitch theme config =
         , uiClass "ui-pressable"
         , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
         , Element.htmlAttribute
-            (Html.Attributes.attribute
-                "aria-pressed"
+            (Html.Attributes.attribute "aria-pressed"
                 (if config.isActive then
                     "true"
 

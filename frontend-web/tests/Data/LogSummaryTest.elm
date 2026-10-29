@@ -13,10 +13,8 @@ tests =
     describe "Data.LogSummary"
         [ fuzz SupportFuzz.localDate "fromLogs [] is Nothing" <|
             \date ->
-                LogSummary.fromLogs date []
-                    |> Expect.equal Nothing
-        , fuzz2
-            SupportFuzz.localDate
+                LogSummary.fromLogs date [] |> Expect.equal Nothing
+        , fuzz2 SupportFuzz.localDate
             nonEmptyLogsFuzzer
             "fromLogs preserves the date and sums each field from its own code"
           <|
@@ -47,8 +45,7 @@ tests =
 
 macroNutrientFuzzer : Fuzzer NutrientAmount
 macroNutrientFuzzer =
-    Fuzz.map3
-        (\code amount unit -> { code = code, amount = amount, unit = unit })
+    Fuzz.map3 (\code amount unit -> { code = code, amount = amount, unit = unit })
         (Fuzz.oneOfValues
             [ "ENERGY_KCAL"
             , "PROTEIN_G"
@@ -63,9 +60,7 @@ macroNutrientFuzzer =
 
 summaryLogFuzzer : Fuzzer { nutrients : List NutrientAmount }
 summaryLogFuzzer =
-    Fuzz.map
-        (\nutrients -> { nutrients = nutrients })
-        (Fuzz.list macroNutrientFuzzer)
+    Fuzz.map (\nutrients -> { nutrients = nutrients }) (Fuzz.list macroNutrientFuzzer)
 
 
 nonEmptyLogsFuzzer : Fuzzer (List { nutrients : List NutrientAmount })
@@ -80,9 +75,7 @@ summaryTolerance =
 
 sumCode : String -> List { nutrients : List NutrientAmount } -> Float
 sumCode code logs =
-    logs
-        |> List.map (\log -> firstAmount code log.nutrients)
-        |> List.sum
+    logs |> List.map (\log -> firstAmount code log.nutrients) |> List.sum
 
 
 firstAmount : String -> List NutrientAmount -> Float

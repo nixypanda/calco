@@ -100,11 +100,7 @@ update msg model =
                             )
 
                         _ ->
-                            ( Loaded
-                                { keys = keys
-                                , dialog = NoDialog
-                                , nextRequestId = 1
-                                }
+                            ( Loaded { keys = keys, dialog = NoDialog, nextRequestId = 1 }
                             , Cmd.none
                             , NoOp
                             )
@@ -215,8 +211,7 @@ update msg model =
                                         ( Loaded
                                             { loaded
                                                 | keys =
-                                                    List.filter
-                                                        (\item -> item.id /= key.id)
+                                                    List.filter (\item -> item.id /= key.id)
                                                         loaded.keys
                                                 , dialog = NoDialog
                                             }
@@ -268,9 +263,7 @@ refreshDialog dialog keys =
 
 findKey : String -> List ApiKey -> Maybe ApiKey
 findKey keyId keys =
-    keys
-        |> List.filter (\key -> key.id == keyId)
-        |> List.head
+    keys |> List.filter (\key -> key.id == keyId) |> List.head
 
 
 applyRevokeFailure : Int -> String -> String -> Model -> Model
@@ -300,8 +293,7 @@ view : Env -> Model -> Element Msg
 view env model =
     case model of
         Loading ->
-            UiPage.pageContainer
-                [ apiKeysSkeleton env.theme ]
+            UiPage.pageContainer [ apiKeysSkeleton env.theme ]
 
         LoadFailed error ->
             UiPage.pageContainer
@@ -337,13 +329,11 @@ keysSection env loaded =
                 )
         , body =
             if List.isEmpty loaded.keys then
-                [ Typography.mutedBodyParagraph env.theme
-                    (I18n.t env.language TidApiKeysEmpty)
+                [ Typography.mutedBodyParagraph env.theme (I18n.t env.language TidApiKeysEmpty)
                 ]
 
             else
-                List.intersperse (Surface.hairline env.theme)
-                    (List.map (keyRow env) loaded.keys)
+                List.intersperse (Surface.hairline env.theme) (List.map (keyRow env) loaded.keys)
         , footer = Nothing
         }
 
@@ -356,16 +346,14 @@ keyRow env key =
         , subtitle =
             [ Typography.mutedBodyParagraph env.theme
                 (I18n.t env.language (TidApiKeysHint key.tokenHint))
-            , Typography.mutedCaptionParagraph env.theme
-                (keyMeta env.language key)
+            , Typography.mutedCaptionParagraph env.theme (keyMeta env.language key)
             ]
         , trailing =
             [ Chip.badge env.theme (scopeLabel env.language key.scope)
             , Button.textButtonWithAttributes env.device
                 env.theme
                 [ Element.htmlAttribute
-                    (Html.Attributes.attribute
-                        "aria-label"
+                    (Html.Attributes.attribute "aria-label"
                         (I18n.t env.language (TidApiKeysRevokeNamed key.name))
                     )
                 ]
@@ -391,8 +379,7 @@ keyMeta language key =
         , Just
             (case key.lastUsedAt of
                 Just timestamp ->
-                    I18n.t language
-                        (TidApiKeysLastUsed (formatTimestamp language timestamp))
+                    I18n.t language (TidApiKeysLastUsed (formatTimestamp language timestamp))
 
                 Nothing ->
                     I18n.t language TidApiKeysNeverUsed
@@ -400,8 +387,7 @@ keyMeta language key =
         , Just
             (case key.expiresAt of
                 Just timestamp ->
-                    I18n.t language
-                        (TidApiKeysExpires (formatTimestamp language timestamp))
+                    I18n.t language (TidApiKeysExpires (formatTimestamp language timestamp))
 
                 Nothing ->
                     I18n.t language TidApiKeysNeverExpires
@@ -441,11 +427,7 @@ modalView env model =
                     Nothing
 
                 ConfirmRevoke key maybeError ->
-                    Just
-                        (revokeModal env
-                            key
-                            { pending = False, error = maybeError }
-                        )
+                    Just (revokeModal env key { pending = False, error = maybeError })
 
                 Revoking _ key ->
                     Just (revokeModal env key { pending = True, error = Nothing })

@@ -72,8 +72,7 @@ removableChip theme language config =
             , Border.rounded radiusPill
             , uiClass "ui-chip-remove-target ui-pressable"
             , Element.htmlAttribute
-                (Html.Attributes.attribute
-                    "aria-label"
+                (Html.Attributes.attribute "aria-label"
                     (I18n.t language (TidUiRemoveNamed config.label))
                 )
             ]
@@ -118,8 +117,7 @@ chips theme strings =
 
     else
         Element.html
-            (Html.div
-                [ Html.Attributes.class "ui-chip-group" ]
+            (Html.div [ Html.Attributes.class "ui-chip-group" ]
                 (List.map
                     (\c ->
                         chipHtml theme { label = c, selected = False }

@@ -70,8 +70,7 @@ circle theme =
 
 input : Theme -> Element msg
 input theme =
-    Element.column
-        [ Element.width Element.fill, Element.spacing space4 ]
+    Element.column [ Element.width Element.fill, Element.spacing space4 ]
         [ Element.el
             [ Element.width (Element.px 80)
             , Element.height (Element.px 12)
@@ -113,8 +112,7 @@ listRow theme =
             , Element.paddingEach { top = space2, right = 0, bottom = 0, left = 0 }
             ]
             (circle theme)
-        , Element.column
-            [ Element.width Element.fill, Element.spacing space4, Element.alignTop ]
+        , Element.column [ Element.width Element.fill, Element.spacing space4, Element.alignTop ]
             [ Element.el
                 [ Element.width (Element.fillPortion 2)
                 , Element.height (Element.px 16)

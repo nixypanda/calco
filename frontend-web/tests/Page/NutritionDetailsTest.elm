@@ -30,10 +30,7 @@ tests =
                             { date = LocalDate.format (dateOf model)
                             , finalOut = outMsg
                             }
-                                |> Expect.equal
-                                    { date = "2026-08-18"
-                                    , finalOut = N.NoOp
-                                    }
+                                |> Expect.equal { date = "2026-08-18", finalOut = N.NoOp }
                         )
         , test "a failed load recovers and a 401 expires" <|
             \_ ->

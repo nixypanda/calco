@@ -325,8 +325,7 @@ bottomActionButtons device theme buttons =
             Element.column [ Element.width Element.fill, Element.spacing space12 ] [ onlyButton ]
 
         [ firstButton, secondButton ] ->
-            Element.row
-                [ Element.width Element.fill, Element.spacing space12 ]
+            Element.row [ Element.width Element.fill, Element.spacing space12 ]
                 [ firstButton, secondButton ]
 
         _ ->

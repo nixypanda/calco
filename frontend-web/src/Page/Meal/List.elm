@@ -91,8 +91,7 @@ failure =
 
 contentView : Env -> Model -> Element Msg
 contentView env model =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
             Loaded _ ->
                 Element.none
@@ -126,8 +125,7 @@ bodyView env model =
                         )
                 , body =
                     if List.isEmpty meals then
-                        [ Typography.mutedBodyParagraph
-                            env.theme
+                        [ Typography.mutedBodyParagraph env.theme
                             (I18n.t env.language TidCustomFoodListEmpty)
                         ]
 
@@ -176,8 +174,7 @@ mealSummaryText meal =
                 )
         )
         meal.nutritionSummary
-    , Just
-        (I18n.en (TidMealComponentsCount (String.fromInt (List.length meal.components))))
+    , Just (I18n.en (TidMealComponentsCount (String.fromInt (List.length meal.components))))
     ]
         |> Text.dotSeparated
 

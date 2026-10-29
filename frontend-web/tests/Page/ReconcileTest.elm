@@ -145,9 +145,7 @@ initialize desired =
 
 paneFor : String -> List Pane -> Maybe Pane
 paneFor key panes =
-    panes
-        |> List.filter (\pane -> pane.key == key)
-        |> List.head
+    panes |> List.filter (\pane -> pane.key == key) |> List.head
 
 
 missingDesiredKeys : List Pane -> List Desired -> List String
@@ -157,30 +155,22 @@ missingDesiredKeys existing desired =
         existingKeys =
             List.map .key existing
     in
-    desired
-        |> List.filter (\pane -> not (List.member pane.key existingKeys))
-        |> List.map .key
+    desired |> List.filter (\pane -> not (List.member pane.key existingKeys)) |> List.map .key
 
 
 existingPanes : Fuzzer (List Pane)
 existingPanes =
-    uniqueKeys
-        |> Fuzz.map
-            (List.indexedMap
-                (\index key -> { key = key, marker = index + 1 })
-            )
+    uniqueKeys |> Fuzz.map (List.indexedMap (\index key -> { key = key, marker = index + 1 }))
 
 
 desiredPanes : Fuzzer (List Desired)
 desiredPanes =
-    uniqueKeys
-        |> Fuzz.map (List.map (\key -> { key = key }))
+    uniqueKeys |> Fuzz.map (List.map (\key -> { key = key }))
 
 
 uniqueKeys : Fuzzer (List String)
 uniqueKeys =
-    Fuzz.list (Fuzz.intRange 0 1000)
-        |> Fuzz.map (List.map String.fromInt >> dedupe)
+    Fuzz.list (Fuzz.intRange 0 1000) |> Fuzz.map (List.map String.fromInt >> dedupe)
 
 
 dedupe : List String -> List String

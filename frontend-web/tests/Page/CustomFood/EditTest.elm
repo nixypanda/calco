@@ -48,10 +48,7 @@ tests =
                             { request = updateRequest outMsg
                             , disabled = isSubmitting model
                             }
-                                |> Expect.equal
-                                    { request = Just curdRequest
-                                    , disabled = True
-                                    }
+                                |> Expect.equal { request = Just curdRequest, disabled = True }
                         )
         , test "a failed load can be retried" <|
             \_ ->
@@ -62,9 +59,7 @@ tests =
                     |> step CustomFoodEdit.RetryClicked
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal
-                                    (CustomFoodEdit.RequestInitialData "food-1")
+                            outMsg |> Expect.equal (CustomFoodEdit.RequestInitialData "food-1")
                         )
         ]
 
@@ -177,8 +172,7 @@ loadedFood =
 
 editedFood : Journey
 editedFood =
-    loadedFood
-        |> step (CustomFoodEdit.FormMsg (Form.NameChanged "Paneer"))
+    loadedFood |> step (CustomFoodEdit.FormMsg (Form.NameChanged "Paneer"))
 
 
 curdRequest : Api.Foods.CreateFoodRequest

@@ -238,15 +238,13 @@ update msg model =
                     if not (isSubmitting loaded.form) then
                         case loaded.delete of
                             DeleteConfirming ->
-                                ( Loaded
-                                    { loaded | delete = Deleting }
+                                ( Loaded { loaded | delete = Deleting }
                                 , Cmd.none
                                 , RequestDeleteLog loaded.logId
                                 )
 
                             DeleteFailed _ ->
-                                ( Loaded
-                                    { loaded | delete = Deleting }
+                                ( Loaded { loaded | delete = Deleting }
                                 , Cmd.none
                                 , RequestDeleteLog loaded.logId
                                 )
@@ -525,8 +523,7 @@ modelLogId model =
 
 contentView : Env -> Model -> Element Msg
 contentView env model =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
             LoadFailed failed ->
                 Feedback.errorBanner env.theme failed.error
@@ -592,8 +589,7 @@ loadedView env model =
         categories =
             itemCategories env.theme model.item
     in
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Surface.panel env.theme
             { header = Just (itemHeaderElement env model)
             , sections =
@@ -605,14 +601,12 @@ loadedView env model =
                 )
                     ++ [ { title =
                             Just
-                                (Typography.subsectionTitle
-                                    env.theme
+                                (Typography.subsectionTitle env.theme
                                     (I18n.t env.language TidFoodShowPortion)
                                 )
                          , body =
                             List.map (Element.map FormMsg)
-                                (FoodLogForm.fields
-                                    env
+                                (FoodLogForm.fields env
                                     maybeFood
                                     (unitsForItem model)
                                     model.form
@@ -663,18 +657,12 @@ nutrientsForDisplay item log form =
 
         savedSnapshot : List Nutrition.NutrientAmount
         savedSnapshot =
-            Nutrition.scaledSnapshotForQuantity
-                log.quantity
-                currentQuantity
-                log.nutrients
+            Nutrition.scaledSnapshotForQuantity log.quantity currentQuantity log.nutrients
                 |> Maybe.withDefault log.nutrients
     in
     case item of
         ProductItem (DetailLoaded food) ->
-            Nutrition.nutrientsForQuantity
-                currentQuantity
-                food.servings
-                food.nutrients
+            Nutrition.nutrientsForQuantity currentQuantity food.servings food.nutrients
                 |> Maybe.withDefault savedSnapshot
 
         ProductItem (DetailLoading _) ->
@@ -708,8 +696,7 @@ itemCategories theme item =
                 []
 
             else
-                [ Element.row
-                    [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                [ Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                     [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
                 ]
 
@@ -809,10 +796,8 @@ unitsForItem model =
 
 detailActionsView : Env -> LoadedModel -> Element Msg
 detailActionsView env model =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Element.row
-            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        [ Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.el [ Element.width Element.fill ]
                 (Button.textButton env.device
                     env.theme
@@ -853,8 +838,7 @@ deleteModalView env loaded =
 
 foodLogEntrySkeleton : Theme -> Element Msg
 foodLogEntrySkeleton theme =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Skeleton.card theme { rows = 2 }
         , Skeleton.input theme
         , Skeleton.input theme

@@ -12,10 +12,7 @@ import Test exposing (Test, describe, fuzz, test)
 
 tests : Test
 tests =
-    describe "Component.FoodLogForm"
-        [ amountRequired
-        , payloadBranches
-        ]
+    describe "Component.FoodLogForm" [ amountRequired, payloadBranches ]
 
 
 amountRequired : Test
@@ -24,15 +21,13 @@ amountRequired =
         \_ ->
             Expect.all
                 [ \_ ->
-                    FoodLogForm.createProductLogRequest
-                        Fixtures.today
+                    FoodLogForm.createProductLogRequest Fixtures.today
                         Nothing
                         "food-1"
                         (model " " "g" Nothing "")
                         |> Expect.equal (Err FoodLogForm.AmountRequired)
                 , \_ ->
-                    FoodLogForm.createUpdateLogRequest
-                        (model " " "g" Nothing "")
+                    FoodLogForm.createUpdateLogRequest (model " " "g" Nothing "")
                         |> Expect.equal (Err FoodLogForm.AmountRequired)
                 ]
                 ()
@@ -44,9 +39,7 @@ blank notes become Nothing, while the update payload always carries the slot.
 -}
 payloadBranches : Test
 payloadBranches =
-    fuzz payloadInput
-        "create and update payloads map the portion, meal slot, and notes"
-    <|
+    fuzz payloadInput "create and update payloads map the portion, meal slot, and notes" <|
         \input ->
             let
                 formModel : FoodLogForm.Model
@@ -59,11 +52,7 @@ payloadBranches =
             in
             Expect.all
                 [ \_ ->
-                    FoodLogForm.createProductLogRequest
-                        Fixtures.today
-                        Nothing
-                        "food-1"
-                        formModel
+                    FoodLogForm.createProductLogRequest Fixtures.today Nothing "food-1" formModel
                         |> Result.map
                             (\request ->
                                 { item = request.item
@@ -114,11 +103,7 @@ type alias PayloadInput =
 
 payloadInput : Fuzz.Fuzzer PayloadInput
 payloadInput =
-    Fuzz.map4 PayloadInput
-        SupportFuzz.maybeMealSlot
-        amount
-        unit
-        Fuzz.string
+    Fuzz.map4 PayloadInput SupportFuzz.maybeMealSlot amount unit Fuzz.string
 
 
 model : String -> String -> Maybe MealSlot -> String -> FoodLogForm.Model

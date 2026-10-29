@@ -26,8 +26,7 @@ tests =
             , classDependsOnlyOnWidth
             , orientationLaw
             ]
-        , describe "reclassifyDevice"
-            [ reclassifyLaw ]
+        , describe "reclassifyDevice" [ reclassifyLaw ]
         , describe "normalizeChromeNavigation"
             [ genericSearchNavigation
             , navigationIsUnchangedOtherwise
@@ -132,8 +131,7 @@ reclassifyLaw =
                                 Just next
                             )
                 , \_ ->
-                    Main.reclassifyDevice widthValue heightValue next
-                        |> Expect.equal Nothing
+                    Main.reclassifyDevice widthValue heightValue next |> Expect.equal Nothing
                 ]
                 ()
         )
@@ -168,8 +166,7 @@ navigationIsUnchangedOtherwise =
         navigableTarget
         "navigation is unchanged unless a dated diary page targets a generic search"
         (\current target ->
-            Main.normalizeChromeNavigation current target
-                |> Expect.equal target
+            Main.normalizeChromeNavigation current target |> Expect.equal target
         )
 
 

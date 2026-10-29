@@ -25,8 +25,7 @@ getGoal date toMsg =
 
 saveGoal : SaveGoalRequest -> (Result Client.ApiError GoalSnapshot -> msg) -> Cmd msg
 saveGoal request toMsg =
-    Client.put
-        (Builder.absolute [ "api", "goal" ] [])
+    Client.put (Builder.absolute [ "api", "goal" ] [])
         (saveGoalRequestEncoder request)
         Goals.decoder
         toMsg

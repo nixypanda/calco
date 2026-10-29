@@ -493,8 +493,7 @@ nutrientsTableInner env nutrients =
               , width = Element.fill
               , view =
                     \n ->
-                        Element.el
-                            [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
+                        Element.el [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
                             (Element.text (nutrientLabel env.language n.code))
               }
             , { header =
@@ -533,14 +532,14 @@ nutrientsTableInner env nutrients =
                             , right = 0
                             }
                         ]
-                        (Typography.tableHeader env.theme
+                        (Typography.tableHeader
+                            env.theme
                             (I18n.t env.language TidNutrientTableUnit)
                         )
               , width = Element.shrink
               , view =
                     \n ->
-                        Element.el
-                            [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
+                        Element.el [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
                             (Element.text n.unit)
               }
             ]

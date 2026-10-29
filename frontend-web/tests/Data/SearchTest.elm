@@ -17,8 +17,7 @@ tests =
             "completion navigation moves exactly one step and clamps at both ends"
           <|
             \options ->
-                navigationExpectations options
-                    |> expectAll
+                navigationExpectations options |> expectAll
         , fuzz2 completionFuzzer
             completionsFuzzer
             "completionIndex reports the first exact index or Nothing"
@@ -26,19 +25,14 @@ tests =
             \target options ->
                 case Search.completionIndex target options of
                     Nothing ->
-                        List.member target options
-                            |> Expect.equal False
+                        List.member target options |> Expect.equal False
 
                     Just index ->
                         Expect.all
                             [ \_ ->
-                                List.drop index options
-                                    |> List.head
-                                    |> Expect.equal (Just target)
+                                List.drop index options |> List.head |> Expect.equal (Just target)
                             , \_ ->
-                                List.take index options
-                                    |> List.member target
-                                    |> Expect.equal False
+                                List.take index options |> List.member target |> Expect.equal False
                             ]
                             ()
         , fuzz applyCaseFuzzer
@@ -63,8 +57,7 @@ tests =
 
                             applied : String
                             applied =
-                                Search.applyCompletion
-                                    (CategoryCompletion replacement 1)
+                                Search.applyCompletion (CategoryCompletion replacement 1)
                                     ("apple " ++ prefix ++ "typed")
                         in
                         Expect.all
@@ -83,8 +76,7 @@ tests =
                             |> Expect.equal caseValue.expected
                     ]
                     ()
-        , fuzz3
-            queryInputFuzzer
+        , fuzz3 queryInputFuzzer
             (Fuzz.list suggestionFuzzer)
             queryStateFuzzer
             "onQueryChanged advances tokens, preserves query text, and gates category requests"
@@ -121,22 +113,18 @@ tests =
                 in
                 Expect.all
                     [ \_ ->
-                        next.searchToken
-                            |> Expect.equal (Ticket.next state.searchToken)
+                        next.searchToken |> Expect.equal (Ticket.next state.searchToken)
                     , \_ ->
-                        next.categoryToken
-                            |> Expect.equal (Ticket.next state.categoryToken)
+                        next.categoryToken |> Expect.equal (Ticket.next state.categoryToken)
                     , \_ -> next.query |> Expect.equal raw
                     , \_ -> request |> Expect.equal expectedRequest
                     , \_ ->
-                        next.categorySuggestions
-                            |> Expect.equal expectedSuggestions
+                        next.categorySuggestions |> Expect.equal expectedSuggestions
                     , \_ ->
                         Search.setCategorySuggestions next.categoryToken suggestions next
                             |> Expect.equal { next | categorySuggestions = suggestions }
                     , \_ ->
-                        Search.setCategorySuggestions
-                            (Ticket.next next.categoryToken)
+                        Search.setCategorySuggestions (Ticket.next next.categoryToken)
                             suggestions
                             next
                             |> Expect.equal next
@@ -157,8 +145,7 @@ tests =
                 Expect.all
                     [ \_ -> next |> Expect.equal expectedState
                     , \_ ->
-                        (command == Cmd.none)
-                            |> Expect.equal (String.isEmpty (String.trim raw))
+                        (command == Cmd.none) |> Expect.equal (String.isEmpty (String.trim raw))
                     ]
                     ()
         ]
@@ -205,8 +192,7 @@ completionsCaseFuzzer =
                 , expected =
                     List.map
                         (\suggestion ->
-                            CategoryCompletion
-                                (prefix ++ Text.quoteIfWhitespace suggestion.value)
+                            CategoryCompletion (prefix ++ Text.quoteIfWhitespace suggestion.value)
                                 suggestion.count
                         )
                         suggestions
@@ -234,17 +220,14 @@ navigationExpectations options =
     [ Search.nextCompletion Nothing options |> Expect.equal (List.head options)
     , Search.previousCompletion Nothing options |> Expect.equal (List.head options)
     , Search.nextCompletion (Just missingCompletion) options |> Expect.equal (List.head options)
-    , Search.previousCompletion (Just missingCompletion) options
-        |> Expect.equal (List.head options)
+    , Search.previousCompletion (Just missingCompletion) options |> Expect.equal (List.head options)
     ]
         ++ List.indexedMap
             (\index option ->
                 let
                     nextExpected : Completion
                     nextExpected =
-                        List.drop (index + 1) options
-                            |> List.head
-                            |> Maybe.withDefault option
+                        List.drop (index + 1) options |> List.head |> Maybe.withDefault option
 
                     previousExpected : Completion
                     previousExpected =
@@ -286,16 +269,12 @@ wordFuzzer =
 
 categoryValueFuzzer : Fuzzer String
 categoryValueFuzzer =
-    Fuzz.map2
-        (\first rest -> String.join " " (first :: rest))
-        wordFuzzer
-        (Fuzz.list wordFuzzer)
+    Fuzz.map2 (\first rest -> String.join " " (first :: rest)) wordFuzzer (Fuzz.list wordFuzzer)
 
 
 suggestionFuzzer : Fuzzer CategorySuggestion
 suggestionFuzzer =
-    Fuzz.map2
-        (\value count -> { value = value, count = count })
+    Fuzz.map2 (\value count -> { value = value, count = count })
         categoryValueFuzzer
         (Fuzz.intRange 0 1000)
 
@@ -369,10 +348,7 @@ whitespaceFuzzer =
 
 plainQueryFuzzer : Fuzzer String
 plainQueryFuzzer =
-    Fuzz.map2
-        (\first rest -> String.join " " (first :: rest))
-        wordFuzzer
-        (Fuzz.list wordFuzzer)
+    Fuzz.map2 (\first rest -> String.join " " (first :: rest)) wordFuzzer (Fuzz.list wordFuzzer)
 
 
 queryInputFuzzer : Fuzzer String

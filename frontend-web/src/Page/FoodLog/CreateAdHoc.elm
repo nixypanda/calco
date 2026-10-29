@@ -256,9 +256,7 @@ setDateIfBlank date form =
             if String.isEmpty (String.trim logFields.date) then
                 { form
                     | ctx =
-                        Editor.FoodLogCtx
-                            { logFields | date = LocalDate.format date }
-                            persistence
+                        Editor.FoodLogCtx { logFields | date = LocalDate.format date } persistence
                 }
 
             else

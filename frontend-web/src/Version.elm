@@ -33,10 +33,7 @@ type OutMsg
 
 init : ( Model, Cmd Msg )
 init =
-    ( { currentVersion = Nothing
-      , updateAvailable = False
-      , versionError = Nothing
-      }
+    ( { currentVersion = Nothing, updateAvailable = False, versionError = Nothing }
     , Task.perform GotVersionCheckTime Time.now
     )
 

@@ -37,17 +37,12 @@ type alias Payload =
 
 payloadFuzzer : Fuzzer Payload
 payloadFuzzer =
-    Fuzz.map4 Payload
-        Fuzz.string
-        (Fuzz.intRange -1000000 1000000)
-        Fuzz.niceFloat
-        Fuzz.bool
+    Fuzz.map4 Payload Fuzz.string (Fuzz.intRange -1000000 1000000) Fuzz.niceFloat Fuzz.bool
 
 
 payloadDecoder : Decoder Payload
 payloadDecoder =
-    Decode.map Payload
-        (Decode.field "name" Decode.string)
+    Decode.map Payload (Decode.field "name" Decode.string)
         |> Json.andMap (Decode.field "count" Decode.int)
         |> Json.andMap (Decode.field "amount" Decode.float)
         |> Json.andMap (Decode.field "enabled" Decode.bool)

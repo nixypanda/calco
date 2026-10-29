@@ -22,8 +22,7 @@ createUser request toMsg =
 
 resetPassword : String -> User.ResetPasswordRequest -> (Result Client.ApiError () -> msg) -> Cmd msg
 resetPassword userId request toMsg =
-    Client.postEmpty
-        ("/api/admin/users/" ++ userId ++ "/reset-password")
+    Client.postEmpty ("/api/admin/users/" ++ userId ++ "/reset-password")
         (User.resetPasswordEncoder request)
         toMsg
 

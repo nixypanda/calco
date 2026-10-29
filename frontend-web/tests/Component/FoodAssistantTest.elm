@@ -59,9 +59,7 @@ turnRules =
             in
             Expect.all
                 [ \_ ->
-                    FoodAssistant.userTurn raw
-                        |> toRoleAndText
-                        |> Expect.equal expectedUser
+                    FoodAssistant.userTurn raw |> toRoleAndText |> Expect.equal expectedUser
                 , \_ ->
                     FoodAssistant.assistantTurn raw
                         |> toRoleAndText
@@ -76,19 +74,13 @@ conversationBounds =
         \_ ->
             Expect.all
                 [ \_ ->
-                    conversationOf 0
-                        |> Expect.equal (Err (I18n.en TidAssistantConversationEmpty))
+                    conversationOf 0 |> Expect.equal (Err (I18n.en TidAssistantConversationEmpty))
                 , \_ ->
-                    conversationOf 1
-                        |> Result.map (always ())
-                        |> Expect.equal (Ok ())
+                    conversationOf 1 |> Result.map (always ()) |> Expect.equal (Ok ())
                 , \_ ->
-                    conversationOf 20
-                        |> Result.map (always ())
-                        |> Expect.equal (Ok ())
+                    conversationOf 20 |> Result.map (always ()) |> Expect.equal (Ok ())
                 , \_ ->
-                    conversationOf 21
-                        |> Expect.equal (Err (I18n.en TidAssistantConversationFull))
+                    conversationOf 21 |> Expect.equal (Err (I18n.en TidAssistantConversationFull))
                 ]
                 ()
 
@@ -112,23 +104,18 @@ photoMetadataLimits =
             in
             Expect.all
                 [ \_ ->
-                    Assistant.validatePhotoMeta []
-                        [ photo "image/jpeg" (15 * mebibyte) ]
+                    Assistant.validatePhotoMeta [] [ photo "image/jpeg" (15 * mebibyte) ]
                         |> Expect.equal (Ok ())
                 , \_ ->
-                    Assistant.validatePhotoMeta fourAtTen []
-                        |> Expect.equal (Ok ())
+                    Assistant.validatePhotoMeta fourAtTen [] |> Expect.equal (Ok ())
                 , \_ ->
-                    Assistant.validatePhotoMeta []
-                        [ photo "image/gif" 1 ]
+                    Assistant.validatePhotoMeta [] [ photo "image/gif" 1 ]
                         |> Expect.equal (Err (I18n.en TidAssistantPhotoTypes))
                 , \_ ->
-                    Assistant.validatePhotoMeta []
-                        [ photo "image/png" (15 * mebibyte + 1) ]
+                    Assistant.validatePhotoMeta [] [ photo "image/png" (15 * mebibyte + 1) ]
                         |> Expect.equal (Err (I18n.en TidAssistantPhotoTooLarge))
                 , \_ ->
-                    Assistant.validatePhotoMeta fourAtTen
-                        [ photo "image/png" 1 ]
+                    Assistant.validatePhotoMeta fourAtTen [ photo "image/png" 1 ]
                         |> Expect.equal (Err (I18n.en TidAssistantPhotoLimit))
                 , \_ ->
                     Assistant.validatePhotoMeta
@@ -146,8 +133,7 @@ turn keeps its role, text, and position.
 -}
 conversationEncoderBranches : Test
 conversationEncoderBranches =
-    fuzz2
-        (Fuzz.oneOfValues [ CustomFood, AdHocLog ])
+    fuzz2 (Fuzz.oneOfValues [ CustomFood, AdHocLog ])
         (Fuzz.listOfLengthBetween 1 20 encodedTurn)
         "the conversation encoder preserves purpose, role, text, and order"
     <|
@@ -210,21 +196,14 @@ strictObjectRejection =
 
                 decode : Encode.Value -> Maybe ()
                 decode value =
-                    Decode.decodeValue
-                        (FoodAssistant.foodDraftTurnDecoder CustomFood)
-                        value
+                    Decode.decodeValue (FoodAssistant.foodDraftTurnDecoder CustomFood) value
                         |> Result.map (always ())
                         |> Result.toMaybe
             in
             Expect.all
                 [ \_ -> decode (Encode.object payload) |> Expect.equal (Just ())
                 , \_ ->
-                    decode
-                        (Encode.object
-                            (payload
-                                ++ [ ( "unexpected", Encode.string "nope" ) ]
-                            )
-                        )
+                    decode (Encode.object (payload ++ [ ( "unexpected", Encode.string "nope" ) ]))
                         |> Expect.equal Nothing
                 ]
                 ()
@@ -247,9 +226,7 @@ encodedConversationDecoder =
 
 encodedTurnDecoder : Decode.Decoder ( String, String )
 encodedTurnDecoder =
-    Decode.map2 Tuple.pair
-        (Decode.field "role" Decode.string)
-        (Decode.field "text" Decode.string)
+    Decode.map2 Tuple.pair (Decode.field "role" Decode.string) (Decode.field "text" Decode.string)
 
 
 decodeEncodedConversation : Encode.Value -> Result String EncodedConversation
@@ -266,8 +243,7 @@ encodedTurn : Fuzz.Fuzzer ( Bool, String )
 encodedTurn =
     Fuzz.map2 Tuple.pair
         Fuzz.bool
-        (Fuzz.map
-            (\index -> "turn " ++ String.fromInt index)
+        (Fuzz.map (\index -> "turn " ++ String.fromInt index)
             (Fuzz.intRange 1 100000)
         )
 
@@ -276,9 +252,7 @@ overlongText : Fuzz.Fuzzer String
 overlongText =
     Fuzz.map3
         (\leading length trailing ->
-            String.repeat leading " "
-                ++ String.repeat length "x"
-                ++ String.repeat trailing " "
+            String.repeat leading " " ++ String.repeat length "x" ++ String.repeat trailing " "
         )
         (Fuzz.intRange 0 4)
         (Fuzz.intRange 3999 4001)

@@ -263,8 +263,7 @@ update msg model =
                                     | copyState = CopyIdle
                                     , diary = diary
                                     , latestSlots =
-                                        removeLatestSlotSource
-                                            requestDate
+                                        removeLatestSlotSource requestDate
                                             (copiedSlotFromState model.copyState)
                                             model.latestSlots
                                   }
@@ -287,9 +286,7 @@ update msg model =
                             ( { model | copyState = CopyIdle }, Cmd.none, SessionExpired )
 
                         else
-                            ( { model
-                                | copyState = CopyFailed (Client.displayError error)
-                              }
+                            ( { model | copyState = CopyFailed (Client.displayError error) }
                             , Cmd.none
                             , NoOp
                             )
@@ -302,8 +299,7 @@ update msg model =
             in
             ( model
             , Cmd.none
-            , Navigate
-                (DiaryDay (Just previous) model.calendarMonth)
+            , Navigate (DiaryDay (Just previous) model.calendarMonth)
             )
 
         NextDayClicked ->
@@ -311,8 +307,7 @@ update msg model =
                 Just next ->
                     ( model
                     , Cmd.none
-                    , Navigate
-                        (DiaryDay (Just next) model.calendarMonth)
+                    , Navigate (DiaryDay (Just next) model.calendarMonth)
                     )
 
                 Nothing ->
@@ -336,8 +331,7 @@ update msg model =
         LogClicked id ->
             ( model
             , Cmd.none
-            , Navigate
-                (FoodLogEntry id (Just model.currentDate) model.calendarMonth)
+            , Navigate (FoodLogEntry id (Just model.currentDate) model.calendarMonth)
             )
 
         MealsClicked ->
@@ -529,8 +523,7 @@ contentView env model =
         fallbackViews =
             copyErrorView env.theme model.copyState ++ [ logGroupsView env model logs ]
     in
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         (dateCard env model
             :: (case model.diary of
                     Failed date message ->
@@ -563,8 +556,7 @@ dateCard env model =
     Surface.section env.theme
         { header =
             Just
-                (Element.row
-                    [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                (Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                     [ Button.iconButton env.device
                         env.theme
                         { icon = Icon.ChevronLeft
@@ -572,8 +564,7 @@ dateCard env model =
                         , onPress = Just PreviousDayClicked
                         , tone = Button.Primary
                         }
-                    , Element.el
-                        [ Element.width Element.fill, Font.center ]
+                    , Element.el [ Element.width Element.fill, Font.center ]
                         (Typography.sectionTitle env.theme
                             (LocalDate.display env.language model.currentDate)
                         )
@@ -659,24 +650,19 @@ detailsAction env =
 
 calorieHero : Env -> Float -> Float -> Element msg
 calorieHero env calories target =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.row
             [ Element.width Element.fill, Element.spacing DesignTokens.space12, Element.centerY ]
-            [ Element.column
-                [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
-                [ Element.el
-                    [ Font.bold, Font.color env.theme.textMedium, Typography.caption ]
+            [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
+                [ Element.el [ Font.bold, Font.color env.theme.textMedium, Typography.caption ]
                     (Element.text (I18n.t env.language TidDiaryCalories))
                 , Typography.heroStat env.theme (formatWhole calories)
-                , Element.el
-                    [ Typography.body, Font.color env.theme.textMuted ]
+                , Element.el [ Typography.body, Font.color env.theme.textMuted ]
                     (Element.text (I18n.t env.language TidDiaryKcalEaten))
                 ]
             , calorieBalancePill env target calories
             ]
-        , progressBar
-            env.theme
+        , progressBar env.theme
             (if target > 0 && calories > target then
                 env.theme.dangerSolid
 
@@ -687,8 +673,7 @@ calorieHero env calories target =
             calories
             target
         , if target > 0 then
-            Element.el
-                [ Typography.body, Font.color env.theme.textMuted, Element.alignRight ]
+            Element.el [ Typography.body, Font.color env.theme.textMuted, Element.alignRight ]
                 (Element.text (I18n.t env.language (TidDiaryOfKcal (formatWhole target))))
 
           else
@@ -759,15 +744,11 @@ macroSummaryRow env macros =
 
 macroSummaryItem : Env -> MacroSummary -> Element msg
 macroSummaryItem env macro =
-    Element.column
-        [ Element.width (Element.fillPortion 1), Element.spacing DesignTokens.space8 ]
-        [ Element.el
-            [ Font.bold, Font.color env.theme.textPrimary, Typography.body ]
+    Element.column [ Element.width (Element.fillPortion 1), Element.spacing DesignTokens.space8 ]
+        [ Element.el [ Font.bold, Font.color env.theme.textPrimary, Typography.body ]
             (Element.text macro.label)
         , Element.el
-            ([ Font.bold
-             , Typography.body
-             ]
+            ([ Font.bold, Typography.body ]
                 ++ (if macro.target > 0 then
                         [ Font.color
                             (goalScaleColor env.theme macro.tolerance macro.value macro.target)
@@ -778,12 +759,7 @@ macroSummaryItem env macro =
                    )
             )
             (Element.text (macroAmountLabel env.language macro))
-        , progressBar
-            env.theme
-            macro.color
-            DesignTokens.space8
-            macro.value
-            macro.target
+        , progressBar env.theme macro.color DesignTokens.space8 macro.value macro.target
         ]
 
 
@@ -989,10 +965,7 @@ logGroupsView env model logs =
             section Nothing
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        ((MealSlot.all
-            |> List.map (Just >> section)
-            |> List.filter (shouldShowSection model.prefs)
-         )
+        ((MealSlot.all |> List.map (Just >> section) |> List.filter (shouldShowSection model.prefs))
             ++ (if List.isEmpty unslotted.logs then
                     []
 
@@ -1181,12 +1154,9 @@ mealSlotBackground slot =
     in
     [ Element.htmlAttribute
         (Html.Attributes.style "background-image" ("url(\"" ++ image.url ++ "\")"))
-    , Element.htmlAttribute
-        (Html.Attributes.style "background-size" "max(100%, 1120px) auto")
-    , Element.htmlAttribute
-        (Html.Attributes.style "background-position" (image.focusX ++ " top"))
-    , Element.htmlAttribute
-        (Html.Attributes.style "background-repeat" "no-repeat")
+    , Element.htmlAttribute (Html.Attributes.style "background-size" "max(100%, 1120px) auto")
+    , Element.htmlAttribute (Html.Attributes.style "background-position" (image.focusX ++ " top"))
+    , Element.htmlAttribute (Html.Attributes.style "background-repeat" "no-repeat")
     ]
 
 
@@ -1214,16 +1184,14 @@ macroSummary language mode totals =
     case mode of
         Grams ->
             I18n.t language
-                (TidDiaryMacroSummaryGrams
-                    (Number.toFixedOne totals.carbs)
+                (TidDiaryMacroSummaryGrams (Number.toFixedOne totals.carbs)
                     (Number.toFixedOne totals.protein)
                     (Number.toFixedOne totals.fat)
                 )
 
         Percent ->
             I18n.t language
-                (TidDiaryMacroSummaryPercent
-                    (String.fromInt (round totals.carbsPct))
+                (TidDiaryMacroSummaryPercent (String.fromInt (round totals.carbsPct))
                     (String.fromInt (round totals.proteinPct))
                     (String.fromInt (round totals.fatPct))
                 )
@@ -1231,17 +1199,14 @@ macroSummary language mode totals =
 
 logRow : Env -> FoodLog -> Element Msg
 logRow env log =
-    Input.button
-        [ Element.width Element.fill, Element.padding DesignTokens.space12 ]
+    Input.button [ Element.width Element.fill, Element.padding DesignTokens.space12 ]
         { onPress = Just (LogClicked log.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ View.Nutrients.macroDot env log.nutrients
-                , Element.el
-                    [ Element.width Element.fill, UiCommon.minWidthZero ]
+                , Element.el [ Element.width Element.fill, UiCommon.minWidthZero ]
                     (Typography.wrappedListItemTitle env.theme (FoodLog.itemName log.item))
-                , Element.row
-                    [ Element.alignRight, Element.spacing DesignTokens.space12 ]
+                , Element.row [ Element.alignRight, Element.spacing DesignTokens.space12 ]
                     [ Typography.mutedCaption env.theme
                         (log.quantity.amount ++ " " ++ log.quantity.unit)
                     , Typography.mutedCaption env.theme

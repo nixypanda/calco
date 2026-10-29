@@ -46,9 +46,7 @@ tests =
                 Expect.all
                     [ \_ -> List.length tagRows |> Expect.atMost 2
                     , \_ ->
-                        tagRows
-                            |> List.all (\cells -> List.length cells <= 2)
-                            |> Expect.equal True
+                        tagRows |> List.all (\cells -> List.length cells <= 2) |> Expect.equal True
                     , \_ ->
                         if inputLength <= 4 then
                             Expect.all
@@ -66,9 +64,7 @@ tests =
                                 ]
                                 ()
                     , \_ ->
-                        List.length names
-                            + List.sum counts
-                            |> Expect.equal inputLength
+                        List.length names + List.sum counts |> Expect.equal inputLength
                     ]
                     ()
         , {- Allowed render exception: the translated overflow label is only

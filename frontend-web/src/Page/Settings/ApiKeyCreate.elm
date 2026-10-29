@@ -143,8 +143,7 @@ update msg model =
             updateForm (\form -> { form | scope = scope, state = Editing }) model
 
         ExpiryChanged expiry ->
-            updateForm
-                (\form -> { form | expiry = expiry, expiryOpen = False, state = Editing })
+            updateForm (\form -> { form | expiry = expiry, expiryOpen = False, state = Editing })
                 model
 
         ExpiryToggled ->
@@ -183,10 +182,7 @@ update msg model =
                                     )
 
                                 Err error ->
-                                    ( Form
-                                        { formModel
-                                            | form = { form | state = Invalid error }
-                                        }
+                                    ( Form { formModel | form = { form | state = Invalid error } }
                                     , Cmd.none
                                     , NoOp
                                     )
@@ -339,10 +335,7 @@ applyCreateFailure requestId message model =
             case form.state of
                 Submitting pendingRequestId ->
                     if pendingRequestId == requestId then
-                        Form
-                            { formModel
-                                | form = { form | state = Failed message }
-                            }
+                        Form { formModel | form = { form | state = Failed message } }
 
                     else
                         model
@@ -378,11 +371,7 @@ validateForm form =
         Err NameInvalid
 
     else
-        Ok
-            { name = name
-            , scope = form.scope
-            , expiresInDays = expiresInDays form.expiry
-            }
+        Ok { name = name, scope = form.scope, expiresInDays = expiresInDays form.expiry }
 
 
 nameLength : String -> Int
@@ -525,8 +514,7 @@ submittingModal env =
     Feedback.blockingOverlay env.theme
         { title = I18n.t env.language TidApiKeysCreateTitle
         , body =
-            [ Typography.mutedBodyParagraph env.theme
-                (I18n.t env.language TidCommonCreating)
+            [ Typography.mutedBodyParagraph env.theme (I18n.t env.language TidCommonCreating)
             ]
         }
 
@@ -591,8 +579,7 @@ nameField env disabled value =
 
 scopeField : Env -> Bool -> CreatableScope -> Element Msg
 scopeField env disabled selected =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ UiInput.fieldLabel env.theme (I18n.t env.language TidApiKeysScope)
         , scopeOption env disabled selected CreatableRead
         , scopeOption env disabled selected CreatableReadWrite
@@ -601,8 +588,7 @@ scopeField env disabled selected =
 
 scopeOption : Env -> Bool -> CreatableScope -> CreatableScope -> Element Msg
 scopeOption env disabled selected scope =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
         [ UiInput.optionRowWithState env.theme
             { label = creatableScopeLabel env.language scope
             , trailing = Nothing
@@ -610,8 +596,7 @@ scopeOption env disabled selected scope =
             , onPress = ScopeChanged scope
             , disabled = disabled
             }
-        , Typography.mutedCaption env.theme
-            (creatableScopeDescription env.language scope)
+        , Typography.mutedCaption env.theme (creatableScopeDescription env.language scope)
         ]
 
 
@@ -692,23 +677,17 @@ createdModal env createdModel =
     Feedback.modalOverlay env.theme
         { title = I18n.t env.language TidApiKeysCreatedTitle
         , body =
-            [ Feedback.warningBanner env.theme
-                (I18n.t env.language TidApiKeysCreatedWarning)
+            [ Feedback.warningBanner env.theme (I18n.t env.language TidApiKeysCreatedWarning)
             , secretBox env createdModel.created.token
             , copyFeedback env createdModel.copyState
-            , Typography.mutedBodyParagraph env.theme
-                (I18n.t env.language TidApiKeysUsage)
+            , Typography.mutedBodyParagraph env.theme (I18n.t env.language TidApiKeysUsage)
             , codeBox env (I18n.t env.language TidApiKeysUsageExample)
             ]
         , actions =
-            Element.row
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space12
-                ]
+            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ actionButton env
                     [ Element.htmlAttribute
-                        (Html.Attributes.attribute
-                            "aria-label"
+                        (Html.Attributes.attribute "aria-label"
                             (I18n.t env.language TidApiKeysCopyAria)
                         )
                     , Element.htmlAttribute
@@ -778,19 +757,14 @@ copyFeedback env state =
                 [ Element.width Element.fill
                 , Element.htmlAttribute (Html.Attributes.attribute "role" "alert")
                 ]
-                (Feedback.errorBanner env.theme
-                    (I18n.t env.language TidApiKeysCopyFailed)
-                )
+                (Feedback.errorBanner env.theme (I18n.t env.language TidApiKeysCopyFailed))
 
         CopyIdle ->
             Element.none
 
         CopyPending _ ->
-            Element.el
-                [ Element.htmlAttribute (Html.Attributes.attribute "role" "status") ]
-                (Typography.mutedCaption env.theme
-                    (I18n.t env.language TidApiKeysCopying)
-                )
+            Element.el [ Element.htmlAttribute (Html.Attributes.attribute "role" "status") ]
+                (Typography.mutedCaption env.theme (I18n.t env.language TidApiKeysCopying))
 
 
 secretBox : Env -> String -> Element Msg
@@ -808,9 +782,7 @@ secretBox env token =
                 , Html.Attributes.autofocus True
                 , Html.Attributes.class "ui-secret-token"
                 , Html.Attributes.attribute "spellcheck" "false"
-                , Html.Attributes.attribute
-                    "aria-label"
-                    (I18n.t env.language TidApiKeysSecretLabel)
+                , Html.Attributes.attribute "aria-label" (I18n.t env.language TidApiKeysSecretLabel)
                 ]
                 [ Html.text token ]
             )

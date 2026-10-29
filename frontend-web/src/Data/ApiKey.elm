@@ -67,9 +67,7 @@ decoder =
 
 createdDecoder : Decoder CreatedApiKey
 createdDecoder =
-    Decode.map2 CreatedApiKey
-        decoder
-        (Decode.field "token" Decode.string)
+    Decode.map2 CreatedApiKey decoder (Decode.field "token" Decode.string)
 
 
 listDecoder : Decoder (List ApiKey)

@@ -87,8 +87,7 @@ finish =
 
 loaded : Journey
 loaded =
-    Story.start ( S.init |> Tuple.first, S.NoOp )
-        |> step (S.GoalLoaded (Ok defaultSnapshot))
+    Story.start ( S.init |> Tuple.first, S.NoOp ) |> step (S.GoalLoaded (Ok defaultSnapshot))
 
 
 fieldsOf : S.Model -> List String
@@ -151,5 +150,4 @@ snapshot source effective calories protein carbs fat =
 
 savedStatus : String
 savedStatus =
-    I18n.en
-        (TidGoalSettingsStatusSavedFrom (LocalDate.display I18n.defaultLanguage today))
+    I18n.en (TidGoalSettingsStatusSavedFrom (LocalDate.display I18n.defaultLanguage today))

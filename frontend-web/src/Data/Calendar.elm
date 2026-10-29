@@ -105,9 +105,7 @@ parseMonth : String -> Maybe ( Int, Int )
 parseMonth period =
     case String.split "-" period of
         [ yearText, monthText ] ->
-            Maybe.map2 Tuple.pair
-                (String.toInt yearText)
-                (String.toInt monthText)
+            Maybe.map2 Tuple.pair (String.toInt yearText) (String.toInt monthText)
                 |> Maybe.andThen
                     (\( year, month ) ->
                         if String.length yearText == 4 && month >= 1 && month <= 12 then

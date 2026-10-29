@@ -19,8 +19,7 @@ tests =
                     |> step (MealList.OpenMealClicked "meal-1")
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal (MealList.Navigate (MealShow "meal-1"))
+                            outMsg |> Expect.equal (MealList.Navigate (MealShow "meal-1"))
                         )
         , test "a loaded list starts meal creation" <|
             \_ ->
@@ -28,8 +27,7 @@ tests =
                     |> step MealList.CreateMealClicked
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal (MealList.Navigate MealCreate)
+                            outMsg |> Expect.equal (MealList.Navigate MealCreate)
                         )
         , test "a failed load shows the error" <|
             \_ ->

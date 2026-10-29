@@ -146,16 +146,12 @@ named =
 
 createdToken : ApiKeyCreate.Model -> Maybe String
 createdToken model =
-    Projection.createScreen model
-        |> .created
-        |> Maybe.map .token
+    Projection.createScreen model |> .created |> Maybe.map .token
 
 
 createdFeedback : ApiKeyCreate.Model -> Maybe String
 createdFeedback model =
-    Projection.createScreen model
-        |> .created
-        |> Maybe.andThen .copyFeedback
+    Projection.createScreen model |> .created |> Maybe.andThen .copyFeedback
 
 
 copiedLabel : String

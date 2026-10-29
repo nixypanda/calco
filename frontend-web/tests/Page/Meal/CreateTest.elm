@@ -24,25 +24,21 @@ tests =
                 MealCreate.init
                     |> Story.start
                     |> step (MealCreate.FormMsg (Common.NameChanged "Lunch"))
-                    |> step
-                        (MealCreate.FormMsg (Common.ComponentSearchChanged 1 "apple"))
+                    |> step (MealCreate.FormMsg (Common.ComponentSearchChanged 1 "apple"))
                     |> bind
                         (\out ->
                             productSearch out
                                 |> Maybe.map
                                     (\searchRequest ->
                                         MealCreate.FormMsg
-                                            (Common.ComponentSearchCompleted
-                                                1
+                                            (Common.ComponentSearchCompleted 1
                                                 searchRequest.token
                                                 (Ok { items = [ appleResult ] })
                                             )
                                     )
-                                |> Result.fromMaybe
-                                    "the search produced no product-search request"
+                                |> Result.fromMaybe "the search produced no product-search request"
                         )
-                    |> step
-                        (MealCreate.FormMsg (Common.SelectProduct 1 appleResult))
+                    |> step (MealCreate.FormMsg (Common.SelectProduct 1 appleResult))
                     |> step MealCreate.SubmitClicked
                     |> step (MealCreate.SaveCompleted (Ok meal))
                     |> finish
@@ -75,10 +71,7 @@ tests =
                             { request = createRequest outMsg
                             , disabled = (toScreen model).disabled
                             }
-                                |> Expect.equal
-                                    { request = Just lunchRequest
-                                    , disabled = True
-                                    }
+                                |> Expect.equal { request = Just lunchRequest, disabled = True }
                         )
         , test "a save with an expired session reports session expiry" <|
             \_ ->
@@ -88,8 +81,7 @@ tests =
                         (MealCreate.SaveCompleted (Err Fixtures.unauthorized))
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal MealCreate.SessionExpired
+                            outMsg |> Expect.equal MealCreate.SessionExpired
                         )
         ]
 
@@ -113,8 +105,7 @@ toScreen fields =
     let
         row : Common.ComponentRow
         row =
-            List.head fields.components
-                |> Maybe.withDefault (Common.emptyComponentRow 0)
+            List.head fields.components |> Maybe.withDefault (Common.emptyComponentRow 0)
     in
     { name = fields.name
     , rows = List.map rowProjection fields.components
@@ -216,17 +207,14 @@ preparedMeal =
                     |> Maybe.map
                         (\searchRequest ->
                             MealCreate.FormMsg
-                                (Common.ComponentSearchCompleted
-                                    1
+                                (Common.ComponentSearchCompleted 1
                                     searchRequest.token
                                     (Ok { items = [ appleResult ] })
                                 )
                         )
-                    |> Result.fromMaybe
-                        "the search produced no product-search request"
+                    |> Result.fromMaybe "the search produced no product-search request"
             )
-        |> step
-            (MealCreate.FormMsg (Common.SelectProduct 1 appleResult))
+        |> step (MealCreate.FormMsg (Common.SelectProduct 1 appleResult))
 
 
 lunchRequest : Api.Meals.CreateMealRequest

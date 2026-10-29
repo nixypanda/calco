@@ -246,9 +246,7 @@ updateFormField msg form =
         ComponentSearchCompleted rowId token result ->
             case result of
                 Ok response ->
-                    ( updateComponent rowId
-                        (SetSearchResults token response.items)
-                        form
+                    ( updateComponent rowId (SetSearchResults token response.items) form
                     , Cmd.none
                     , Nothing
                     )
@@ -294,8 +292,7 @@ updateFormField msg form =
                                     \_ current ->
                                         updateComponent rowId
                                             (SetSearch
-                                                (Search.setCategorySuggestions
-                                                    token
+                                                (Search.setCategorySuggestions token
                                                     []
                                                     (findRow rowId current.components
                                                         |> Maybe.map .search
@@ -526,8 +523,7 @@ onComponentSearchChanged rowId query form =
             ( { nextForm | nextSearchToken = Ticket.next categoryToken }
                 |> updateComponent rowId (SetSearchResults token [])
             , Cmd.none
-            , Just
-                (RequestCategorySuggestions rowId categoryToken { query = cat.query, limit = 8 })
+            , Just (RequestCategorySuggestions rowId categoryToken { query = cat.query, limit = 8 })
             )
 
         _ ->
@@ -660,8 +656,7 @@ componentRowView :
     -> ComponentRow
     -> Element msg
 componentRowView env toMsg units row =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ SearchView.searchInput env
             { id = "meal-component-completions-" ++ String.fromInt row.rowId
             , onChange = toMsg << ComponentSearchChanged row.rowId
@@ -682,8 +677,7 @@ componentRowView env toMsg units row =
                     Element.none
 
                 else
-                    Element.column
-                        [ Element.width Element.fill, Element.spacing 0 ]
+                    Element.column [ Element.width Element.fill, Element.spacing 0 ]
                         (List.map
                             (\result ->
                                 searchResultView env

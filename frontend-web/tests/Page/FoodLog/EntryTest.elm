@@ -114,8 +114,7 @@ productLog =
     , deviceTimezone = Just "Asia/Kolkata"
     , mealSlot = Just Lunch
     , item =
-        FoodLog.ProductLogItem
-            { id = "food-1", name = "Apple", brand = Just "Local" }
+        FoodLog.ProductLogItem { id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
     , nutrients =
         [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]

@@ -13,11 +13,7 @@ import Test exposing (Test, describe, fuzz, test)
 
 tests : Test
 tests =
-    describe "Component.Meal.Form"
-        [ validation
-        , payloadBranches
-        , componentFiltering
-        ]
+    describe "Component.Meal.Form" [ validation, payloadBranches, componentFiltering ]
 
 
 validation : Test
@@ -26,12 +22,10 @@ validation =
         \_ ->
             Expect.all
                 [ \_ ->
-                    Form.toMealRequest
-                        (form "" "" [ row 1 "food-1" "100" "g" ])
+                    Form.toMealRequest (form "" "" [ row 1 "food-1" "100" "g" ])
                         |> Expect.equal (Err Form.MealNameRequired)
                 , \_ ->
-                    Form.toMealRequest
-                        (form "   " "" [ row 1 "food-1" "100" "g" ])
+                    Form.toMealRequest (form "   " "" [ row 1 "food-1" "100" "g" ])
                         |> Expect.equal (Err Form.MealNameRequired)
                 , \_ ->
                     Form.toMealRequest (form "Lunch" "" [])
@@ -59,9 +53,7 @@ payloadBranches =
             let
                 base : FormFields
                 base =
-                    form "  Lunch  "
-                        " 500 "
-                        [ row 1 "  food-1  " "  2 " " piece " ]
+                    form "  Lunch  " " 500 " [ row 1 "  food-1  " "  2 " " piece " ]
 
                 mapped : FormFields
                 mapped =
@@ -86,13 +78,11 @@ payloadBranches =
                                 }
                             )
                 , \_ ->
-                    Form.toMealRequest
-                        (form "Meal" "   " [ row 1 "food-1" "100" "g" ])
+                    Form.toMealRequest (form "Meal" "   " [ row 1 "food-1" "100" "g" ])
                         |> Result.map .totalQuantity
                         |> Expect.equal (Ok Nothing)
                 , \_ ->
-                    Form.toMealRequest
-                        (form "Meal" "" [ row 1 "food-1" "   " "   " ])
+                    Form.toMealRequest (form "Meal" "" [ row 1 "food-1" "   " "   " ])
                         |> Result.map (.components >> List.head)
                         |> Expect.equal
                             (Ok
@@ -185,11 +175,5 @@ row rowId productId quantityValue unit =
 componentInput : Fuzz.Fuzzer ( String, String )
 componentInput =
     Fuzz.map2 Tuple.pair
-        (Fuzz.oneOfValues
-            [ ""
-            , "   "
-            , "food-1"
-            , "  food-2  "
-            ]
-        )
+        (Fuzz.oneOfValues [ "", "   ", "food-1", "  food-2  " ])
         (Fuzz.oneOfValues [ "100", "  1.5 ", "" ])

@@ -242,8 +242,7 @@ emptyLogForm maybeDate maybeMealSlot =
         , ctx =
             FoodLogCtx
                 { date =
-                    Maybe.map LocalDate.format maybeDate
-                        |> Maybe.withDefault ""
+                    Maybe.map LocalDate.format maybeDate |> Maybe.withDefault ""
                 , mealSlot = maybeMealSlot
                 , quantity = "1"
                 , unit = "serving"
@@ -364,8 +363,7 @@ applyAiLogDraft catalog draft suggested form =
                 , ctx = ctx
             }
         )
-        (positiveNumber
-            (I18n.en TidFoodEditorLabelSuggestedPortionWeight)
+        (positiveNumber (I18n.en TidFoodEditorLabelSuggestedPortionWeight)
             suggested.totalWeightGrams
         )
         (draft.nutrients
@@ -394,8 +392,7 @@ aiLogNutrientRow catalog rawWeight nutrient =
                     }
                 )
                 (positiveNumber (I18n.en TidFoodEditorLabelSuggestedPortionWeight) rawWeight)
-                (nonNegativeNumber
-                    (I18n.en TidFoodEditorLabelEstimatedNutrient)
+                (nonNegativeNumber (I18n.en TidFoodEditorLabelEstimatedNutrient)
                     nutrient.amountPer100g
                 )
 
@@ -424,9 +421,7 @@ changeLogQuantity rawQuantity form =
                         scaleLogPortion (newQuantity / oldQuantity)
                             { form
                                 | ctx =
-                                    FoodLogCtx
-                                        { logFields | quantity = rawQuantity }
-                                        persistence
+                                    FoodLogCtx { logFields | quantity = rawQuantity } persistence
                             }
 
                     else
@@ -772,8 +767,7 @@ validateLog form =
                             Ok Nothing
 
                         SaveCustomFoodThenLog details ->
-                            positiveNumber
-                                (I18n.en TidFoodEditorLabelPortionWeight)
+                            positiveNumber (I18n.en TidFoodEditorLabelPortionWeight)
                                 details.portionWeight
                                 |> Result.map Just
             in
@@ -827,8 +821,7 @@ validateLog form =
                                         , portionWeight = weight
                                         }
                                     )
-                                    (positiveNumber
-                                        (I18n.en TidNutrientTableAmount)
+                                    (positiveNumber (I18n.en TidNutrientTableAmount)
                                         logFields.quantity
                                     )
                                     parsedNutrients
@@ -984,10 +977,7 @@ toDefaultPortion form =
 
         ( Just quantity, Just unit ) ->
             if
-                (String.toFloat quantity
-                    |> Maybe.map ((<) 0)
-                    |> Maybe.withDefault False
-                )
+                (String.toFloat quantity |> Maybe.map ((<) 0) |> Maybe.withDefault False)
                     && List.any (\serving -> serving.unit == unit) form.servings
             then
                 Ok ( Just quantity, Just unit )
@@ -1241,8 +1231,7 @@ update msg formIn =
             in
             ( { form
                 | nutrients =
-                    ListExtra.updateAt
-                        index
+                    ListExtra.updateAt index
                         (\row -> { row | code = value, unit = unit })
                         form.nutrients
                 , openDropdown = NoneOpen
@@ -1863,8 +1852,7 @@ nutrientsCard env basis visibility form nutrients =
                     ]
                 )
         , body =
-            [ Element.column
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 (form.nutrients
                     |> List.indexedMap Tuple.pair
                     |> List.filter
@@ -1904,8 +1892,7 @@ servingsCard env form units =
         { header =
             Just (Typography.subsectionTitle env.theme (I18n.t env.language TidFoodEditorServings))
         , body =
-            [ Element.column
-                [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 (if List.isEmpty form.servings then
                     [ Typography.mutedParagraph env.theme
                         (I18n.t env.language TidFoodEditorServingsEmpty)
@@ -2066,17 +2053,14 @@ nutrientRowView env basis nutrients openDropdown index row =
                 }
     in
     if UiCommon.isSmall env.device then
-        Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ selector
-            , Element.row
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ amountInputWithUnit env basis index row, removeButton ]
             ]
 
     else
-        Element.row
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ selector, amountInputWithUnit env basis index row, removeButton ]
 
 
@@ -2143,17 +2127,14 @@ servingRowView env units openDropdown index row =
                 }
     in
     if UiCommon.isSmall env.device then
-        Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ selector
-            , Element.row
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ gramsInput, removeButton ]
             ]
 
     else
-        Element.row
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ selector, gramsInput, removeButton ]
 
 

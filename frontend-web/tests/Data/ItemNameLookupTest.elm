@@ -54,18 +54,14 @@ lookupFuzzer =
 
 namesFrom : List String -> Names
 namesFrom ids =
-    List.foldl
-        (\id names -> ItemNameLookup.insertProduct id id names)
-        ItemNameLookup.empty
-        ids
+    List.foldl (\id names -> ItemNameLookup.insertProduct id id names) ItemNameLookup.empty ids
 
 
 firstEligible : Maybe String -> List String -> List String -> Maybe String
 firstEligible completed ids loaded =
     ids
         |> firstUnique
-        |> List.filter
-            (\id -> Just id /= completed && not (List.member id loaded))
+        |> List.filter (\id -> Just id /= completed && not (List.member id loaded))
         |> List.head
 
 

@@ -34,8 +34,7 @@ tests =
                     Just parsed ->
                         Expect.all
                             [ \_ ->
-                                parsed
-                                    |> Expect.within (Expect.Absolute tolerance) value
+                                parsed |> Expect.within (Expect.Absolute tolerance) value
                             , \_ -> fractionalDigits digits formatted
                             ]
                             ()
@@ -80,8 +79,7 @@ tests =
                                 _ ->
                                     raw
                 in
-                Number.normalizeDecimalSeparator raw
-                    |> Expect.equal expected
+                Number.normalizeDecimalSeparator raw |> Expect.equal expected
         ]
 
 
@@ -131,8 +129,7 @@ normalizeInput =
             (\before after -> before ++ "," ++ after)
             withoutDotOrComma
             withoutDotOrComma
-        , Fuzz.map3
-            (\first second third -> first ++ "," ++ second ++ "," ++ third)
+        , Fuzz.map3 (\first second third -> first ++ "," ++ second ++ "," ++ third)
             withoutDotOrComma
             withoutDotOrComma
             withoutDotOrComma
@@ -142,5 +139,4 @@ normalizeInput =
 
 withoutDotOrComma : Fuzzer String
 withoutDotOrComma =
-    Fuzz.string
-        |> Fuzz.map (String.filter (\char -> char /= '.' && char /= ','))
+    Fuzz.string |> Fuzz.map (String.filter (\char -> char /= '.' && char /= ','))

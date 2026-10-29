@@ -121,8 +121,7 @@ update msg model =
                 Loaded loadedUser actionState ->
                     ( { model
                         | status =
-                            Loaded
-                                { loadedUser | password = password }
+                            Loaded { loadedUser | password = password }
                                 (actionStateAfterEdit actionState)
                       }
                     , Cmd.none
@@ -329,8 +328,7 @@ userCard env status loadedUser =
     Surface.section env.theme
         { header =
             Just
-                (Element.column
-                    [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+                (Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
                     [ Typography.sectionTitle env.theme loadedUser.user.displayName
                     , Typography.mutedParagraph env.theme loadedUser.user.username
                     ]
@@ -460,6 +458,5 @@ problemMessage language problem =
 
 editUserSkeleton : Theme -> Element msg
 editUserSkeleton theme =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Skeleton.card theme { rows = 5 }, Skeleton.button theme ]

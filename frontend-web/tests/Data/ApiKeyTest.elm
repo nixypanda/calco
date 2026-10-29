@@ -35,8 +35,7 @@ tests =
                                         expectField "expires_in_days" Decode.int days fields
 
                                     Nothing ->
-                                        Dict.member "expires_in_days" fields
-                                            |> Expect.equal False
+                                        Dict.member "expires_in_days" fields |> Expect.equal False
                                 ]
                             )
                             ()
@@ -81,8 +80,7 @@ expectField : String -> Decode.Decoder a -> a -> Dict String Decode.Value -> Exp
 expectField key decoder expected fields =
     case Dict.get key fields of
         Just raw ->
-            Decode.decodeValue decoder raw
-                |> Expect.equal (Ok expected)
+            Decode.decodeValue decoder raw |> Expect.equal (Ok expected)
 
         Nothing ->
             Expect.fail ("missing encoded key: " ++ key)

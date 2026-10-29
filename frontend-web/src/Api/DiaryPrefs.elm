@@ -12,8 +12,7 @@ get toMsg =
 
 put : DiaryPrefs -> (Result Client.ApiError DiaryPrefs -> msg) -> Cmd msg
 put prefs toMsg =
-    Client.put
-        (Builder.absolute [ "api", "diary-preferences" ] [])
+    Client.put (Builder.absolute [ "api", "diary-preferences" ] [])
         (DiaryPrefs.encoder prefs)
         DiaryPrefs.decoder
         toMsg

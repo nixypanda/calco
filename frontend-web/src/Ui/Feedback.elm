@@ -51,10 +51,8 @@ search that matched nothing.
 emptyStateWithIcon : Theme -> { icon : Icon, message : String } -> Element msg
 emptyStateWithIcon theme config =
     Surface.cardFill theme
-        [ Icon.view
-            { icon = config.icon, size = 40, color = theme.textMuted }
-        , Element.paragraph
-            [ Font.color theme.textMuted, Font.center, Element.width Element.fill ]
+        [ Icon.view { icon = config.icon, size = 40, color = theme.textMuted }
+        , Element.paragraph [ Font.color theme.textMuted, Font.center, Element.width Element.fill ]
             [ Element.text config.message ]
         ]
 
@@ -128,11 +126,7 @@ blockingOverlay : Theme -> { title : String, body : List (Element msg) } -> Elem
 blockingOverlay theme config =
     modalScrim theme
         { card =
-            modalCard theme
-                { title = config.title
-                , body = config.body
-                , footer = Nothing
-                }
+            modalCard theme { title = config.title, body = config.body, footer = Nothing }
         , onBackgroundPress = Nothing
         }
 
@@ -176,8 +170,7 @@ modalScrim theme config =
         backdrop =
             case config.onBackgroundPress of
                 Just onPress ->
-                    Input.button backdropAttrs
-                        { onPress = Just onPress, label = Element.none }
+                    Input.button backdropAttrs { onPress = Just onPress, label = Element.none }
 
                 Nothing ->
                     Element.el backdropAttrs Element.none

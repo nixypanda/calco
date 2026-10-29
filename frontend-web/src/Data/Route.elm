@@ -57,8 +57,7 @@ routeParser =
         , Parser.map AdminDashboard (s "admin")
         , Parser.map AdminCreateUser (s "admin" </> s "users" </> s "new")
         , Parser.map AdminEditUser (s "admin" </> s "users" </> pathSegment </> s "edit")
-        , Parser.map DiaryDay
-            (s "home" <?> dateQuery <?> Query.string "calendar_month")
+        , Parser.map DiaryDay (s "home" <?> dateQuery <?> Query.string "calendar_month")
         , Parser.map DiaryCalendar (s "calendar" <?> Query.string "month")
         , Parser.map NutritionDetails (s "details" <?> dateQuery)
         , Parser.map GoalSettings (s "settings" </> s "goals")
@@ -67,14 +66,12 @@ routeParser =
         , Parser.map SettingsApiKeyCreate (s "settings" </> s "api-keys" </> s "new")
         , Parser.map AdHocLogCreate
             (s "logs" </> s "new" </> s "ad-hoc" <?> dateQuery <?> mealSlotQuery)
-        , Parser.map AiLogCreate
-            (s "logs" </> s "new" </> s "ai" <?> dateQuery <?> mealSlotQuery)
+        , Parser.map AiLogCreate (s "logs" </> s "new" </> s "ai" <?> dateQuery <?> mealSlotQuery)
         , Parser.map FoodLogEntry
             (s "logs" </> pathSegment <?> dateQuery <?> Query.string "calendar_month")
         , Parser.map FoodSearch (s "search" <?> dateQuery <?> mealSlotQuery)
         , Parser.map CustomFoodList (s "foods" </> s "custom")
-        , Parser.map CustomFoodCreateWithAi
-            (s "foods" </> s "custom" </> s "new" </> s "ai")
+        , Parser.map CustomFoodCreateWithAi (s "foods" </> s "custom" </> s "new" </> s "ai")
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
         , Parser.map CustomFoodEdit (s "foods" </> s "custom" </> pathSegment </> s "edit")
         , Parser.map CustomFoodShow (s "foods" </> s "custom" </> pathSegment)
@@ -199,8 +196,7 @@ routeToPath route =
                 [ Maybe.map
                     (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
                     maybeDate
-                , Maybe.map
-                    (\month -> "calendar_month=" ++ Url.percentEncode month)
+                , Maybe.map (\month -> "calendar_month=" ++ Url.percentEncode month)
                     maybeCalendarMonth
                 ]
 
@@ -232,8 +228,7 @@ routeToPath route =
                 [ Maybe.map
                     (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
                     maybeDate
-                , Maybe.map
-                    (\month -> "calendar_month=" ++ Url.percentEncode month)
+                , Maybe.map (\month -> "calendar_month=" ++ Url.percentEncode month)
                     maybeCalendarMonth
                 ]
 
@@ -251,12 +246,8 @@ routeToPath route =
                 [ Maybe.map
                     (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
                     maybeDate
-                , Maybe.map
-                    (\slot -> "meal_slot=" ++ MealSlot.toString slot)
-                    maybeSlot
-                , Maybe.map
-                    (\note -> "lookup_note=" ++ Url.percentEncode note)
-                    lookupNote
+                , Maybe.map (\slot -> "meal_slot=" ++ MealSlot.toString slot) maybeSlot
+                , Maybe.map (\note -> "lookup_note=" ++ Url.percentEncode note) lookupNote
                 ]
 
         CustomFoodList ->
@@ -321,10 +312,7 @@ escapeFirstCharacter value =
 
 hexByte : Int -> String
 hexByte value =
-    String.fromList
-        [ hexDigit (value // 16)
-        , hexDigit (modBy 16 value)
-        ]
+    String.fromList [ hexDigit (value // 16), hexDigit (modBy 16 value) ]
 
 
 hexDigit : Int -> Char

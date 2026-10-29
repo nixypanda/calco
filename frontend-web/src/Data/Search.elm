@@ -195,8 +195,7 @@ completions query suggestions =
                 suggestions
                     |> List.map
                         (\category ->
-                            CategoryCompletion
-                                (prefix ++ quoteCategory category.value)
+                            CategoryCompletion (prefix ++ quoteCategory category.value)
                                 category.count
                         )
 
@@ -225,10 +224,7 @@ nextCompletion current options =
                     List.head options
 
                 Just index ->
-                    List.drop (index + 1) options
-                        |> List.head
-                        |> Maybe.withDefault selected
-                        |> Just
+                    List.drop (index + 1) options |> List.head |> Maybe.withDefault selected |> Just
 
 
 previousCompletion : Maybe Completion -> List Completion -> Maybe Completion

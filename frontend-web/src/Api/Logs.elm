@@ -110,8 +110,7 @@ type alias BatchLogResponse =
 
 createLog : CreateLogRequest -> (Result Client.ApiError FoodLog -> msg) -> Cmd msg
 createLog request toMsg =
-    Client.post
-        (Builder.absolute [ "api", "logs" ] [])
+    Client.post (Builder.absolute [ "api", "logs" ] [])
         (createLogRequestEncoder request)
         FoodLog.decoder
         toMsg
@@ -119,8 +118,7 @@ createLog request toMsg =
 
 createAdHocLog : CreateAdHocLogRequest -> (Result Client.ApiError FoodLog -> msg) -> Cmd msg
 createAdHocLog request toMsg =
-    Client.post
-        (Builder.absolute [ "api", "logs", "ad-hoc" ] [])
+    Client.post (Builder.absolute [ "api", "logs", "ad-hoc" ] [])
         (createAdHocLogRequestEncoder request)
         FoodLog.decoder
         toMsg
@@ -131,8 +129,7 @@ createLogsBatch :
     -> (Result Client.ApiError BatchLogResponse -> msg)
     -> Cmd msg
 createLogsBatch requests toMsg =
-    Client.post
-        (Builder.absolute [ "api", "logs", "batch" ] [])
+    Client.post (Builder.absolute [ "api", "logs", "batch" ] [])
         (Encode.object [ ( "items", Encode.list createLogRequestEncoder requests ) ])
         batchLogResponseDecoder
         toMsg
@@ -145,8 +142,7 @@ getLog id toMsg =
 
 updateLog : String -> UpdateLogRequest -> (Result Client.ApiError FoodLog -> msg) -> Cmd msg
 updateLog id request toMsg =
-    Client.put
-        (Builder.absolute [ "api", "logs", id ] [])
+    Client.put (Builder.absolute [ "api", "logs", id ] [])
         (updateLogRequestEncoder request)
         FoodLog.decoder
         toMsg
@@ -163,8 +159,7 @@ latestSlots :
     -> Cmd msg
 latestSlots query toMsg =
     Client.get
-        (Builder.absolute
-            [ "api", "logs", "latest-slots" ]
+        (Builder.absolute [ "api", "logs", "latest-slots" ]
             [ Builder.string "before" (LocalDate.format query.before)
             , Builder.int "lookback_days" query.lookbackDays
             ]
@@ -176,8 +171,7 @@ latestSlots query toMsg =
 recentItems : RecentItemsRequest -> (Result Client.ApiError RecentItemsResponse -> msg) -> Cmd msg
 recentItems request toMsg =
     Client.get
-        (Builder.absolute
-            [ "api", "logs", "recent-items" ]
+        (Builder.absolute [ "api", "logs", "recent-items" ]
             ([ Builder.string "from_date" (LocalDate.format request.fromDate)
              , Builder.string "to_date" (LocalDate.format request.toDate)
              ]
@@ -191,8 +185,7 @@ recentItems request toMsg =
 summary : SummaryRequest -> (Result Client.ApiError (List DaySummary) -> msg) -> Cmd msg
 summary request toMsg =
     Client.get
-        (Builder.absolute
-            [ "api", "logs", "summary" ]
+        (Builder.absolute [ "api", "logs", "summary" ]
             [ Builder.string "from_date" (LocalDate.format request.fromDate)
             , Builder.string "to_date" (LocalDate.format request.toDate)
             ]
@@ -206,8 +199,7 @@ lastUsedItems :
     -> (Result Client.ApiError RecentItemsResponse -> msg)
     -> Cmd msg
 lastUsedItems request toMsg =
-    Client.post
-        (Builder.absolute [ "api", "logs", "last-used" ] [])
+    Client.post (Builder.absolute [ "api", "logs", "last-used" ] [])
         (Encode.object
             [ ( "from_date", Encode.string (LocalDate.format request.fromDate) )
             , ( "to_date", Encode.string (LocalDate.format request.toDate) )

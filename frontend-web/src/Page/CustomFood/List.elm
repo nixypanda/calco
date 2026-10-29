@@ -97,8 +97,7 @@ failure =
 
 contentView : Env -> Model -> Element Msg
 contentView env model =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
             Loaded _ ->
                 Element.none
@@ -121,8 +120,7 @@ bodyView env model =
                     Just (createActions env)
                 , body =
                     if List.isEmpty foods then
-                        [ Typography.mutedBodyParagraph
-                            env.theme
+                        [ Typography.mutedBodyParagraph env.theme
                             (I18n.t env.language TidCustomFoodListEmpty)
                         ]
 
@@ -140,8 +138,7 @@ bodyView env model =
 
 createActions : Env -> Element Msg
 createActions env =
-    Element.row
-        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.el [ Element.width Element.fill ]
             (Button.textButton env.device
                 env.theme
@@ -207,12 +204,9 @@ customFoodListSkeleton theme =
     Surface.section theme
         { header =
             Just
-                (Element.row
-                    [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                    [ Element.el [ Element.width Element.fill ]
-                        (Skeleton.button theme)
-                    , Element.el [ Element.width Element.fill ]
-                        (Skeleton.button theme)
+                (Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                    [ Element.el [ Element.width Element.fill ] (Skeleton.button theme)
+                    , Element.el [ Element.width Element.fill ] (Skeleton.button theme)
                     ]
                 )
         , body =

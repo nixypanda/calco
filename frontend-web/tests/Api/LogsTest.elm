@@ -160,23 +160,19 @@ createAdHocLogFuzzer =
 
 itemRefFuzzer : Fuzzer ItemRef
 itemRefFuzzer =
-    Fuzz.map2 ItemRef
-        (Fuzz.oneOfValues [ ItemRef.Product, ItemRef.Meal ])
-        Fuzz.string
+    Fuzz.map2 ItemRef (Fuzz.oneOfValues [ ItemRef.Product, ItemRef.Meal ]) Fuzz.string
 
 
 quantityFuzzer : Fuzzer Nutrition.Quantity
 quantityFuzzer =
-    Fuzz.map2
-        (\amount unit -> { amount = amount, unit = unit })
+    Fuzz.map2 (\amount unit -> { amount = amount, unit = unit })
         Support.nonNegativeAmountString
         Support.segment
 
 
 nutrientFuzzer : Fuzzer Nutrition.NutrientAmount
 nutrientFuzzer =
-    Fuzz.map3
-        (\code amount unit -> { code = code, amount = amount, unit = unit })
+    Fuzz.map3 (\code amount unit -> { code = code, amount = amount, unit = unit })
         Support.segment
         Support.amountString
         Support.segment
@@ -221,8 +217,7 @@ expectOptionalValue :
 expectOptionalValue key decoder expected fields =
     case expected of
         Nothing ->
-            Dict.member key fields
-                |> Expect.equal False
+            Dict.member key fields |> Expect.equal False
 
         Just value ->
             Dict.get key fields

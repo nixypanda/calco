@@ -30,11 +30,9 @@ tests =
                     |> finish
                         (\( model, outMsg ) ->
                             { amount =
-                                formField model (\form -> form.amount)
-                                    |> Maybe.withDefault ""
+                                formField model (\form -> form.amount) |> Maybe.withDefault ""
                             , unit =
-                                formField model (\form -> form.unit)
-                                    |> Maybe.withDefault ""
+                                formField model (\form -> form.unit) |> Maybe.withDefault ""
                             , finalOut = outMsg
                             }
                                 |> Expect.equal
@@ -56,11 +54,9 @@ tests =
                     |> finish
                         (\( model, outMsg ) ->
                             { amount =
-                                formField model (\form -> form.amount)
-                                    |> Maybe.withDefault ""
+                                formField model (\form -> form.amount) |> Maybe.withDefault ""
                             , unit =
-                                formField model (\form -> form.unit)
-                                    |> Maybe.withDefault ""
+                                formField model (\form -> form.unit) |> Maybe.withDefault ""
                             , finalOut = outMsg
                             }
                                 |> Expect.equal

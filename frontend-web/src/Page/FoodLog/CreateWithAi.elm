@@ -309,8 +309,7 @@ view env model =
         Nothing ->
             UiPage.pageContainer
                 [ Feedback.maybeErrorBanner env.theme model.error
-                , Element.map AssistantMsg
-                    (Assistant.viewFor env AdHocLog False model.assistant)
+                , Element.map AssistantMsg (Assistant.viewFor env AdHocLog False model.assistant)
                 ]
 
         Just review ->
@@ -331,8 +330,7 @@ view env model =
                     , trailing = Nothing
                     }
                 , additionalNutrientsToggle env model review
-                , Element.map ReviewMsg
-                    (Review.viewForAi env model.showAdditionalNutrients review)
+                , Element.map ReviewMsg (Review.viewForAi env model.showAdditionalNutrients review)
                 ]
 
 

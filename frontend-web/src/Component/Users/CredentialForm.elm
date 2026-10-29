@@ -132,8 +132,7 @@ view env config model =
         , Element.width (Element.fill |> Element.maximum 420)
         , Element.padding DesignTokens.space16
         ]
-        (Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        (Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
             [ Surface.section env.theme
                 { header = Just (Typography.subsectionTitle env.theme config.title)
                 , body =

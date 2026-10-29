@@ -169,13 +169,9 @@ finish =
 
 loadedPrefs : Journey
 loadedPrefs =
-    S.init
-        |> Story.start
-        |> step (S.PrefsLoaded (Ok (prefs [ Breakfast, Lunch ])))
+    S.init |> Story.start |> step (S.PrefsLoaded (Ok (prefs [ Breakfast, Lunch ])))
 
 
 editedPrefs : Journey
 editedPrefs =
-    loadedPrefs
-        |> step (S.SlotToggled Breakfast False)
-        |> step (S.SlotToggled Dinner True)
+    loadedPrefs |> step (S.SlotToggled Breakfast False) |> step (S.SlotToggled Dinner True)

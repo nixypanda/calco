@@ -168,8 +168,7 @@ update msg model =
 
 replaceDay : LocalDate -> Maybe DaySummary -> List DaySummary -> List DaySummary
 replaceDay date summary existing =
-    mergeSummaries
-        (List.filter (\other -> not (LocalDate.equals other.date date)) existing)
+    mergeSummaries (List.filter (\other -> not (LocalDate.equals other.date date)) existing)
         (summary |> Maybe.map List.singleton |> Maybe.withDefault [])
 
 
@@ -232,10 +231,7 @@ applySummaryResult :
 applySummaryResult earlier result model =
     case result of
         Ok summaries ->
-            ( { model
-                | summaries = mergeSummaries model.summaries summaries
-                , status = Ready
-              }
+            ( { model | summaries = mergeSummaries model.summaries summaries, status = Ready }
             , Cmd.none
             , NoOp
             )
@@ -291,8 +287,7 @@ requestForMonths token oldest newest today =
 
 contentViewWithSelection : Env -> Maybe LocalDate -> Model -> Element Msg
 contentViewWithSelection env selectedDate model =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         (case model.status of
             Loading ->
                 calendarSkeleton env.theme model
@@ -409,8 +404,7 @@ dayView env model selectedDate month day attributes =
             dayLabel env model.today day date maybeSummary
     in
     if future then
-        Element.el
-            (Font.color env.theme.textMuted :: attributes)
+        Element.el (Font.color env.theme.textMuted :: attributes)
             (Element.el [ Element.centerX, Element.centerY ] (Element.text (String.fromInt day)))
 
     else
@@ -426,8 +420,7 @@ dayView env model selectedDate month day attributes =
                 :: Element.htmlAttribute
                     (Attr.attribute "aria-label" (dayAriaLabel env.language date maybeSummary))
                 :: Element.htmlAttribute
-                    (Attr.attribute
-                        "aria-pressed"
+                    (Attr.attribute "aria-pressed"
                         (if selectedDate == maybeDate then
                             "true"
 
@@ -467,7 +460,8 @@ dayLabel env today day date maybeSummary =
                 , Border.color env.theme.brandBlue
                 , Font.center
                 ]
-                (Element.el [ Element.centerX, Element.centerY ]
+                (Element.el
+                    [ Element.centerX, Element.centerY ]
                     (Element.text (String.fromInt day))
                 )
     in

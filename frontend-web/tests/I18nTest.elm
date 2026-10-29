@@ -58,8 +58,7 @@ exact language translationId expected _ =
 
 blankIds : Util.Language -> List TranslationId
 blankIds language =
-    sampleIds
-        |> List.filter (\translationId -> String.trim (I18n.t language translationId) == "")
+    sampleIds |> List.filter (\translationId -> String.trim (I18n.t language translationId) == "")
 
 
 sampleIds : List TranslationId

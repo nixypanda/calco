@@ -47,10 +47,8 @@ view device panes =
             , Element.clip
             , Element.htmlAttribute (Attr.class "ui-workspace")
             , Element.htmlAttribute (Attr.style "min-height" "0")
-            , Element.htmlAttribute
-                (Attr.style "height" "calc(100vh - 58px)")
-            , Element.htmlAttribute
-                (Attr.style "height" "calc(100dvh - 58px)")
+            , Element.htmlAttribute (Attr.style "height" "calc(100vh - 58px)")
+            , Element.htmlAttribute (Attr.style "height" "calc(100dvh - 58px)")
             ]
             (List.map scrollingPane withVisibility)
 
@@ -96,8 +94,7 @@ scrollingPane ( ( key, content ), visible ) =
             , Element.scrollbarY
             , Element.htmlAttribute (Attr.class "ui-workspace-pane")
             , Element.htmlAttribute (Attr.style "min-height" "0")
-            , Element.htmlAttribute
-                (Attr.style "overscroll-behavior-y" "contain")
+            , Element.htmlAttribute (Attr.style "overscroll-behavior-y" "contain")
             ]
 
          else

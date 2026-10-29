@@ -110,26 +110,19 @@ topBarView env session route loading onMenuClick onProfileClick onThemeToggle on
         , Font.color env.theme.textPrimary
         ]
         (if chromeShown then
-            [ leadingButton env
-                meta.leading
-                onMenuClick
-                onNavigate
-            , Element.el
-                [ Element.width Element.fill, Element.clip ]
+            [ leadingButton env meta.leading onMenuClick onNavigate
+            , Element.el [ Element.width Element.fill, Element.clip ]
                 (Typography.screenTitle env.theme meta.title)
             , Element.el
                 [ Element.paddingEach
                     { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 }
                 ]
                 (themeToggle env onThemeToggle)
-            , profileButton env
-                onProfileClick
-                profile
+            , profileButton env onProfileClick profile
             ]
 
          else
-            [ Element.row
-                [ Element.spacing DesignTokens.space8, Element.centerY ]
+            [ Element.row [ Element.spacing DesignTokens.space8, Element.centerY ]
                 [ Element.image
                     [ Element.width (Element.px 28), Element.height (Element.px 28) ]
                     { src = "/android-chrome-192x192.png", description = "CalCo" }
@@ -175,8 +168,7 @@ leadingButton env leading onMenuClick onNavigate =
             Element.el [ Element.width (Element.px 40) ] Element.none
 
         ShowAppIcon ->
-            Element.image
-                [ Element.width (Element.px 28), Element.height (Element.px 28) ]
+            Element.image [ Element.width (Element.px 28), Element.height (Element.px 28) ]
                 { src = "/android-chrome-192x192.png", description = "CalCo" }
 
 
@@ -232,12 +224,10 @@ updateBanner env onPress =
         ]
         { onPress = Just onPress
         , label =
-            Element.row
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Element.el [ Element.centerY ]
                     (Element.text (I18n.t env.language TidCommonNewVersionAvailable))
-                , Element.el
-                    [ Element.alignRight, Element.centerY, Font.bold ]
+                , Element.el [ Element.alignRight, Element.centerY, Font.bold ]
                     (Element.text (I18n.t env.language TidCommonTapToRefresh))
                 ]
         }
@@ -421,18 +411,8 @@ bottomNavBar env route onNavigate =
             (I18n.t env.language TidNavSearch)
             (FoodSearch Nothing Nothing)
             Icon.Search
-        , tabButton env
-            route
-            onNavigate
-            (I18n.t env.language TidNavFoods)
-            CustomFoodList
-            Icon.Box
-        , tabButton env
-            route
-            onNavigate
-            (I18n.t env.language TidNavMeals)
-            MealList
-            Icon.Utensils
+        , tabButton env route onNavigate (I18n.t env.language TidNavFoods) CustomFoodList Icon.Box
+        , tabButton env route onNavigate (I18n.t env.language TidNavMeals) MealList Icon.Utensils
         ]
 
 
@@ -500,13 +480,10 @@ bottomNavTab theme config =
         ]
         { onPress = Just config.onPress
         , label =
-            Element.column
-                [ Element.centerX, Element.centerY, Element.spacing DesignTokens.space2 ]
+            Element.column [ Element.centerX, Element.centerY, Element.spacing DesignTokens.space2 ]
                 [ Element.el [ Element.centerX ]
                     (Icon.view { icon = config.icon, size = 22, color = iconColor })
-                , Element.el
-                    [ Element.centerX, Typography.caption ]
-                    (Element.text config.label)
+                , Element.el [ Element.centerX, Typography.caption ] (Element.text config.label)
                 ]
         }
 
@@ -531,8 +508,7 @@ drawerOverlay env session route drawerOpen onClose onNavigate =
     in
     if drawerOpen && showsAppChrome session isLoadingPage route then
         [ Element.inFront
-            (Element.row
-                [ Element.width Element.fill, Element.height Element.fill ]
+            (Element.row [ Element.width Element.fill, Element.height Element.fill ]
                 [ drawerView env session route onClose onNavigate
                 , scrimOverlay env.theme (Just onClose)
                 ]
@@ -564,8 +540,7 @@ drawerView env session route onClose onNavigate =
 drawerItems : Env -> Session -> Route -> (Route -> msg) -> List (Element msg)
 drawerItems env session route onNavigate =
     if Auth.isAdmin session then
-        [ drawerItem
-            env.theme
+        [ drawerItem env.theme
             route
             onNavigate
             Nothing
@@ -672,8 +647,7 @@ drawerItemButton theme config =
         ]
         { onPress = Just config.onPress
         , label =
-            Element.row
-                [ Element.spacing DesignTokens.space12, Element.centerY ]
+            Element.row [ Element.spacing DesignTokens.space12, Element.centerY ]
                 [ iconEl, Element.text config.label ]
         }
 
@@ -766,8 +740,7 @@ profileMenuContent env session onNavigate onLogout onSetLanguage =
                     }
                 ]
            )
-        ++ [ Element.row
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        ++ [ Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Button.textButton env.device
                     env.theme
                     { tone =

@@ -27,8 +27,7 @@ tests =
                     |> step CustomFoodList.CreateManuallyClicked
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal (CustomFoodList.Navigate CustomFoodCreate)
+                            outMsg |> Expect.equal (CustomFoodList.Navigate CustomFoodCreate)
                         )
         , test "a loaded list starts AI food creation" <|
             \_ ->
@@ -36,9 +35,7 @@ tests =
                     |> step CustomFoodList.CreateWithAiClicked
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal
-                                    (CustomFoodList.Navigate CustomFoodCreateWithAi)
+                            outMsg |> Expect.equal (CustomFoodList.Navigate CustomFoodCreateWithAi)
                         )
         ]
 

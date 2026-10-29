@@ -77,8 +77,7 @@ searchInput env config =
         ariaAttributes =
             [ Element.htmlAttribute (Html.Attributes.attribute "role" "combobox")
             , Element.htmlAttribute
-                (Html.Attributes.attribute
-                    "aria-expanded"
+                (Html.Attributes.attribute "aria-expanded"
                     (if hasCompletions then
                         "true"
 
@@ -86,8 +85,7 @@ searchInput env config =
                         "false"
                     )
                 )
-            , Element.htmlAttribute
-                (Html.Attributes.attribute "aria-controls" config.id)
+            , Element.htmlAttribute (Html.Attributes.attribute "aria-controls" config.id)
             , Element.htmlAttribute (Html.Attributes.attribute "aria-autocomplete" "list")
             ]
                 ++ (case activeIndex of
@@ -166,8 +164,7 @@ keydownHandler config =
                                 let
                                     previous : Maybe Completion
                                     previous =
-                                        Search.previousCompletion
-                                            config.selection
+                                        Search.previousCompletion config.selection
                                             config.completions
                                 in
                                 Decode.succeed ( config.onSelectionChanged previous, True )
@@ -204,15 +201,13 @@ resultRow env config =
 
         searchItem : Element msg
         searchItem =
-            Element.column
-                [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
                 [ if UiCommon.isSmall env.device then
                     Typography.wrappedListItemTitle env.theme config.item.name
 
                   else
                     Typography.truncatedListItemTitle env.theme config.item.name
-                , Typography.mutedCaptionParagraph
-                    env.theme
+                , Typography.mutedCaptionParagraph env.theme
                     (metaText env.language config.query config.item)
                 ]
 
@@ -258,8 +253,7 @@ completionRow theme config index completion =
         [ Element.htmlAttribute (Html.Attributes.attribute "role" "option")
         , Element.htmlAttribute (Html.Attributes.attribute "id" (optionId config.id index))
         , Element.htmlAttribute
-            (Html.Attributes.attribute
-                "aria-selected"
+            (Html.Attributes.attribute "aria-selected"
                 (if Just index == config.activeIndex then
                     "true"
 

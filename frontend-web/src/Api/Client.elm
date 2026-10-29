@@ -184,10 +184,7 @@ displayError error =
 
 
 failure :
-    { noOp : outMsg
-    , sessionExpired : outMsg
-    , applyError : String -> model -> model
-    }
+    { noOp : outMsg, sessionExpired : outMsg, applyError : String -> model -> model }
     -> ApiError
     -> model
     -> ( model, Cmd msg, outMsg )

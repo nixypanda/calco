@@ -158,8 +158,7 @@ update msg model =
         CategorySuggestionsLoaded token result ->
             let
                 ( nextForm, subCmd, _ ) =
-                    Form.update
-                        (Form.CategorySuggestionsLoaded token (Result.map .items result))
+                    Form.update (Form.CategorySuggestionsLoaded token (Result.map .items result))
                         model.form
             in
             ( { model | form = nextForm }, Cmd.map FormMsg subCmd, NoOp )
@@ -175,8 +174,7 @@ update msg model =
                 Err validationError ->
                     ( { model
                         | form =
-                            withSubmit
-                                (Form.SubmitFailed (validationMessage validationError))
+                            withSubmit (Form.SubmitFailed (validationMessage validationError))
                                 model.form
                       }
                     , Cmd.none
@@ -252,10 +250,7 @@ applyAssistantOutMsg assistantOut model command =
             ( model, command, RevokePhotoPreviewUrls urls )
 
         Assistant.ApplyDraft draft ->
-            ( { model
-                | form = Form.applyAiDraft draft model.form
-                , assistantOnly = False
-              }
+            ( { model | form = Form.applyAiDraft draft model.form, assistantOnly = False }
             , command
             , NoOp
             )
@@ -280,8 +275,7 @@ view env model =
                 [ Element.map AssistantMsg (Assistant.view env False model.assistant) ]
 
             else
-                [ Element.map FormMsg
-                    (Form.viewForCreate env model.nutrients model.form)
+                [ Element.map FormMsg (Form.viewForCreate env model.nutrients model.form)
                 , Button.textButton env.device
                     env.theme
                     { tone = Button.Primary

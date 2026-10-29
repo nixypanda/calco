@@ -31,22 +31,19 @@ tests =
                     |> step (CustomFoodShow.DeleteCompleted (Ok ()))
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal (CustomFoodShow.Navigate CustomFoodList)
+                            outMsg |> Expect.equal (CustomFoodShow.Navigate CustomFoodList)
                         )
         , test "a failed delete can be retried" <|
             \_ ->
                 loadedFood
                     |> step CustomFoodShow.DeleteClicked
                     |> step CustomFoodShow.ConfirmDeleteClicked
-                    |> step
-                        (CustomFoodShow.DeleteCompleted (Err Client.NetworkError))
+                    |> step (CustomFoodShow.DeleteCompleted (Err Client.NetworkError))
                     |> step CustomFoodShow.ConfirmDeleteClicked
                     |> step (CustomFoodShow.DeleteCompleted (Ok ()))
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal (CustomFoodShow.Navigate CustomFoodList)
+                            outMsg |> Expect.equal (CustomFoodShow.Navigate CustomFoodList)
                         )
         ]
 

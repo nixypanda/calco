@@ -45,10 +45,7 @@ tests =
                             { request = updateRequest outMsg
                             , disabled = (toScreen model).disabled
                             }
-                                |> Expect.equal
-                                    { request = Just lunchBowlRequest
-                                    , disabled = True
-                                    }
+                                |> Expect.equal { request = Just lunchBowlRequest, disabled = True }
                         )
         , test "a failed load can be retried" <|
             \_ ->
@@ -58,8 +55,7 @@ tests =
                     |> step MealEdit.RetryClicked
                     |> finish
                         (\( _, outMsg ) ->
-                            outMsg
-                                |> Expect.equal (MealEdit.RequestMeal "meal-1")
+                            outMsg |> Expect.equal (MealEdit.RequestMeal "meal-1")
                         )
         ]
 
@@ -78,8 +74,7 @@ toScreen model =
         MealEdit.Editing loaded ->
             { name = loaded.fields.name
             , components =
-                List.map
-                    (\row -> ( row.productId, row.quantity, row.unit ))
+                List.map (\row -> ( row.productId, row.quantity, row.unit ))
                     loaded.fields.components
             , disabled = Common.isSubmitting loaded.fields.submit
             , submitError = submitError loaded.fields.submit

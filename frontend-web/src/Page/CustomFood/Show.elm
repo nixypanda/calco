@@ -62,8 +62,7 @@ type OutMsg
 
 init : String -> ( Model, OutMsg )
 init productId =
-    ( Loading
-        { productId = productId, food = Nothing, units = Nothing }
+    ( Loading { productId = productId, food = Nothing, units = Nothing }
     , RequestInitialData productId
     )
 
@@ -208,8 +207,7 @@ update msg model =
         RetryClicked ->
             case model of
                 LoadFailed failed ->
-                    ( Loading
-                        { productId = failed.productId, food = Nothing, units = Nothing }
+                    ( Loading { productId = failed.productId, food = Nothing, units = Nothing }
                     , Cmd.none
                     , RequestInitialData failed.productId
                     )
@@ -338,8 +336,7 @@ loadedView env loaded =
         nutrients =
             View.Product.foodNutrientsPer100g food
     in
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ View.Product.foodHeader env food []
         , View.Nutrients.nutritionCard env nutrients
         , bottomActionsView env food
@@ -393,8 +390,7 @@ customFoodEditRoute food =
 
 customFoodShowSkeleton : Theme -> Element msg
 customFoodShowSkeleton theme =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Element.el
             [ Element.width Element.fill
             , Element.height (Element.px 120)
@@ -404,10 +400,8 @@ customFoodShowSkeleton theme =
             ]
             Element.none
         , Skeleton.bar theme
-        , Skeleton.barCustom theme
-            { width = Element.fillPortion 2, height = 12 }
+        , Skeleton.barCustom theme { width = Element.fillPortion 2, height = 12 }
         , Skeleton.card theme { rows = 3 }
-        , Element.row
-            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Skeleton.button theme, Skeleton.button theme ]
         ]

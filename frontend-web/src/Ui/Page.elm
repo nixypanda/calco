@@ -58,8 +58,7 @@ pageHeader theme config =
 
         titleColumn : Element msg
         titleColumn =
-            Element.column
-                [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
+            Element.column [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
                 (config.title
                     :: (case config.subtitle of
                             Just subtitle ->
@@ -78,8 +77,7 @@ pageHeader theme config =
             else
                 Element.row [ Element.spacing space8 ] config.actions
     in
-    Element.wrappedRow
-        [ Element.width Element.fill, Element.spacing space12, minWidthZero ]
+    Element.wrappedRow [ Element.width Element.fill, Element.spacing space12, minWidthZero ]
         [ leadingElement, titleColumn, actionsRow ]
 
 
@@ -95,8 +93,7 @@ pageHeaderSubtitle theme subtitle =
                 (separatedInline meta)
 
         SubtitleMetaLines meta ->
-            Element.column
-                [ Element.width Element.fill, Element.spacing space2, minWidthZero ]
+            Element.column [ Element.width Element.fill, Element.spacing space2, minWidthZero ]
                 (List.map
                     (\items ->
                         Element.paragraph

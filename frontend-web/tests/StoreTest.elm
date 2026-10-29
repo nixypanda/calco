@@ -56,11 +56,9 @@ requestIsIssuedOnce =
                 Just ( inFlight, token ) ->
                     Expect.all
                         [ \_ ->
-                            Store.cached access inFlight
-                                |> Expect.equal Nothing
+                            Store.cached access inFlight |> Expect.equal Nothing
                         , \_ ->
-                            Store.request access inFlight
-                                |> Expect.equal Nothing
+                            Store.request access inFlight |> Expect.equal Nothing
                         , \_ ->
                             case Store.settle access token (Ok logs) inFlight of
                                 Nothing ->
@@ -72,8 +70,7 @@ requestIsIssuedOnce =
                                             Store.cached access settled
                                                 |> Expect.equal (Just (Ok logs))
                                         , \_ ->
-                                            Store.request access settled
-                                                |> Expect.equal Nothing
+                                            Store.request access settled |> Expect.equal Nothing
                                         ]
                                         ()
                         ]
@@ -164,14 +161,11 @@ failedSettlementIsCached =
                             in
                             Expect.all
                                 [ \_ ->
-                                    Store.cached access settled
-                                        |> Expect.equal (Just failure)
+                                    Store.cached access settled |> Expect.equal (Just failure)
                                 , \_ ->
-                                    Store.request access settled
-                                        |> Expect.equal Nothing
+                                    Store.request access settled |> Expect.equal Nothing
                                 , \_ ->
-                                    Store.cached access retryable
-                                        |> Expect.equal Nothing
+                                    Store.cached access retryable |> Expect.equal Nothing
                                 , \_ ->
                                     Store.request access retryable
                                         |> Maybe.map (always True)
@@ -215,9 +209,7 @@ settleRejectsSupersededRequests =
                                 seeded =
                                     Store.seed access logs inFlight
                             in
-                            [ ( "duplicate settle"
-                              , Store.settle access token (Ok logs) settled
-                              )
+                            [ ( "duplicate settle", Store.settle access token (Ok logs) settled )
                             , ( "invalidated request"
                               , Store.settle access token (Ok logs) invalidated
                               )
@@ -297,8 +289,7 @@ resetInvalidatesEverything =
                         , \_ -> Store.cached Store.units resetStore |> Expect.equal Nothing
                         , \_ -> Store.cached Store.nutrients resetStore |> Expect.equal Nothing
                         , \_ ->
-                            Store.settle access token (Ok logs) resetStore
-                                |> Expect.equal Nothing
+                            Store.settle access token (Ok logs) resetStore |> Expect.equal Nothing
                         , \_ -> isRequestable access resetStore
                         , \_ -> isRequestable otherAccess resetStore
                         , \_ -> isRequestable goalAccess resetStore
@@ -429,8 +420,7 @@ resourceKeysAreIndependent =
                                             Store.cached Store.prefs withPrefs
                                                 |> Expect.equal (Just (Ok prefsValue))
                                         , \_ ->
-                                            Store.cached access withoutFirst
-                                                |> Expect.equal Nothing
+                                            Store.cached access withoutFirst |> Expect.equal Nothing
                                         , \_ ->
                                             Store.cached otherDateAccess withoutFirst
                                                 |> Expect.equal (Just (Ok logs))
@@ -496,12 +486,9 @@ nutrientsValue =
 
 expectCached : Access a -> a -> Store -> Expectation
 expectCached access value store =
-    Store.cached access store
-        |> Expect.equal (Just (Ok value))
+    Store.cached access store |> Expect.equal (Just (Ok value))
 
 
 isRequestable : Access a -> Store -> Expectation
 isRequestable access store =
-    Store.request access store
-        |> Maybe.map (always True)
-        |> Expect.equal (Just True)
+    Store.request access store |> Maybe.map (always True) |> Expect.equal (Just True)

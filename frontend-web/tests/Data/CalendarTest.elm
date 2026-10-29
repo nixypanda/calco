@@ -37,8 +37,7 @@ tests =
           <|
             \period ->
                 expectMonthBounds period
-        , fuzz2
-            (Fuzz.intRange -3 24)
+        , fuzz2 (Fuzz.intRange -3 24)
             shiftablePeriodFuzzer
             "monthsDescending returns count months, or none for non-positive counts"
           <|
@@ -58,8 +57,7 @@ tests =
                         , \_ -> expectDescending months
                         ]
                         ()
-        , fuzz
-            (SupportFuzz.monthPeriod |> Fuzz.andThen periodAndDayFuzzer)
+        , fuzz (SupportFuzz.monthPeriod |> Fuzz.andThen periodAndDayFuzzer)
             "dayKey zero-pads single-digit days and parses back to the same date"
           <|
             \( period, day ) ->
@@ -76,11 +74,9 @@ tests =
                         Expect.all
                             [ \_ -> String.startsWith period key |> Expect.equal True
                             , \_ ->
-                                String.endsWith ("-" ++ pad2 day) key
-                                    |> Expect.equal True
+                                String.endsWith ("-" ++ pad2 day) key |> Expect.equal True
                             , \_ ->
-                                String.length key
-                                    |> Expect.equal (String.length period + 3)
+                                String.length key |> Expect.equal (String.length period + 3)
                             , \_ ->
                                 LocalDate.fromString key
                                     |> Expect.equal (LocalDate.fromParts yearValue month day)
@@ -102,26 +98,21 @@ offsetFuzzer =
 
 shiftablePeriodFuzzer : Fuzzer String
 shiftablePeriodFuzzer =
-    Fuzz.map2
-        (\yearValue month -> String.fromInt yearValue ++ "-" ++ pad2 month)
+    Fuzz.map2 (\yearValue month -> String.fromInt yearValue ++ "-" ++ pad2 month)
         (Fuzz.intRange 1100 9899)
         (Fuzz.intRange 1 12)
 
 
 calendarPeriodFuzzer : Fuzzer String
 calendarPeriodFuzzer =
-    Fuzz.frequency
-        [ ( 5, SupportFuzz.monthPeriod )
-        , ( 1, Fuzz.oneOfValues boundaryPeriods )
-        ]
+    Fuzz.frequency [ ( 5, SupportFuzz.monthPeriod ), ( 1, Fuzz.oneOfValues boundaryPeriods ) ]
 
 
 periodAndDayFuzzer : String -> Fuzzer ( String, Int )
 periodAndDayFuzzer period =
     case monthParts period of
         Just ( yearValue, month ) ->
-            Fuzz.map
-                (\day -> ( period, day ))
+            Fuzz.map (\day -> ( period, day ))
                 (Fuzz.intRange 1 (referenceDaysInMonth yearValue month))
 
         Nothing ->
@@ -301,8 +292,7 @@ expectMonthBounds period =
                 , \_ ->
                     end
                         |> Expect.equal
-                            (LocalDate.fromParts
-                                yearValue
+                            (LocalDate.fromParts yearValue
                                 month
                                 (referenceDaysInMonth yearValue month)
                             )
@@ -340,9 +330,6 @@ countTrailingNothing cells =
 
 expectDescending : List String -> Expect.Expectation
 expectDescending months =
-    List.map2
-        (\later earlier -> Calendar.shiftMonth 1 earlier == later)
-        months
-        (List.drop 1 months)
+    List.map2 (\later earlier -> Calendar.shiftMonth 1 earlier == later) months (List.drop 1 months)
         |> List.all identity
         |> Expect.equal True

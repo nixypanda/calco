@@ -185,10 +185,8 @@ request (Access access) store =
                     fields.nextRequestId + 1
             in
             Just
-                ( access.set (InFlight requestId)
-                    (Store { fields | nextRequestId = requestId })
-                , RequestToken
-                    { generation = fields.generation, requestId = requestId }
+                ( access.set (InFlight requestId) (Store { fields | nextRequestId = requestId })
+                , RequestToken { generation = fields.generation, requestId = requestId }
                 )
 
         _ ->

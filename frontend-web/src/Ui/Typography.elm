@@ -63,8 +63,7 @@ sizeSubsectionTitle =
 
 pageTitle : Theme -> String -> Element msg
 pageTitle theme text =
-    Element.el
-        [ sizePageTitle, Font.bold, Font.color theme.textPrimary, Region.heading 1 ]
+    Element.el [ sizePageTitle, Font.bold, Font.color theme.textPrimary, Region.heading 1 ]
         (Element.text text)
 
 
@@ -78,22 +77,19 @@ compact bar size.
 -}
 screenTitle : Theme -> String -> Element msg
 screenTitle theme text =
-    Element.el
-        [ sizeSubsectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 1 ]
+    Element.el [ sizeSubsectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 1 ]
         (Element.text text)
 
 
 sectionTitle : Theme -> String -> Element msg
 sectionTitle theme text =
-    Element.el
-        [ sizeSectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 2 ]
+    Element.el [ sizeSectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 2 ]
         (Element.text text)
 
 
 subsectionTitle : Theme -> String -> Element msg
 subsectionTitle theme text =
-    Element.el
-        [ sizeSubsectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 3 ]
+    Element.el [ sizeSubsectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 3 ]
         (Element.text text)
 
 
@@ -104,8 +100,7 @@ listItemTitle theme child =
 
 truncatedListItemTitle : Theme -> String -> Element msg
 truncatedListItemTitle theme name =
-    Element.el
-        [ Element.width Element.fill ]
+    Element.el [ Element.width Element.fill ]
         (listItemTitle theme
             (Element.el
                 [ Element.width Element.fill, Element.clip, uiClass "ui-text-ellipsis" ]
@@ -157,8 +152,7 @@ mutedBody theme text =
 
 mutedBodyParagraph : Theme -> String -> Element msg
 mutedBodyParagraph theme text =
-    Element.paragraph
-        [ Font.color theme.textMuted, body, Element.width Element.fill, minWidthZero ]
+    Element.paragraph [ Font.color theme.textMuted, body, Element.width Element.fill, minWidthZero ]
         [ Element.text text ]
 
 

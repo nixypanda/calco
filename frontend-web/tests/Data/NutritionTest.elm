@@ -10,8 +10,7 @@ import Test exposing (Test, describe, fuzz, fuzz3)
 tests : Test
 tests =
     describe "Data.Nutrition"
-        [ fuzz3
-            (Fuzz.floatRange 0 500)
+        [ fuzz3 (Fuzz.floatRange 0 500)
             (Fuzz.floatRange 0 500)
             (Fuzz.list per100gFuzzer)
             "scalePer100g is linear, preserves shape, and zeroes at zero grams"
@@ -29,28 +28,22 @@ tests =
                 in
                 Expect.all
                     [ \_ ->
-                        expectAmountLists
-                            (Nutrition.scalePer100g (first * second / 100) nutrients)
+                        expectAmountLists (Nutrition.scalePer100g (first * second / 100) nutrients)
                             stepwise
                     , \_ ->
-                        expectAmountLists
-                            (toNutrientAmounts nutrients)
+                        expectAmountLists (toNutrientAmounts nutrients)
                             (Nutrition.scalePer100g 100 nutrients)
                     , \_ ->
-                        List.map .code zeroed
-                            |> Expect.equal (List.map .code nutrients)
+                        List.map .code zeroed |> Expect.equal (List.map .code nutrients)
                     , \_ ->
-                        List.map .unit zeroed
-                            |> Expect.equal (List.map .unit nutrients)
+                        List.map .unit zeroed |> Expect.equal (List.map .unit nutrients)
                     , \_ ->
-                        List.all
-                            (\nutrient -> closeTo 0 (Nutrition.safeAmount nutrient.amount))
+                        List.all (\nutrient -> closeTo 0 (Nutrition.safeAmount nutrient.amount))
                             zeroed
                             |> Expect.equal True
                     ]
                     ()
-        , fuzz3
-            positiveAmountString
+        , fuzz3 positiveAmountString
             positiveAmountString
             nonGramUnitFuzzer
             "servingGrams passes grams through, scales matching servings, and rejects bad input"
@@ -78,9 +71,7 @@ tests =
                             |> expectJustFloat
                                 (Nutrition.safeAmount amount * Nutrition.safeAmount grams)
                     , \_ ->
-                        Nutrition.servingGrams
-                            { amount = amount, unit = "unknown-unit" }
-                            matching
+                        Nutrition.servingGrams { amount = amount, unit = "unknown-unit" } matching
                             |> Expect.equal Nothing
                     , \_ ->
                         List.map
@@ -93,24 +84,21 @@ tests =
                     , \_ ->
                         List.map
                             (\bad ->
-                                Nutrition.servingGrams
-                                    { amount = amount, unit = unit }
+                                Nutrition.servingGrams { amount = amount, unit = unit }
                                     [ { unit = unit, gramsPerUnit = bad } ]
                             )
                             badGrams
                             |> List.all ((==) Nothing)
                             |> Expect.equal True
                     , \_ ->
-                        Nutrition.servingGrams
-                            { amount = amount, unit = "cup" }
+                        Nutrition.servingGrams { amount = amount, unit = "cup" }
                             [ { unit = "cup", gramsPerUnit = "100" }
                             , { unit = "cup", gramsPerUnit = "200" }
                             ]
                             |> expectJustFloat (Nutrition.safeAmount amount * 100)
                     ]
                     ()
-        , fuzz3
-            positiveAmountString
+        , fuzz3 positiveAmountString
             unitFuzzer
             (Fuzz.list nutrientFuzzer)
             "scaledSnapshotForQuantity handles identity, doubling, and missing input"
@@ -148,16 +136,14 @@ tests =
                         Nutrition.scaledSnapshotForQuantity saved doubled nutrients
                             |> expectMaybeAmountLists (Just doubledNutrients)
                     , \_ ->
-                        Nutrition.scaledSnapshotForQuantity
-                            saved
+                        Nutrition.scaledSnapshotForQuantity saved
                             { amount = amount, unit = otherUnit unit }
                             nutrients
                             |> Expect.equal Nothing
                     , \_ ->
                         List.map
                             (\bad ->
-                                Nutrition.scaledSnapshotForQuantity
-                                    saved
+                                Nutrition.scaledSnapshotForQuantity saved
                                     { amount = bad, unit = unit }
                                     nutrients
                             )
@@ -167,8 +153,7 @@ tests =
                     , \_ ->
                         List.map
                             (\bad ->
-                                Nutrition.scaledSnapshotForQuantity
-                                    { amount = bad, unit = unit }
+                                Nutrition.scaledSnapshotForQuantity { amount = bad, unit = unit }
                                     saved
                                     nutrients
                             )
@@ -215,8 +200,7 @@ tests =
                         , carbsPct = percent (carbs * 4)
                         , fatPct = percent (fat * 9)
                         }
-        , fuzz3
-            (Fuzz.floatRange 0 1000)
+        , fuzz3 (Fuzz.floatRange 0 1000)
             (Fuzz.floatRange 0 1000)
             (Fuzz.floatRange 0 1000)
             "dominantMacro picks the highest calorie share and prefers Protein then Carbs on ties"
@@ -277,21 +261,17 @@ tests =
                 Expect.all
                     [ \_ -> Nutrition.totalsFromLogs [] |> Expect.equal []
                     , \_ ->
-                        List.map .code totals
-                            |> Expect.equal (firstSeen (List.map .code flattened))
+                        List.map .code totals |> Expect.equal (firstSeen (List.map .code flattened))
                     , \_ ->
                         List.all
                             (\total ->
-                                closeTo
-                                    (totalFor total.code flattened)
+                                closeTo (totalFor total.code flattened)
                                     (Nutrition.safeAmount total.amount)
                             )
                             totals
                             |> Expect.equal True
                     , \_ ->
-                        List.all
-                            (\total -> total.unit == unitFor total.code flattened)
-                            totals
+                        List.all (\total -> total.unit == unitFor total.code flattened) totals
                             |> Expect.equal True
                     ]
                     ()
@@ -323,8 +303,7 @@ nonGramUnitFuzzer =
 
 per100gFuzzer : Fuzzer Per100g
 per100gFuzzer =
-    Fuzz.map3
-        (\code amount unit -> { code = code, amountPer100g = amount, unit = unit })
+    Fuzz.map3 (\code amount unit -> { code = code, amountPer100g = amount, unit = unit })
         codeFuzzer
         SupportFuzz.nonNegativeAmountString
         unitFuzzer
@@ -332,8 +311,7 @@ per100gFuzzer =
 
 nutrientFuzzer : Fuzzer NutrientAmount
 nutrientFuzzer =
-    Fuzz.map3
-        (\code amount unit -> { code = code, amount = amount, unit = unit })
+    Fuzz.map3 (\code amount unit -> { code = code, amount = amount, unit = unit })
         codeFuzzer
         SupportFuzz.amountString
         unitFuzzer
@@ -362,8 +340,7 @@ macroLogFuzzer =
 
 totalsLogFuzzer : Fuzzer MacroLog
 totalsLogFuzzer =
-    Fuzz.map
-        (\nutrients -> { nutrients = nutrients })
+    Fuzz.map (\nutrients -> { nutrients = nutrients })
         (Fuzz.list
             (Fuzz.map3
                 (\code amount unit -> { code = code, amount = amount, unit = unit })
@@ -522,9 +499,7 @@ expectedDominant protein carbs fat =
 
 totalOf : String -> List MacroLog -> Float
 totalOf code logs =
-    logs
-        |> List.map (\log -> amountFor code log.nutrients)
-        |> List.sum
+    logs |> List.map (\log -> amountFor code log.nutrients) |> List.sum
 
 
 amountFor : String -> List NutrientAmount -> Float
@@ -552,10 +527,7 @@ firstSeen values =
 
 totalFor : String -> List NutrientAmount -> Float
 totalFor code flattened =
-    flattened
-        |> List.filter (.code >> (==) code)
-        |> List.map (.amount >> parsedAmount)
-        |> List.sum
+    flattened |> List.filter (.code >> (==) code) |> List.map (.amount >> parsedAmount) |> List.sum
 
 
 unitFor : String -> List NutrientAmount -> String

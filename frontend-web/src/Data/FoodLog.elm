@@ -125,14 +125,12 @@ logItemDecoder =
                             optionalBrandDecoder
 
                     "meal" ->
-                        Decode.map2
-                            (\id name -> MealLogItem { id = id, name = name })
+                        Decode.map2 (\id name -> MealLogItem { id = id, name = name })
                             (Decode.field "id" Decode.string)
                             (Decode.field "name" Decode.string)
 
                     "ad_hoc" ->
-                        Decode.map2
-                            (\name brand -> AdHocLogItem { name = name, brand = brand })
+                        Decode.map2 (\name brand -> AdHocLogItem { name = name, brand = brand })
                             (Decode.field "name" Decode.string)
                             optionalBrandDecoder
 

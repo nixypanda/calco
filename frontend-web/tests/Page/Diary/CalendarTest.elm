@@ -40,9 +40,7 @@ tests =
                 loadedCalendar
                     |> step Calendar.LoadEarlierClicked
                     |> step
-                        (Calendar.EarlierSummaryLoaded 1
-                            (Ok [ summary "2026-01-15" 300 ])
-                        )
+                        (Calendar.EarlierSummaryLoaded 1 (Ok [ summary "2026-01-15" 300 ]))
                     |> finish
                         (\( model, outMsg ) ->
                             { screen = toScreen model
@@ -72,8 +70,7 @@ tests =
                         (\( _, outMsg ) ->
                             outMsg
                                 |> Expect.equal
-                                    (Calendar.RequestSummary
-                                        1
+                                    (Calendar.RequestSummary 1
                                         (Fixtures.date "2026-02-01")
                                         (Fixtures.date "2026-07-29")
                                     )
@@ -180,10 +177,4 @@ loadedCalendar =
     Calendar.init { monthParam = Nothing, today = today }
         |> Story.start
         |> step
-            (Calendar.SummaryLoaded 0
-                (Ok
-                    [ summary "2026-07-20" 500
-                    , summary "2026-07-21" 1312
-                    ]
-                )
-            )
+            (Calendar.SummaryLoaded 0 (Ok [ summary "2026-07-20" 500, summary "2026-07-21" 1312 ]))

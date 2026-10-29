@@ -264,11 +264,7 @@ applyQueryChange rawQuery model =
             else
                 Loading
     in
-    ( { model
-        | search = search
-        , results = results
-        , completionSelection = Nothing
-      }
+    ( { model | search = search, results = results, completionSelection = Nothing }
     , debounceCmd
     , NoOp
     )
@@ -440,8 +436,7 @@ update msg model =
                         ( { model | barcodeLookup = Success response.product }
                         , Cmd.none
                         , Navigate
-                            (FoodShow
-                                response.product.id
+                            (FoodShow response.product.id
                                 model.date
                                 model.mealSlot
                                 response.lookup.note
@@ -506,8 +501,7 @@ update msg model =
             if token == model.search.searchToken then
                 ( model
                 , Cmd.none
-                , RequestSearch token
-                    { query = query, scope = searchRequestScope model.scope }
+                , RequestSearch token { query = query, scope = searchRequestScope model.scope }
                 )
 
             else
@@ -928,10 +922,8 @@ adHocLogView : Env -> Element Msg
 adHocLogView env =
     Surface.formSection env.theme
         (I18n.t env.language TidFoodSearchAdHocTitle)
-        [ Typography.mutedParagraph env.theme
-            (I18n.t env.language TidFoodSearchAdHocDescription)
-        , Element.row
-            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        [ Typography.mutedParagraph env.theme (I18n.t env.language TidFoodSearchAdHocDescription)
+        , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.el [ Element.width Element.fill ]
                 (Button.textButton env.device
                     env.theme
@@ -962,8 +954,7 @@ adHocLogView env =
 
 searchInputView : Env -> Model -> Element Msg
 searchInputView env model =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space24 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space24 ]
         [ scopeControl env model.scope
         , if model.scope == Barcode then
             barcodeInputView env model
@@ -1069,18 +1060,15 @@ barcodeInputView env model =
 
         controls : Element Msg
         controls =
-            Element.row
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ scanButton, searchButton ]
 
         inputRow : Element Msg
         inputRow =
-            Element.column
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ input, controls ]
     in
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         (inputRow :: barcodeScannerStateView env model.barcodeScanner)
 
 
@@ -1137,8 +1125,7 @@ barcodeScannerGuide theme =
             , Element.height (Element.px 96)
             , Border.rounded DesignTokens.radiusControl
             , Border.color theme.focusRing
-            , Border.widthEach
-                { top = 2, right = 0, bottom = 2, left = 0 }
+            , Border.widthEach { top = 2, right = 0, bottom = 2, left = 0 }
             ]
             Element.none
         )
@@ -1257,8 +1244,7 @@ bodyView env model =
                 Surface.section env.theme
                     { header =
                         Just
-                            (Typography.subsectionTitle
-                                env.theme
+                            (Typography.subsectionTitle env.theme
                                 (I18n.t env.language TidFoodSearchResults)
                             )
                     , body =
@@ -1442,8 +1428,7 @@ recentsView env model =
                         [ Surface.section env.theme
                             { header =
                                 Just
-                                    (Typography.sectionTitle
-                                        env.theme
+                                    (Typography.sectionTitle env.theme
                                         (I18n.t env.language TidFoodSearchRecent)
                                     )
                             , body =

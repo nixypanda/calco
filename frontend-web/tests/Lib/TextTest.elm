@@ -40,10 +40,7 @@ tests =
 
                     expected : List String
                     expected =
-                        raw
-                            |> String.split ","
-                            |> List.filterMap normalizeToken
-                            |> firstUnique
+                        raw |> String.split "," |> List.filterMap normalizeToken |> firstUnique
                 in
                 Expect.all
                     [ \_ -> entries |> Expect.equal expected
@@ -61,11 +58,7 @@ tests =
                 let
                     quoted : String
                     quoted =
-                        "before"
-                            ++ separator
-                            ++ "\"a b\""
-                            ++ separator
-                            ++ "after"
+                        "before" ++ separator ++ "\"a b\"" ++ separator ++ "after"
                 in
                 Expect.all
                     [ \_ ->
@@ -76,9 +69,7 @@ tests =
                             |> Expect.equal
                                 [ "before", separator, "\"a b\"", separator, "after" ]
                     , \_ ->
-                        Text.splitQuotedWhitespace quoted
-                            |> String.concat
-                            |> Expect.equal quoted
+                        Text.splitQuotedWhitespace quoted |> String.concat |> Expect.equal quoted
                     , \_ ->
                         Text.splitQuotedWhitespace (separator ++ "category:dairy")
                             |> Expect.equal [ "", separator, "category:dairy" ]
@@ -104,8 +95,7 @@ tests =
                         else
                             value
                 in
-                ( quoted, Text.stripBoundingQuotes quoted )
-                    |> Expect.equal ( expected, value )
+                ( quoted, Text.stripBoundingQuotes quoted ) |> Expect.equal ( expected, value )
         ]
 
 
@@ -163,8 +153,7 @@ textWithoutBoundaryQuote =
         |> Fuzz.map String.trim
         |> Fuzz.filter
             (\value ->
-                not (String.startsWith "\"" value)
-                    && not (String.endsWith "\"" value)
+                not (String.startsWith "\"" value) && not (String.endsWith "\"" value)
             )
 
 

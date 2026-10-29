@@ -386,10 +386,7 @@ retryDraft : FoodDraftPurpose -> ChatModel -> ( ChatModel, OutMsg )
 retryDraft purpose chat =
     case ( chat.request, FoodAssistant.conversation chat.transcript ) of
         ( RequestFailed _, Ok boundedConversation ) ->
-            ( { chat
-                | request = Sending
-                , awaitingNewSessionConfirmation = False
-              }
+            ( { chat | request = Sending, awaitingNewSessionConfirmation = False }
             , RequestDraft purpose boundedConversation chat.photos
             )
 
@@ -515,9 +512,7 @@ addSelectedPhotos files model =
 
             else
                 case
-                    validatePhotoMeta
-                        (List.map photoMeta chat.photos)
-                        (List.map photoMeta files)
+                    validatePhotoMeta (List.map photoMeta chat.photos) (List.map photoMeta files)
                 of
                     Err message ->
                         ( Enabled { chat | photoError = Just message }, Cmd.none, NoOutMsg )
@@ -744,8 +739,7 @@ conversationView env chat =
         Element.none
 
     else
-        Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.row [ Element.width Element.fill ]
                 [ Element.el [ Font.bold ]
                     (Element.text (I18n.t env.language TidAssistantConversation))
@@ -766,8 +760,7 @@ conversationView env chat =
                             }
                         )
                 ]
-            , Element.column
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            , Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 (List.map (turnView env) chat.transcript)
             ]
 
@@ -874,8 +867,7 @@ photoPicker env chat =
         Element.none
 
     else
-        Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             ([ Element.el [ Font.bold ]
                 (Element.text (I18n.t env.language TidAssistantPhotosOptional))
              , photoActionView env chat
@@ -883,8 +875,7 @@ photoPicker env chat =
                 ++ photoErrorView env.theme chat.photoError
                 ++ List.indexedMap
                     (\index photo ->
-                        photoPreview
-                            env
+                        photoPreview env
                             index
                             photo
                             (valueAt index chat.photoUrls |> Maybe.andThen identity)
@@ -899,13 +890,10 @@ photoActionView env chat =
         Typography.mutedParagraph env.theme (I18n.t env.language TidAssistantPhotosMax)
 
     else
-        Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-            [ Element.row
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Element.el [ Element.width Element.fill ] (cameraInput env.language chat)
-                , Element.el [ Element.width Element.fill ]
-                    (choosePhotosButton env chat)
+                , Element.el [ Element.width Element.fill ] (choosePhotosButton env chat)
                 ]
             ]
 
@@ -954,8 +942,7 @@ cameraInput language chat =
                 [ HtmlAttributes.type_ "file"
                 , HtmlAttributes.accept "image/*"
                 , HtmlAttributes.attribute "capture" "environment"
-                , HtmlAttributes.attribute "aria-label"
-                    (I18n.t language TidAssistantTakePhotoAria)
+                , HtmlAttributes.attribute "aria-label" (I18n.t language TidAssistantTakePhotoAria)
                 , HtmlAttributes.disabled (not (canAddPhotos chat))
                 , HtmlEvents.on "change" cameraFileDecoder
                 , HtmlAttributes.value ""
@@ -981,8 +968,7 @@ photoErrorView theme maybeError =
 
 photoPreview : Env -> Int -> File -> Maybe String -> Element Msg
 photoPreview env index photo maybeUrl =
-    Element.row
-        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ case maybeUrl of
             Just url ->
                 Element.image
@@ -993,13 +979,10 @@ photoPreview env index photo maybeUrl =
                     { src = url, description = File.name photo }
 
             Nothing ->
-                Element.el
-                    [ Element.width (Element.px 72), Element.height (Element.px 72) ]
+                Element.el [ Element.width (Element.px 72), Element.height (Element.px 72) ]
                     (Element.text (I18n.t env.language TidAssistantLoadingPreview))
-        , Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
-            [ Element.paragraph [ Element.width Element.fill ]
-                [ Element.text (File.name photo) ]
+        , Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+            [ Element.paragraph [ Element.width Element.fill ] [ Element.text (File.name photo) ]
             , Typography.mutedParagraph env.theme (formatPhotoSize (File.size photo))
             , Button.textButton env.device
                 env.theme
@@ -1055,8 +1038,7 @@ requestErrorView : Env -> RequestState -> Element Msg
 requestErrorView env request =
     case request of
         RequestFailed message ->
-            Element.column
-                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Feedback.errorBanner env.theme message
                 , Button.textButton env.device
                     env.theme
@@ -1083,8 +1065,7 @@ warningView env warnings =
         Element.none
 
     else
-        Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+        Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
             (List.map
                 (\warning ->
                     Element.paragraph
@@ -1142,22 +1123,17 @@ draftPreviewView env purpose formHasManualInput chat =
                             )
                     ]
                 , previewRows env.theme preview.details
-                , previewSection
-                    env
+                , previewSection env
                     (I18n.t env.language TidAssistantNutritionPer100g)
                     preview.nutrients
-                , previewSection
-                    env
-                    (I18n.t env.language TidFoodEditorServings)
-                    preview.servings
+                , previewSection env (I18n.t env.language TidFoodEditorServings) preview.servings
                 , draftActionView env purpose formHasManualInput chat
                 ]
 
 
 previewSection : Env -> String -> List ( String, String ) -> Element Msg
 previewSection env title rows =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Element.el [ Font.bold ] (Element.text title)
         , if List.isEmpty rows then
             Typography.mutedParagraph env.theme
@@ -1170,8 +1146,7 @@ previewSection env title rows =
 
 previewRows : Theme -> List ( String, String ) -> Element Msg
 previewRows theme rows =
-    Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         (List.map (previewRow theme) rows)
 
 
@@ -1179,8 +1154,7 @@ previewRow : Theme -> ( String, String ) -> Element Msg
 previewRow theme ( label, value ) =
     Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.el [ Font.color theme.textMuted ] (Element.text label)
-        , Element.paragraph [ Element.width Element.fill, Font.alignRight ]
-            [ Element.text value ]
+        , Element.paragraph [ Element.width Element.fill, Font.alignRight ] [ Element.text value ]
         ]
 
 
@@ -1215,8 +1189,7 @@ draftPreviewData language draft =
         List.map
             (\serving ->
                 ( serving.unit
-                , I18n.t language
-                    (TidAssistantServingConversion serving.unit serving.gramsPerUnit)
+                , I18n.t language (TidAssistantServingConversion serving.unit serving.gramsPerUnit)
                 )
             )
             draft.servings
@@ -1286,8 +1259,7 @@ draftActionView env purpose formHasManualInput chat =
                     ]
 
             else
-                Element.row
-                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                     [ Element.el [ Element.width Element.fill ]
                         (Button.textButton env.device
                             env.theme

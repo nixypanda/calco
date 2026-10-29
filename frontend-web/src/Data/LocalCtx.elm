@@ -22,6 +22,4 @@ rejected here rather than flowing into the app as an invalid value.
 -}
 fromRaw : RawLocalCtx -> Maybe LocalCtx
 fromRaw raw =
-    Maybe.map
-        (\date -> { date = date, timezone = raw.timezone })
-        (LocalDate.fromString raw.date)
+    Maybe.map (\date -> { date = date, timezone = raw.timezone }) (LocalDate.fromString raw.date)

@@ -70,8 +70,7 @@ tests =
                                     { barcode = "111"
                                     , notFound = True
                                     , finalOut =
-                                        FoodSearch.Navigate
-                                            (AdHocLogCreate (Just day) (Just Lunch))
+                                        FoodSearch.Navigate (AdHocLogCreate (Just day) (Just Lunch))
                                     }
                         )
         , test "a user quick-adds a recent food" <|
@@ -119,8 +118,7 @@ tests =
                                     { barcode = "12345"
                                     , finalOut =
                                         FoodSearch.Navigate
-                                            (FoodShow
-                                                "food-barcode"
+                                            (FoodShow "food-barcode"
                                                 (Just day)
                                                 (Just Lunch)
                                                 Nothing
@@ -154,8 +152,7 @@ tests =
                                     { barcode = "12345"
                                     , finalOut =
                                         FoodSearch.Navigate
-                                            (FoodShow
-                                                "food-barcode"
+                                            (FoodShow "food-barcode"
                                                 (Just day)
                                                 (Just Lunch)
                                                 (Just "Imported from Open Food Facts")
@@ -259,8 +256,7 @@ context =
 
 scannerEvent : String -> Maybe String -> FoodSearch.Msg
 scannerEvent event barcode =
-    FoodSearch.BarcodeScannerEventReceived
-        { event = event, barcode = barcode, message = Nothing }
+    FoodSearch.BarcodeScannerEventReceived { event = event, barcode = barcode, message = Nothing }
 
 
 barcodeNotFound : Client.ApiError
@@ -284,8 +280,7 @@ apple =
 recentProduct : Logs.RecentItem
 recentProduct =
     { item =
-        FoodLog.ProductLogItem
-            { id = "food-1", name = "Apple", brand = Just "Local" }
+        FoodLog.ProductLogItem { id = "food-1", name = "Apple", brand = Just "Local" }
     , lastUsedDate = Fixtures.date "2026-05-28"
     , mealSlot = Just Lunch
     , quantity = { amount = "2", unit = "serving" }

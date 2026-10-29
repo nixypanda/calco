@@ -9,8 +9,7 @@ import Test exposing (Test, describe, fuzz2, fuzz3)
 tests : Test
 tests =
     describe "Data.NutritionDetails"
-        [ fuzz3
-            guidanceKindFuzzer
+        [ fuzz3 guidanceKindFuzzer
             maybeFloatFuzzer
             maybeFloatFuzzer
             "progressPercent is defined exactly for non-informational positive references"
@@ -39,13 +38,11 @@ tests =
                 in
                 case ( actual, expected ) of
                     ( Just actualProgress, Just expectedProgress ) ->
-                        actualProgress
-                            |> Expect.within progressTolerance expectedProgress
+                        actualProgress |> Expect.within progressTolerance expectedProgress
 
                     _ ->
                         actual |> Expect.equal expected
-        , fuzz2
-            guidanceKindFuzzer
+        , fuzz2 guidanceKindFuzzer
             nutrientStatusFuzzer
             "isDangerous is true exactly for Maximum and OverLimit"
           <|

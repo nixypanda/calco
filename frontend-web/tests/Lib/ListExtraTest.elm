@@ -33,9 +33,7 @@ tests =
 
                 else
                     ListExtra.updateAt index change items |> Expect.equal items
-        , fuzz indexedList
-            "removeAt removes only an in-range target and preserves order"
-          <|
+        , fuzz indexedList "removeAt removes only an in-range target and preserves order" <|
             \( index, items ) ->
                 if index >= 0 && index < List.length items then
                     let
@@ -47,8 +45,7 @@ tests =
                         [ \_ -> List.length removed |> Expect.equal (List.length items - 1)
                         , \_ -> List.take index removed |> Expect.equal (List.take index items)
                         , \_ ->
-                            List.drop index removed
-                                |> Expect.equal (List.drop (index + 1) items)
+                            List.drop index removed |> Expect.equal (List.drop (index + 1) items)
                         ]
                         ()
 
@@ -56,12 +53,10 @@ tests =
                     ListExtra.removeAt index items |> Expect.equal items
         , fuzz uniqueKeyedList "uniqueBy keeps first occurrences in input order" <|
             \items ->
-                ListExtra.uniqueBy Tuple.first items
-                    |> Expect.equal (firstByKey items)
+                ListExtra.uniqueBy Tuple.first items |> Expect.equal (firstByKey items)
         , fuzz combineCase "combineErrors preserves Ok order and returns the leftmost Err" <|
             \caseValue ->
-                ListExtra.combineErrors caseValue.results
-                    |> Expect.equal caseValue.expected
+                ListExtra.combineErrors caseValue.results |> Expect.equal caseValue.expected
         ]
 
 
@@ -70,8 +65,7 @@ indexedList =
     Fuzz.listOfLengthBetween 0 32 (Fuzz.intRange 0 100)
         |> Fuzz.andThen
             (\items ->
-                Fuzz.intRange -2 (List.length items + 2)
-                    |> Fuzz.map (\index -> ( index, items ))
+                Fuzz.intRange -2 (List.length items + 2) |> Fuzz.map (\index -> ( index, items ))
             )
 
 
@@ -87,9 +81,7 @@ valueAt index items =
 
 uniqueKeyedList : Fuzzer (List ( Int, Int ))
 uniqueKeyedList =
-    Fuzz.listOfLengthBetween 0
-        32
-        (Fuzz.pair (Fuzz.intRange 0 5) (Fuzz.intRange 0 1000))
+    Fuzz.listOfLengthBetween 0 32 (Fuzz.pair (Fuzz.intRange 0 5) (Fuzz.intRange 0 1000))
 
 
 firstByKey : List ( Int, Int ) -> List ( Int, Int )
@@ -113,8 +105,7 @@ type alias CombineCase =
 combineCase : Fuzzer CombineCase
 combineCase =
     Fuzz.oneOf
-        [ Fuzz.map
-            (\values -> { results = List.map Ok values, expected = Ok values })
+        [ Fuzz.map (\values -> { results = List.map Ok values, expected = Ok values })
             (Fuzz.frequency
                 [ ( 1, Fuzz.constant [] )
                 , ( 3, Fuzz.listOfLengthBetween 1 32 (Fuzz.intRange 0 100) )
