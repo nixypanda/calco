@@ -45,6 +45,32 @@ tests =
                                             (FoodSearch (Just sampleDate) (Just Lunch))
                                     }
                         )
+        , test "a user logs a food using a saved serving option" <|
+            \_ ->
+                baseLoaded
+                    |> step (FoodShow.FormMsg (FoodLogForm.AmountChanged "1"))
+                    |> step (FoodShow.FormMsg (FoodLogForm.UnitChanged "serving"))
+                    |> step FoodShow.SubmitClicked
+                    |> step (FoodShow.LocalCtxReceived context)
+                    |> step (FoodShow.LogCompleted (Ok servingLog))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { amount =
+                                formField model (\form -> form.amount)
+                                    |> Maybe.withDefault ""
+                            , unit =
+                                formField model (\form -> form.unit)
+                                    |> Maybe.withDefault ""
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { amount = "1"
+                                    , unit = "serving"
+                                    , finalOut =
+                                        FoodShow.LogCreated servingLog
+                                            (FoodSearch (Just sampleDate) (Just Lunch))
+                                    }
+                        )
         , test "a failed save can be retried" <|
             \_ ->
                 baseLoaded
@@ -226,6 +252,19 @@ log =
     , mealSlot = Just Lunch
     , item = FoodLog.ProductLogItem { id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "3", unit = "g" }
+    , nutrients = []
+    , notes = Nothing
+    }
+
+
+servingLog : FoodLog
+servingLog =
+    { id = "log-serving-1"
+    , logDate = sampleDate
+    , deviceTimezone = Just "Asia/Kolkata"
+    , mealSlot = Just Lunch
+    , item = FoodLog.ProductLogItem { id = "food-1", name = "Apple", brand = Just "Local" }
+    , quantity = { amount = "1", unit = "serving" }
     , nutrients = []
     , notes = Nothing
     }

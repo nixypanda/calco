@@ -92,6 +92,94 @@ tests =
                                     , finalOut = FoodSearch.LogCreated productLog
                                     }
                         )
+        , test "a user looks up a barcode locally and opens the matching food" <|
+            \_ ->
+                page
+                    |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
+                    |> step (FoodSearch.BarcodeChanged "12345")
+                    |> step FoodSearch.BarcodeSubmitted
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                FoodSearch.RequestBarcodeLookup token _ ->
+                                    Ok
+                                        (FoodSearch.BarcodeLookupCompleted token
+                                            (Ok localBarcodeLookup)
+                                        )
+
+                                _ ->
+                                    Err "expected a barcode lookup request"
+                        )
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { barcode = model.barcodeQuery
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { barcode = "12345"
+                                    , finalOut =
+                                        FoodSearch.Navigate
+                                            (FoodShow
+                                                "food-barcode"
+                                                (Just day)
+                                                (Just Lunch)
+                                                Nothing
+                                            )
+                                    }
+                        )
+        , test "a user fetches a missing barcode from Open Food Facts" <|
+            \_ ->
+                page
+                    |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
+                    |> step (FoodSearch.BarcodeChanged "12345")
+                    |> step FoodSearch.BarcodeSubmitted
+                    |> bind
+                        (\outMsg ->
+                            case outMsg of
+                                FoodSearch.RequestBarcodeLookup token _ ->
+                                    Ok
+                                        (FoodSearch.BarcodeLookupCompleted token
+                                            (Ok offBarcodeLookup)
+                                        )
+
+                                _ ->
+                                    Err "expected a barcode lookup request"
+                        )
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { barcode = model.barcodeQuery
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { barcode = "12345"
+                                    , finalOut =
+                                        FoodSearch.Navigate
+                                            (FoodShow
+                                                "food-barcode"
+                                                (Just day)
+                                                (Just Lunch)
+                                                (Just "Imported from Open Food Facts")
+                                            )
+                                    }
+                        )
+        , test "a user quick-adds a recent meal" <|
+            \_ ->
+                recentsPage
+                    |> step (FoodSearch.RecentQuickAddClicked recentMeal recentMeal.quantity)
+                    |> step (FoodSearch.LocalCtxReceived context)
+                    |> step (FoodSearch.QuickAddCompleted (Ok mealLog))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { recentNames = values (FoodLog.itemName << .item) model.recentItems
+                            , added = List.map .key model.addedItems
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { recentNames = [ "Apple", "Lunch meal" ]
+                                    , added = [ recentMealKey ]
+                                    , finalOut = FoodSearch.LogCreated mealLog
+                                    }
+                        )
         ]
 
 
@@ -247,6 +335,57 @@ productLog =
 recentProductKey : String
 recentProductKey =
     "product:food-1:2 serving"
+
+
+recentMealKey : String
+recentMealKey =
+    "meal:meal-1:1 bowl"
+
+
+localBarcodeLookup : Foods.BarcodeLookupResponse
+localBarcodeLookup =
+    { product = barcodeFood
+    , lookup = { origin = Foods.Local, note = Nothing }
+    }
+
+
+offBarcodeLookup : Foods.BarcodeLookupResponse
+offBarcodeLookup =
+    { product = barcodeFood
+    , lookup = { origin = Foods.OpenFoodFacts, note = Just "Imported from Open Food Facts" }
+    }
+
+
+barcodeFood : Foods.ProductDetail
+barcodeFood =
+    { id = "food-barcode"
+    , source = "OFF"
+    , sourceId = Nothing
+    , visibility = "global"
+    , barcode = Just "12345"
+    , name = "Barcode Food"
+    , brand = Just "Brand"
+    , categories = [ "snack" ]
+    , defaultQuantity = Nothing
+    , defaultUnit = Nothing
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
+    , nutrients = []
+    , servings = []
+    , allowedUnits = []
+    }
+
+
+mealLog : FoodLog
+mealLog =
+    { id = "log-meal-1"
+    , logDate = day
+    , deviceTimezone = Just "Asia/Kolkata"
+    , mealSlot = Just Lunch
+    , item = FoodLog.MealLogItem { id = "meal-1", name = "Lunch meal" }
+    , quantity = recentMeal.quantity
+    , nutrients = []
+    , notes = Nothing
+    }
 
 
 ticket : Int -> Ticket
