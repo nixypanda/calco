@@ -5,7 +5,6 @@ import Api.Foods exposing (UnitItem)
 import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot(..))
-
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date exposing (LocalDate)

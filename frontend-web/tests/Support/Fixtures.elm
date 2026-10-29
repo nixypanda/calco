@@ -3,7 +3,6 @@ module Support.Fixtures exposing
     , networkErrorMessage
     , today
     , tupleFirst
-    , tupleThird
     , unauthorized
     )
 
@@ -60,9 +59,4 @@ networkErrorMessage =
 
 tupleFirst : ( a, b, c ) -> a
 tupleFirst ( value, _, _ ) =
-    value
-
-
-tupleThird : ( a, b, c ) -> c
-tupleThird ( _, _, value ) =
     value
