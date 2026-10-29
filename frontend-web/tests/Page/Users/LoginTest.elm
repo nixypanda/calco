@@ -3,130 +3,78 @@ module Page.Users.LoginTest exposing (tests)
 import Component.Users.CredentialForm as CredentialForm
 import Data.Auth as Auth
 import Expect
-import I18n
 import Page.Users.Login as AuthLogin
 import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
-import Translations.Ids exposing (TranslationId(..))
 
 
 tests : Test
 tests =
     describe "Page.Users.Login"
-        [ test "blank submit, a password error, a 401, and a retried login" <|
+        [ test "a user logs in" <|
             \_ ->
-                let
-                    blank : AuthLogin.Model
-                    blank =
-                        step (formMsg CredentialForm.Submitted) AuthLogin.init
-
-                    named : AuthLogin.Model
-                    named =
-                        step (formMsg (CredentialForm.UsernameChanged " alice ")) blank
-
-                    noPassword : AuthLogin.Model
-                    noPassword =
-                        step (formMsg CredentialForm.Submitted) named
-
-                    filled : AuthLogin.Model
-                    filled =
-                        step (formMsg (CredentialForm.PasswordChanged "wrong")) noPassword
-
-                    submitted : AuthLogin.Model
-                    submitted =
-                        step (formMsg CredentialForm.Submitted) filled
-
-                    failed : AuthLogin.Model
-                    failed =
-                        step
-                            (AuthLogin.LoginCompleted (Err Fixtures.unauthorized))
-                            submitted
-
-                    edited : AuthLogin.Model
-                    edited =
-                        step (formMsg (CredentialForm.PasswordChanged "secret")) failed
-
-                    retried : AuthLogin.Model
-                    retried =
-                        step (formMsg CredentialForm.Submitted) edited
-
-                    succeeded : AuthLogin.Model
-                    succeeded =
-                        step (AuthLogin.LoginCompleted (Ok loginSession)) retried
-                in
-                { blankError = (toScreen blank).error
-                , noPasswordError = (toScreen noPassword).error
-                , request = out (formMsg CredentialForm.Submitted) filled
-                , failedError = (toScreen failed).error
-                , retryRequest = out (formMsg CredentialForm.Submitted) edited
-                , finalOut =
-                    out (AuthLogin.LoginCompleted (Ok loginSession)) retried
-                , final = toScreen succeeded
-                }
-                    |> Expect.equal
-                        { blankError = Just (I18n.en TidCommonUsernameRequired)
-                        , noPasswordError = Just (I18n.en TidLoginPasswordRequired)
-                        , request =
-                            AuthLogin.RequestLogin
-                                { username = "alice", password = "wrong" }
-                        , failedError = Just unauthorizedMessage
-                        , retryRequest =
-                            AuthLogin.RequestLogin
-                                { username = "alice", password = "secret" }
-                        , finalOut = AuthLogin.LoginSucceeded loginSession
-                        , final = { error = Nothing }
-                        }
+                Story.start ( AuthLogin.init, AuthLogin.NoOp )
+                    |> step (formMsg (CredentialForm.UsernameChanged "alice"))
+                    |> step (formMsg (CredentialForm.PasswordChanged "secret"))
+                    |> step (formMsg CredentialForm.Submitted)
+                    |> step (AuthLogin.LoginCompleted (Ok loginSession))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (AuthLogin.LoginSucceeded loginSession)
+                        )
+        , test "a failed login can be retried" <|
+            \_ ->
+                Story.start ( AuthLogin.init, AuthLogin.NoOp )
+                    |> step (formMsg (CredentialForm.UsernameChanged "alice"))
+                    |> step (formMsg (CredentialForm.PasswordChanged "wrong"))
+                    |> step (formMsg CredentialForm.Submitted)
+                    |> step (AuthLogin.LoginCompleted (Err Fixtures.unauthorized))
+                    |> step (formMsg (CredentialForm.PasswordChanged "secret"))
+                    |> step (formMsg CredentialForm.Submitted)
+                    |> step (AuthLogin.LoginCompleted (Ok loginSession))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal (AuthLogin.LoginSucceeded loginSession)
+                        )
         ]
 
 
-
--- SCREEN PROJECTION
-
-
-type alias Screen =
-    { error : Maybe String }
-
-
-toScreen : AuthLogin.Model -> Screen
-toScreen model =
-    { error =
-        case model of
-            CredentialForm.Invalid _ message ->
-                Just message
-
-            CredentialForm.Failed _ message ->
-                Just message
-
-            CredentialForm.Editing _ ->
-                Nothing
-
-            CredentialForm.Submitting _ ->
-                Nothing
-    }
+stepWithOut :
+    AuthLogin.Msg
+    -> AuthLogin.Model
+    -> ( AuthLogin.Model, AuthLogin.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            AuthLogin.update msg model
+    in
+    ( next, outMsg )
 
 
-
--- HELPERS
-
-
-step : AuthLogin.Msg -> AuthLogin.Model -> AuthLogin.Model
-step msg model =
-    Fixtures.tupleFirst (AuthLogin.update msg model)
+-- STORY PIPELINE
 
 
-out : AuthLogin.Msg -> AuthLogin.Model -> AuthLogin.OutMsg
-out msg model =
-    Fixtures.tupleThird (AuthLogin.update msg model)
+type alias Journey =
+    Story.Journey AuthLogin.Model AuthLogin.OutMsg
+
+
+step : AuthLogin.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
+
+
+finish :
+    (( AuthLogin.Model, AuthLogin.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
 
 
 formMsg : CredentialForm.Msg -> AuthLogin.Msg
 formMsg =
     AuthLogin.FormMsg
-
-
-unauthorizedMessage : String
-unauthorizedMessage =
-    "Sign in again"
 
 
 loginSession : Auth.LoginSession
