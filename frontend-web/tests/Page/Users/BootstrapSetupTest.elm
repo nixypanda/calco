@@ -1,10 +1,10 @@
 module Page.Users.BootstrapSetupTest exposing (tests)
 
+import Api.Client as Client
 import Component.Users.CredentialForm as CredentialForm
 import Data.Auth as Auth
 import Expect
 import Page.Users.BootstrapSetup as BootstrapSetup
-import Api.Client as Client
 import Support.Story as Story
 import Test exposing (Test, describe, test)
 
@@ -53,6 +53,7 @@ stepWithOut msg model =
             BootstrapSetup.update msg model
     in
     ( next, outMsg )
+
 
 
 -- STORY PIPELINE

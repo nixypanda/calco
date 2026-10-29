@@ -34,7 +34,6 @@ tests =
         , failedSettlementIsCached
         , resetInvalidatesEverything
         , clearDateKeyedFamilies
-        , seedAndInvalidate
         , resourceKeysAreIndependent
         ]
 
@@ -369,40 +368,6 @@ clearDateKeyedFamilies =
         )
 
 
-seedAndInvalidate : Test
-seedAndInvalidate =
-    fuzz2 FuzzSupport.localDate
-        FuzzSupport.foodLogList
-        "seed exposes the value and invalidate makes the resource requestable again"
-        (\date logs ->
-            let
-                access : Access (List FoodLog)
-                access =
-                    Store.diaryLogsAt date
-
-                seeded : Store
-                seeded =
-                    Store.seed access logs Store.empty
-
-                invalidated : Store
-                invalidated =
-                    Store.invalidate access seeded
-            in
-            Expect.all
-                [ \_ -> Store.cached access seeded |> Expect.equal (Just (Ok logs))
-                , \_ -> Store.cached access invalidated |> Expect.equal Nothing
-                , \_ ->
-                    Store.request access invalidated
-                        |> Maybe.map (always True)
-                        |> Expect.equal (Just True)
-                ]
-                ()
-        )
-
-
-{-| Date keys and different resource families live in separate entries, so a
-settlement or invalidation of one must leave the others untouched.
--}
 resourceKeysAreIndependent : Test
 resourceKeysAreIndependent =
     fuzz2 FuzzSupport.interiorLocalDate

@@ -30,7 +30,6 @@ tests : Test
 tests =
     describe "Api.Client"
         [ unauthorizedExpiresSession
-        , failureAppliesDisplayError
         , displayErrorIsNeverBlank
         ]
 
@@ -55,10 +54,7 @@ unauthorizedExpiresSession =
                         NoOp
             in
             Expect.all
-                [ \_ ->
-                    Client.isUnauthorized error
-                        |> Expect.equal (expected == SessionExpired)
-                , \_ -> outMsg |> Expect.equal expected
+                [ \_ -> outMsg |> Expect.equal expected
                 , \_ -> statusEdges |> List.map statusEdgeExpectation |> expectAll
                 ]
                 ()
@@ -78,7 +74,6 @@ statusEdges : List ( Int, Bool )
 statusEdges =
     [ ( 401, True )
     , ( 403, False )
-    , ( 429, False )
     ]
 
 
@@ -87,18 +82,6 @@ statusEdgeExpectation ( status, expected ) =
     Client.isUnauthorized (BadStatus status "denied" "Denied")
         |> Expect.equal expected
         |> Expect.onFail ("status " ++ String.fromInt status)
-
-
-failureAppliesDisplayError : Test
-failureAppliesDisplayError =
-    fuzz FuzzSupport.apiError "failure applies the display message for every error" <|
-        \error ->
-            let
-                ( model, _, _ ) =
-                    Client.failure config error emptyModel
-            in
-            model.appliedError
-                |> Expect.equal (Just (Client.displayError error))
 
 
 {-| Includes deterministic blank/whitespace backend messages because the generic

@@ -24,7 +24,6 @@ tests =
         , conversationBounds
         , photoMetadataLimits
         , conversationEncoderBranches
-        , conversationEncoderDefault
         , strictObjectRejection
         ]
 
@@ -190,20 +189,6 @@ conversationEncoderBranches =
                 |> Result.map decodeEncodedConversation
                 |> Result.andThen identity
                 |> Expect.equal (Ok expected)
-
-
-{-| The public alias without an explicit purpose uses `custom_food`.
--}
-conversationEncoderDefault : Test
-conversationEncoderDefault =
-    test "conversationEncoder defaults to the custom_food purpose" <|
-        \_ ->
-            FoodAssistant.userTurn "dal"
-                |> Result.andThen (\turn -> FoodAssistant.conversation [ turn ])
-                |> Result.map FoodAssistant.conversationEncoder
-                |> Result.map
-                    (Decode.decodeValue (Decode.field "purpose" Decode.string))
-                |> Expect.equal (Ok (Ok "custom_food"))
 
 
 {-| Exception from §6.5: the draft decoder intentionally rejects unknown

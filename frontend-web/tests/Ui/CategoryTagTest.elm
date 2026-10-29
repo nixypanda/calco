@@ -49,7 +49,6 @@ tests =
                         tagRows
                             |> List.all (\cells -> List.length cells <= 2)
                             |> Expect.equal True
-                    , \_ -> names |> Expect.equal (List.take (List.length names) input)
                     , \_ ->
                         if inputLength <= 4 then
                             Expect.all

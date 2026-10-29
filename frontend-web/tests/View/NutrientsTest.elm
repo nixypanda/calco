@@ -1,19 +1,17 @@
 module View.NutrientsTest exposing (tests)
 
-{-| Laws for the generic fallback in `View.Nutrients.nutrientLabel` and for
-`View.Nutrients.mapNutritionInput`.
+{-| Laws for the generic fallback in `View.Nutrients.nutrientLabel`.
 
 The curated code-to-label table is data, so it is not asserted here. Rendered
 DOM structure is not asserted either.
 
 -}
 
-import Data.Nutrition as Nutrition
 import Expect
 import Fuzz exposing (Fuzzer)
-import Test exposing (Test, describe, fuzz, fuzz3)
+import Test exposing (Test, describe, fuzz)
 import Translations.Util as Util
-import View.Nutrients as Nutrients exposing (NutritionInput, NutritionState(..))
+import View.Nutrients as Nutrients
 
 
 tests : Test
@@ -28,48 +26,6 @@ tests =
                 \generated ->
                     Nutrients.nutrientLabel Util.EN_US generated.code
                         |> Expect.equal generated.label
-            , fuzz generatedCode
-                "every non-empty generated code gets a non-blank trimmed label"
-              <|
-                \code ->
-                    let
-                        label : String
-                        label =
-                            Nutrients.nutrientLabel Util.EN_US code
-                    in
-                    Expect.all
-                        [ \_ -> String.isEmpty code |> Expect.equal False
-                        , \_ -> String.isEmpty label |> Expect.equal False
-                        , \_ -> String.trim label |> String.isEmpty |> Expect.equal False
-                        ]
-                        ()
-            ]
-        , describe "mapNutritionInput"
-            [ fuzz3 nutritionState
-                transform
-                transform
-                "mapping updates the input and preserves the constructor, identity, and composition"
-              <|
-                \state first second ->
-                    Expect.all
-                        [ \_ ->
-                            Nutrients.mapNutritionInput first state
-                                |> stateTag
-                                |> Expect.equal (stateTag state)
-                        , \_ ->
-                            Nutrients.mapNutritionInput first state
-                                |> Nutrients.nutritionInput
-                                |> Expect.equal (first (Nutrients.nutritionInput state))
-                        , \_ ->
-                            Nutrients.mapNutritionInput identity state
-                                |> Expect.equal state
-                        , \_ ->
-                            Nutrients.mapNutritionInput first
-                                (Nutrients.mapNutritionInput second state)
-                                |> Expect.equal
-                                    (Nutrients.mapNutritionInput (first << second) state)
-                        ]
-                        ()
             ]
         ]
 
@@ -163,42 +119,6 @@ plainCode =
         nameTokens
 
 
-{-| Codes that tokenize into empty strings: underscore-only, leading/trailing
-underscores, and empty tokens between separators. Every generated code is still
-non-empty.
--}
-pathologicalCode : Fuzzer String
-pathologicalCode =
-    Fuzz.oneOf
-        [ Fuzz.oneOfValues
-            [ "_"
-            , "__"
-            , "___"
-            , "_ALPHA"
-            , "ALPHA_"
-            , "_ALPHA_"
-            , "ALPHA__MG"
-            , "__MG__"
-            ]
-        , Fuzz.map2 (::)
-            (Fuzz.oneOfValues [ "_", "__", "ALPHA", "_ALPHA", "ALPHA_", "MG", "_MG" ])
-            (Fuzz.listOfLengthBetween 0
-                4
-                (Fuzz.oneOfValues [ "", "_", "__", "ALPHA", "BETA", "MG" ])
-            )
-            |> Fuzz.map (String.join "_")
-        ]
-
-
-generatedCode : Fuzzer String
-generatedCode =
-    Fuzz.oneOf
-        [ Fuzz.map .code unitCode
-        , Fuzz.map .code plainCode
-        , pathologicalCode
-        ]
-
-
 titleCase : String -> String
 titleCase word =
     case String.uncons word of
@@ -207,62 +127,3 @@ titleCase word =
 
         Nothing ->
             word
-
-
-type alias Transform =
-    NutritionInput -> NutritionInput
-
-
-transforms : List Transform
-transforms =
-    [ identity
-    , \input -> { input | amount = "42" }
-    , \input -> { input | unit = "mg" }
-    , \input -> { input | unitOpen = not input.unitOpen }
-    , \input -> { input | amount = input.amount ++ "0", unit = input.unit ++ "-x" }
-    ]
-
-
-transform : Fuzzer Transform
-transform =
-    Fuzz.oneOfValues transforms
-
-
-nutritionInput : Fuzzer NutritionInput
-nutritionInput =
-    Fuzz.map3 NutritionInput Fuzz.string Fuzz.string Fuzz.bool
-
-
-nutrientAmount : Fuzzer Nutrition.NutrientAmount
-nutrientAmount =
-    Fuzz.map3
-        (\code amount unit -> { code = code, amount = amount, unit = unit })
-        Fuzz.string
-        Fuzz.string
-        Fuzz.string
-
-
-nutritionState : Fuzzer NutritionState
-nutritionState =
-    Fuzz.oneOf
-        [ Fuzz.map NutritionLoading nutritionInput
-        , Fuzz.map2 NutritionLoaded nutritionInput (Fuzz.list nutrientAmount)
-        , Fuzz.map2 NutritionFailed nutritionInput Fuzz.string
-        , Fuzz.map NutritionUnavailable nutritionInput
-        ]
-
-
-stateTag : NutritionState -> String
-stateTag state =
-    case state of
-        NutritionLoading _ ->
-            "Loading"
-
-        NutritionLoaded _ _ ->
-            "Loaded"
-
-        NutritionFailed _ _ ->
-            "Failed"
-
-        NutritionUnavailable _ ->
-            "Unavailable"

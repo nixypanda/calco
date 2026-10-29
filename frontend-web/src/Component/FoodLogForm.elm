@@ -12,7 +12,6 @@ module Component.FoodLogForm exposing
     , initLogFormFromFood
     , initLogFormFromLog
     , setSubmitState
-    , submitFailureMessage
     , update
     )
 

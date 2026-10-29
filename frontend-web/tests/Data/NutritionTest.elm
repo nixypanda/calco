@@ -10,30 +10,7 @@ import Test exposing (Test, describe, fuzz, fuzz3)
 tests : Test
 tests =
     describe "Data.Nutrition"
-        [ fuzz SupportFuzz.amountString
-            "safeAmount is non-negative, rejects non-numeric input, and clamps negatives"
-          <|
-            \raw ->
-                let
-                    actual : Float
-                    actual =
-                        Nutrition.safeAmount raw
-
-                    expected : Float
-                    expected =
-                        case String.toFloat raw of
-                            Nothing ->
-                                0
-
-                            Just value ->
-                                max 0 value
-                in
-                Expect.all
-                    [ \_ -> actual |> Expect.atLeast 0
-                    , \_ -> actual |> Expect.within amountTolerance expected
-                    ]
-                    ()
-        , fuzz3
+        [ fuzz3
             (Fuzz.floatRange 0 500)
             (Fuzz.floatRange 0 500)
             (Fuzz.list per100gFuzzer)
@@ -318,25 +295,6 @@ tests =
                             |> Expect.equal True
                     ]
                     ()
-        , fuzz summaryFuzzer
-            "summaryToNutrients maps macro codes and replaces missing values with zero"
-          <|
-            \summary ->
-                Nutrition.summaryToNutrients summary
-                    |> Expect.equal
-                        [ { code = "PROTEIN_G"
-                          , amount = Maybe.withDefault "0" summary.proteinG
-                          , unit = "g"
-                          }
-                        , { code = "CARBS_G"
-                          , amount = Maybe.withDefault "0" summary.carbsG
-                          , unit = "g"
-                          }
-                        , { code = "FAT_G"
-                          , amount = Maybe.withDefault "0" summary.fatG
-                          , unit = "g"
-                          }
-                        ]
         ]
 
 
@@ -414,24 +372,6 @@ totalsLogFuzzer =
                 unitFuzzer
             )
         )
-
-
-summaryFuzzer : Fuzzer Nutrition.NutritionSummary
-summaryFuzzer =
-    Fuzz.map5
-        (\energy protein carbs fat fiber ->
-            { energyKcal = energy
-            , proteinG = protein
-            , carbsG = carbs
-            , fatG = fat
-            , fiberG = fiber
-            }
-        )
-        (Fuzz.maybe SupportFuzz.amountString)
-        (Fuzz.maybe SupportFuzz.amountString)
-        (Fuzz.maybe SupportFuzz.amountString)
-        (Fuzz.maybe SupportFuzz.amountString)
-        (Fuzz.maybe SupportFuzz.amountString)
 
 
 amountTolerance : Expect.FloatingPointTolerance

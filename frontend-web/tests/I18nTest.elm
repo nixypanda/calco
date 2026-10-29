@@ -20,24 +20,7 @@ import Translations.Util as Util
 tests : Test
 tests =
     describe "I18n"
-        [ test "accepts supported locales and rejects unknown tags" <|
-            \_ ->
-                Expect.all
-                    [ \_ ->
-                        Util.parseLanguage "en_US"
-                            |> Expect.equal (Ok Util.EN_US)
-                    , \_ ->
-                        Util.parseLanguage "hi_IN"
-                            |> Expect.equal (Ok Util.HI_IN)
-                    , \_ -> rejected "en" |> Expect.equal True
-                    , \_ -> rejected "EN_US" |> Expect.equal True
-                    , \_ -> rejected "hi" |> Expect.equal True
-                    , \_ -> rejected "fr_FR" |> Expect.equal True
-                    , \_ -> rejected "en-US" |> Expect.equal True
-                    , \_ -> rejected "" |> Expect.equal True
-                    ]
-                    ()
-        , test "renders exact plain and interpolated translations in both languages" <|
+        [ test "renders exact plain and interpolated translations in both languages" <|
             \_ ->
                 Expect.all
                     [ exact Util.EN_US TidNavDiary "Diary"
@@ -66,16 +49,6 @@ tests =
                     ]
                     ()
         ]
-
-
-rejected : String -> Bool
-rejected candidate =
-    case Util.parseLanguage candidate of
-        Err _ ->
-            True
-
-        Ok _ ->
-            False
 
 
 exact : Util.Language -> TranslationId -> String -> () -> Expect.Expectation

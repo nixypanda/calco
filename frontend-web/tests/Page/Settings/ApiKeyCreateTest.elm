@@ -2,7 +2,6 @@ module Page.Settings.ApiKeyCreateTest exposing (tests)
 
 import Api.Client as Client
 import Data.ApiKey exposing (ApiKey, ApiKeyScope(..), CreatableScope(..), CreatedApiKey)
-
 import Expect
 import I18n
 import Page.Settings.ApiKeyCreate as ApiKeyCreate

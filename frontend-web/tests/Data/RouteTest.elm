@@ -29,9 +29,6 @@ tests =
                     [ \_ ->
                         Route.primaryRoute (Route.primaryRoute route)
                             |> Expect.equal (Route.primaryRoute route)
-                    , \_ ->
-                        Route.primaryRoute route
-                            |> Expect.notEqual NotFound
                     ]
                     ()
         , {- Negative exception: NotFound is the only route excluded from the

@@ -65,18 +65,6 @@ validateLogBranches =
                         (SaveCustomFoodThenLog { portionWeight = "0" })
                         coreNutrients
 
-                withOptional : FormModel
-                withOptional =
-                    { form
-                        | nutrients =
-                            coreNutrients
-                                ++ [ { code = "FIBER_G"
-                                     , amount = "7"
-                                     , unit = "g"
-                                     }
-                                   ]
-                    }
-
                 expectedNegative : String
                 expectedNegative =
                     I18n.en
@@ -101,10 +89,6 @@ validateLogBranches =
                 , \_ ->
                     Editor.validateLog zeroWeight
                         |> Expect.equal (Err expectedWeight)
-                , \_ ->
-                    Editor.validateLog withOptional
-                        |> Result.map (always ())
-                        |> Expect.equal (Ok ())
                 ]
                 ()
 

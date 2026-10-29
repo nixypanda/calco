@@ -2,7 +2,6 @@ module Support.Fuzz exposing
     ( amountString
     , apiError
     , device
-    , foodLog
     , foodLogList
     , interiorLocalDate
     , invalidCanonicalDateStrings

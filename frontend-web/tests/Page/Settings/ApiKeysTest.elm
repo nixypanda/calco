@@ -34,9 +34,10 @@ tests =
                             case outMsg of
                                 ApiKeys.RequestRevoke requestId key ->
                                     Ok
-                                    (ApiKeys.RevokeCompleted requestId key
-                                        (Err Client.NetworkError)
-                                    )
+                                        (ApiKeys.RevokeCompleted requestId
+                                            key
+                                            (Err Client.NetworkError)
+                                        )
 
                                 _ ->
                                     Err "expected a revoke request"
@@ -47,9 +48,10 @@ tests =
                             case outMsg of
                                 ApiKeys.RequestRevoke requestId key ->
                                     Ok
-                                    (ApiKeys.RevokeCompleted requestId key
-                                        (Err Fixtures.unauthorized)
-                                    )
+                                        (ApiKeys.RevokeCompleted requestId
+                                            key
+                                            (Err Fixtures.unauthorized)
+                                        )
 
                                 _ ->
                                     Err "expected a revoke request"

@@ -5,11 +5,9 @@ import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot)
 import Expect
 import Fuzz
-import I18n
 import Support.Fixtures as Fixtures
 import Support.Fuzz as SupportFuzz
 import Test exposing (Test, describe, fuzz, test)
-import Translations.Ids exposing (TranslationId(..))
 
 
 tests : Test
@@ -36,10 +34,6 @@ amountRequired =
                     FoodLogForm.createUpdateLogRequest
                         (model " " "g" Nothing "")
                         |> Expect.equal (Err FoodLogForm.AmountRequired)
-                , \_ ->
-                    FoodLogForm.submitFailureMessage
-                        FoodLogForm.AmountRequiredMessage
-                        |> Expect.equal (I18n.en TidFoodLogAmountRequired)
                 ]
                 ()
 

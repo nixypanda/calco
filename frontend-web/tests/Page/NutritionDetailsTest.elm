@@ -10,13 +10,12 @@ import Support.Story as Story
 import Test exposing (Test, describe, test)
 
 
-
 tests : Test
 tests =
     describe "Page.NutritionDetails"
         [ test "a user pages days and clamps at today" <|
             \_ ->
-                Story.start ( N.init { date = today, today = today } )
+                Story.start (N.init { date = today, today = today })
                     |> step (N.NutritionDetailsLoaded today (Ok reportToday))
                     |> step (N.NutrientAdviceToggled "FIBER_G")
                     |> step (N.NutrientAdviceToggled "FIBER_G")
@@ -38,7 +37,7 @@ tests =
                         )
         , test "a failed load recovers and a 401 expires" <|
             \_ ->
-                Story.start ( N.init { date = today, today = today } )
+                Story.start (N.init { date = today, today = today })
                     |> step (N.NutritionDetailsLoaded today (Err Client.NetworkError))
                     |> step N.PreviousDayClicked
                     |> step (N.NutritionDetailsLoaded yesterday (Ok reportYesterday))
@@ -64,6 +63,7 @@ stepWithOut msg model =
             N.update msg model
     in
     ( next, outMsg )
+
 
 
 -- STORY PIPELINE
@@ -97,6 +97,7 @@ dateOf model =
 
         N.Failed context _ ->
             context.currentDate
+
 
 
 -- FIXTURES (copied)

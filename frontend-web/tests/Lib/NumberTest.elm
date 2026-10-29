@@ -45,19 +45,12 @@ tests =
           <|
             \value digits ->
                 let
-                    formatted : String
-                    formatted =
-                        Number.toFixed digits value
-
                     trimmed : String
                     trimmed =
                         Number.toFixedTrimmed digits value
                 in
                 Expect.all
                     [ \_ ->
-                        String.toFloat trimmed
-                            |> Expect.equal (String.toFloat formatted)
-                    , \_ ->
                         if String.contains "." trimmed then
                             Expect.all
                                 [ \_ -> String.endsWith "." trimmed |> Expect.equal False

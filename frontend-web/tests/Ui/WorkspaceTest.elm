@@ -36,7 +36,6 @@ tests =
                 in
                 Expect.all
                     [ \_ -> List.map Tuple.first result |> Expect.equal keys
-                    , \_ -> List.length result |> Expect.equal (List.length keys)
                     , \_ ->
                         result
                             |> List.indexedMap
