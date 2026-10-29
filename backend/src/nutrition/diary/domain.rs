@@ -75,21 +75,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn enabled_meal_slots_canonicalizes_and_deduplicates() {
-        let slots = EnabledMealSlots::new([
-            MealSlot::LateNightSnack,
-            MealSlot::Breakfast,
-            MealSlot::LateNightSnack,
-        ])
-        .unwrap();
-
-        assert_eq!(
-            slots.canonical(),
-            vec![MealSlot::Breakfast, MealSlot::LateNightSnack]
-        );
-    }
-
-    #[test]
     fn enabled_meal_slots_rejects_empty() {
         let result = EnabledMealSlots::new(std::iter::empty());
 

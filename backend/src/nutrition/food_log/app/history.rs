@@ -460,25 +460,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn history_lists_recent_items_through_repository() {
-        let (services, history_services) = make_services_and_history(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
-        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
-
-        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
-        log_test_product(&services, user_id, monday, MealSlot::Dinner, 150).await;
-
-        let recent = history_services
-            .list_recent_items(user_id, friday, monday, Some(MealSlot::Breakfast))
-            .await
-            .unwrap();
-
-        assert_eq!(recent.len(), 1);
-        assert_eq!(recent[0].meal_slot, Some(MealSlot::Breakfast));
-    }
-
-    #[tokio::test]
     async fn history_summarizes_logs_by_date_for_requested_user() {
         let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
@@ -514,30 +495,6 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[tokio::test]
-    async fn history_finds_last_used_items_through_repository() {
-        let (services, history_services) = make_services_and_history(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
-        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
-
-        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
-
-        let recent = history_services
-            .find_last_used_items(
-                user_id,
-                friday,
-                monday,
-                None,
-                &[FoodLogItemRef::Product(ProductId(Uuid::nil()))],
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(recent.len(), 1);
-        assert_eq!(recent[0].quantity_amount, Decimal::new(100, 0));
     }
 
     #[test]

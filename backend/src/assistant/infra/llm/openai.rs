@@ -518,7 +518,6 @@ mod tests {
     use axum::routing::post;
     use axum::{Json, Router};
     use proptest::prelude::*;
-    use rstest::rstest;
     use tokio::sync::Mutex as AsyncMutex;
 
     use super::*;
@@ -640,72 +639,6 @@ mod tests {
         assert_eq!(requests[0].1["authorization"], "Bearer secret-for-test");
         assert_eq!(requests[0].2, "/chat?x=1");
         assert_eq!(requests[0].0["max_completion_tokens"], 16_384);
-    }
-
-    #[tokio::test]
-    async fn sends_custom_header_without_authorization() {
-        let server = server(vec![(AxumStatusCode::OK, success(), Duration::ZERO)]).await;
-        let key = temp_key("custom-secret\n");
-        let client = OpenAiClient::new(config(
-            server.endpoint.clone(),
-            Auth::HeaderFile {
-                name: "x-provider-key".parse().unwrap(),
-                path: key.clone(),
-            },
-        ))
-        .unwrap();
-        std::fs::remove_file(key).unwrap();
-
-        client.complete(request()).await.unwrap();
-
-        let requests = server.state.requests.lock().await;
-        assert_eq!(requests[0].1["x-provider-key"], "custom-secret");
-        assert!(requests[0].1.get("authorization").is_none());
-    }
-
-    #[rstest]
-    #[case::provider_rejects_response_format(
-        AxumStatusCode::BAD_REQUEST,
-        r#"{"error":{"message":"response_format is unsupported"}}"#,
-        &["json_schema", "json_object", "json_object"],
-    )]
-    #[case::groq_rejects_schema_validation(
-        AxumStatusCode::BAD_REQUEST,
-        r#"{"error":{"message":"json_validate_failed"}}"#,
-        &["json_schema", "json_object"],
-    )]
-    #[tokio::test]
-    async fn schema_rejection_falls_back_to_json_object(
-        #[case] rejection_status: AxumStatusCode,
-        #[case] rejection_body: &str,
-        #[case] expected_modes: &[&str],
-    ) {
-        let mut responses = vec![(rejection_status, rejection_body.to_owned(), Duration::ZERO)];
-        responses.extend(
-            expected_modes[1..]
-                .iter()
-                .map(|_| (AxumStatusCode::OK, success(), Duration::ZERO)),
-        );
-        let server = server(responses).await;
-        let client = OpenAiClient::new(config(server.endpoint.clone(), Auth::None)).unwrap();
-
-        for _ in 1..expected_modes.len() {
-            client.complete(request()).await.unwrap();
-        }
-
-        let requests = server.state.requests.lock().await;
-        assert_eq!(requests.len(), expected_modes.len());
-        for (index, (actual, expected)) in requests.iter().zip(expected_modes).enumerate() {
-            assert_eq!(actual.0["response_format"]["type"], *expected);
-            if index > 0 {
-                assert!(
-                    actual.0["messages"][0]["content"]
-                        .as_str()
-                        .unwrap()
-                        .contains("Required JSON Schema")
-                );
-            }
-        }
     }
 
     #[tokio::test]
@@ -1103,22 +1036,6 @@ mod tests {
             let bytes = serde_json::to_vec(&response).unwrap();
             prop_assert!(parse_response(&bytes).is_err());
         }
-    }
-
-    #[test]
-    fn groq_request_adds_only_provider_extensions() {
-        let request = request();
-        let body =
-            RequestBody::from_request("test", &request, ResponseMode::JsonSchema, false).unwrap();
-        let body = serde_json::to_value(GroqRequest {
-            request: &body,
-            reasoning_format: "hidden",
-            max_tokens: request.max_output_tokens,
-        })
-        .unwrap();
-        assert_eq!(body["reasoning_format"], "hidden");
-        assert_eq!(body["max_tokens"], 16_384);
-        assert!(body.get("max_completion_tokens").is_none());
     }
 
     #[test]

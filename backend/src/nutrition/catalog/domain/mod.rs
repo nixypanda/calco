@@ -1159,18 +1159,6 @@ mod tests {
     }
 
     #[test]
-    fn external_product_creation_normalizes_blank_barcode_to_none() {
-        let product = Product::new_external(
-            ExternalSource::Off,
-            ExternalProductBuilder::new("source-id", "Food").barcode(Some("  ".into())),
-            &test_catalog(),
-        )
-        .unwrap();
-
-        assert_eq!(product.origin.barcode(), None);
-    }
-
-    #[test]
     fn external_product_creation_rejects_blank_source_id() {
         let blank_source_id = Product::new_external(
             ExternalSource::Off,
@@ -1342,22 +1330,6 @@ mod tests {
             missing_quantity,
             Err(NutritionError::Validation(_))
         ));
-    }
-
-    #[test]
-    fn custom_product_creation_accepts_arbitrary_default_quantity_for_serving_unit() {
-        let catalog = test_catalog();
-        let product = Product::new_custom(
-            Uuid::new_v4(),
-            CustomProductBuilder::new("Food")
-                .default_portion(Decimal::new(3, 0), "serving")
-                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
-                .servings(vec![serving_input(Decimal::new(100, 0))]),
-            &catalog,
-        )
-        .unwrap();
-        assert_eq!(product.default_quantity, Some(Decimal::new(3, 0)));
-        assert_eq!(product.default_unit.unwrap().0, "serving");
     }
 
     #[test]

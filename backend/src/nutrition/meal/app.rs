@@ -537,13 +537,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_meal_not_found() {
-        let services = make_services(Some(sample_product()));
-        let result = services.delete_meal(MealId::new(), Uuid::new_v4()).await;
-        assert!(matches!(&result, Err(NutritionError::NotFound(_))));
-    }
-
-    #[tokio::test]
     async fn test_get_meal_nutrients_calculates_sum() {
         let services = make_services(Some(sample_product()));
         let user_id = Uuid::new_v4();

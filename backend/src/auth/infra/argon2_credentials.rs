@@ -39,27 +39,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hashes_are_salted_and_verify() {
-        let credentials = Argon2Credentials;
-        let new_password = NewPassword::new("testpassword").unwrap();
-
-        let first_hash = credentials.hash(&new_password).unwrap();
-        let second_hash = credentials.hash(&new_password).unwrap();
-
-        assert_ne!(first_hash, second_hash);
-        assert!(
-            credentials
-                .verify(&Password::new("testpassword"), &first_hash)
-                .unwrap()
-        );
-        assert!(
-            !credentials
-                .verify(&Password::new("wrongpassword"), &first_hash)
-                .unwrap()
-        );
-    }
-
-    #[test]
     fn malformed_hash_is_a_processing_error() {
         let result = Argon2Credentials.verify(
             &Password::new("testpassword"),

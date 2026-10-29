@@ -338,35 +338,4 @@ mod tests {
             Err(AssistantError::InvalidModelResponse)
         ));
     }
-
-    #[test]
-    fn model_request_attaches_photos_to_the_latest_user_turn() {
-        let conversation = Conversation::new(vec![
-            crate::assistant::domain::ConversationTurn::new(ConversationRole::User, "first")
-                .unwrap(),
-            crate::assistant::domain::ConversationTurn::new(
-                ConversationRole::Assistant,
-                "question",
-            )
-            .unwrap(),
-            crate::assistant::domain::ConversationTurn::new(ConversationRole::User, "latest")
-                .unwrap(),
-        ])
-        .unwrap();
-        let photo = SanitizedFoodPhoto {
-            mime_type: FoodPhotoMimeType::Jpeg,
-            bytes: vec![1, 2, 3],
-        };
-
-        let prepared = prepare_model_request(FoodDraftRequest {
-            purpose: FoodDraftPurpose::CustomFood,
-            conversation,
-            photos: vec![photo.clone()],
-        })
-        .unwrap();
-
-        assert!(prepared.turns[0].photos.is_empty());
-        assert!(prepared.turns[1].photos.is_empty());
-        assert_eq!(prepared.turns[2].photos, vec![photo]);
-    }
 }

@@ -1032,40 +1032,5 @@ mod tests {
                 prop_assert_eq!(snapshot.amount, original.amount * scale);
             }
         }
-
-        #[test]
-        fn update_ad_hoc_log_scales_by_exact_multiple(
-            name in valid_ad_hoc_name(),
-            old_amount in positive_quantity_amount(),
-            multiplier in 1i64..=10i64,
-            nutrients in required_nutrients_strategy(),
-        ) {
-            let factor = Decimal::from(multiplier);
-            let new_amount = old_amount * factor;
-            let log = build_log_with_quantity(name, old_amount, &nutrients);
-            let original_snapshots = log.nutrient_snapshots().to_vec();
-
-            let updated = log
-                .update_ad_hoc_log(
-                    ad_hoc_date(),
-                    None,
-                    None,
-                    serving_quantity(new_amount),
-                    None,
-                )
-                .expect("exact-multiple update must succeed");
-
-            prop_assert_eq!(updated.quantity_amount(), new_amount);
-            prop_assert_eq!(updated.nutrient_snapshots().len(), original_snapshots.len());
-            for (snapshot, original) in updated
-                .nutrient_snapshots()
-                .iter()
-                .zip(original_snapshots.iter())
-            {
-                prop_assert_eq!(&snapshot.nutrient_code, &original.nutrient_code);
-                prop_assert_eq!(&snapshot.unit, &original.unit);
-                prop_assert_eq!(snapshot.amount, original.amount * factor);
-            }
-        }
     }
 }

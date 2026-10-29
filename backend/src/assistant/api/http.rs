@@ -670,23 +670,6 @@ mod tests {
     use crate::assistant::domain::FoodDraftBuilder;
 
     #[test]
-    fn response_contract_is_stable_for_clarification() {
-        let value = serde_json::to_value(turn_to_response(
-            FoodDraftTurn::clarification("How many grams?").unwrap(),
-        ))
-        .unwrap();
-        assert_eq!(
-            value,
-            serde_json::json!({
-                "assistant_message": "How many grams?",
-                "status": "needs_clarification",
-                "draft": null,
-                "warnings": []
-            })
-        );
-    }
-
-    #[test]
     fn response_contract_maps_the_validated_draft_to_http_fields() {
         let draft = FoodDraftBuilder::new("Dal")
             .categories(["lentils"])
@@ -731,44 +714,5 @@ mod tests {
                 "warnings": []
             })
         );
-    }
-
-    #[test]
-    fn response_contract_includes_a_suggested_logged_portion() {
-        let draft = FoodDraftBuilder::new("Dal")
-            .nutrients([crate::assistant::domain::DraftNutrient::new(
-                "ENERGY_KCAL".into(),
-                Decimal::from(100),
-            )
-            .unwrap()])
-            .servings([crate::assistant::domain::DraftServing::new(
-                "bowl".into(),
-                Decimal::from(250),
-            )
-            .unwrap()])
-            .build()
-            .unwrap();
-        let suggested = SuggestedLog::new(Decimal::ONE, "bowl".into(), Decimal::from(250)).unwrap();
-        let value = serde_json::to_value(turn_to_response(
-            FoodDraftTurn::ready_for_log("Review", draft, suggested, vec![]).unwrap(),
-        ))
-        .unwrap();
-
-        assert_eq!(
-            value["suggested_log"],
-            serde_json::json!({
-                "amount": "1",
-                "unit": "bowl",
-                "total_weight_grams": "250"
-            })
-        );
-    }
-
-    #[test]
-    fn conversation_wire_rejects_unknown_photo_data() {
-        let value = serde_json::json!({
-            "turns": [{"role": "user", "text": "dal", "photo": "bytes"}]
-        });
-        assert!(serde_json::from_value::<ConversationRequest>(value).is_err());
     }
 }

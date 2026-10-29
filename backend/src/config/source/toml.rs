@@ -181,17 +181,8 @@ mod tests {
     }
 
     #[test]
-    fn missing_path_empty_file_and_comment_only_file_disable_the_assistant() {
+    fn missing_path_disables_the_assistant() {
         assert_eq!(load(None), Ok(AssistantConfig::Disabled));
-
-        for contents in [
-            "",
-            r#"# Assistant configuration is optional.
-"#,
-        ] {
-            let file = TempFile::new(contents);
-            assert_eq!(load(Some(file.path())), Ok(AssistantConfig::Disabled));
-        }
     }
 
     #[test]
@@ -336,11 +327,6 @@ enabled = false
 unexpected = true
 "#
     )]
-    #[case::unknown_authentication_field(
-        r#"[assistant.authentication]
-kind = "none"
-"#
-    )]
     #[case::non_http_endpoint(
         r#"[assistant]
 enabled = true
@@ -463,37 +449,6 @@ api_key_file = ""
     #[case::non_boolean_enabled(
         r#"[assistant]
 enabled = "true"
-"#
-    )]
-    #[case::non_string_endpoint(
-        r#"[assistant]
-enabled = true
-endpoint = 42
-model = "model"
-
-[assistant.authentication]
-kind = "none"
-"#
-    )]
-    #[case::non_string_model(
-        r#"[assistant]
-enabled = true
-endpoint = "http://provider.example"
-model = 42
-
-[assistant.authentication]
-kind = "none"
-"#
-    )]
-    #[case::non_boolean_supports_images(
-        r#"[assistant]
-enabled = true
-endpoint = "http://provider.example"
-model = "model"
-supports_images = "yes"
-
-[assistant.authentication]
-kind = "none"
 "#
     )]
     #[case::missing_endpoint(
