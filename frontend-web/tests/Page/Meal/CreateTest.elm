@@ -174,18 +174,6 @@ createRequest outMsg =
             Nothing
 
 
-stepWithOut :
-    MealCreate.Msg
-    -> MealCreate.Model
-    -> ( MealCreate.Model, MealCreate.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            MealCreate.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -196,7 +184,7 @@ type alias Journey =
 
 step : MealCreate.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd MealCreate.update)
 
 
 bind :
@@ -204,7 +192,7 @@ bind :
     -> Journey
     -> Journey
 bind =
-    Story.bind stepWithOut
+    Story.bind (Story.ignoreCmd MealCreate.update)
 
 
 finish :

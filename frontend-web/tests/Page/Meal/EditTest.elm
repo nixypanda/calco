@@ -109,18 +109,6 @@ updateRequest outMsg =
             Nothing
 
 
-stepWithOut :
-    MealEdit.Msg
-    -> MealEdit.Model
-    -> ( MealEdit.Model, MealEdit.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            MealEdit.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -131,7 +119,7 @@ type alias Journey =
 
 step : MealEdit.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd MealEdit.update)
 
 
 finish :

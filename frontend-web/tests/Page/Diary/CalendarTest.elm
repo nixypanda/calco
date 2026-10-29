@@ -154,18 +154,6 @@ loadingLabel =
     I18n.en TidCommonLoading
 
 
-stepWithOut :
-    Calendar.Msg
-    -> Calendar.Model
-    -> ( Calendar.Model, Calendar.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            Calendar.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -176,7 +164,7 @@ type alias Journey =
 
 step : Calendar.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd Calendar.update)
 
 
 finish :

@@ -43,18 +43,6 @@ tests =
         ]
 
 
-stepWithOut :
-    BootstrapSetup.Msg
-    -> BootstrapSetup.Model
-    -> ( BootstrapSetup.Model, BootstrapSetup.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            BootstrapSetup.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -65,7 +53,7 @@ type alias Journey =
 
 step : BootstrapSetup.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd BootstrapSetup.update)
 
 
 finish :

@@ -2,6 +2,8 @@ module Support.Story exposing
     ( Journey
     , bind
     , finish
+    , ignoreCmd
+    , modelFromUpdate
     , runSteps
     , start
     , step
@@ -21,6 +23,30 @@ import Expect
 runSteps : (msg -> model -> model) -> List msg -> model -> model
 runSteps stepFn messages model =
     List.foldl (\message current -> stepFn message current) model messages
+
+
+{-| Drop the `Cmd` from a page `update` that returns `( model, Cmd msg, out )`,
+yielding the `( model, out )` shape consumed by `step` and `bind`.
+-}
+ignoreCmd : (msg -> model -> ( model, cmd, out )) -> (msg -> model -> ( model, out ))
+ignoreCmd update msg model =
+    let
+        ( next, _, outMsg ) =
+            update msg model
+    in
+    ( next, outMsg )
+
+
+{-| Drop both the `Cmd` and the `OutMsg` from a page `update`, yielding a
+plain `model -> model` step function for `runSteps`.
+-}
+modelFromUpdate : (msg -> model -> ( model, cmd, out )) -> (msg -> model -> model)
+modelFromUpdate update msg model =
+    let
+        ( next, _, _ ) =
+            update msg model
+    in
+    next
 
 
 {-| A page story as a linear pipeline. `bind` handles the step whose message

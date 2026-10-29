@@ -53,18 +53,6 @@ tests =
         ]
 
 
-stepWithOut :
-    N.Msg
-    -> N.Model
-    -> ( N.Model, N.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            N.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -75,7 +63,7 @@ type alias Journey =
 
 step : N.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd N.update)
 
 
 finish :

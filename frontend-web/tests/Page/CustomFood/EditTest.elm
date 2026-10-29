@@ -145,18 +145,6 @@ updateRequest outMsg =
             Nothing
 
 
-stepWithOut :
-    CustomFoodEdit.Msg
-    -> CustomFoodEdit.Model
-    -> ( CustomFoodEdit.Model, CustomFoodEdit.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            CustomFoodEdit.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -167,7 +155,7 @@ type alias Journey =
 
 step : CustomFoodEdit.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd CustomFoodEdit.update)
 
 
 finish :

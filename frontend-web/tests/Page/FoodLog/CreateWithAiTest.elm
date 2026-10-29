@@ -61,18 +61,6 @@ tests =
         ]
 
 
-stepWithOut :
-    CreateWithAi.Msg
-    -> CreateWithAi.Model
-    -> ( CreateWithAi.Model, CreateWithAi.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            CreateWithAi.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -83,7 +71,7 @@ type alias Journey =
 
 step : CreateWithAi.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd CreateWithAi.update)
 
 
 finish :
@@ -124,8 +112,8 @@ draftModel date mealSlot =
 
 
 stepModel : CreateWithAi.Msg -> CreateWithAi.Model -> CreateWithAi.Model
-stepModel msg model =
-    Fixtures.tupleFirst (CreateWithAi.update msg model)
+stepModel =
+    Story.modelFromUpdate CreateWithAi.update
 
 
 context : LocalCtx

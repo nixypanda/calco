@@ -107,18 +107,6 @@ visibleSections prefs logs =
         |> List.map (MealSlot.label I18n.defaultLanguage)
 
 
-stepWithOut :
-    Day.Msg
-    -> Day.Model
-    -> ( Day.Model, Day.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            Day.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -129,7 +117,7 @@ type alias Journey =
 
 step : Day.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd Day.update)
 
 
 finish :

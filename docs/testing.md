@@ -172,8 +172,10 @@ fold those steps into the page story that owns them.
   errors, food logs). Fuzzers are reviewed like production code.
 - `Support.Fixtures` — canonical dates, API errors, user-facing error strings,
   and tuple helpers. Page-specific model builders stay next to their page.
-- `Support.Story` — `runSteps` and `runStepsResult` for sequential messages.
-  It is deliberately small; it is not a test framework.
+- `Support.Story` — `runSteps`, `step`, `bind`, `finish`, and the update-shape
+  adapters `ignoreCmd` / `modelFromUpdate` for page stories whose `update`
+  returns `( model, Cmd Msg, OutMsg )`. It is deliberately small; it is not a
+  test framework.
 
 Support modules must not expose a top-level value of type `Test`. `elm-test`
 compiles every `.elm` file under `tests/` and runs exposed `Test` values; the

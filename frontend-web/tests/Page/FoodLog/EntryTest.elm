@@ -49,18 +49,6 @@ tests =
         ]
 
 
-stepWithOut :
-    FoodLogEntry.Msg
-    -> FoodLogEntry.Model
-    -> ( FoodLogEntry.Model, FoodLogEntry.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            FoodLogEntry.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -71,7 +59,7 @@ type alias Journey =
 
 step : FoodLogEntry.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd FoodLogEntry.update)
 
 
 finish :
@@ -87,7 +75,7 @@ productLoaded =
     Story.start
         ( FoodLogEntry.init "log-1"
             |> Tuple.first
-            |> runSteps stepModel
+            |> Story.runSteps stepModel
                 [ FoodLogEntry.UnitsLoaded (Ok { items = [ gram ] })
                 , FoodLogEntry.LogLoaded "log-1" (Ok productLog)
                 , FoodLogEntry.ProductDetailLoaded (Err Client.NetworkError)
@@ -101,7 +89,7 @@ mealLoaded =
     Story.start
         ( FoodLogEntry.init "log-2"
             |> Tuple.first
-            |> runSteps stepModel
+            |> Story.runSteps stepModel
                 [ FoodLogEntry.UnitsLoaded (Ok { items = [ gram ] })
                 , FoodLogEntry.LogLoaded "log-2" (Ok mealLog)
                 ]
@@ -110,13 +98,8 @@ mealLoaded =
 
 
 stepModel : FoodLogEntry.Msg -> FoodLogEntry.Model -> FoodLogEntry.Model
-stepModel msg model =
-    Fixtures.tupleFirst (FoodLogEntry.update msg model)
-
-
-runSteps : (msg -> model -> model) -> List msg -> model -> model
-runSteps =
-    Story.runSteps
+stepModel =
+    Story.modelFromUpdate FoodLogEntry.update
 
 
 sampleDate : LocalDate

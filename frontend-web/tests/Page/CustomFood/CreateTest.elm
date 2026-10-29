@@ -139,18 +139,6 @@ categoryRequest outMsg =
             Nothing
 
 
-stepWithOut :
-    CustomFoodCreate.Msg
-    -> CustomFoodCreate.Model
-    -> ( CustomFoodCreate.Model, CustomFoodCreate.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            CustomFoodCreate.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -161,7 +149,7 @@ type alias Journey =
 
 step : CustomFoodCreate.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd CustomFoodCreate.update)
 
 
 bind :
@@ -169,7 +157,7 @@ bind :
     -> Journey
     -> Journey
 bind =
-    Story.bind stepWithOut
+    Story.bind (Story.ignoreCmd CustomFoodCreate.update)
 
 
 finish :

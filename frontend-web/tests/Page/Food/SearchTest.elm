@@ -203,18 +203,6 @@ barcodeNotFoundShown lookup =
             False
 
 
-stepWithOut :
-    FoodSearch.Msg
-    -> FoodSearch.Model
-    -> ( FoodSearch.Model, FoodSearch.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            FoodSearch.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -225,7 +213,7 @@ type alias Journey =
 
 step : FoodSearch.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd FoodSearch.update)
 
 
 bind :
@@ -233,7 +221,7 @@ bind :
     -> Journey
     -> Journey
 bind =
-    Story.bind stepWithOut
+    Story.bind (Story.ignoreCmd FoodSearch.update)
 
 
 finish :

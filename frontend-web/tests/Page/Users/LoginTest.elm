@@ -40,18 +40,6 @@ tests =
         ]
 
 
-stepWithOut :
-    AuthLogin.Msg
-    -> AuthLogin.Model
-    -> ( AuthLogin.Model, AuthLogin.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            AuthLogin.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -62,7 +50,7 @@ type alias Journey =
 
 step : AuthLogin.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd AuthLogin.update)
 
 
 finish :

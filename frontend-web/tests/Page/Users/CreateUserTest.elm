@@ -41,18 +41,6 @@ tests =
         ]
 
 
-stepWithOut :
-    CreateUser.Msg
-    -> CreateUser.Model
-    -> ( CreateUser.Model, CreateUser.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            CreateUser.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -63,7 +51,7 @@ type alias Journey =
 
 step : CreateUser.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd CreateUser.update)
 
 
 finish :

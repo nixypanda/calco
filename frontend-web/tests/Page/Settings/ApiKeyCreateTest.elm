@@ -107,18 +107,6 @@ tests =
         ]
 
 
-stepWithOut :
-    ApiKeyCreate.Msg
-    -> ApiKeyCreate.Model
-    -> ( ApiKeyCreate.Model, ApiKeyCreate.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            ApiKeyCreate.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -129,7 +117,7 @@ type alias Journey =
 
 step : ApiKeyCreate.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd ApiKeyCreate.update)
 
 
 bind :
@@ -137,7 +125,7 @@ bind :
     -> Journey
     -> Journey
 bind =
-    Story.bind stepWithOut
+    Story.bind (Story.ignoreCmd ApiKeyCreate.update)
 
 
 finish :

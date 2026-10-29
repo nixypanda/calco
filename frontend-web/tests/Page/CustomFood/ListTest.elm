@@ -43,18 +43,6 @@ tests =
         ]
 
 
-stepWithOut :
-    CustomFoodList.Msg
-    -> CustomFoodList.Model
-    -> ( CustomFoodList.Model, CustomFoodList.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            CustomFoodList.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -65,7 +53,7 @@ type alias Journey =
 
 step : CustomFoodList.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd CustomFoodList.update)
 
 
 finish :

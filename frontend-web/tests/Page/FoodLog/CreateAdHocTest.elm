@@ -55,18 +55,6 @@ tests =
         ]
 
 
-stepWithOut :
-    CreateAdHoc.Msg
-    -> CreateAdHoc.Model
-    -> ( CreateAdHoc.Model, CreateAdHoc.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            CreateAdHoc.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -77,7 +65,7 @@ type alias Journey =
 
 step : CreateAdHoc.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd CreateAdHoc.update)
 
 
 finish :
@@ -94,7 +82,7 @@ prepared =
         ( CreateAdHoc.init (Just ReviewStory.day) (Just Lunch)
             |> stepModel (CreateAdHoc.UnitsLoaded (Ok { items = ReviewStory.units }))
             |> stepModel (CreateAdHoc.NutrientsLoaded (Ok { items = ReviewStory.catalog }))
-            |> runSteps stepModel ReviewStory.fillNutrients
+            |> Story.runSteps stepModel ReviewStory.fillNutrients
         , CreateAdHoc.NoOp
         )
 
@@ -105,19 +93,14 @@ blankDate =
         ( CreateAdHoc.init Nothing Nothing
             |> stepModel (CreateAdHoc.UnitsLoaded (Ok { items = ReviewStory.units }))
             |> stepModel (CreateAdHoc.NutrientsLoaded (Ok { items = ReviewStory.catalog }))
-            |> runSteps stepModel ReviewStory.fillNutrients
+            |> Story.runSteps stepModel ReviewStory.fillNutrients
         , CreateAdHoc.NoOp
         )
 
 
 stepModel : CreateAdHoc.Msg -> CreateAdHoc.Model -> CreateAdHoc.Model
-stepModel msg model =
-    Fixtures.tupleFirst (CreateAdHoc.update msg model)
-
-
-runSteps : (msg -> model -> model) -> List msg -> model -> model
-runSteps =
-    Story.runSteps
+stepModel =
+    Story.modelFromUpdate CreateAdHoc.update
 
 
 context : LocalCtx

@@ -66,18 +66,6 @@ toScreen model =
             { names = [], error = Nothing }
 
 
-stepWithOut :
-    MealList.Msg
-    -> MealList.Model
-    -> ( MealList.Model, MealList.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            MealList.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -88,7 +76,7 @@ type alias Journey =
 
 step : MealList.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd MealList.update)
 
 
 finish :

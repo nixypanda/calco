@@ -129,18 +129,6 @@ nutritionFailure nutrition =
             Nothing
 
 
-stepWithOut :
-    MealShow.Msg
-    -> MealShow.Model
-    -> ( MealShow.Model, MealShow.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            MealShow.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -151,7 +139,7 @@ type alias Journey =
 
 step : MealShow.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd MealShow.update)
 
 
 bind :
@@ -159,7 +147,7 @@ bind :
     -> Journey
     -> Journey
 bind =
-    Story.bind stepWithOut
+    Story.bind (Story.ignoreCmd MealShow.update)
 
 
 finish :

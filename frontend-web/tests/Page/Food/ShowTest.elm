@@ -137,18 +137,6 @@ createLog outMsg =
             Nothing
 
 
-stepWithOut :
-    FoodShow.Msg
-    -> FoodShow.Model
-    -> ( FoodShow.Model, FoodShow.OutMsg )
-stepWithOut msg model =
-    let
-        ( next, _, outMsg ) =
-            FoodShow.update msg model
-    in
-    ( next, outMsg )
-
-
 
 -- STORY PIPELINE
 
@@ -159,7 +147,7 @@ type alias Journey =
 
 step : FoodShow.Msg -> Journey -> Journey
 step =
-    Story.step stepWithOut
+    Story.step (Story.ignoreCmd FoodShow.update)
 
 
 finish :
