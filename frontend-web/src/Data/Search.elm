@@ -15,7 +15,6 @@ module Data.Search exposing
     , onQueryChangedDebounced
     , previousCompletion
     , setCategorySuggestions
-    , withCategoryToken
     , withQuery
     )
 
@@ -160,11 +159,6 @@ setCategorySuggestions token suggestions state =
 withQuery : String -> QueryState -> QueryState
 withQuery query state =
     { state | query = query }
-
-
-withCategoryToken : Ticket -> QueryState -> QueryState
-withCategoryToken token state =
-    { state | categoryToken = token }
 
 
 completions : String -> List { a | value : String, count : Int } -> List Completion
