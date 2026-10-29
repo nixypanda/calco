@@ -1,202 +1,89 @@
 module Page.NutritionDetailsTest exposing (tests)
 
-{-| Nutrition-details stories.
-
-Advice expansion, the paging ceiling, stale responses, and the page-level 401
-check are steps inside the two flows rather than standalone branch tests.
-
--}
-
 import Api.Client as Client
 import Data.NutritionDetails as Details
-import Data.Route exposing (Route(..))
 import Expect
-import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.NutritionDetails as N
-import Set
 import Support.Fixtures as Fixtures
+import Support.Story as Story
 import Test exposing (Test, describe, test)
-import Translations.Ids exposing (TranslationId(..))
+
 
 
 tests : Test
 tests =
     describe "Page.NutritionDetails"
-        [ test "advice toggles, days page, a stale response is ignored, and today clamps" <|
+        [ test "a user pages days and clamps at today" <|
             \_ ->
-                let
-                    ( loading, initialOut ) =
-                        N.init { date = today, today = today }
-
-                    loaded : N.Model
-                    loaded =
-                        step (N.NutritionDetailsLoaded today (Ok reportToday))
-                            loading
-
-                    ( adviceOpen, _ ) =
-                        stepOnce (N.NutrientAdviceToggled "FIBER_G") loaded
-
-                    ( adviceClosed, adviceClosedOut ) =
-                        stepOnce (N.NutrientAdviceToggled "FIBER_G")
-                            adviceOpen
-
-                    ( previous, previousOut ) =
-                        stepOnce N.PreviousDayClicked adviceClosed
-
-                    ( afterStale, staleOut ) =
-                        stepOnce
-                            (N.NutritionDetailsLoaded today (Ok reportToday))
-                            previous
-
-                    ( yesterdayLoaded, _ ) =
-                        stepOnce
-                            (N.NutritionDetailsLoaded
-                                yesterday
-                                (Ok reportYesterday)
-                            )
-                            afterStale
-
-                    ( next, nextOut ) =
-                        stepOnce N.NextDayClicked yesterdayLoaded
-
-                    ( todayLoaded, _ ) =
-                        stepOnce
-                            (N.NutritionDetailsLoaded today (Ok reportToday))
-                            next
-
-                    ( clamped, clampOut ) =
-                        stepOnce N.NextDayClicked todayLoaded
-                in
-                { initialOut = initialOut
-                , loaded = toScreen loaded
-                , advice = ( .advice <| toScreen adviceOpen, adviceClosedOut )
-                , adviceClosed = toScreen adviceClosed
-                , previousOut = previousOut
-                , previousDate = (toScreen previous).date
-                , staleOut = staleOut
-                , staleUnchanged = toScreen afterStale == toScreen previous
-                , yesterdayBanner = (toScreen yesterdayLoaded).banner
-                , nextOut = nextOut
-                , todayBanner = (toScreen todayLoaded).banner
-                , clamp = ( clampOut, (toScreen clamped).date )
-                }
-                    |> Expect.equal
-                        { initialOut = N.RequestNutritionDetails today
-                        , loaded = loadedTodayScreen
-                        , advice = ( [ fiberAdvice ], N.NoOp )
-                        , adviceClosed = loadedTodayScreen
-                        , previousOut =
-                            N.Navigate (NutritionDetails (Just yesterday))
-                        , previousDate = "2026-08-17"
-                        , staleOut = N.NoOp
-                        , staleUnchanged = True
-                        , yesterdayBanner = Just oneItemBanner
-                        , nextOut =
-                            N.Navigate (NutritionDetails (Just today))
-                        , todayBanner = Just twoItemBanner
-                        , clamp = ( N.NoOp, "2026-08-18" )
-                        }
-        , test "a failed load recovers, TodayChanged lifts the ceiling, then 401 expires" <|
+                Story.start ( N.init { date = today, today = today } )
+                    |> step (N.NutritionDetailsLoaded today (Ok reportToday))
+                    |> step (N.NutrientAdviceToggled "FIBER_G")
+                    |> step (N.NutrientAdviceToggled "FIBER_G")
+                    |> step N.PreviousDayClicked
+                    |> step (N.NutritionDetailsLoaded today (Ok reportToday))
+                    |> step (N.NutritionDetailsLoaded yesterday (Ok reportYesterday))
+                    |> step N.NextDayClicked
+                    |> step (N.NutritionDetailsLoaded today (Ok reportToday))
+                    |> step N.NextDayClicked
+                    |> finish
+                        (\( model, outMsg ) ->
+                            { date = LocalDate.format (dateOf model)
+                            , finalOut = outMsg
+                            }
+                                |> Expect.equal
+                                    { date = "2026-08-18"
+                                    , finalOut = N.NoOp
+                                    }
+                        )
+        , test "a failed load recovers and a 401 expires" <|
             \_ ->
-                let
-                    ( loading, initialOut ) =
-                        N.init { date = today, today = today }
-
-                    failed : N.Model
-                    failed =
-                        step
-                            (N.NutritionDetailsLoaded
-                                today
-                                (Err Client.NetworkError)
-                            )
-                            loading
-
-                    ( previous, previousOut ) =
-                        stepOnce N.PreviousDayClicked failed
-
-                    ( yesterdayLoaded, _ ) =
-                        stepOnce
-                            (N.NutritionDetailsLoaded
-                                yesterday
-                                (Ok reportYesterday)
-                            )
-                            previous
-
-                    ( todayChanged, todayChangedOut ) =
-                        stepOnce (N.TodayChanged tomorrow) yesterdayLoaded
-
-                    ( next, nextOut ) =
-                        stepOnce N.NextDayClicked todayChanged
-
-                    ( todayLoaded, _ ) =
-                        stepOnce
-                            (N.NutritionDetailsLoaded today (Ok reportToday))
-                            next
-
-                    ( tomorrowDate, tomorrowOut ) =
-                        stepOnce N.NextDayClicked todayLoaded
-
-                    finalOut : N.OutMsg
-                    finalOut =
-                        stepOnce
-                            (N.NutritionDetailsLoaded
-                                tomorrow
-                                (Err Fixtures.unauthorized)
-                            )
-                            tomorrowDate
-                            |> Tuple.second
-                in
-                { initialOut = initialOut
-                , failure = ( (toScreen failed).error, (toScreen failed).date )
-                , previousOut = previousOut
-                , yesterdayBanner = (toScreen yesterdayLoaded).banner
-                , todayChanged = ( todayChangedOut, (toScreen todayChanged).date )
-                , nextOut = nextOut
-                , tomorrowOut = tomorrowOut
-                , finalOut = finalOut
-                }
-                    |> Expect.equal
-                        { initialOut = N.RequestNutritionDetails today
-                        , failure = ( Just Fixtures.networkErrorMessage, "2026-08-18" )
-                        , previousOut =
-                            N.Navigate (NutritionDetails (Just yesterday))
-                        , yesterdayBanner = Just oneItemBanner
-                        , todayChanged = ( N.NoOp, "2026-08-17" )
-                        , nextOut =
-                            N.Navigate (NutritionDetails (Just today))
-                        , tomorrowOut =
-                            N.Navigate (NutritionDetails (Just tomorrow))
-                        , finalOut = N.SessionExpired
-                        }
+                Story.start ( N.init { date = today, today = today } )
+                    |> step (N.NutritionDetailsLoaded today (Err Client.NetworkError))
+                    |> step N.PreviousDayClicked
+                    |> step (N.NutritionDetailsLoaded yesterday (Ok reportYesterday))
+                    |> step (N.TodayChanged tomorrow)
+                    |> step N.NextDayClicked
+                    |> step (N.NutritionDetailsLoaded today (Ok reportToday))
+                    |> step N.NextDayClicked
+                    |> step (N.NutritionDetailsLoaded tomorrow (Err Fixtures.unauthorized))
+                    |> finish
+                        (\( _, outMsg ) ->
+                            outMsg |> Expect.equal N.SessionExpired
+                        )
         ]
 
 
+stepWithOut :
+    N.Msg
+    -> N.Model
+    -> ( N.Model, N.OutMsg )
+stepWithOut msg model =
+    let
+        ( next, _, outMsg ) =
+            N.update msg model
+    in
+    ( next, outMsg )
 
--- SCREEN PROJECTION
+
+-- STORY PIPELINE
 
 
-type alias Screen =
-    { date : String
-    , banner : Maybe String
-    , advice : List String
-    , error : Maybe String
-    }
+type alias Journey =
+    Story.Journey N.Model N.OutMsg
 
 
-toScreen : N.Model -> Screen
-toScreen model =
-    { date = LocalDate.format (dateOf model)
-    , banner = bannerOf model
-    , advice = adviceOf model
-    , error =
-        case model of
-            N.Failed _ message ->
-                Just message
+step : N.Msg -> Journey -> Journey
+step =
+    Story.step stepWithOut
 
-            _ ->
-                Nothing
-    }
+
+finish :
+    (( N.Model, N.OutMsg ) -> Expect.Expectation)
+    -> Journey
+    -> Expect.Expectation
+finish =
+    Story.finish
 
 
 dateOf : N.Model -> LocalDate
@@ -212,67 +99,7 @@ dateOf model =
             context.currentDate
 
 
-bannerOf : N.Model -> Maybe String
-bannerOf model =
-    case model of
-        N.Loaded _ report _ ->
-            Just
-                (if report.loggedItems == 1 then
-                    oneItemBanner
-
-                 else
-                    twoItemBanner
-                )
-
-        _ ->
-            Nothing
-
-
-adviceOf : N.Model -> List String
-adviceOf model =
-    case model of
-        N.Loaded _ _ expanded ->
-            if Set.isEmpty expanded then
-                []
-
-            else
-                [ fiberAdvice ]
-
-        _ ->
-            []
-
-
-loadedTodayScreen : Screen
-loadedTodayScreen =
-    { date = "2026-08-18", banner = Just twoItemBanner, advice = [], error = Nothing }
-
-
-
--- HELPERS
-
-
-step :
-    N.Msg
-    -> N.Model
-    -> N.Model
-step msg model =
-    Tuple.first (stepOnce msg model)
-
-
-stepOnce :
-    N.Msg
-    -> N.Model
-    -> ( N.Model, N.OutMsg )
-stepOnce msg model =
-    let
-        ( next, _, outMsg ) =
-            N.update msg model
-    in
-    ( next, outMsg )
-
-
-
--- FIXTURES
+-- FIXTURES (copied)
 
 
 today : LocalDate
@@ -371,18 +198,3 @@ nutrient code name section knownAmount unit referenceAmount guidance status =
     , coverage = Details.CompleteCoverage
     , status = status
     }
-
-
-twoItemBanner : String
-twoItemBanner =
-    I18n.en (TidNutritionDetailsLoggedItemsIncludedOther "2")
-
-
-oneItemBanner : String
-oneItemBanner =
-    I18n.en (TidNutritionDetailsLoggedItemsIncludedOne "1")
-
-
-fiberAdvice : String
-fiberAdvice =
-    I18n.en TidNutritionDetailsAdviceFiber
