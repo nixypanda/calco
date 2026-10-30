@@ -509,6 +509,9 @@ async function removeDevChrome(client) {
     client,
     `(() => {
       document.querySelectorAll("vite-error-overlay").forEach((element) => element.remove());
+      document
+        .querySelectorAll('body > div[style*="bottom: 2em"]')
+        .forEach((element) => element.remove());
       return true;
     })()`,
   );
