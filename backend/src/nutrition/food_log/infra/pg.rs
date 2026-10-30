@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::food_log::domain::*;
+use crate::nutrition::infra::pg as nutrient_batch;
 use crate::nutrition::meal::domain::MealId;
 
 #[derive(Iden)]
@@ -563,46 +564,15 @@ async fn insert_food_log_nutrients(
     }
 
     // Resolve nutrient IDs in Rust instead of relying on a Postgres JOIN/UNNEST.
-    let mut unique_codes: Vec<String> =
-        snapshots.iter().map(|s| s.nutrient_code.0.clone()).collect();
-    unique_codes.sort();
-    unique_codes.dedup();
-
-    let mut nutrient_ids: std::collections::HashMap<String, Uuid> =
-        std::collections::HashMap::new();
-    if !unique_codes.is_empty() {
-        let (sql, values) = Query::select()
-            .columns([Nutrients::Code, Nutrients::Id])
-            .from(Nutrients::Table)
-            .and_where(Expr::col(Nutrients::Code).is_in(unique_codes.to_vec()))
-            .to_owned()
-            .build_sqlx(PostgresQueryBuilder);
-        let rows: Vec<(String, Uuid)> = sqlx::query_as_with::<_, (String, Uuid), _>(
-            sqlx::AssertSqlSafe(sql.as_str()),
-            values,
-        )
-        .fetch_all(&mut **tx)
-        .await?;
-        nutrient_ids.extend(rows);
-    }
-
-    let resolved_count = snapshots
+    let codes: Vec<String> = snapshots
         .iter()
-        .filter(|s| nutrient_ids.contains_key(&s.nutrient_code.0))
-        .count();
-    if resolved_count != snapshots.len() {
-        return Err(NutritionError::Validation(format!(
-            "unknown nutrient code in food log snapshot (expected {} rows, inserted {})",
-            snapshots.len(),
-            resolved_count
-        )));
-    }
+        .map(|s| s.nutrient_code.0.clone())
+        .collect();
+    let nutrient_ids =
+        nutrient_batch::resolve_nutrient_ids(tx, &codes, "food log snapshot").await?;
 
-    let mut written: usize = 0;
     let n = snapshots.len();
-    let mut chunk_start = 0;
-    while chunk_start < n {
-        let end = (chunk_start + 100).min(n);
+    let written = nutrient_batch::insert_chunked(tx, n, 100, |start, end| {
         let mut statement = Query::insert();
         statement.into_table(FoodLogNutrients::Table).columns([
             FoodLogNutrients::FoodLogId,
@@ -610,10 +580,10 @@ async fn insert_food_log_nutrients(
             FoodLogNutrients::Amount,
             FoodLogNutrients::Unit,
         ]);
-        for snapshot in &snapshots[chunk_start..end] {
-            let nutrient_id = nutrient_ids.get(&snapshot.nutrient_code.0).ok_or_else(|| {
-                NutritionError::Internal("validated nutrient identity missing during insert".into())
-            })?;
+        for snapshot in &snapshots[start..end] {
+            let nutrient_id = nutrient_ids
+                .get(&snapshot.nutrient_code.0)
+                .expect("validated nutrient identity missing during insert");
             statement.values_panic([
                 food_log_id.into(),
                 (*nutrient_id).into(),
@@ -621,13 +591,10 @@ async fn insert_food_log_nutrients(
                 snapshot.unit.0.clone().into(),
             ]);
         }
-        let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
-        let result = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-            .execute(&mut **tx)
-            .await?;
-        written += result.rows_affected() as usize;
-        chunk_start = end;
-    }
+        statement
+    })
+    .await?;
+
     if written != snapshots.len() {
         return Err(NutritionError::Validation(format!(
             "unknown nutrient code in food log snapshot (expected {} rows, inserted {})",
@@ -637,7 +604,6 @@ async fn insert_food_log_nutrients(
     }
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

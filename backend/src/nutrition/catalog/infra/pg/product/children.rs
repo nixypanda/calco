@@ -6,6 +6,7 @@ use sqlx::Postgres;
 use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::{NutritionError, Product, ProductNutrient, ProductServing};
+use crate::nutrition::infra::pg as nutrient_batch;
 
 #[derive(Iden)]
 enum ProductNutrients {
@@ -37,38 +38,14 @@ pub(super) async fn insert_product_nutrients(
     }
 
     // Resolve nutrient IDs in Rust instead of relying on a Postgres JOIN/UNNEST.
-    let mut unique_codes: Vec<String> = nutrients.iter().map(|n| n.nutrient_code.0.clone()).collect();
-    unique_codes.sort();
-    unique_codes.dedup();
-
-    let nutrient_rows: Vec<(String, Uuid)> = if unique_codes.is_empty() {
-        Vec::new()
-    } else {
-        let (sql, values) = super::statements::nutrient_ids_by_code_statement(&unique_codes)
-            .build_sqlx(PostgresQueryBuilder);
-        sqlx::query_as_with::<_, (String, Uuid), _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-            .fetch_all(&mut **tx)
-            .await?
-    };
-    let nutrient_ids: HashMap<String, Uuid> = nutrient_rows.into_iter().collect();
-
-    let resolved_count = nutrients
+    let codes: Vec<String> = nutrients
         .iter()
-        .filter(|n| nutrient_ids.contains_key(&n.nutrient_code.0))
-        .count();
-    if resolved_count != nutrients.len() {
-        return Err(NutritionError::Validation(format!(
-            "unknown nutrient code in product (expected {} rows, inserted {})",
-            nutrients.len(),
-            resolved_count
-        )));
-    }
+        .map(|n| n.nutrient_code.0.clone())
+        .collect();
+    let nutrient_ids = nutrient_batch::resolve_nutrient_ids(tx, &codes, "product").await?;
 
-    let mut written: usize = 0;
     let n = nutrients.len();
-    let mut chunk_start = 0;
-    while chunk_start < n {
-        let end = (chunk_start + 100).min(n);
+    let written = nutrient_batch::insert_chunked(tx, n, 100, |start, end| {
         let mut statement = Query::insert();
         statement.into_table(ProductNutrients::Table).columns([
             ProductNutrients::ProductId,
@@ -77,10 +54,10 @@ pub(super) async fn insert_product_nutrients(
             ProductNutrients::Source,
             ProductNutrients::Confidence,
         ]);
-        for nutrient in &nutrients[chunk_start..end] {
-            let nutrient_id = nutrient_ids.get(&nutrient.nutrient_code.0).ok_or_else(|| {
-                NutritionError::Internal("validated nutrient identity missing during insert".into())
-            })?;
+        for nutrient in &nutrients[start..end] {
+            let nutrient_id = nutrient_ids
+                .get(&nutrient.nutrient_code.0)
+                .expect("validated nutrient identity missing during insert");
             statement.values_panic([
                 product_id.into(),
                 (*nutrient_id).into(),
@@ -93,13 +70,10 @@ pub(super) async fn insert_product_nutrients(
                     .into(),
             ]);
         }
-        let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
-        let result = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-            .execute(&mut **tx)
-            .await?;
-        written += result.rows_affected() as usize;
-        chunk_start = end;
-    }
+        statement
+    })
+    .await?;
+
     if written != nutrients.len() {
         return Err(NutritionError::Validation(format!(
             "unknown nutrient code in product (expected {} rows, inserted {})",
@@ -191,11 +165,8 @@ pub(super) async fn replace_product_nutrients(
         return Ok(0);
     }
 
-    let mut written: i64 = 0;
     let n = incoming_product_ids.len();
-    let mut chunk_start = 0;
-    while chunk_start < n {
-        let end = (chunk_start + 100).min(n);
+    let written_usize = nutrient_batch::insert_chunked(tx, n, 100, |start, end| {
         let mut statement = Query::insert();
         statement.into_table(ProductNutrients::Table).columns([
             ProductNutrients::ProductId,
@@ -204,7 +175,7 @@ pub(super) async fn replace_product_nutrients(
             ProductNutrients::Source,
             ProductNutrients::Confidence,
         ]);
-        for i in chunk_start..end {
+        for i in start..end {
             statement.values_panic([
                 incoming_product_ids[i].into(),
                 incoming_nutrient_ids[i].into(),
@@ -213,13 +184,10 @@ pub(super) async fn replace_product_nutrients(
                 confidences[i].clone().into(),
             ]);
         }
-        let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
-        let result = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-            .execute(&mut **tx)
-            .await?;
-        written += result.rows_affected() as i64;
-        chunk_start = end;
-    }
+        statement
+    })
+    .await?;
+    let written = written_usize as i64;
 
     Ok(written)
 }
@@ -261,11 +229,8 @@ pub(super) async fn replace_product_servings(
         return Ok(0);
     }
 
-    let mut written: i64 = 0;
     let n = incoming_product_ids.len();
-    let mut chunk_start = 0;
-    while chunk_start < n {
-        let end = (chunk_start + 100).min(n);
+    let written_usize = nutrient_batch::insert_chunked(tx, n, 100, |start, end| {
         let mut statement = Query::insert();
         statement.into_table(ProductServings::Table).columns([
             ProductServings::ProductId,
@@ -273,7 +238,7 @@ pub(super) async fn replace_product_servings(
             ProductServings::GramsPerUnit,
             ProductServings::Position,
         ]);
-        for i in chunk_start..end {
+        for i in start..end {
             statement.values_panic([
                 incoming_product_ids[i].into(),
                 units[i].clone().into(),
@@ -281,13 +246,10 @@ pub(super) async fn replace_product_servings(
                 positions[i].into(),
             ]);
         }
-        let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
-        let result = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-            .execute(&mut **tx)
-            .await?;
-        written += result.rows_affected() as i64;
-        chunk_start = end;
-    }
+        statement
+    })
+    .await?;
+    let written = written_usize as i64;
 
     Ok(written)
 }
