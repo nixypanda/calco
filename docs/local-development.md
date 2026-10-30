@@ -137,6 +137,21 @@ just check-frontend-review
 just check-frontend-line-length
 ```
 
+## README screenshots
+
+The feature screenshots in `docs/images/readme/` are generated from the local
+development database. Start the app with `just dev`, then run:
+
+```bash
+just screenshots
+```
+
+The capture script drives Chrome through the DevTools protocol, captures the
+same states in light and dark mode, and writes them to `light/` and `dark/`
+subdirectories. It expects Chrome or Chromium; set `CHROME=/path/to/chrome` if
+it cannot find one. Use `CALCO_URL` to capture from a different frontend
+address and `CALCO_SCREENSHOT_DATE` to choose the diary date used in the shots.
+
 ## Database Migrations
 
 Migrations live in:

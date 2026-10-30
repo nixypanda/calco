@@ -6,16 +6,30 @@ The app is intentionally simple: search or create foods, log what was eaten, sna
 
 ## Mobile Showcase
 
-| Daily diary and macro progress | Catalog search | Quantity-aware nutrition and logging | Reusable meal builder |
-| :---: | :---: | :---: | :---: |
-| <img src="docs/images/readme/mobile-diary.jpg" alt="CalCo mobile diary showing daily calorie and macro progress" width="240"> | <img src="docs/images/readme/mobile-food-search.jpg" alt="CalCo mobile food catalog search results" width="240"> | <img src="docs/images/readme/mobile-food-nutrition.jpg" alt="CalCo mobile food logging form with calculated nutrition" width="240"> | <img src="docs/images/readme/mobile-meal-builder.jpg" alt="CalCo mobile reusable meal builder" width="240"> |
+The screenshots use the local development database and switch between light and
+dark with the page theme.
+
+| Daily diary and macro progress | Catalog search | Quantity-aware nutrition and logging | Reusable meal builder | Custom food creation |
+| :---: | :---: | :---: | :---: | :---: |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/dark/mobile-diary.png"><img alt="CalCo mobile diary showing daily calorie and macro progress" src="docs/images/readme/light/mobile-diary.png" width="240"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/dark/mobile-food-search.png"><img alt="CalCo mobile food catalog search results" src="docs/images/readme/light/mobile-food-search.png" width="240"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/dark/mobile-food-nutrition.png"><img alt="CalCo mobile food logging form with calculated nutrition" src="docs/images/readme/light/mobile-food-nutrition.png" width="240"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/dark/mobile-meal-builder.png"><img alt="CalCo mobile reusable meal builder" src="docs/images/readme/light/mobile-meal-builder.png" width="240"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/dark/mobile-custom-food.png"><img alt="CalCo mobile custom food creation form" src="docs/images/readme/light/mobile-custom-food.png" width="240"></picture> |
 
 ## Desktop Showcase
 
-The diary and food search stay visible together on wider screens.
+The diary and food search stay visible together on wider screens, and opening a
+food keeps the diary in view.
 
 <p align="center">
-  <img src="docs/images/readme/desktop-diary-search.jpg" alt="CalCo desktop workspace showing the daily diary and food search side by side" width="1200">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/dark/desktop-diary-search.png">
+    <img alt="CalCo desktop workspace showing the daily diary and food search side by side" src="docs/images/readme/light/desktop-diary-search.png" width="1200">
+  </picture>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/dark/desktop-food-detail.png">
+    <img alt="CalCo desktop workspace showing the daily diary and a food detail side by side" src="docs/images/readme/light/desktop-food-detail.png" width="1200">
+  </picture>
 </p>
 
 ## Stack

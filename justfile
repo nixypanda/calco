@@ -98,6 +98,10 @@ migrate-backend:
 dev-frontend:
     npm run dev
 
+# Capture the README light/dark screenshots (run `just dev` first).
+screenshots:
+    node docs/scripts/capture-readme-screenshots.mjs
+
 # Build the frontend.
 [working-directory("frontend-web")]
 build-frontend:
