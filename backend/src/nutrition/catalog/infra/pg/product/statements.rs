@@ -77,7 +77,7 @@ const SEARCH_NUTRIENT_CODES: [&str; 5] =
 // Ranking lives in `domain/search_ranking.rs`. These candidate queries only
 // apply storage filters; they intentionally contain no text matching, ranking,
 // ordering, or pre-ranking limit.
-pub(super) fn search_catalog_candidates_statement(
+pub(super) fn product_search_catalog_candidates_statement(
     scope: CatalogSearchScope,
     include: &[String],
     exclude: &[String],
@@ -101,7 +101,7 @@ pub(super) fn search_catalog_candidates_statement(
     statement.to_owned()
 }
 
-pub(super) fn search_history_candidates_statement(
+pub(super) fn product_search_history_candidates_statement(
     user_id: Uuid,
     include: &[String],
     exclude: &[String],
@@ -149,7 +149,7 @@ pub(super) fn search_history_candidates_statement(
     statement.to_owned()
 }
 
-pub(super) fn category_counts_statement() -> SelectStatement {
+pub(super) fn product_category_counts_statement() -> SelectStatement {
     // sea-query has no first-class UNNEST/BTRIM expressions; these custom
     // function names are the only raw identifiers in this generated query.
     let categories = Query::select()
@@ -234,7 +234,7 @@ fn insert_product_columns() -> [Products; 11] {
     ]
 }
 
-pub(super) fn load_nutrients_statement(product_id: Uuid) -> SelectStatement {
+pub(super) fn product_nutrient_load_by_product_id_statement(product_id: Uuid) -> SelectStatement {
     Query::select()
         .column((ProductNutrients::Table, ProductNutrients::AmountPer100g))
         .column((ProductNutrients::Table, ProductNutrients::Source))
@@ -252,7 +252,7 @@ pub(super) fn load_nutrients_statement(product_id: Uuid) -> SelectStatement {
         .to_owned()
 }
 
-pub(super) fn load_servings_statement(product_id: Uuid) -> SelectStatement {
+pub(super) fn product_serving_load_by_product_id_statement(product_id: Uuid) -> SelectStatement {
     Query::select()
         .columns([ProductServings::Unit, ProductServings::GramsPerUnit])
         .from(ProductServings::Table)
@@ -261,7 +261,9 @@ pub(super) fn load_servings_statement(product_id: Uuid) -> SelectStatement {
         .to_owned()
 }
 
-pub(super) fn load_nutrients_for_products_statement(product_ids: &[Uuid]) -> SelectStatement {
+pub(super) fn product_nutrient_load_by_product_ids_statement(
+    product_ids: &[Uuid],
+) -> SelectStatement {
     Query::select()
         .column((ProductNutrients::Table, ProductNutrients::ProductId))
         .column((ProductNutrients::Table, ProductNutrients::AmountPer100g))
@@ -283,7 +285,9 @@ pub(super) fn load_nutrients_for_products_statement(product_ids: &[Uuid]) -> Sel
         .to_owned()
 }
 
-pub(super) fn load_servings_for_products_statement(product_ids: &[Uuid]) -> SelectStatement {
+pub(super) fn product_serving_load_by_product_ids_statement(
+    product_ids: &[Uuid],
+) -> SelectStatement {
     Query::select()
         .columns([
             ProductServings::ProductId,
@@ -297,7 +301,7 @@ pub(super) fn load_servings_for_products_statement(product_ids: &[Uuid]) -> Sele
         .to_owned()
 }
 
-pub(super) fn search_summary_nutrients_statement(product_ids: &[Uuid]) -> SelectStatement {
+pub(super) fn product_search_summary_nutrients_statement(product_ids: &[Uuid]) -> SelectStatement {
     let nutrient_codes = SEARCH_NUTRIENT_CODES
         .iter()
         .map(|code| (*code).to_owned())
@@ -325,7 +329,7 @@ pub(super) fn search_summary_nutrients_statement(product_ids: &[Uuid]) -> Select
         .to_owned()
 }
 
-pub(super) fn find_product_statement(id: Uuid) -> SelectStatement {
+pub(super) fn product_find_by_id_statement(id: Uuid) -> SelectStatement {
     Query::select()
         .columns(product_columns())
         .from(Products::Table)
@@ -334,7 +338,9 @@ pub(super) fn find_product_statement(id: Uuid) -> SelectStatement {
         .to_owned()
 }
 
-pub(super) fn find_search_summaries_statement(product_ids: Vec<Uuid>) -> SelectStatement {
+pub(super) fn product_find_search_summaries_by_product_ids_statement(
+    product_ids: Vec<Uuid>,
+) -> SelectStatement {
     Query::select()
         .columns(product_columns())
         .from(Products::Table)
@@ -343,7 +349,7 @@ pub(super) fn find_search_summaries_statement(product_ids: Vec<Uuid>) -> SelectS
         .to_owned()
 }
 
-pub(super) fn find_product_by_barcode_statement(barcode: &str) -> SelectStatement {
+pub(super) fn product_find_by_barcode_statement(barcode: &str) -> SelectStatement {
     Query::select()
         .columns(product_columns())
         .from(Products::Table)
@@ -352,7 +358,7 @@ pub(super) fn find_product_by_barcode_statement(barcode: &str) -> SelectStatemen
         .to_owned()
 }
 
-pub(super) fn list_custom_foods_statement() -> SelectStatement {
+pub(super) fn product_list_custom_statement() -> SelectStatement {
     Query::select()
         .columns(product_columns())
         .from(Products::Table)
@@ -362,7 +368,7 @@ pub(super) fn list_custom_foods_statement() -> SelectStatement {
         .to_owned()
 }
 
-pub(super) fn existing_ids_statement(ids: Vec<Uuid>) -> SelectStatement {
+pub(super) fn product_existing_ids_statement(ids: Vec<Uuid>) -> SelectStatement {
     Query::select()
         .column(Products::Id)
         .from(Products::Table)
@@ -371,7 +377,7 @@ pub(super) fn existing_ids_statement(ids: Vec<Uuid>) -> SelectStatement {
         .to_owned()
 }
 
-pub(super) fn insert_product_statement(product: &Product) -> InsertStatement {
+pub(super) fn product_insert_statement(product: &Product) -> InsertStatement {
     Query::insert()
         .into_table(Products::Table)
         .columns(insert_product_columns())
@@ -404,7 +410,7 @@ pub(super) fn insert_product_statement(product: &Product) -> InsertStatement {
         .to_owned()
 }
 
-pub(super) fn insert_external_products_statement(chunk: &[&Product]) -> InsertStatement {
+pub(super) fn product_insert_external_statement(chunk: &[&Product]) -> InsertStatement {
     let mut statement = Query::insert();
     statement
         .into_table(Products::Table)
@@ -461,7 +467,7 @@ pub(super) fn nutrient_ids_by_code_statement(nutrient_codes: &[String]) -> Selec
     statement.to_owned()
 }
 
-pub(super) fn resolve_external_product_ids_statement(chunk: &[&Product]) -> SelectStatement {
+pub(super) fn product_resolve_external_ids_statement(chunk: &[&Product]) -> SelectStatement {
     let identities = chunk.iter().map(|product| {
         (
             product.origin.source_code().to_owned(),
@@ -481,7 +487,7 @@ pub(super) fn resolve_external_product_ids_statement(chunk: &[&Product]) -> Sele
         .to_owned()
 }
 
-pub(super) fn update_product_statement(product: &Product) -> UpdateStatement {
+pub(super) fn product_update_statement(product: &Product) -> UpdateStatement {
     Query::update()
         .table(Products::Table)
         .value(Products::Name, product.name.as_str())
@@ -507,21 +513,21 @@ pub(super) fn update_product_statement(product: &Product) -> UpdateStatement {
         .to_owned()
 }
 
-pub(super) fn delete_product_nutrients_statement(product_id: Uuid) -> DeleteStatement {
+pub(super) fn product_nutrient_delete_by_product_id_statement(product_id: Uuid) -> DeleteStatement {
     Query::delete()
         .from_table(ProductNutrients::Table)
         .and_where(Expr::col(ProductNutrients::ProductId).eq(product_id))
         .to_owned()
 }
 
-pub(super) fn delete_product_servings_statement(product_id: Uuid) -> DeleteStatement {
+pub(super) fn product_serving_delete_by_product_id_statement(product_id: Uuid) -> DeleteStatement {
     Query::delete()
         .from_table(ProductServings::Table)
         .and_where(Expr::col(ProductServings::ProductId).eq(product_id))
         .to_owned()
 }
 
-pub(super) fn soft_delete_product_statement(id: Uuid) -> UpdateStatement {
+pub(super) fn product_soft_delete_statement(id: Uuid) -> UpdateStatement {
     Query::update()
         .table(Products::Table)
         .value(Products::DeletedAt, Expr::current_timestamp())

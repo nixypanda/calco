@@ -67,7 +67,7 @@ impl DiaryPrefs {
 pub trait DiaryPrefsRepo: Send + Sync {
     async fn find_by_user_id(&self, user_id: Uuid) -> Result<Option<DiaryPrefs>, NutritionError>;
 
-    async fn save(&self, prefs: &DiaryPrefs) -> Result<(), NutritionError>;
+    async fn upsert(&self, prefs: &DiaryPrefs) -> Result<(), NutritionError>;
 }
 
 #[cfg(test)]

@@ -47,7 +47,7 @@ fn identity_columns() -> [Identities; 8] {
     ]
 }
 
-fn find_by_username_statement(username: &str) -> SelectStatement {
+fn identity_find_by_username_statement(username: &str) -> SelectStatement {
     Query::select()
         .columns(identity_columns())
         .from(Identities::Table)
@@ -55,7 +55,7 @@ fn find_by_username_statement(username: &str) -> SelectStatement {
         .to_owned()
 }
 
-fn find_by_id_statement(id: IdentityId) -> SelectStatement {
+fn identity_find_by_id_statement(id: IdentityId) -> SelectStatement {
     Query::select()
         .columns(identity_columns())
         .from(Identities::Table)
@@ -63,7 +63,7 @@ fn find_by_id_statement(id: IdentityId) -> SelectStatement {
         .to_owned()
 }
 
-fn find_by_ids_statement(ids: &[Uuid]) -> SelectStatement {
+fn identity_find_by_ids_statement(ids: &[Uuid]) -> SelectStatement {
     Query::select()
         .columns(identity_columns())
         .from(Identities::Table)
@@ -71,7 +71,7 @@ fn find_by_ids_statement(ids: &[Uuid]) -> SelectStatement {
         .to_owned()
 }
 
-fn create_statement(identity: &Identity) -> InsertStatement {
+fn identity_create_statement(identity: &Identity) -> InsertStatement {
     Query::insert()
         .into_table(Identities::Table)
         .columns(identity_columns())
@@ -88,7 +88,7 @@ fn create_statement(identity: &Identity) -> InsertStatement {
         .to_owned()
 }
 
-fn update_statement(identity: &Identity) -> UpdateStatement {
+fn identity_update_statement(identity: &Identity) -> UpdateStatement {
     Query::update()
         .table(Identities::Table)
         .values([
@@ -107,7 +107,7 @@ fn update_statement(identity: &Identity) -> UpdateStatement {
         .to_owned()
 }
 
-fn exists_admin_statement() -> SelectStatement {
+fn identity_exists_admin_statement() -> SelectStatement {
     Query::select()
         .expr(Expr::exists(
             Query::select()
@@ -122,7 +122,8 @@ fn exists_admin_statement() -> SelectStatement {
 #[async_trait]
 impl IdentityRepo for PgIdentityRepo {
     async fn find_by_username(&self, username: &str) -> Result<Option<Identity>, AuthError> {
-        let (sql, values) = find_by_username_statement(username).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) =
+            identity_find_by_username_statement(username).build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, IdentityRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_optional(&self.pool)
@@ -132,7 +133,7 @@ impl IdentityRepo for PgIdentityRepo {
     }
 
     async fn find_by_id(&self, id: IdentityId) -> Result<Option<Identity>, AuthError> {
-        let (sql, values) = find_by_id_statement(id).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = identity_find_by_id_statement(id).build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, IdentityRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_optional(&self.pool)
@@ -143,7 +144,7 @@ impl IdentityRepo for PgIdentityRepo {
 
     async fn find_by_ids(&self, ids: &[IdentityId]) -> Result<Vec<Identity>, AuthError> {
         let ids: Vec<Uuid> = ids.iter().map(|id| id.0).collect();
-        let (sql, values) = find_by_ids_statement(&ids).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = identity_find_by_ids_statement(&ids).build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, IdentityRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_all(&self.pool)
@@ -153,7 +154,7 @@ impl IdentityRepo for PgIdentityRepo {
     }
 
     async fn create(&self, identity: &Identity) -> Result<(), AuthError> {
-        let (sql, values) = create_statement(identity).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = identity_create_statement(identity).build_sqlx(PostgresQueryBuilder);
         let result = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await;
@@ -165,7 +166,7 @@ impl IdentityRepo for PgIdentityRepo {
     }
 
     async fn update(&self, identity: &Identity) -> Result<(), AuthError> {
-        let (sql, values) = update_statement(identity).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = identity_update_statement(identity).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;
@@ -174,7 +175,7 @@ impl IdentityRepo for PgIdentityRepo {
     }
 
     async fn exists_admin(&self) -> Result<bool, AuthError> {
-        let (sql, values) = exists_admin_statement().build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = identity_exists_admin_statement().build_sqlx(PostgresQueryBuilder);
         let row: (bool,) =
             sqlx::query_as_with::<_, (bool,), _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_one(&self.pool)

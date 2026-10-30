@@ -53,7 +53,7 @@ fn api_key_columns() -> [ApiKeys; 11] {
     ]
 }
 
-fn create_statement(key: &ApiKey) -> InsertStatement {
+fn api_key_create_statement(key: &ApiKey) -> InsertStatement {
     Query::insert()
         .into_table(ApiKeys::Table)
         .columns(api_key_columns())
@@ -73,7 +73,7 @@ fn create_statement(key: &ApiKey) -> InsertStatement {
         .to_owned()
 }
 
-fn find_by_token_hash_statement(token_hash: &str) -> SelectStatement {
+fn api_key_find_by_token_hash_statement(token_hash: &str) -> SelectStatement {
     Query::select()
         .columns(api_key_columns())
         .from(ApiKeys::Table)
@@ -81,7 +81,7 @@ fn find_by_token_hash_statement(token_hash: &str) -> SelectStatement {
         .to_owned()
 }
 
-fn find_by_id_statement(id: ApiKeyId) -> SelectStatement {
+fn api_key_find_by_id_statement(id: ApiKeyId) -> SelectStatement {
     Query::select()
         .columns(api_key_columns())
         .from(ApiKeys::Table)
@@ -89,7 +89,10 @@ fn find_by_id_statement(id: ApiKeyId) -> SelectStatement {
         .to_owned()
 }
 
-fn find_by_id_and_identity_id_statement(id: ApiKeyId, identity_id: IdentityId) -> SelectStatement {
+fn api_key_find_by_id_and_identity_id_statement(
+    id: ApiKeyId,
+    identity_id: IdentityId,
+) -> SelectStatement {
     Query::select()
         .columns(api_key_columns())
         .from(ApiKeys::Table)
@@ -98,7 +101,7 @@ fn find_by_id_and_identity_id_statement(id: ApiKeyId, identity_id: IdentityId) -
         .to_owned()
 }
 
-fn list_by_identity_id_statement(identity_id: IdentityId) -> SelectStatement {
+fn api_key_list_by_identity_id_statement(identity_id: IdentityId) -> SelectStatement {
     Query::select()
         .columns(api_key_columns())
         .from(ApiKeys::Table)
@@ -107,7 +110,7 @@ fn list_by_identity_id_statement(identity_id: IdentityId) -> SelectStatement {
         .to_owned()
 }
 
-fn update_statement(key: &ApiKey) -> UpdateStatement {
+fn api_key_update_statement(key: &ApiKey) -> UpdateStatement {
     Query::update()
         .table(ApiKeys::Table)
         .values([
@@ -139,7 +142,7 @@ fn update_statement(key: &ApiKey) -> UpdateStatement {
 #[async_trait]
 impl ApiKeyRepo for PgApiKeyRepo {
     async fn create(&self, key: &ApiKey) -> Result<(), AuthError> {
-        let (sql, values) = create_statement(key).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = api_key_create_statement(key).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;
@@ -149,7 +152,7 @@ impl ApiKeyRepo for PgApiKeyRepo {
 
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<ApiKey>, AuthError> {
         let (sql, values) =
-            find_by_token_hash_statement(token_hash).build_sqlx(PostgresQueryBuilder);
+            api_key_find_by_token_hash_statement(token_hash).build_sqlx(PostgresQueryBuilder);
         let row = sqlx::query_as_with::<_, ApiKeyRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .fetch_optional(&self.pool)
             .await?;
@@ -158,7 +161,7 @@ impl ApiKeyRepo for PgApiKeyRepo {
     }
 
     async fn find_by_id(&self, id: ApiKeyId) -> Result<Option<ApiKey>, AuthError> {
-        let (sql, values) = find_by_id_statement(id).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = api_key_find_by_id_statement(id).build_sqlx(PostgresQueryBuilder);
         let row = sqlx::query_as_with::<_, ApiKeyRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .fetch_optional(&self.pool)
             .await?;
@@ -171,8 +174,8 @@ impl ApiKeyRepo for PgApiKeyRepo {
         id: ApiKeyId,
         identity_id: IdentityId,
     ) -> Result<Option<ApiKey>, AuthError> {
-        let (sql, values) =
-            find_by_id_and_identity_id_statement(id, identity_id).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = api_key_find_by_id_and_identity_id_statement(id, identity_id)
+            .build_sqlx(PostgresQueryBuilder);
         let row = sqlx::query_as_with::<_, ApiKeyRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .fetch_optional(&self.pool)
             .await?;
@@ -181,7 +184,8 @@ impl ApiKeyRepo for PgApiKeyRepo {
     }
 
     async fn list_by_identity_id(&self, id: IdentityId) -> Result<Vec<ApiKey>, AuthError> {
-        let (sql, values) = list_by_identity_id_statement(id).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) =
+            api_key_list_by_identity_id_statement(id).build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, ApiKeyRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_all(&self.pool)
@@ -191,7 +195,7 @@ impl ApiKeyRepo for PgApiKeyRepo {
     }
 
     async fn update(&self, key: &ApiKey) -> Result<(), AuthError> {
-        let (sql, values) = update_statement(key).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = api_key_update_statement(key).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;

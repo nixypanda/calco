@@ -36,7 +36,10 @@ impl PgGoalTargetRepo {
     }
 }
 
-fn find_effective_for_date_statement(user_id: Uuid, requested_date: NaiveDate) -> SelectStatement {
+fn goal_target_find_effective_for_date_statement(
+    user_id: Uuid,
+    requested_date: NaiveDate,
+) -> SelectStatement {
     Query::select()
         .columns([
             GoalTargetVersions::Id,
@@ -57,7 +60,7 @@ fn find_effective_for_date_statement(user_id: Uuid, requested_date: NaiveDate) -
         .to_owned()
 }
 
-fn upsert_statement(goal_target: &GoalTarget) -> InsertStatement {
+fn goal_target_upsert_statement(goal_target: &GoalTarget) -> InsertStatement {
     Query::insert()
         .into_table(GoalTargetVersions::Table)
         .columns([
@@ -106,7 +109,7 @@ impl GoalTargetRepo for PgGoalTargetRepo {
         user_id: Uuid,
         requested_date: NaiveDate,
     ) -> Result<Option<GoalTarget>, crate::nutrition::error::NutritionError> {
-        let (sql, values) = find_effective_for_date_statement(user_id, requested_date)
+        let (sql, values) = goal_target_find_effective_for_date_statement(user_id, requested_date)
             .build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, GoalTargetRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
@@ -120,7 +123,8 @@ impl GoalTargetRepo for PgGoalTargetRepo {
         &self,
         goal_target: &GoalTarget,
     ) -> Result<(), crate::nutrition::error::NutritionError> {
-        let (sql, values) = upsert_statement(goal_target).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) =
+            goal_target_upsert_statement(goal_target).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;

@@ -17,7 +17,7 @@ enum Units {
 
 // ─── Unit Repo ───────────────────────────────────────────
 
-fn list_units_statement() -> SelectStatement {
+fn unit_list_all_statement() -> SelectStatement {
     Query::select()
         .columns([Units::Code, Units::Name, Units::Kind])
         .from(Units::Table)
@@ -25,7 +25,7 @@ fn list_units_statement() -> SelectStatement {
         .to_owned()
 }
 
-fn list_mass_factors_statement() -> SelectStatement {
+fn mass_factor_list_all_statement() -> SelectStatement {
     Query::select()
         .columns([Units::Code, Units::CanonicalGrams])
         .from(Units::Table)
@@ -47,7 +47,7 @@ impl PgUnitRepo {
 #[async_trait]
 impl UnitRepo for PgUnitRepo {
     async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, NutritionError> {
-        let (sql, values) = list_units_statement().build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = unit_list_all_statement().build_sqlx(PostgresQueryBuilder);
         let rows = sqlx::query_as_with::<_, UnitRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .fetch_all(&self.pool)
             .await?;
@@ -59,7 +59,7 @@ impl UnitRepo for PgUnitRepo {
     }
 
     async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, NutritionError> {
-        let (sql, values) = list_mass_factors_statement().build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = mass_factor_list_all_statement().build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, MassFactorRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_all(&self.pool)

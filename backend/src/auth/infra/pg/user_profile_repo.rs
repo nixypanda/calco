@@ -39,7 +39,7 @@ fn profile_columns() -> [UserProfiles; 5] {
     ]
 }
 
-fn find_by_identity_id_statement(identity_id: IdentityId) -> SelectStatement {
+fn user_profile_find_by_identity_id_statement(identity_id: IdentityId) -> SelectStatement {
     Query::select()
         .columns(profile_columns())
         .from(UserProfiles::Table)
@@ -47,7 +47,7 @@ fn find_by_identity_id_statement(identity_id: IdentityId) -> SelectStatement {
         .to_owned()
 }
 
-fn find_by_id_statement(id: Uuid) -> SelectStatement {
+fn user_profile_find_by_id_statement(id: Uuid) -> SelectStatement {
     Query::select()
         .columns(profile_columns())
         .from(UserProfiles::Table)
@@ -55,7 +55,7 @@ fn find_by_id_statement(id: Uuid) -> SelectStatement {
         .to_owned()
 }
 
-fn create_statement(profile: &UserProfile) -> InsertStatement {
+fn user_profile_create_statement(profile: &UserProfile) -> InsertStatement {
     Query::insert()
         .into_table(UserProfiles::Table)
         .columns(profile_columns())
@@ -69,7 +69,7 @@ fn create_statement(profile: &UserProfile) -> InsertStatement {
         .to_owned()
 }
 
-fn list_all_statement() -> SelectStatement {
+fn user_profile_list_all_statement() -> SelectStatement {
     Query::select()
         .columns(profile_columns())
         .from(UserProfiles::Table)
@@ -83,8 +83,8 @@ impl UserProfileRepo for PgUserProfileRepo {
         &self,
         identity_id: IdentityId,
     ) -> Result<Option<UserProfile>, AuthError> {
-        let (sql, values) =
-            find_by_identity_id_statement(identity_id).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = user_profile_find_by_identity_id_statement(identity_id)
+            .build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, ProfileRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_optional(&self.pool)
@@ -94,7 +94,7 @@ impl UserProfileRepo for PgUserProfileRepo {
     }
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UserProfile>, AuthError> {
-        let (sql, values) = find_by_id_statement(id).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = user_profile_find_by_id_statement(id).build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, ProfileRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_optional(&self.pool)
@@ -104,7 +104,7 @@ impl UserProfileRepo for PgUserProfileRepo {
     }
 
     async fn create(&self, profile: &UserProfile) -> Result<(), AuthError> {
-        let (sql, values) = create_statement(profile).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = user_profile_create_statement(profile).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;
@@ -113,7 +113,7 @@ impl UserProfileRepo for PgUserProfileRepo {
     }
 
     async fn list_all(&self) -> Result<Vec<UserProfile>, AuthError> {
-        let (sql, values) = list_all_statement().build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = user_profile_list_all_statement().build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, ProfileRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_all(&self.pool)
