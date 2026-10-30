@@ -1,14 +1,32 @@
 use std::collections::HashMap;
 
-use rust_decimal::Decimal;
+use sea_query::{Expr, ExprTrait, Iden, PostgresQueryBuilder, Query};
+use sea_query_sqlx::SqlxBinder;
 use sqlx::Postgres;
 use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::{NutritionError, Product, ProductNutrient, ProductServing};
 
-// The four child bulk helpers below stay raw by design: they rely on Postgres
-// UNNEST of parallel typed arrays plus the insert/count validation contract.
-// They are used by the sea-query parent writes.
+#[derive(Iden)]
+enum ProductNutrients {
+    Table,
+    ProductId,
+    NutrientId,
+    #[iden = "amount_per_100g"]
+    AmountPer100g,
+    Source,
+    Confidence,
+}
+
+#[derive(Iden)]
+enum ProductServings {
+    Table,
+    ProductId,
+    Unit,
+    GramsPerUnit,
+    Position,
+}
+
 pub(super) async fn insert_product_nutrients(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     product_id: Uuid,
@@ -18,46 +36,75 @@ pub(super) async fn insert_product_nutrients(
         return Ok(());
     }
 
-    let codes: Vec<String> = nutrients
-        .iter()
-        .map(|n| n.nutrient_code.0.clone())
-        .collect();
-    let amounts: Vec<Decimal> = nutrients
-        .iter()
-        .map(|n| n.amount_per_100g.value())
-        .collect();
-    let sources: Vec<Option<String>> = nutrients.iter().map(|n| n.source.clone()).collect();
-    let confidences: Vec<Option<String>> = nutrients
-        .iter()
-        .map(|n| n.confidence.as_ref().map(|c| c.as_str().to_string()))
-        .collect();
+    // Resolve nutrient IDs in Rust instead of relying on a Postgres JOIN/UNNEST.
+    let mut unique_codes: Vec<String> = nutrients.iter().map(|n| n.nutrient_code.0.clone()).collect();
+    unique_codes.sort();
+    unique_codes.dedup();
 
-    let inserted: i64 = sqlx::query_scalar(
-        r#"
-        WITH ins AS (
-            INSERT INTO product_nutrients (product_id, nutrient_id, amount_per_100g, source, confidence)
-            SELECT $1, n.id, v.amount, v.source, v.confidence
-            FROM UNNEST($2::text[], $3::numeric[], $4::text[], $5::text[])
-                AS v(code, amount, source, confidence)
-            JOIN nutrients n ON n.code = v.code
-            RETURNING 1
-        )
-        SELECT COUNT(*) FROM ins
-        "#,
-    )
-    .bind(product_id)
-    .bind(&codes)
-    .bind(&amounts)
-    .bind(&sources)
-    .bind(&confidences)
-    .fetch_one(&mut **tx)
-    .await?;
+    let nutrient_rows: Vec<(String, Uuid)> = if unique_codes.is_empty() {
+        Vec::new()
+    } else {
+        let (sql, values) = super::statements::nutrient_ids_by_code_statement(&unique_codes)
+            .build_sqlx(PostgresQueryBuilder);
+        sqlx::query_as_with::<_, (String, Uuid), _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .fetch_all(&mut **tx)
+            .await?
+    };
+    let nutrient_ids: HashMap<String, Uuid> = nutrient_rows.into_iter().collect();
 
-    if (inserted as usize) != nutrients.len() {
+    let resolved_count = nutrients
+        .iter()
+        .filter(|n| nutrient_ids.contains_key(&n.nutrient_code.0))
+        .count();
+    if resolved_count != nutrients.len() {
         return Err(NutritionError::Validation(format!(
             "unknown nutrient code in product (expected {} rows, inserted {})",
             nutrients.len(),
-            inserted
+            resolved_count
+        )));
+    }
+
+    let mut written: usize = 0;
+    let n = nutrients.len();
+    let mut chunk_start = 0;
+    while chunk_start < n {
+        let end = (chunk_start + 100).min(n);
+        let mut statement = Query::insert();
+        statement.into_table(ProductNutrients::Table).columns([
+            ProductNutrients::ProductId,
+            ProductNutrients::NutrientId,
+            ProductNutrients::AmountPer100g,
+            ProductNutrients::Source,
+            ProductNutrients::Confidence,
+        ]);
+        for nutrient in &nutrients[chunk_start..end] {
+            let nutrient_id = nutrient_ids.get(&nutrient.nutrient_code.0).ok_or_else(|| {
+                NutritionError::Internal("validated nutrient identity missing during insert".into())
+            })?;
+            statement.values_panic([
+                product_id.into(),
+                (*nutrient_id).into(),
+                nutrient.amount_per_100g.value().into(),
+                nutrient.source.clone().into(),
+                nutrient
+                    .confidence
+                    .as_ref()
+                    .map(|c| c.as_str().to_string())
+                    .into(),
+            ]);
+        }
+        let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
+        let result = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&mut **tx)
+            .await?;
+        written += result.rows_affected() as usize;
+        chunk_start = end;
+    }
+    if written != nutrients.len() {
+        return Err(NutritionError::Validation(format!(
+            "unknown nutrient code in product (expected {} rows, inserted {})",
+            nutrients.len(),
+            written
         )));
     }
     Ok(())
@@ -72,24 +119,27 @@ pub(super) async fn insert_product_servings(
         return Ok(());
     }
 
-    let units: Vec<String> = servings.iter().map(|s| s.unit.0.clone()).collect();
-    let grams_per_unit: Vec<Decimal> = servings.iter().map(|s| s.grams_per_unit).collect();
-    let positions: Vec<i32> = (0..servings.len() as i32).collect();
-
-    sqlx::query(
-        r#"
-        INSERT INTO product_servings (product_id, unit, grams_per_unit, position)
-        SELECT $1, v.unit, v.grams_per_unit, v.position
-        FROM UNNEST($2::text[], $3::numeric[], $4::integer[])
-            AS v(unit, grams_per_unit, position)
-        "#,
-    )
-    .bind(product_id)
-    .bind(&units)
-    .bind(&grams_per_unit)
-    .bind(&positions)
-    .execute(&mut **tx)
-    .await?;
+    let mut statement = Query::insert();
+    statement.into_table(ProductServings::Table).columns([
+        ProductServings::ProductId,
+        ProductServings::Unit,
+        ProductServings::GramsPerUnit,
+        ProductServings::Position,
+    ]);
+    for (position, serving) in servings.iter().enumerate() {
+        let position = i32::try_from(position)
+            .map_err(|_| NutritionError::Validation("too many servings for product".into()))?;
+        statement.values_panic([
+            product_id.into(),
+            serving.unit.0.clone().into(),
+            serving.grams_per_unit.into(),
+            position.into(),
+        ]);
+    }
+    let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
+    sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 
@@ -126,33 +176,50 @@ pub(super) async fn replace_product_nutrients(
         }
     }
 
-    sqlx::query("DELETE FROM product_nutrients WHERE product_id = ANY($1)")
-        .bind(product_ids)
-        .execute(&mut **tx)
-        .await?;
+    if !product_ids.is_empty() {
+        let mut delete = Query::delete();
+        delete
+            .from_table(ProductNutrients::Table)
+            .and_where(Expr::col(ProductNutrients::ProductId).is_in(product_ids.to_vec()));
+        let (sql, values) = delete.build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&mut **tx)
+            .await?;
+    }
 
     if incoming_product_ids.is_empty() {
         return Ok(0);
     }
 
-    let written = sqlx::query(
-        r#"
-        INSERT INTO product_nutrients (
-            product_id, nutrient_id, amount_per_100g, source, confidence
-        )
-        SELECT value.product_id, value.nutrient_id, value.amount, value.source, value.confidence
-        FROM UNNEST($1::uuid[], $2::uuid[], $3::numeric[], $4::text[], $5::text[])
-            AS value(product_id, nutrient_id, amount, source, confidence)
-        "#,
-    )
-    .bind(&incoming_product_ids)
-    .bind(&incoming_nutrient_ids)
-    .bind(&amounts)
-    .bind(&sources)
-    .bind(&confidences)
-    .execute(&mut **tx)
-    .await?
-    .rows_affected() as i64;
+    let mut written: i64 = 0;
+    let n = incoming_product_ids.len();
+    let mut chunk_start = 0;
+    while chunk_start < n {
+        let end = (chunk_start + 100).min(n);
+        let mut statement = Query::insert();
+        statement.into_table(ProductNutrients::Table).columns([
+            ProductNutrients::ProductId,
+            ProductNutrients::NutrientId,
+            ProductNutrients::AmountPer100g,
+            ProductNutrients::Source,
+            ProductNutrients::Confidence,
+        ]);
+        for i in chunk_start..end {
+            statement.values_panic([
+                incoming_product_ids[i].into(),
+                incoming_nutrient_ids[i].into(),
+                amounts[i].into(),
+                sources[i].clone().into(),
+                confidences[i].clone().into(),
+            ]);
+        }
+        let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
+        let result = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&mut **tx)
+            .await?;
+        written += result.rows_affected() as i64;
+        chunk_start = end;
+    }
 
     Ok(written)
 }
@@ -179,30 +246,48 @@ pub(super) async fn replace_product_servings(
         }
     }
 
-    sqlx::query("DELETE FROM product_servings WHERE product_id = ANY($1)")
-        .bind(product_ids)
-        .execute(&mut **tx)
-        .await?;
+    if !product_ids.is_empty() {
+        let mut delete = Query::delete();
+        delete
+            .from_table(ProductServings::Table)
+            .and_where(Expr::col(ProductServings::ProductId).is_in(product_ids.to_vec()));
+        let (sql, values) = delete.build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&mut **tx)
+            .await?;
+    }
 
     if incoming_product_ids.is_empty() {
         return Ok(0);
     }
 
-    let written = sqlx::query(
-        r#"
-        INSERT INTO product_servings (product_id, unit, grams_per_unit, position)
-        SELECT value.product_id, value.unit, value.grams_per_unit, value.position
-        FROM UNNEST($1::uuid[], $2::text[], $3::numeric[], $4::integer[])
-            AS value(product_id, unit, grams_per_unit, position)
-        "#,
-    )
-    .bind(&incoming_product_ids)
-    .bind(&units)
-    .bind(&grams_per_unit)
-    .bind(&positions)
-    .execute(&mut **tx)
-    .await?
-    .rows_affected() as i64;
+    let mut written: i64 = 0;
+    let n = incoming_product_ids.len();
+    let mut chunk_start = 0;
+    while chunk_start < n {
+        let end = (chunk_start + 100).min(n);
+        let mut statement = Query::insert();
+        statement.into_table(ProductServings::Table).columns([
+            ProductServings::ProductId,
+            ProductServings::Unit,
+            ProductServings::GramsPerUnit,
+            ProductServings::Position,
+        ]);
+        for i in chunk_start..end {
+            statement.values_panic([
+                incoming_product_ids[i].into(),
+                units[i].clone().into(),
+                grams_per_unit[i].into(),
+                positions[i].into(),
+            ]);
+        }
+        let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
+        let result = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&mut **tx)
+            .await?;
+        written += result.rows_affected() as i64;
+        chunk_start = end;
+    }
 
     Ok(written)
 }

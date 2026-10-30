@@ -654,5 +654,4 @@ mod tests {
         assert!(matches!(result, Err(NutritionError::Validation(_))));
         assert_eq!(external.calls.load(Ordering::Relaxed), 0);
     }
-
 }

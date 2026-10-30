@@ -553,12 +553,6 @@ fn item_to_columns(item: &FoodLogItemSnapshot) -> (Option<Uuid>, Option<Uuid>, &
     }
 }
 
-/// Postgres-specific bulk snapshot insert.
-///
-/// This intentionally stays as raw SQL: `UNNEST` turns the three snapshot
-/// arrays into a single set-based insert, and the returned row count is the
-/// validation that every nutrient code resolved. sea-query cannot express
-/// either the array unnest or the count validation more clearly than this.
 async fn insert_food_log_nutrients(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     food_log_id: Uuid,
@@ -568,41 +562,82 @@ async fn insert_food_log_nutrients(
         return Ok(());
     }
 
-    let codes: Vec<String> = snapshots
-        .iter()
-        .map(|s| s.nutrient_code.0.clone())
-        .collect();
-    let amounts: Vec<Decimal> = snapshots.iter().map(|s| s.amount).collect();
-    let units: Vec<String> = snapshots.iter().map(|s| s.unit.0.clone()).collect();
+    // Resolve nutrient IDs in Rust instead of relying on a Postgres JOIN/UNNEST.
+    let mut unique_codes: Vec<String> =
+        snapshots.iter().map(|s| s.nutrient_code.0.clone()).collect();
+    unique_codes.sort();
+    unique_codes.dedup();
 
-    let inserted: i64 = sqlx::query_scalar(
-        r#"
-        WITH ins AS (
-            INSERT INTO food_log_nutrients (food_log_id, nutrient_id, amount, unit)
-            SELECT $1, n.id, v.amount, v.unit
-            FROM UNNEST($2::text[], $3::numeric[], $4::text[]) AS v(code, amount, unit)
-            JOIN nutrients n ON n.code = v.code
-            RETURNING 1
+    let mut nutrient_ids: std::collections::HashMap<String, Uuid> =
+        std::collections::HashMap::new();
+    if !unique_codes.is_empty() {
+        let (sql, values) = Query::select()
+            .columns([Nutrients::Code, Nutrients::Id])
+            .from(Nutrients::Table)
+            .and_where(Expr::col(Nutrients::Code).is_in(unique_codes.to_vec()))
+            .to_owned()
+            .build_sqlx(PostgresQueryBuilder);
+        let rows: Vec<(String, Uuid)> = sqlx::query_as_with::<_, (String, Uuid), _>(
+            sqlx::AssertSqlSafe(sql.as_str()),
+            values,
         )
-        SELECT COUNT(*) FROM ins
-        "#,
-    )
-    .bind(food_log_id)
-    .bind(&codes)
-    .bind(&amounts)
-    .bind(&units)
-    .fetch_one(&mut **tx)
-    .await?;
+        .fetch_all(&mut **tx)
+        .await?;
+        nutrient_ids.extend(rows);
+    }
 
-    if (inserted as usize) != snapshots.len() {
+    let resolved_count = snapshots
+        .iter()
+        .filter(|s| nutrient_ids.contains_key(&s.nutrient_code.0))
+        .count();
+    if resolved_count != snapshots.len() {
         return Err(NutritionError::Validation(format!(
             "unknown nutrient code in food log snapshot (expected {} rows, inserted {})",
             snapshots.len(),
-            inserted
+            resolved_count
+        )));
+    }
+
+    let mut written: usize = 0;
+    let n = snapshots.len();
+    let mut chunk_start = 0;
+    while chunk_start < n {
+        let end = (chunk_start + 100).min(n);
+        let mut statement = Query::insert();
+        statement.into_table(FoodLogNutrients::Table).columns([
+            FoodLogNutrients::FoodLogId,
+            FoodLogNutrients::NutrientId,
+            FoodLogNutrients::Amount,
+            FoodLogNutrients::Unit,
+        ]);
+        for snapshot in &snapshots[chunk_start..end] {
+            let nutrient_id = nutrient_ids.get(&snapshot.nutrient_code.0).ok_or_else(|| {
+                NutritionError::Internal("validated nutrient identity missing during insert".into())
+            })?;
+            statement.values_panic([
+                food_log_id.into(),
+                (*nutrient_id).into(),
+                snapshot.amount.into(),
+                snapshot.unit.0.clone().into(),
+            ]);
+        }
+        let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
+        let result = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&mut **tx)
+            .await?;
+        written += result.rows_affected() as usize;
+        chunk_start = end;
+    }
+    if written != snapshots.len() {
+        return Err(NutritionError::Validation(format!(
+            "unknown nutrient code in food log snapshot (expected {} rows, inserted {})",
+            snapshots.len(),
+            written
         )));
     }
     Ok(())
 }
+
 
 #[cfg(test)]
 mod tests {

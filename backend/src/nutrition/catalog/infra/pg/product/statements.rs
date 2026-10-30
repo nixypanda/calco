@@ -449,11 +449,16 @@ pub(super) fn insert_external_products_statement(chunk: &[&Product]) -> InsertSt
 }
 
 pub(super) fn nutrient_ids_by_code_statement(nutrient_codes: &[String]) -> SelectStatement {
-    Query::select()
+    let mut statement = Query::select();
+    statement
         .columns([Nutrients::Code, Nutrients::Id])
-        .from(Nutrients::Table)
-        .and_where(Expr::col(Nutrients::Code).eq_any(nutrient_codes.to_vec()))
-        .to_owned()
+        .from(Nutrients::Table);
+    if nutrient_codes.is_empty() {
+        statement.and_where(Expr::value(1).eq(2));
+    } else {
+        statement.and_where(Expr::col(Nutrients::Code).is_in(nutrient_codes.to_vec()));
+    }
+    statement.to_owned()
 }
 
 pub(super) fn resolve_external_product_ids_statement(chunk: &[&Product]) -> SelectStatement {
