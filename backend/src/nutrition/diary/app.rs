@@ -29,7 +29,7 @@ impl DiaryPrefsService {
         enabled_meal_slots: EnabledMealSlots,
     ) -> Result<DiaryPrefs, NutritionError> {
         let prefs = DiaryPrefs::new(actor_id, enabled_meal_slots);
-        self.repo.save(&prefs).await?;
+        self.repo.upsert(&prefs).await?;
         Ok(prefs)
     }
 }

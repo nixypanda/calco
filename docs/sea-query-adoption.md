@@ -15,13 +15,15 @@ Dependencies:
 ## Converted
 
 - Auth: sessions, API keys, identities, and user profiles.
-- Food logs: dynamic filters, snapshot loading, list queries, and CRUD.
+- Food logs: dynamic filters, snapshot loading, list queries, CRUD, and the
+  PostgresQueryBuilder-based nutrient helper (multi-row INSERT ... VALUES).
 - Goals and diary preferences: all repository queries.
 - Meals: parent and component create/read/list/update/delete.
 - Catalog: product CRUD, nutrient/serving loads, `existing_ids`,
   barcode/custom-product queries, search candidate queries, category counts,
-  the external-upsert insert and identity resolve, nutrient-ID lookup, and
-  nutrient/unit repositories.
+  the external-upsert insert and identity resolve, nutrient-ID lookup,
+  nutrient/unit repositories, and PostgresQueryBuilder-based child helpers
+  (multi-row INSERT ... VALUES).
 
 Every converted query is built with `sea-query`, rendered with
 `PostgresQueryBuilder`, and executed through parameterized `sqlx` calls using
@@ -58,27 +60,6 @@ Two pieces remain raw:
   require custom expressions for the values table and row comparison.
 
 The insert and identity-resolve parts of the same method do use sea-query.
-
-### Catalog UNNEST child helpers
-
-`backend/src/nutrition/catalog/infra/pg/product/children.rs`
-
-Functions: `insert_product_nutrients`, `insert_product_servings`,
-`replace_product_nutrients`, `replace_product_servings`.
-
-These are PostgreSQL array-based bulk writes using `UNNEST(...)`, with
-inserted-count validation for unknown nutrients. Sea-query would add
-indirection around `UNNEST` and array binds without improving clarity or
-performance.
-
-### Food-log UNNEST nutrient helper
-
-`backend/src/nutrition/food_log/infra/pg.rs` —
-`insert_food_log_nutrients`.
-
-Uses `WITH ins AS (INSERT ... SELECT ... FROM UNNEST(...) RETURNING 1) SELECT
-COUNT(*)` plus unknown-code validation. Same rationale as the catalog UNNEST
-helpers.
 
 ### Migrations
 

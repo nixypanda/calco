@@ -11,7 +11,7 @@ use super::iden::Nutrients;
 
 // ─── Nutrient Repo ───────────────────────────────────────
 
-fn list_nutrients_statement() -> SelectStatement {
+fn nutrient_list_all_statement() -> SelectStatement {
     Query::select()
         .columns([
             Nutrients::Code,
@@ -24,7 +24,7 @@ fn list_nutrients_statement() -> SelectStatement {
         .to_owned()
 }
 
-fn find_nutrient_statement(code: &str) -> SelectStatement {
+fn nutrient_find_by_code_statement(code: &str) -> SelectStatement {
     Query::select()
         .columns([
             Nutrients::Code,
@@ -51,7 +51,7 @@ impl PgNutrientRepo {
 #[async_trait]
 impl NutrientRepo for PgNutrientRepo {
     async fn list_all(&self) -> Result<Vec<Nutrient>, NutritionError> {
-        let (sql, values) = list_nutrients_statement().build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = nutrient_list_all_statement().build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, NutrientRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_all(&self.pool)
@@ -61,7 +61,7 @@ impl NutrientRepo for PgNutrientRepo {
     }
 
     async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, NutritionError> {
-        let (sql, values) = find_nutrient_statement(code).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = nutrient_find_by_code_statement(code).build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, NutrientRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_optional(&self.pool)

@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::food_log::domain::*;
+use crate::nutrition::infra::pg as nutrient_batch;
 use crate::nutrition::meal::domain::MealId;
 
 #[derive(Iden)]
@@ -69,7 +70,7 @@ fn food_log_columns() -> [FoodLogs; 14] {
     ]
 }
 
-fn load_snapshots_statement(food_log_id: Uuid) -> SelectStatement {
+fn food_log_load_snapshots_statement(food_log_id: Uuid) -> SelectStatement {
     Query::select()
         .column((FoodLogNutrients::Table, FoodLogNutrients::Amount))
         .column((FoodLogNutrients::Table, FoodLogNutrients::Unit))
@@ -87,7 +88,7 @@ fn load_snapshots_statement(food_log_id: Uuid) -> SelectStatement {
         .to_owned()
 }
 
-fn snapshot_join_statement(ids: Vec<Uuid>) -> SelectStatement {
+fn food_log_join_snapshots_statement(ids: Vec<Uuid>) -> SelectStatement {
     Query::select()
         .column((FoodLogNutrients::Table, FoodLogNutrients::FoodLogId))
         .column((FoodLogNutrients::Table, FoodLogNutrients::Amount))
@@ -104,7 +105,7 @@ fn snapshot_join_statement(ids: Vec<Uuid>) -> SelectStatement {
         .to_owned()
 }
 
-fn find_food_log_statement(id: Uuid) -> SelectStatement {
+fn food_log_find_by_id_statement(id: Uuid) -> SelectStatement {
     Query::select()
         .columns(food_log_columns())
         .from(FoodLogs::Table)
@@ -112,7 +113,7 @@ fn find_food_log_statement(id: Uuid) -> SelectStatement {
         .to_owned()
 }
 
-fn list_by_user_and_date_statement(user_id: Uuid, log_date: NaiveDate) -> SelectStatement {
+fn food_log_list_by_user_and_date_statement(user_id: Uuid, log_date: NaiveDate) -> SelectStatement {
     let slot_rank = CaseStatement::new()
         .case(
             Expr::col(FoodLogs::MealSlot).eq(MealSlot::Breakfast.as_str()),
@@ -146,7 +147,7 @@ fn list_by_user_and_date_statement(user_id: Uuid, log_date: NaiveDate) -> Select
         .to_owned()
 }
 
-fn insert_food_log_statement(log: &FoodLog) -> InsertStatement {
+fn food_log_insert_statement(log: &FoodLog) -> InsertStatement {
     let (product_id, meal_id, item_name, item_brand) = item_to_columns(log.item());
 
     Query::insert()
@@ -171,7 +172,7 @@ fn insert_food_log_statement(log: &FoodLog) -> InsertStatement {
         .to_owned()
 }
 
-fn update_food_log_statement(log: &FoodLog) -> UpdateStatement {
+fn food_log_update_statement(log: &FoodLog) -> UpdateStatement {
     let (product_id, meal_id, item_name, item_brand) = item_to_columns(log.item());
 
     Query::update()
@@ -194,14 +195,14 @@ fn update_food_log_statement(log: &FoodLog) -> UpdateStatement {
         .to_owned()
 }
 
-fn delete_food_log_statement(id: Uuid) -> DeleteStatement {
+fn food_log_delete_statement(id: Uuid) -> DeleteStatement {
     Query::delete()
         .from_table(FoodLogs::Table)
         .and_where(Expr::col(FoodLogs::Id).eq(id))
         .to_owned()
 }
 
-fn delete_food_log_nutrients_statement(food_log_id: Uuid) -> DeleteStatement {
+fn food_log_nutrient_delete_by_food_log_id_statement(food_log_id: Uuid) -> DeleteStatement {
     Query::delete()
         .from_table(FoodLogNutrients::Table)
         .and_where(Expr::col(FoodLogNutrients::FoodLogId).eq(food_log_id))
@@ -222,7 +223,8 @@ impl PgFoodLogRepo {
         &self,
         food_log_id: Uuid,
     ) -> Result<Vec<FoodLogNutrientSnapshot>, NutritionError> {
-        let (sql, values) = load_snapshots_statement(food_log_id).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) =
+            food_log_load_snapshots_statement(food_log_id).build_sqlx(PostgresQueryBuilder);
         let rows = sqlx::query_as_with::<_, NutrientSnapshotRow, _>(
             sqlx::AssertSqlSafe(sql.as_str()),
             values,
@@ -249,7 +251,7 @@ impl PgFoodLogRepo {
         }
 
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-        let (sql, values) = snapshot_join_statement(ids).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = food_log_join_snapshots_statement(ids).build_sqlx(PostgresQueryBuilder);
         let snapshot_rows = sqlx::query_as_with::<_, FoodLogSnapshotJoinRow, _>(
             sqlx::AssertSqlSafe(sql.as_str()),
             values,
@@ -279,7 +281,7 @@ impl PgFoodLogRepo {
     }
 }
 
-fn food_log_filter_query(filter: FoodLogListFilter) -> SelectStatement {
+fn food_log_list_by_filter_statement(filter: FoodLogListFilter) -> SelectStatement {
     let FoodLogListFilter {
         user_id,
         date_range,
@@ -425,7 +427,7 @@ impl FoodLogRepo for PgFoodLogRepo {
         let mut tx = self.pool.begin().await?;
 
         for log in logs {
-            let (sql, values) = insert_food_log_statement(log).build_sqlx(PostgresQueryBuilder);
+            let (sql, values) = food_log_insert_statement(log).build_sqlx(PostgresQueryBuilder);
             sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .execute(&mut *tx)
                 .await?;
@@ -438,7 +440,7 @@ impl FoodLogRepo for PgFoodLogRepo {
     }
 
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, NutritionError> {
-        let (sql, values) = find_food_log_statement(id.0).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = food_log_find_by_id_statement(id.0).build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_optional(&self.pool)
@@ -458,8 +460,8 @@ impl FoodLogRepo for PgFoodLogRepo {
         user_id: Uuid,
         log_date: NaiveDate,
     ) -> Result<Vec<FoodLog>, NutritionError> {
-        let (sql, values) =
-            list_by_user_and_date_statement(user_id, log_date).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = food_log_list_by_user_and_date_statement(user_id, log_date)
+            .build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_all(&self.pool)
@@ -472,7 +474,7 @@ impl FoodLogRepo for PgFoodLogRepo {
         &self,
         filter: FoodLogListFilter,
     ) -> Result<Vec<FoodLog>, NutritionError> {
-        let statement = food_log_filter_query(filter);
+        let statement = food_log_list_by_filter_statement(filter);
         let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
@@ -484,13 +486,13 @@ impl FoodLogRepo for PgFoodLogRepo {
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
-        let (sql, values) = update_food_log_statement(log).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = food_log_update_statement(log).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&mut *tx)
             .await?;
 
-        let (sql, values) =
-            delete_food_log_nutrients_statement(log.id().0).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = food_log_nutrient_delete_by_food_log_id_statement(log.id().0)
+            .build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&mut *tx)
             .await?;
@@ -502,7 +504,7 @@ impl FoodLogRepo for PgFoodLogRepo {
     }
 
     async fn delete(&self, id: FoodLogId) -> Result<(), NutritionError> {
-        let (sql, values) = delete_food_log_statement(id.0).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = food_log_delete_statement(id.0).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;
@@ -553,12 +555,6 @@ fn item_to_columns(item: &FoodLogItemSnapshot) -> (Option<Uuid>, Option<Uuid>, &
     }
 }
 
-/// Postgres-specific bulk snapshot insert.
-///
-/// This intentionally stays as raw SQL: `UNNEST` turns the three snapshot
-/// arrays into a single set-based insert, and the returned row count is the
-/// validation that every nutrient code resolved. sea-query cannot express
-/// either the array unnest or the count validation more clearly than this.
 async fn insert_food_log_nutrients(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     food_log_id: Uuid,
@@ -568,37 +564,43 @@ async fn insert_food_log_nutrients(
         return Ok(());
     }
 
+    // Resolve nutrient IDs in Rust instead of relying on a Postgres JOIN/UNNEST.
     let codes: Vec<String> = snapshots
         .iter()
         .map(|s| s.nutrient_code.0.clone())
         .collect();
-    let amounts: Vec<Decimal> = snapshots.iter().map(|s| s.amount).collect();
-    let units: Vec<String> = snapshots.iter().map(|s| s.unit.0.clone()).collect();
+    let nutrient_ids =
+        nutrient_batch::resolve_nutrient_ids(tx, &codes, "food log snapshot").await?;
 
-    let inserted: i64 = sqlx::query_scalar(
-        r#"
-        WITH ins AS (
-            INSERT INTO food_log_nutrients (food_log_id, nutrient_id, amount, unit)
-            SELECT $1, n.id, v.amount, v.unit
-            FROM UNNEST($2::text[], $3::numeric[], $4::text[]) AS v(code, amount, unit)
-            JOIN nutrients n ON n.code = v.code
-            RETURNING 1
-        )
-        SELECT COUNT(*) FROM ins
-        "#,
-    )
-    .bind(food_log_id)
-    .bind(&codes)
-    .bind(&amounts)
-    .bind(&units)
-    .fetch_one(&mut **tx)
+    let n = snapshots.len();
+    let written = nutrient_batch::insert_chunked(tx, n, 100, |start, end| {
+        let mut statement = Query::insert();
+        statement.into_table(FoodLogNutrients::Table).columns([
+            FoodLogNutrients::FoodLogId,
+            FoodLogNutrients::NutrientId,
+            FoodLogNutrients::Amount,
+            FoodLogNutrients::Unit,
+        ]);
+        for snapshot in &snapshots[start..end] {
+            let nutrient_id = nutrient_ids
+                .get(&snapshot.nutrient_code.0)
+                .expect("validated nutrient identity missing during insert");
+            statement.values_panic([
+                food_log_id.into(),
+                (*nutrient_id).into(),
+                snapshot.amount.into(),
+                snapshot.unit.0.clone().into(),
+            ]);
+        }
+        statement
+    })
     .await?;
 
-    if (inserted as usize) != snapshots.len() {
+    if written != snapshots.len() {
         return Err(NutritionError::Validation(format!(
             "unknown nutrient code in food log snapshot (expected {} rows, inserted {})",
             snapshots.len(),
-            inserted
+            written
         )));
     }
     Ok(())

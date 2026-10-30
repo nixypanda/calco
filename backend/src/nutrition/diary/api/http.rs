@@ -73,4 +73,3 @@ fn to_response(prefs: DiaryPrefs) -> DiaryPrefsResponse {
             .collect(),
     }
 }
-

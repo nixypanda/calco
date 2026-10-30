@@ -5,5 +5,6 @@ pub mod error;
 pub mod food_log;
 pub mod goals;
 pub mod guidance;
+pub mod infra;
 pub mod meal;
 pub mod module;

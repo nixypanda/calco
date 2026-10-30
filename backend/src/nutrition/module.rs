@@ -195,5 +195,4 @@ impl FromRef<AppState> for NutritionModule {
 }
 
 #[cfg(test)]
-mod architecture_tests {
-}
+mod architecture_tests {}

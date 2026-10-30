@@ -50,7 +50,7 @@ fn meal_columns() -> [Meals; 8] {
     ]
 }
 
-fn load_components_statement(meal_id: Uuid) -> SelectStatement {
+fn meal_component_load_by_meal_id_statement(meal_id: Uuid) -> SelectStatement {
     Query::select()
         .columns([
             MealComponents::Id,
@@ -65,7 +65,7 @@ fn load_components_statement(meal_id: Uuid) -> SelectStatement {
         .to_owned()
 }
 
-fn find_meal_statement(id: Uuid) -> SelectStatement {
+fn meal_find_by_id_statement(id: Uuid) -> SelectStatement {
     Query::select()
         .columns(meal_columns())
         .from(Meals::Table)
@@ -73,7 +73,7 @@ fn find_meal_statement(id: Uuid) -> SelectStatement {
         .to_owned()
 }
 
-fn list_all_meals_statement() -> SelectStatement {
+fn meal_list_all_statement() -> SelectStatement {
     Query::select()
         .columns(meal_columns())
         .from(Meals::Table)
@@ -81,7 +81,7 @@ fn list_all_meals_statement() -> SelectStatement {
         .to_owned()
 }
 
-fn insert_meal_statement(meal: &Meal) -> InsertStatement {
+fn meal_insert_statement(meal: &Meal) -> InsertStatement {
     Query::insert()
         .into_table(Meals::Table)
         .columns(meal_columns())
@@ -101,7 +101,7 @@ fn insert_meal_statement(meal: &Meal) -> InsertStatement {
         .to_owned()
 }
 
-fn insert_component_statement(meal_id: Uuid, component: &MealComponent) -> InsertStatement {
+fn meal_component_insert_statement(meal_id: Uuid, component: &MealComponent) -> InsertStatement {
     let (product_id, component_meal_id) = match &component.item {
         MealComponentItem::Product(pid) => (Some(pid.0), None::<Uuid>),
     };
@@ -127,7 +127,7 @@ fn insert_component_statement(meal_id: Uuid, component: &MealComponent) -> Inser
         .to_owned()
 }
 
-fn update_meal_statement(meal: &Meal) -> UpdateStatement {
+fn meal_update_statement(meal: &Meal) -> UpdateStatement {
     Query::update()
         .table(Meals::Table)
         .value(Meals::Name, meal.name.as_str())
@@ -147,14 +147,14 @@ fn update_meal_statement(meal: &Meal) -> UpdateStatement {
         .to_owned()
 }
 
-fn delete_meal_components_statement(meal_id: Uuid) -> DeleteStatement {
+fn meal_component_delete_by_meal_id_statement(meal_id: Uuid) -> DeleteStatement {
     Query::delete()
         .from_table(MealComponents::Table)
         .and_where(Expr::col(MealComponents::MealId).eq(meal_id))
         .to_owned()
 }
 
-fn delete_meal_statement(id: Uuid) -> DeleteStatement {
+fn meal_delete_statement(id: Uuid) -> DeleteStatement {
     Query::delete()
         .from_table(Meals::Table)
         .and_where(Expr::col(Meals::Id).eq(id))
@@ -172,7 +172,8 @@ impl PgMealRepo {
     }
 
     async fn load_components(&self, meal_id: Uuid) -> Result<Vec<MealComponent>, NutritionError> {
-        let (sql, values) = load_components_statement(meal_id).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) =
+            meal_component_load_by_meal_id_statement(meal_id).build_sqlx(PostgresQueryBuilder);
         let rows = sqlx::query_as_with::<_, MealComponentRow, _>(
             sqlx::AssertSqlSafe(sql.as_str()),
             values,
@@ -226,14 +227,14 @@ impl MealRepo for PgMealRepo {
     async fn create(&self, meal: &Meal) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
-        let (sql, values) = insert_meal_statement(meal).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = meal_insert_statement(meal).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&mut *tx)
             .await?;
 
         for component in &meal.components {
-            let (sql, values) =
-                insert_component_statement(meal.id.0, component).build_sqlx(PostgresQueryBuilder);
+            let (sql, values) = meal_component_insert_statement(meal.id.0, component)
+                .build_sqlx(PostgresQueryBuilder);
             sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .execute(&mut *tx)
                 .await?;
@@ -244,7 +245,7 @@ impl MealRepo for PgMealRepo {
     }
 
     async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, NutritionError> {
-        let (sql, values) = find_meal_statement(id.0).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = meal_find_by_id_statement(id.0).build_sqlx(PostgresQueryBuilder);
         let row = sqlx::query_as_with::<_, MealRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .fetch_optional(&self.pool)
             .await?;
@@ -259,7 +260,7 @@ impl MealRepo for PgMealRepo {
     }
 
     async fn list_all(&self) -> Result<Vec<Meal>, NutritionError> {
-        let (sql, values) = list_all_meals_statement().build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = meal_list_all_statement().build_sqlx(PostgresQueryBuilder);
         let rows = sqlx::query_as_with::<_, MealRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .fetch_all(&self.pool)
             .await?;
@@ -275,20 +276,20 @@ impl MealRepo for PgMealRepo {
     async fn update(&self, meal: &Meal) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
-        let (sql, values) = update_meal_statement(meal).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = meal_update_statement(meal).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&mut *tx)
             .await?;
 
         let (sql, values) =
-            delete_meal_components_statement(meal.id.0).build_sqlx(PostgresQueryBuilder);
+            meal_component_delete_by_meal_id_statement(meal.id.0).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&mut *tx)
             .await?;
 
         for component in &meal.components {
-            let (sql, values) =
-                insert_component_statement(meal.id.0, component).build_sqlx(PostgresQueryBuilder);
+            let (sql, values) = meal_component_insert_statement(meal.id.0, component)
+                .build_sqlx(PostgresQueryBuilder);
             sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .execute(&mut *tx)
                 .await?;
@@ -299,7 +300,7 @@ impl MealRepo for PgMealRepo {
     }
 
     async fn delete(&self, id: MealId) -> Result<(), NutritionError> {
-        let (sql, values) = delete_meal_statement(id.0).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = meal_delete_statement(id.0).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;

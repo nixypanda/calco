@@ -897,6 +897,14 @@ Function naming rules:
 - Keep repository `impl` blocks focused on repository behavior, SQL execution, transactions, and data-loading helpers.
 - Keep insert/update helpers outside repository `impl` blocks when they are shared by multiple repository methods or only need a transaction.
 
+Statement constructors:
+- Every private SQL builder that returns a sea-query `*Statement` must end in `_statement`. Do not use `_query`, `_sql`, or an unsuffixed name.
+- Use entity-first naming: `{entity}_{operation}[_{qualifier}...]_statement`. The entity is the primary row/domain concept, including child tables such as `product_nutrient` or `meal_component`.
+- Mirror repository port vocabulary for port-shaped operations: `create`, `find_by_{criteria}`, `list_all`, `list_by_{criteria}`, `update`, `delete`, `delete_by_{criteria}`, `upsert`, `exists_by_{criteria}`, `count_by_{criteria}`, and `sum_by_{criteria}`.
+- For builders that are not direct port operations, use only `load`, `join`, `search`, `soft_delete`, `resolve`, or `insert_{variant}` / `delete_{child}`.
+- Use `by_{criteria}` for predicates, `_and_` to join predicates, and `by_{target}_ids` or `for_{target}` for collection inputs.
+- Child-table builders name the child entity, not the parent.
+
 ## Error Shape
 
 HTTP errors use:

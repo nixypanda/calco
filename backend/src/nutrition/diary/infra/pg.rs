@@ -34,7 +34,7 @@ impl PgDiaryPrefsRepo {
     }
 }
 
-fn find_by_user_id_statement(user_id: Uuid) -> SelectStatement {
+fn diary_prefs_find_by_user_id_statement(user_id: Uuid) -> SelectStatement {
     Query::select()
         .columns([DiaryPrefs::UserId, DiaryPrefs::EnabledMealSlots])
         .from(DiaryPrefs::Table)
@@ -51,7 +51,7 @@ fn canonical_slots(prefs: &DomainDiaryPrefs) -> Vec<String> {
         .collect()
 }
 
-fn save_statement(prefs: &DomainDiaryPrefs) -> InsertStatement {
+fn diary_prefs_upsert_statement(prefs: &DomainDiaryPrefs) -> InsertStatement {
     let slots = canonical_slots(prefs);
     Query::insert()
         .into_table(DiaryPrefs::Table)
@@ -72,7 +72,8 @@ impl DiaryPrefsRepo for PgDiaryPrefsRepo {
         &self,
         user_id: Uuid,
     ) -> Result<Option<DomainDiaryPrefs>, NutritionError> {
-        let (sql, values) = find_by_user_id_statement(user_id).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) =
+            diary_prefs_find_by_user_id_statement(user_id).build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, DiaryPrefsRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_optional(&self.pool)
@@ -81,8 +82,8 @@ impl DiaryPrefsRepo for PgDiaryPrefsRepo {
         row.map(row_to_domain).transpose()
     }
 
-    async fn save(&self, prefs: &DomainDiaryPrefs) -> Result<(), NutritionError> {
-        let (sql, values) = save_statement(prefs).build_sqlx(PostgresQueryBuilder);
+    async fn upsert(&self, prefs: &DomainDiaryPrefs) -> Result<(), NutritionError> {
+        let (sql, values) = diary_prefs_upsert_statement(prefs).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;

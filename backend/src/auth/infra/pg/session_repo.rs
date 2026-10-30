@@ -46,7 +46,7 @@ fn session_columns() -> [Sessions; 8] {
     ]
 }
 
-fn create_statement(session: &Session) -> InsertStatement {
+fn session_create_statement(session: &Session) -> InsertStatement {
     Query::insert()
         .into_table(Sessions::Table)
         .columns(session_columns())
@@ -63,7 +63,7 @@ fn create_statement(session: &Session) -> InsertStatement {
         .to_owned()
 }
 
-fn find_by_token_hash_statement(token_hash: &str) -> SelectStatement {
+fn session_find_by_token_hash_statement(token_hash: &str) -> SelectStatement {
     Query::select()
         .columns(session_columns())
         .from(Sessions::Table)
@@ -71,7 +71,7 @@ fn find_by_token_hash_statement(token_hash: &str) -> SelectStatement {
         .to_owned()
 }
 
-fn update_statement(session: &Session) -> UpdateStatement {
+fn session_update_statement(session: &Session) -> UpdateStatement {
     Query::update()
         .table(Sessions::Table)
         .values([
@@ -102,7 +102,7 @@ fn update_statement(session: &Session) -> UpdateStatement {
 #[async_trait]
 impl SessionRepo for PgSessionRepo {
     async fn create(&self, session: &Session) -> Result<(), AuthError> {
-        let (sql, values) = create_statement(session).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = session_create_statement(session).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;
@@ -112,7 +112,7 @@ impl SessionRepo for PgSessionRepo {
 
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError> {
         let (sql, values) =
-            find_by_token_hash_statement(token_hash).build_sqlx(PostgresQueryBuilder);
+            session_find_by_token_hash_statement(token_hash).build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, SessionRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_optional(&self.pool)
@@ -122,7 +122,7 @@ impl SessionRepo for PgSessionRepo {
     }
 
     async fn update(&self, session: &Session) -> Result<(), AuthError> {
-        let (sql, values) = update_statement(session).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = session_update_statement(session).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;
