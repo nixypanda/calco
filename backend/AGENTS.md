@@ -9,7 +9,7 @@ This directory contains the Rust backend. Also read the repository root
 - `src/lib.rs` is the app composition root (`AppState`, `build_app_state`,
   `build_router`).
 - Code is organized by bounded context first, then layer:
-  `auth/`, `nutrition/`, `import/`, and `assistant/`.
+  `auth/`, `catalog/`, `journal/`, `import/`, and `assistant/`.
 - `infra` is always a directory with `mod.rs`. One PostgreSQL repository uses
   `infra/pg.rs`; multiple repositories use `infra/pg/` with one module per
   repository. Non-Postgres adapters live under `infra/`.
@@ -64,7 +64,7 @@ Or directly:
 ```bash
 cd backend && cargo test
 cd backend && cargo test --test product_lifecycle
-cd backend && cargo test nutrition::domain::food_log
+cd backend && cargo test journal::food_log::domain
 ```
 
 Integration tests require PostgreSQL reachable via `DATABASE_URL`. The project

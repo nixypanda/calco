@@ -4,7 +4,7 @@
 
 The backend is a Rust service built with axum and sqlx. The code is organized
 by bounded context first. `auth`, `import`, and `assistant` nest their layers
-directly; `nutrition` is feature-first, with one folder per sub-context, each
+directly; `journal` is feature-first, with one folder per sub-context, each
 nesting its own layers:
 
 ```text
@@ -52,33 +52,46 @@ backend/src/
       mod.rs
       http.rs
     composition.rs
-  nutrition/
-    error.rs             # NutritionError
+  catalog/
+    error.rs             # CatalogError
     api/
       mod.rs
-      http.rs            # shared HTTP error glue
-    module.rs            # NutritionModule composition root
-    catalog/
-      domain/
+      http.rs
+      shared.rs           # shared HTTP helpers
+    module.rs            # CatalogModule composition root
+    domain/
+      mod.rs
+      calculation.rs     # Quantity, CalculatedNutrition, NutritionCalculator
+      units.rs           # UnitConverter
+      search_ranking.rs
+    app.rs
+    infra/
+      mod.rs
+      open_food_facts.rs
+      pg/
         mod.rs
-        calculation.rs   # Quantity, CalculatedNutrition, NutritionCalculator
-        units.rs         # UnitConverter
-        search_ranking.rs
+        iden.rs
+        nutrient_repo.rs
+        unit_repo.rs
+        product/
+          mod.rs         # PgProductRepo
+          statements.rs
+          rows.rs
+          children.rs
+          tests.rs
+        shared.rs        # resolve_nutrient_ids, insert_chunked
+  journal/
+    error.rs             # JournalError
+    api/
+      mod.rs
+      http.rs            # IntoResponse for JournalError
+    module.rs            # JournalModule composition root
+    meal/
+      domain.rs
       app.rs
       infra/
         mod.rs
-        open_food_facts.rs
-        pg/
-          mod.rs
-          iden.rs
-          nutrient_repo.rs
-          unit_repo.rs
-          product/
-            mod.rs       # PgProductRepo
-            statements.rs
-            rows.rs
-            children.rs
-            tests.rs
+        pg.rs
       api/
         mod.rs
         http.rs
@@ -89,15 +102,6 @@ backend/src/
         history.rs
         services.rs
         test_support.rs
-      infra/
-        mod.rs
-        pg.rs
-      api/
-        mod.rs
-        http.rs
-    meal/
-      domain.rs
-      app.rs
       infra/
         mod.rs
         pg.rs
@@ -122,7 +126,7 @@ backend/src/
       api/
         mod.rs
         http.rs
-    diary/
+    diary_prefs/
       domain.rs
       app.rs
       infra/
@@ -131,78 +135,9 @@ backend/src/
       api/
         mod.rs
         http.rs
-```
 
-The tree is selective: `main.rs`, `config/`, and the context-root `mod.rs`
-files are omitted for brevity.
-
-`AppState` is the app-wide composition root and lives in `lib.rs`. The
-`ReadUser` and `WriteUser` extractors live in `auth/api/http.rs` and are
-used by nutrition handlers — auth is a foundational dependency of nutrition, not
-the other way around.
-
-## Configuration
-
-Startup settings live under `config/`. `load_env` parses process variables into
-`EnvSourceConfig`; the optional TOML source supplies assistant settings. TOML
-`RawAuth` normalizes to `AssistantAuth` for `AssistantProviderConfig`, and the
-LLM adapter maps it to its private `ProviderAuth`.
-
-## DDD Decisions
-
-### Layering
-
-The backend follows this dependency direction:
-
-```text
-api/http -> app -> domain
-infra/pg -> domain ports
-```
-
-Repository traits are defined in `domain`. PostgreSQL repositories implement
-them. The app layer composes domain operations and repositories into use cases
-without issuing SQL. Shared domain error enums currently contain `sqlx::Error`
-variants, so persistence is not yet fully absent from domain types; avoid
-extending that coupling.
-
-### Infrastructure Layout
-
-`infra` is always a directory with a `mod.rs`.
-
-- A context with one PostgreSQL repository uses `infra/pg.rs`.
-- A context with multiple PostgreSQL repositories uses `infra/pg/`, with one
-  module per repository and a `mod.rs` that re-exports them. Repository modules
-  use `*_repo.rs`, such as `api_key_repo.rs` and `nutrient_repo.rs`.
-- A large repository may use `pg/<repository>/` as a module directory: `mod.rs`
-  owns the repository implementation, while private helper modules hold
-  statements, row mapping, child writes, and tests. The catalog `product/`
-  module is the current example.
-- Schema identifiers shared by more than one repository live in `pg/iden.rs`;
-  repository-local identifiers stay with their repository.
-- Non-PostgreSQL adapters live under `infra/`. A single-file adapter is a
-  top-level file; an adapter family uses its own directory (`llm/`,
-  `food_draft/`).
-
-Catalog uses the multi-repository shape (`product/`, `nutrient_repo.rs`,
-`unit_repo.rs`) plus the Open Food Facts adapter. Auth uses `pg/` for its four
-repositories plus the Argon2 adapter. Import, food logs, meals, goals, and diary
-preferences use the single-repository shape. Guidance keeps its static,
-non-Postgres adapter directly under `infra/`.
-
-### API Layout
-
-`api` is always a directory with a `mod.rs`.
-
-- A single HTTP transport file lives at `api/http.rs`.
-- A large or multi-concern HTTP surface may use `api/http/`, with a `mod.rs`
-  that wires the route entry point and private submodules for handlers, DTOs,
-  conversions, or route groups.
-- `api/mod.rs` holds module wiring and API-level types that are not tied to one
-  HTTP module, such as auth's `SessionCookieConfig`.
-- A context never uses a bare `api.rs`.
-
-All current contexts use the single-file shape. Nutrition's shared HTTP glue
-lives at `nutrition/api/http.rs`.
+All current contexts use the single-file shape. Catalog's shared HTTP glue
+lives at `catalog/api/shared.rs`; journal's HTTP glue lives at `journal/api/http.rs`.
 
 ### Repository Ports
 
