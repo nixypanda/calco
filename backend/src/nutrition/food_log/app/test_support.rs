@@ -1,7 +1,8 @@
 use super::*;
 use crate::catalog::app::{CatalogReadPort, NutrientCatalogReadPort};
-use crate::catalog::error::CatalogError;use crate::catalog::domain::units::UnitConverter;
+use crate::catalog::domain::units::UnitConverter;
 use crate::catalog::domain::*;
+use crate::catalog::error::CatalogError;
 use crate::nutrition::food_log::domain::*;
 use crate::nutrition::meal::app::{MealReadPort, ResolvedMeal};
 use crate::nutrition::meal::domain::*;

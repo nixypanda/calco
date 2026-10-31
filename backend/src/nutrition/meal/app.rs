@@ -4,7 +4,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::catalog::app::CatalogReadPort;
-use crate::catalog::domain::calculation::Quantity;use crate::catalog::domain::units::UnitConverter;
+use crate::catalog::domain::calculation::Quantity;
+use crate::catalog::domain::units::UnitConverter;
 use crate::catalog::domain::*;
 use crate::nutrition::meal::domain::*;
 
@@ -108,7 +109,11 @@ impl MealService {
                 MealComponentItem::Product(id) => id,
             })
             .collect::<Vec<_>>();
-        self.catalog.resolve_products(actor_id, &product_ids).await.map_err(NutritionError::from)    }
+        self.catalog
+            .resolve_products(actor_id, &product_ids)
+            .await
+            .map_err(NutritionError::from)
+    }
 
     pub fn unit_converter(&self) -> &UnitConverter {
         &self.unit_converter

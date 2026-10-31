@@ -236,7 +236,8 @@ fn parse_component_item(item: &ItemRefDto) -> Result<MealComponentItem, Nutritio
 }
 
 fn parse_quantity_dto(q: &QuantityDto) -> Result<Quantity, NutritionError> {
-    Quantity::new(q.amount, UnitCode(q.unit.clone())).map_err(NutritionError::from)}
+    Quantity::new(q.amount, UnitCode(q.unit.clone())).map_err(NutritionError::from)
+}
 
 fn meal_create_request_to_input(req: CreateMealRequest) -> Result<CreateMealInput, NutritionError> {
     Ok(CreateMealInput {

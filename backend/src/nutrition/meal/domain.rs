@@ -3,9 +3,7 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::catalog::domain::calculation::{
-    CalculatedNutrition, NutrientAmount, Quantity,
-};
+use crate::catalog::domain::calculation::{CalculatedNutrition, NutrientAmount, Quantity};
 use crate::catalog::domain::units::UnitConverter;
 use crate::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
 

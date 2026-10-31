@@ -1,6 +1,6 @@
 use calco_backend::catalog::domain::{
-    ExternalProductBatch, ExternalProductBuilder, ExternalSource, Nutrient, NutrientCatalog,
-    NutrientCode, CatalogError, Product, ProductId, ProductNutrientInput, ProductRepo,
+    CatalogError, ExternalProductBatch, ExternalProductBuilder, ExternalSource, Nutrient,
+    NutrientCatalog, NutrientCode, Product, ProductId, ProductNutrientInput, ProductRepo,
     ProductServingInput, UnitCode,
 };
 use calco_backend::catalog::infra::PgProductRepo;
@@ -289,10 +289,8 @@ async fn external_upsert_rolls_back_all_parent_writes_on_persistence_errors(pool
         .nutrients
         .push(calco_backend::catalog::domain::ProductNutrient {
             nutrient_code: NutrientCode("DOES_NOT_EXIST".into()),
-            amount_per_100g: calco_backend::catalog::domain::AmountPer100g::new(
-                Decimal::ONE,
-            )
-            .unwrap(),
+            amount_per_100g: calco_backend::catalog::domain::AmountPer100g::new(Decimal::ONE)
+                .unwrap(),
             unit: UnitCode("g".into()),
             source: None,
             confidence: None,

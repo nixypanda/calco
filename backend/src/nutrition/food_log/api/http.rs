@@ -545,7 +545,8 @@ fn parse_food_log_item_ref(item: &ItemRefDto) -> Result<FoodLogItemRef, Nutritio
 }
 
 fn parse_quantity(q: &QuantityDto) -> Result<Quantity, NutritionError> {
-    Quantity::new(q.amount, UnitCode(q.unit.clone())).map_err(NutritionError::from)}
+    Quantity::new(q.amount, UnitCode(q.unit.clone())).map_err(NutritionError::from)
+}
 
 fn parse_log_date(s: &str) -> Result<NaiveDate, NutritionError> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d")

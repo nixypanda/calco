@@ -6,7 +6,8 @@ use sqlx::PgPool;
 use crate::AppState;
 use crate::BoxError;
 use crate::catalog::app::CatalogService;
-use crate::catalog::app::ExternalProductCatalog;use crate::catalog::domain::units::UnitConverter;
+use crate::catalog::app::ExternalProductCatalog;
+use crate::catalog::domain::units::UnitConverter;
 use crate::catalog::domain::{NutrientRepo, ProductRepo, UnitRepo};
 use crate::catalog::infra::{OpenFoodFactsClient, PgNutrientRepo, PgProductRepo, PgUnitRepo};
 

@@ -217,13 +217,13 @@ impl FoodLogBuilder {
             nutrition: CalculatedNutrition {
                 amounts: nutrient_snapshots
                     .into_iter()
-                    .map(|snapshot| {
-                        crate::catalog::domain::calculation::NutrientAmount {
+                    .map(
+                        |snapshot| crate::catalog::domain::calculation::NutrientAmount {
                             nutrient_code: snapshot.nutrient_code,
                             amount: snapshot.amount,
                             unit: snapshot.unit,
-                        }
-                    })
+                        },
+                    )
                     .collect(),
             },
             meal_slot: None,

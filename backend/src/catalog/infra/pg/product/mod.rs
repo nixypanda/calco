@@ -54,10 +54,7 @@ impl PgProductRepo {
         Self { pool }
     }
 
-    async fn load_nutrients(
-        &self,
-        product_id: Uuid,
-    ) -> Result<Vec<ProductNutrient>, CatalogError> {
+    async fn load_nutrients(&self, product_id: Uuid) -> Result<Vec<ProductNutrient>, CatalogError> {
         let (sql, values) = product_nutrient_load_by_product_id_statement(product_id)
             .build_sqlx(PostgresQueryBuilder);
         let rows = sqlx::query_as_with::<_, ProductNutrientRow, _>(
@@ -290,10 +287,7 @@ impl ProductRepo for PgProductRepo {
             .collect())
     }
 
-    async fn find_search_summaries(
-        &self,
-        ids: &[ProductId],
-    ) -> Result<Vec<Product>, CatalogError> {
+    async fn find_search_summaries(&self, ids: &[ProductId]) -> Result<Vec<Product>, CatalogError> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }

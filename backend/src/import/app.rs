@@ -2,13 +2,13 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::import::domain::*;
 use crate::catalog::app::{ExternalProductWritePort, NutrientCatalogReadPort};
 use crate::catalog::domain::{
     AmountPer100g, ExternalProductBuilder, ExternalSource, NutrientCatalog, Product,
     ProductNutrientInput, ProductServingInput,
 };
 use crate::catalog::error::CatalogError;
+use crate::import::domain::*;
 
 fn validate_staged_food(food: &StagedImportProduct) -> Result<(), String> {
     ExternalSource::from_str(&food.source)?;

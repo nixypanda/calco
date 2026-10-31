@@ -1,8 +1,8 @@
 pub mod assistant;
 pub mod auth;
+pub mod catalog;
 pub mod config;
 pub mod import;
-pub mod catalog;
 pub mod nutrition;
 use axum::http::{HeaderValue, Method, header};
 use axum::{Router, routing::get};
@@ -15,16 +15,16 @@ use crate::auth::api::SessionCookieConfig;
 use crate::auth::api::http::auth_routes;
 use crate::auth::domain::SessionPolicy;
 use crate::auth::module::AuthModule;
+use crate::catalog::api::http::catalog_routes;
+use crate::catalog::module::CatalogModule;
 use crate::config::{AppConfig, ServerConfig};
 use crate::import::api::http::import_routes;
 use crate::import::module::ImportModule;
-use crate::catalog::api::http::catalog_routes;
 use crate::nutrition::diary::api::http::diary_prefs_routes;
 use crate::nutrition::food_log::api::http::food_log_routes;
 use crate::nutrition::goals::api::http::goal_target_routes;
 use crate::nutrition::guidance::api::http::nutrition_details_routes;
 use crate::nutrition::meal::api::http::meal_routes;
-use crate::catalog::module::CatalogModule;
 use crate::nutrition::module::NutritionModule;
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -51,11 +51,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     );
     let catalog = CatalogModule::build(&pool).await?;
     let nutrition = NutritionModule::build(&pool, &catalog).await?;
-    let import = ImportModule::build(
-        &pool,
-        catalog.services.clone(),
-        catalog.services.clone(),
-    );
+    let import = ImportModule::build(&pool, catalog.services.clone(), catalog.services.clone());
     let assistant = AssistantComponents::from_config(&config.assistant, &catalog)?;
 
     Ok(AppState {

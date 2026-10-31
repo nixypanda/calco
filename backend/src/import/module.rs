@@ -4,10 +4,10 @@ use axum::extract::FromRef;
 use sqlx::PgPool;
 
 use crate::AppState;
+use crate::catalog::app::{ExternalProductWritePort, NutrientCatalogReadPort};
 use crate::import::app::ImportService;
 use crate::import::domain::ImportRepo;
 use crate::import::infra::pg::PgImportRepo;
-use crate::catalog::app::{ExternalProductWritePort, NutrientCatalogReadPort};
 
 #[derive(Clone)]
 pub struct ImportModule {

@@ -3,9 +3,7 @@ use sea_query::{Expr, ExprTrait, Order, PostgresQueryBuilder, Query, SelectState
 use sea_query_sqlx::SqlxBinder;
 use sqlx::postgres::PgPool;
 
-use crate::catalog::domain::{
-    Nutrient, NutrientCode, NutrientRepo, CatalogError, UnitCode,
-};
+use crate::catalog::domain::{CatalogError, Nutrient, NutrientCode, NutrientRepo, UnitCode};
 
 use super::iden::Nutrients;
 

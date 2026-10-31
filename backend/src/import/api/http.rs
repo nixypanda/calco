@@ -11,10 +11,10 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::api::http::AuthAdmin;
+use crate::catalog::domain::Category;
 use crate::import::app::StageResult;
 use crate::import::domain::*;
 use crate::import::module::ImportModule;
-use crate::catalog::domain::Category;
 
 pub fn import_routes(state: AppState) -> Router {
     Router::new()

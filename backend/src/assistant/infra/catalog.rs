@@ -8,9 +8,7 @@ use crate::assistant::app::{
 };
 use crate::assistant::domain::FoodDraft;
 use crate::catalog::app::CatalogService;
-use crate::catalog::domain::{
-    CustomProductBuilder, ProductNutrientInput, ProductServingInput,
-};
+use crate::catalog::domain::{CustomProductBuilder, ProductNutrientInput, ProductServingInput};
 use crate::catalog::error::CatalogError;
 
 /// Read-only anti-corruption adapter from nutrition reference data to the

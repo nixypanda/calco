@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::catalog::app::ExternalProductCatalog;
 use crate::catalog::domain::{
-    ExternalProductBuilder, CatalogError, ProductNutrientInput, ProductServingInput,
+    CatalogError, ExternalProductBuilder, ProductNutrientInput, ProductServingInput,
 };
 
 const ENDPOINT: &str = "https://world.openfoodfacts.org/api/v3/product/";
@@ -79,9 +79,7 @@ impl ExternalProductCatalog for OpenFoodFactsClient {
 
         let body: OffResponse =
             serde_json::from_slice(&bytes).map_err(|_| CatalogError::ExternalInvalidResponse)?;
-        let product = body
-            .product
-            .ok_or(CatalogError::ExternalInvalidResponse)?;
+        let product = body.product.ok_or(CatalogError::ExternalInvalidResponse)?;
         product.into_input(barcode).map(Some)
     }
 }

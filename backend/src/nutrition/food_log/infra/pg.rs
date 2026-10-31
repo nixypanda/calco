@@ -12,8 +12,9 @@ use std::ops::Bound;
 use uuid::Uuid;
 
 use crate::catalog::domain::*;
+use crate::catalog::infra::pg as nutrient_batch;
 use crate::nutrition::food_log::domain::*;
-use crate::catalog::infra::pg as nutrient_batch;use crate::nutrition::meal::domain::MealId;
+use crate::nutrition::meal::domain::MealId;
 
 #[derive(Iden)]
 enum FoodLogs {

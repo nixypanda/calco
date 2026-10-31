@@ -9,9 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::catalog::domain::calculation::{
-    CalculatedNutrition, NutritionCalculator, Quantity,
-};
+use crate::catalog::domain::calculation::{CalculatedNutrition, NutritionCalculator, Quantity};
 use crate::catalog::domain::search_ranking::{
     CategoryCount, HistorySearchCandidate, ProductSearchFields,
 };
@@ -999,10 +997,7 @@ pub trait ProductRepo: Send + Sync {
     async fn category_counts(&self) -> Result<Vec<CategoryCount>, CatalogError>;
     /// Loads search-result product summaries by ID. The caller owns the
     /// ranked ordering; the returned order is unspecified.
-    async fn find_search_summaries(
-        &self,
-        ids: &[ProductId],
-    ) -> Result<Vec<Product>, CatalogError>;
+    async fn find_search_summaries(&self, ids: &[ProductId]) -> Result<Vec<Product>, CatalogError>;
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, CatalogError>;
     async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, CatalogError>;
     async fn find_by_barcode(
@@ -1028,11 +1023,7 @@ pub trait ProductRepo: Send + Sync {
 pub struct CatalogPolicy;
 
 impl CatalogPolicy {
-    pub fn authorize_view(
-        &self,
-        _actor_id: Uuid,
-        _product: &Product,
-    ) -> Result<(), CatalogError> {
+    pub fn authorize_view(&self, _actor_id: Uuid, _product: &Product) -> Result<(), CatalogError> {
         Ok(())
     }
 
@@ -1164,10 +1155,7 @@ mod tests {
             ExternalProductBuilder::new("  ", "Food"),
             &test_catalog(),
         );
-        assert!(matches!(
-            blank_source_id,
-            Err(CatalogError::Validation(_))
-        ));
+        assert!(matches!(blank_source_id, Err(CatalogError::Validation(_))));
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -1325,10 +1313,7 @@ mod tests {
 
         let missing_quantity = CustomProductBuilder::new("Food")
             .optional_default_portion(None, Some("serving".into()));
-        assert!(matches!(
-            missing_quantity,
-            Err(CatalogError::Validation(_))
-        ));
+        assert!(matches!(missing_quantity, Err(CatalogError::Validation(_))));
     }
 
     #[test]
