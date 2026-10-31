@@ -71,17 +71,26 @@ pub(super) fn parse(
         WireStatus::NeedsClarification
             if wire.draft.is_none() && wire.suggested_log.is_none() && wire.warnings.is_empty() =>
         {
-            FoodDraftTurn::clarification(wire.assistant_message).map_err(invalid_draft)
+            let message = if wire.assistant_message.trim().is_empty() {
+                "Could you provide more details?".to_owned()
+            } else {
+                wire.assistant_message
+            };
+            FoodDraftTurn::clarification(message).map_err(invalid_draft)
         }
         WireStatus::DraftReady => {
             let draft = parse_draft(wire.draft.ok_or(AssistantError::InvalidModelResponse)?)?;
+            let message = if wire.assistant_message.trim().is_empty() {
+                "Review this estimate.".to_owned()
+            } else {
+                wire.assistant_message
+            };
             match (purpose, wire.suggested_log) {
                 (FoodDraftPurpose::CustomFood, None) => {
-                    FoodDraftTurn::ready(wire.assistant_message, draft, wire.warnings)
-                        .map_err(invalid_draft)
+                    FoodDraftTurn::ready(message, draft, wire.warnings).map_err(invalid_draft)
                 }
                 (FoodDraftPurpose::AdHocLog, Some(value)) => FoodDraftTurn::ready_for_log(
-                    wire.assistant_message,
+                    message,
                     draft,
                     SuggestedLog::new(value.amount, value.unit, value.total_weight_grams)
                         .map_err(invalid_draft)?,
@@ -106,7 +115,7 @@ fn parse_draft(wire: WireDraft) -> Result<FoodDraft, AssistantError> {
         servings.push(DraftServing::new(value.unit, value.grams_per_unit).map_err(invalid_draft)?);
     }
     FoodDraftBuilder::new(wire.name)
-        .optional_brand(wire.brand)
+        .optional_brand(wire.brand.filter(|value| !value.trim().is_empty()).map(|value| value.trim().to_owned()))
         .categories(wire.categories)
         .optional_default_quantity(wire.default_quantity, wire.default_unit)
         .nutrients(nutrients)

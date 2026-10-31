@@ -5,7 +5,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 default_database_url := "postgres://calco:calco@localhost:5432/calco"
-default_calco_config_file := justfile_directory() + "/assistant-config/groq.toml"
+default_calco_config_file := justfile_directory() + "/assistant-config/opencode-go.toml"
 
 default:
     @just --list

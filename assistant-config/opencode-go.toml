@@ -1,0 +1,9 @@
+[assistant]
+enabled = true
+endpoint = "https://opencode.ai/inference/go/openai/v1/chat/completions"
+model = "deepseek-v4.1-flash"
+supports_images = true
+
+[assistant.authentication]
+kind = "bearer"
+api_key_file = "assistant-config/opencode-go-api-key"

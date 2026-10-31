@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use zeroize::Zeroizing;
 
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_PROVIDER_RESPONSE_BYTES: usize = 1024 * 1024;
 const JSON_ONLY_INSTRUCTION: &str =
     "Return only one JSON object that conforms exactly to the supplied JSON Schema.";
@@ -189,6 +189,14 @@ impl OpenAiClient {
             HeaderValue::from_static("application/json"),
         );
         self.auth.apply(&mut headers);
+        if self.endpoint.host_str() == Some("opencode.ai") {
+            if let Ok(value) = HeaderValue::from_str(&uuid::Uuid::new_v4().to_string()) {
+                headers.insert(HeaderName::from_static("x-opencode-session"), value);
+            }
+            if let Ok(value) = HeaderValue::from_str("calco/0.1.0") {
+                headers.insert(reqwest::header::USER_AGENT, value);
+            }
+        }
         let response = self
             .client
             .post(self.endpoint.clone())
@@ -197,7 +205,7 @@ impl OpenAiClient {
             .send()
             .await
             .map_err(|error| {
-                tracing::error!(error = %error, mode = ?mode, "provider request failed");
+                tracing::error!(error = ?error, mode = ?mode, "provider request failed");
                 CompletionFailure::Unavailable
             })?;
         let status = response.status();
@@ -501,10 +509,12 @@ fn explicitly_rejects_response_format(status: StatusCode, body: &[u8]) -> bool {
         return false;
     };
     let text = text.to_ascii_lowercase();
-    (text.contains("response_format")
-        && ["unsupported", "not supported", "unknown", "not available"]
-            .iter()
-            .any(|term| text.contains(term)))
+    if !text.contains("response_format") {
+        return false;
+    }
+    ["unsupported", "not supported", "unknown", "not available", "is not permitted", "invalid_value", "invalid schema", "invalid json schema"]
+        .iter()
+        .any(|term| text.contains(term))
         || text.contains("json_validate_failed")
 }
 
