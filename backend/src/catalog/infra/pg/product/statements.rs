@@ -5,7 +5,7 @@ use sea_query::{
 };
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::{CatalogSearchScope, Product};
+use crate::catalog::domain::{CatalogSearchScope, Product};
 
 use super::super::iden::Nutrients;
 

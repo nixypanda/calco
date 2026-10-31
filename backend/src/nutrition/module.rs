@@ -5,13 +5,8 @@ use sqlx::PgPool;
 
 use crate::AppState;
 use crate::BoxError;
-use crate::nutrition::catalog::app::ExternalProductCatalog;
-use crate::nutrition::catalog::app::{CatalogReadPort, CatalogService, NutrientCatalogReadPort};
-use crate::nutrition::catalog::domain::units::UnitConverter;
-use crate::nutrition::catalog::domain::{NutrientRepo, ProductRepo, UnitRepo};
-use crate::nutrition::catalog::infra::{
-    OpenFoodFactsClient, PgNutrientRepo, PgProductRepo, PgUnitRepo,
-};
+use crate::catalog::app::{CatalogReadPort, NutrientCatalogReadPort};
+use crate::catalog::module::CatalogModule;
 use crate::nutrition::diary::app::DiaryPrefsService;
 use crate::nutrition::diary::domain::DiaryPrefsRepo;
 use crate::nutrition::diary::infra::PgDiaryPrefsRepo;
@@ -31,18 +26,6 @@ use crate::nutrition::meal::infra::PgMealRepo;
 /// The catalog kernel: products, nutrients, units, and the unit converter.
 ///
 /// Every other nutrition sub-module that needs product data or unit conversion
-/// depends on this. Handlers that only touch the catalog extract
-/// `State<CatalogModule>` instead of the whole `AppState`.
-#[derive(Clone)]
-pub struct CatalogModule {
-    pub services: Arc<CatalogService>,
-}
-
-impl FromRef<AppState> for CatalogModule {
-    fn from_ref(app: &AppState) -> Self {
-        app.nutrition.catalog.clone()
-    }
-}
 
 #[derive(Clone)]
 pub struct MealModule {
@@ -114,10 +97,7 @@ pub struct NutritionModule {
 }
 
 impl NutritionModule {
-    pub async fn build(pool: &PgPool) -> Result<Self, BoxError> {
-        let product_repo = Arc::new(PgProductRepo::new(pool.clone())) as Arc<dyn ProductRepo>;
-        let nutrient_repo = Arc::new(PgNutrientRepo::new(pool.clone())) as Arc<dyn NutrientRepo>;
-        let unit_repo = Arc::new(PgUnitRepo::new(pool.clone())) as Arc<dyn UnitRepo>;
+    pub async fn build(pool: &PgPool, catalog: &CatalogModule) -> Result<Self, BoxError> {
         let meal_repo = Arc::new(PgMealRepo::new(pool.clone())) as Arc<dyn MealRepo>;
         let food_log_repo = Arc::new(PgFoodLogRepo::new(pool.clone())) as Arc<dyn FoodLogRepo>;
         let diary_prefs_repo =
@@ -126,19 +106,9 @@ impl NutritionModule {
             Arc::new(PgGoalTargetRepo::new(pool.clone())) as Arc<dyn GoalTargetRepo>;
         let nutrient_guidance_repo =
             Arc::new(StaticGuidanceRepo::new()) as Arc<dyn NutrientGuidanceRepo>;
-        let external_catalog =
-            Arc::new(OpenFoodFactsClient::new()?) as Arc<dyn ExternalProductCatalog>;
 
-        let mass_factors = unit_repo.list_mass_factors().await?;
-        let unit_converter = Arc::new(UnitConverter::from_entries(mass_factors));
-
-        let catalog_services = Arc::new(CatalogService::new(
-            product_repo.clone(),
-            nutrient_repo.clone(),
-            unit_repo,
-            unit_converter.clone(),
-            external_catalog,
-        ));
+        let catalog_services = catalog.services.clone();
+        let unit_converter = catalog.unit_converter.clone();
         let catalog_reads: Arc<dyn CatalogReadPort> = catalog_services.clone();
         let nutrient_catalog_reads: Arc<dyn NutrientCatalogReadPort> = catalog_services.clone();
         let meal_services = Arc::new(MealService::new(
@@ -156,9 +126,7 @@ impl NutritionModule {
         ));
         let food_log_queries: Arc<dyn FoodLogQueryPort> = food_log_services.clone();
 
-        let catalog = CatalogModule {
-            services: catalog_services,
-        };
+        let catalog = catalog.clone();
         let meal = MealModule { meal_services };
         let food_log = FoodLogModule {
             food_log_services,

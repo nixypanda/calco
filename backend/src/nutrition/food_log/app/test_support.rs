@@ -1,7 +1,7 @@
 use super::*;
-use crate::nutrition::catalog::app::{CatalogReadPort, NutrientCatalogReadPort};
-use crate::nutrition::catalog::domain::units::UnitConverter;
-use crate::nutrition::catalog::domain::*;
+use crate::catalog::app::{CatalogReadPort, NutrientCatalogReadPort};
+use crate::catalog::error::CatalogError;use crate::catalog::domain::units::UnitConverter;
+use crate::catalog::domain::*;
 use crate::nutrition::food_log::domain::*;
 use crate::nutrition::meal::app::{MealReadPort, ResolvedMeal};
 use crate::nutrition::meal::domain::*;
@@ -153,7 +153,7 @@ impl CatalogReadPort for MockCatalogReadPort {
         &self,
         _actor_id: Uuid,
         ids: &[ProductId],
-    ) -> Result<Vec<(ProductId, Product)>, NutritionError> {
+    ) -> Result<Vec<(ProductId, Product)>, CatalogError> {
         Ok(self
             .product
             .clone()
@@ -172,7 +172,7 @@ struct MockNutrientCatalogReadPort;
 
 #[async_trait]
 impl NutrientCatalogReadPort for MockNutrientCatalogReadPort {
-    async fn nutrient_catalog(&self) -> Result<NutrientCatalog, NutritionError> {
+    async fn nutrient_catalog(&self) -> Result<NutrientCatalog, CatalogError> {
         Ok([
             ("ENERGY_KCAL", "kcal"),
             ("PROTEIN_G", "g"),

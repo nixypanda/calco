@@ -1,10 +1,10 @@
 use crate::common::*;
 use axum::http::StatusCode;
-use calco_backend::nutrition::catalog::domain::{
+use calco_backend::catalog::domain::{
     ExternalProductBatch, ExternalProductBuilder, ExternalSource, NutrientCatalog, Product,
     ProductRepo,
 };
-use calco_backend::nutrition::catalog::infra::PgProductRepo;
+use calco_backend::catalog::infra::PgProductRepo;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 

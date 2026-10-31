@@ -12,10 +12,10 @@ use sqlx::{Postgres, QueryBuilder};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::search_ranking::{
+use crate::catalog::domain::search_ranking::{
     CategoryCount, HistorySearchCandidate, ProductSearchFields,
 };
-use crate::nutrition::catalog::domain::*;
+use crate::catalog::domain::*;
 
 use children::{
     insert_product_nutrients, insert_product_servings, replace_product_nutrients,
@@ -57,7 +57,7 @@ impl PgProductRepo {
     async fn load_nutrients(
         &self,
         product_id: Uuid,
-    ) -> Result<Vec<ProductNutrient>, NutritionError> {
+    ) -> Result<Vec<ProductNutrient>, CatalogError> {
         let (sql, values) = product_nutrient_load_by_product_id_statement(product_id)
             .build_sqlx(PostgresQueryBuilder);
         let rows = sqlx::query_as_with::<_, ProductNutrientRow, _>(
@@ -80,7 +80,7 @@ impl PgProductRepo {
             .collect()
     }
 
-    async fn load_servings(&self, product_id: Uuid) -> Result<Vec<ProductServing>, NutritionError> {
+    async fn load_servings(&self, product_id: Uuid) -> Result<Vec<ProductServing>, CatalogError> {
         let (sql, values) = product_serving_load_by_product_id_statement(product_id)
             .build_sqlx(PostgresQueryBuilder);
         let rows = sqlx::query_as_with::<_, ProductServingRow, _>(
@@ -102,7 +102,7 @@ impl PgProductRepo {
     async fn load_nutrients_for_products(
         &self,
         product_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, Vec<ProductNutrient>>, NutritionError> {
+    ) -> Result<HashMap<Uuid, Vec<ProductNutrient>>, CatalogError> {
         if product_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -134,7 +134,7 @@ impl PgProductRepo {
     async fn load_servings_for_products(
         &self,
         product_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, Vec<ProductServing>>, NutritionError> {
+    ) -> Result<HashMap<Uuid, Vec<ProductServing>>, CatalogError> {
         if product_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -163,7 +163,7 @@ impl PgProductRepo {
     async fn load_summary_nutrients(
         &self,
         product_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, Vec<ProductNutrient>>, NutritionError> {
+    ) -> Result<HashMap<Uuid, Vec<ProductNutrient>>, CatalogError> {
         if product_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -199,7 +199,7 @@ impl ProductRepo for PgProductRepo {
         &self,
         spec: &ProductSearchSpec,
         scope: CatalogSearchScope,
-    ) -> Result<Vec<ProductSearchFields>, NutritionError> {
+    ) -> Result<Vec<ProductSearchFields>, CatalogError> {
         let include: Vec<String> = spec
             .include_categories
             .iter()
@@ -229,7 +229,7 @@ impl ProductRepo for PgProductRepo {
         &self,
         spec: &ProductSearchSpec,
         user_id: Uuid,
-    ) -> Result<Vec<HistorySearchCandidate>, NutritionError> {
+    ) -> Result<Vec<HistorySearchCandidate>, CatalogError> {
         let include: Vec<String> = spec
             .include_categories
             .iter()
@@ -256,7 +256,7 @@ impl ProductRepo for PgProductRepo {
             .collect())
     }
 
-    async fn category_counts(&self) -> Result<Vec<CategoryCount>, NutritionError> {
+    async fn category_counts(&self) -> Result<Vec<CategoryCount>, CatalogError> {
         // Ranking lives in `domain/search_ranking.rs`; only storage aggregation
         // remains here.
         let (sql, values) = product_category_counts_statement().build_sqlx(PostgresQueryBuilder);
@@ -293,7 +293,7 @@ impl ProductRepo for PgProductRepo {
     async fn find_search_summaries(
         &self,
         ids: &[ProductId],
-    ) -> Result<Vec<Product>, NutritionError> {
+    ) -> Result<Vec<Product>, CatalogError> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -320,7 +320,7 @@ impl ProductRepo for PgProductRepo {
             .collect()
     }
 
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError> {
+    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, CatalogError> {
         let (sql, values) = product_find_by_id_statement(id.0).build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, ProductRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
@@ -337,7 +337,7 @@ impl ProductRepo for PgProductRepo {
         }
     }
 
-    async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, NutritionError> {
+    async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, CatalogError> {
         if ids.is_empty() {
             return Ok(HashSet::new());
         }
@@ -354,7 +354,7 @@ impl ProductRepo for PgProductRepo {
         &self,
         barcode: &str,
         _user_id: Option<Uuid>,
-    ) -> Result<Option<Product>, NutritionError> {
+    ) -> Result<Option<Product>, CatalogError> {
         let (sql, values) =
             product_find_by_barcode_statement(barcode).build_sqlx(PostgresQueryBuilder);
         let row =
@@ -372,7 +372,7 @@ impl ProductRepo for PgProductRepo {
         }
     }
 
-    async fn list_custom_foods(&self) -> Result<Vec<Product>, NutritionError> {
+    async fn list_custom_foods(&self) -> Result<Vec<Product>, CatalogError> {
         let (sql, values) = product_list_custom_statement().build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, ProductRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
@@ -396,7 +396,7 @@ impl ProductRepo for PgProductRepo {
             .collect()
     }
 
-    async fn create(&self, product: &Product) -> Result<(), NutritionError> {
+    async fn create(&self, product: &Product) -> Result<(), CatalogError> {
         let mut tx = self.pool.begin().await?;
 
         let (sql, values) = product_insert_statement(product).build_sqlx(PostgresQueryBuilder);
@@ -414,7 +414,7 @@ impl ProductRepo for PgProductRepo {
     async fn upsert_external_many(
         &self,
         batch: &ExternalProductBatch,
-    ) -> Result<ProductUpsertResult, NutritionError> {
+    ) -> Result<ProductUpsertResult, CatalogError> {
         let products = batch.products();
         if products.is_empty() {
             return Ok(ProductUpsertResult::default());
@@ -462,7 +462,7 @@ impl ProductRepo for PgProductRepo {
             .collect();
         if !unknown_codes.is_empty() {
             unknown_codes.sort_unstable();
-            return Err(NutritionError::Validation(format!(
+            return Err(CatalogError::Validation(format!(
                 "unknown nutrient code(s): {}",
                 unknown_codes.join(", ")
             )));
@@ -549,7 +549,7 @@ impl ProductRepo for PgProductRepo {
         }
 
         if product_ids_by_source.len() != products.len() {
-            return Err(NutritionError::Internal(
+            return Err(CatalogError::Internal(
                 "not every external product could be resolved after upsert".into(),
             ));
         }
@@ -564,7 +564,7 @@ impl ProductRepo for PgProductRepo {
                     ))
                     .copied()
                     .ok_or_else(|| {
-                        NutritionError::Internal(
+                        CatalogError::Internal(
                             "external product identity missing after upsert".into(),
                         )
                     })
@@ -580,7 +580,7 @@ impl ProductRepo for PgProductRepo {
         Ok(result)
     }
 
-    async fn update(&self, product: &Product) -> Result<(), NutritionError> {
+    async fn update(&self, product: &Product) -> Result<(), CatalogError> {
         let mut tx = self.pool.begin().await?;
 
         let (sql, values) = product_update_statement(product).build_sqlx(PostgresQueryBuilder);
@@ -607,7 +607,7 @@ impl ProductRepo for PgProductRepo {
         Ok(())
     }
 
-    async fn delete(&self, id: ProductId) -> Result<(), NutritionError> {
+    async fn delete(&self, id: ProductId) -> Result<(), CatalogError> {
         let (sql, values) = product_soft_delete_statement(id.0).build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)

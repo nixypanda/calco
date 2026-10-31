@@ -166,7 +166,7 @@ fn status_for(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nutrition::catalog::domain::{NutrientCode, ProductId, UnitCode};
+    use crate::catalog::domain::{NutrientCode, ProductId, UnitCode};
     use crate::nutrition::food_log::domain::{
         FoodLogId, FoodLogItemSnapshot, FoodLogNutrientSnapshot,
     };

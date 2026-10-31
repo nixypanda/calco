@@ -9,7 +9,7 @@ use sea_query_sqlx::SqlxBinder;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::*;
+use crate::catalog::domain::*;
 use crate::nutrition::meal::domain::*;
 
 #[derive(Iden)]

@@ -1,8 +1,7 @@
 use rust_decimal::Decimal;
 
 use super::{AmountPer100g, NutrientCode, UnitCode};
-use crate::nutrition::error::NutritionError;
-
+use crate::catalog::error::CatalogError;
 #[derive(Debug, Clone)]
 pub struct Quantity {
     amount: Decimal,
@@ -10,9 +9,9 @@ pub struct Quantity {
 }
 
 impl Quantity {
-    pub fn new(amount: Decimal, unit: UnitCode) -> Result<Self, NutritionError> {
+    pub fn new(amount: Decimal, unit: UnitCode) -> Result<Self, CatalogError> {
         if amount <= Decimal::ZERO {
-            return Err(NutritionError::Validation(
+            return Err(CatalogError::Validation(
                 "quantity amount must be positive".into(),
             ));
         }
@@ -135,7 +134,7 @@ mod tests {
                 prop_assert_eq!(quantity.amount(), amount);
                 prop_assert_eq!(quantity.unit(), &unit);
             } else {
-                prop_assert!(matches!(result, Err(NutritionError::Validation(_))));
+                prop_assert!(matches!(result, Err(CatalogError::Validation(_))));
             }
         }
 

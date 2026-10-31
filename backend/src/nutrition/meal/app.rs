@@ -3,10 +3,9 @@ use rust_decimal::Decimal;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::app::CatalogReadPort;
-use crate::nutrition::catalog::domain::calculation::Quantity;
-use crate::nutrition::catalog::domain::units::UnitConverter;
-use crate::nutrition::catalog::domain::*;
+use crate::catalog::app::CatalogReadPort;
+use crate::catalog::domain::calculation::Quantity;use crate::catalog::domain::units::UnitConverter;
+use crate::catalog::domain::*;
 use crate::nutrition::meal::domain::*;
 
 pub struct CreateMealInput {
@@ -109,8 +108,7 @@ impl MealService {
                 MealComponentItem::Product(id) => id,
             })
             .collect::<Vec<_>>();
-        self.catalog.resolve_products(actor_id, &product_ids).await
-    }
+        self.catalog.resolve_products(actor_id, &product_ids).await.map_err(NutritionError::from)    }
 
     pub fn unit_converter(&self) -> &UnitConverter {
         &self.unit_converter
@@ -324,10 +322,10 @@ mod tests {
             &self,
             _actor_id: Uuid,
             ids: &[ProductId],
-        ) -> Result<Vec<(ProductId, Product)>, NutritionError> {
+        ) -> Result<Vec<(ProductId, Product)>, CatalogError> {
             match &self.product {
                 Some(product) => Ok(ids.iter().map(|id| (*id, product.clone())).collect()),
-                None => Err(NutritionError::NotFound("product not found".into())),
+                None => Err(CatalogError::NotFound("product not found".into())),
             }
         }
     }

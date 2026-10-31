@@ -5,9 +5,8 @@ use sea_query_sqlx::SqlxBinder;
 use sqlx::Postgres;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::{NutritionError, Product, ProductNutrient, ProductServing};
-use crate::nutrition::infra::pg as nutrient_batch;
-
+use crate::catalog::domain::{CatalogError, Product, ProductNutrient, ProductServing};
+use crate::catalog::infra::pg as nutrient_batch;
 #[derive(Iden)]
 enum ProductNutrients {
     Table,
@@ -32,7 +31,7 @@ pub(super) async fn insert_product_nutrients(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     product_id: Uuid,
     nutrients: &[ProductNutrient],
-) -> Result<(), NutritionError> {
+) -> Result<(), CatalogError> {
     if nutrients.is_empty() {
         return Ok(());
     }
@@ -75,7 +74,7 @@ pub(super) async fn insert_product_nutrients(
     .await?;
 
     if written != nutrients.len() {
-        return Err(NutritionError::Validation(format!(
+        return Err(CatalogError::Validation(format!(
             "unknown nutrient code in product (expected {} rows, inserted {})",
             nutrients.len(),
             written
@@ -88,7 +87,7 @@ pub(super) async fn insert_product_servings(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     product_id: Uuid,
     servings: &[ProductServing],
-) -> Result<(), NutritionError> {
+) -> Result<(), CatalogError> {
     if servings.is_empty() {
         return Ok(());
     }
@@ -102,7 +101,7 @@ pub(super) async fn insert_product_servings(
     ]);
     for (position, serving) in servings.iter().enumerate() {
         let position = i32::try_from(position)
-            .map_err(|_| NutritionError::Validation("too many servings for product".into()))?;
+            .map_err(|_| CatalogError::Validation("too many servings for product".into()))?;
         statement.values_panic([
             product_id.into(),
             serving.unit.0.clone().into(),
@@ -122,7 +121,7 @@ pub(super) async fn replace_product_nutrients(
     products: &[&Product],
     product_ids: &[Uuid],
     nutrient_ids: &HashMap<String, Uuid>,
-) -> Result<i64, NutritionError> {
+) -> Result<i64, CatalogError> {
     let mut incoming_product_ids = Vec::new();
     let mut incoming_nutrient_ids = Vec::new();
     let mut amounts = Vec::new();
@@ -134,7 +133,7 @@ pub(super) async fn replace_product_nutrients(
             incoming_product_ids.push(*product_id);
             incoming_nutrient_ids.push(*nutrient_ids.get(&nutrient.nutrient_code.0).ok_or_else(
                 || {
-                    NutritionError::Internal(
+                    CatalogError::Internal(
                         "validated nutrient identity missing during upsert".into(),
                     )
                 },
@@ -196,7 +195,7 @@ pub(super) async fn replace_product_servings(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     products: &[&Product],
     product_ids: &[Uuid],
-) -> Result<i64, NutritionError> {
+) -> Result<i64, CatalogError> {
     let mut incoming_product_ids = Vec::new();
     let mut units = Vec::new();
     let mut grams_per_unit = Vec::new();
@@ -205,7 +204,7 @@ pub(super) async fn replace_product_servings(
     for (product, product_id) in products.iter().zip(product_ids) {
         for (position, serving) in product.servings.iter().enumerate() {
             let position = i32::try_from(position).map_err(|_| {
-                NutritionError::Validation("too many servings for external product".into())
+                CatalogError::Validation("too many servings for external product".into())
             })?;
             incoming_product_ids.push(*product_id);
             units.push(serving.unit.0.clone());

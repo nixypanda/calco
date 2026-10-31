@@ -3,7 +3,7 @@ use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::*;
+use crate::catalog::domain::*;
 
 use super::PgProductRepo;
 

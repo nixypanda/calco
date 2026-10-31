@@ -1,5 +1,4 @@
 pub mod api;
-pub mod catalog;
 pub mod diary;
 pub mod error;
 pub mod food_log;

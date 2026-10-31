@@ -1,9 +1,9 @@
-use calco_backend::nutrition::catalog::domain::{
+use calco_backend::catalog::domain::{
     ExternalProductBatch, ExternalProductBuilder, ExternalSource, Nutrient, NutrientCatalog,
-    NutrientCode, NutritionError, Product, ProductId, ProductNutrientInput, ProductRepo,
+    NutrientCode, CatalogError, Product, ProductId, ProductNutrientInput, ProductRepo,
     ProductServingInput, UnitCode,
 };
-use calco_backend::nutrition::catalog::infra::PgProductRepo;
+use calco_backend::catalog::infra::PgProductRepo;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use std::collections::HashSet;
@@ -272,7 +272,7 @@ async fn external_upsert_rolls_back_all_parent_writes_on_persistence_errors(pool
     primary_key_collision.id = valid.id;
     let colliding_batch = external_batch(vec![valid.clone(), primary_key_collision]);
     let failed = repository.upsert_external_many(&colliding_batch).await;
-    assert!(matches!(failed, Err(NutritionError::Database(_))));
+    assert!(matches!(failed, Err(CatalogError::Database(_))));
 
     let parent_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = ANY($1)",
@@ -287,9 +287,9 @@ async fn external_upsert_rolls_back_all_parent_writes_on_persistence_errors(pool
     let mut unknown = external_product("unknown-nutrient", None, "Unknown", &[], &[]);
     unknown
         .nutrients
-        .push(calco_backend::nutrition::catalog::domain::ProductNutrient {
+        .push(calco_backend::catalog::domain::ProductNutrient {
             nutrient_code: NutrientCode("DOES_NOT_EXIST".into()),
-            amount_per_100g: calco_backend::nutrition::catalog::domain::AmountPer100g::new(
+            amount_per_100g: calco_backend::catalog::domain::AmountPer100g::new(
                 Decimal::ONE,
             )
             .unwrap(),
@@ -299,7 +299,7 @@ async fn external_upsert_rolls_back_all_parent_writes_on_persistence_errors(pool
         });
     let unknown_batch = external_batch(vec![valid, unknown]);
     let unknown_result = repository.upsert_external_many(&unknown_batch).await;
-    assert!(matches!(unknown_result, Err(NutritionError::Validation(_))));
+    assert!(matches!(unknown_result, Err(CatalogError::Validation(_))));
     let parent_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = ANY($1)",
     )

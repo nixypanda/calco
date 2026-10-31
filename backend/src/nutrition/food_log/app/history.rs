@@ -345,8 +345,8 @@ mod tests {
     use super::super::test_support::*;
     use super::super::{FoodLogService, LogFoodInput};
     use super::{MAX_TOP_QUANTITIES, item_name, recent_items_from_logs};
-    use crate::nutrition::catalog::domain::calculation::Quantity;
-    use crate::nutrition::catalog::domain::{NutrientCode, ProductId, UnitCode};
+    use crate::catalog::domain::calculation::Quantity;
+    use crate::catalog::domain::{NutrientCode, ProductId, UnitCode};
     use crate::nutrition::food_log::domain::{
         FoodLog, FoodLogBuilder, FoodLogId, FoodLogItemRef, FoodLogItemSnapshot,
         FoodLogNutrientSnapshot, MealSlot, NutritionError, QuantityUsage,

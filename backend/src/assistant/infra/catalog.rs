@@ -7,11 +7,11 @@ use crate::assistant::app::{
     SupportedUnit,
 };
 use crate::assistant::domain::FoodDraft;
-use crate::nutrition::catalog::app::CatalogService;
-use crate::nutrition::catalog::domain::{
+use crate::catalog::app::CatalogService;
+use crate::catalog::domain::{
     CustomProductBuilder, ProductNutrientInput, ProductServingInput,
 };
-use crate::nutrition::error::NutritionError;
+use crate::catalog::error::CatalogError;
 
 /// Read-only anti-corruption adapter from nutrition reference data to the
 /// bounded vocabulary supplied to the model.
@@ -106,7 +106,7 @@ impl FoodDraftAcceptancePort for CatalogVocabularyAdapter {
                     "assistant response failed catalog validation"
                 );
                 match error {
-                    NutritionError::Validation(_) => AssistantError::InvalidModelResponse,
+                    CatalogError::Validation(_) => AssistantError::InvalidModelResponse,
                     _ => AssistantError::Internal,
                 }
             })

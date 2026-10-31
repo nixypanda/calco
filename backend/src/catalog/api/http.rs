@@ -12,10 +12,9 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::api::http::{ReadUser, WriteUser};
-use crate::nutrition::catalog::app::BarcodeLookupOrigin;
-use crate::nutrition::catalog::domain::*;
-use crate::nutrition::module::CatalogModule;
-
+use crate::catalog::app::BarcodeLookupOrigin;
+use crate::catalog::domain::*;
+use crate::catalog::module::CatalogModule;
 // ─── Routes ────────────────────────────────────────────────────
 
 pub fn catalog_routes(state: AppState) -> Router {
@@ -40,10 +39,9 @@ pub fn catalog_routes(state: AppState) -> Router {
 
 // ─── DTOs ──────────────────────────────────────────────────────
 
-use crate::nutrition::api::http::{
+use crate::catalog::api::shared::{
     NutrientSummaryDto, error_response, internal_error, nutrient_summary_from_entries,
 };
-
 #[derive(Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SourceDto {
@@ -461,7 +459,7 @@ async fn list_units_handler(
 
 fn custom_food_request_to_input(
     req: CreateCustomFoodRequest,
-) -> Result<CustomProductBuilder, NutritionError> {
+) -> Result<CustomProductBuilder, CatalogError> {
     Ok(CustomProductBuilder::new(req.name)
         .brand(req.brand)
         .categories(req.categories)
@@ -516,7 +514,7 @@ fn products_to_search_response(products: Vec<Product>) -> SearchListResponse {
 async fn custom_foods_to_list_response(
     state: &CatalogModule,
     products: &[Product],
-) -> Result<CustomFoodListResponse, NutritionError> {
+) -> Result<CustomFoodListResponse, CatalogError> {
     let all_units = state.services.list_units().await?;
     let mut items = Vec::with_capacity(products.len());
     for product in products {
@@ -617,7 +615,7 @@ fn product_to_detail_response(
 }
 
 fn barcode_lookup_response(
-    result: crate::nutrition::catalog::app::BarcodeLookupResult,
+    result: crate::catalog::app::BarcodeLookupResult,
     allowed_units: Vec<(UnitCode, String, String)>,
 ) -> BarcodeLookupResponse {
     let (origin, note) = match result.origin {

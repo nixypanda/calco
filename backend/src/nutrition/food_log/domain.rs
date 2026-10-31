@@ -5,9 +5,9 @@ use std::ops::Bound;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::calculation::{CalculatedNutrition, Quantity};
-use crate::nutrition::catalog::domain::units::UnitConverter;
-use crate::nutrition::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
+use crate::catalog::domain::calculation::{CalculatedNutrition, Quantity};
+use crate::catalog::domain::units::UnitConverter;
+use crate::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
 use crate::nutrition::meal::domain::{Meal, MealId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -218,7 +218,7 @@ impl FoodLogBuilder {
                 amounts: nutrient_snapshots
                     .into_iter()
                     .map(|snapshot| {
-                        crate::nutrition::catalog::domain::calculation::NutrientAmount {
+                        crate::catalog::domain::calculation::NutrientAmount {
                             nutrient_code: snapshot.nutrient_code,
                             amount: snapshot.amount,
                             unit: snapshot.unit,

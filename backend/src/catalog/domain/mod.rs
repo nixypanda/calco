@@ -9,13 +9,13 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::calculation::{
+use crate::catalog::domain::calculation::{
     CalculatedNutrition, NutritionCalculator, Quantity,
 };
-use crate::nutrition::catalog::domain::search_ranking::{
+use crate::catalog::domain::search_ranking::{
     CategoryCount, HistorySearchCandidate, ProductSearchFields,
 };
-use crate::nutrition::catalog::domain::units::UnitConverter;
+use crate::catalog::domain::units::UnitConverter;
 
 #[derive(Debug, Clone, Default)]
 pub struct ProductSearchSpec {
@@ -64,12 +64,12 @@ pub enum CatalogSearchScope {
 }
 
 impl ProductSearchScope {
-    pub fn parse(input: Option<&str>) -> Result<Self, NutritionError> {
+    pub fn parse(input: Option<&str>) -> Result<Self, CatalogError> {
         match input.unwrap_or("all") {
             "all" => Ok(Self::All),
             "custom" => Ok(Self::Custom),
             "history" => Ok(Self::History),
-            other => Err(NutritionError::Validation(format!(
+            other => Err(CatalogError::Validation(format!(
                 "unknown food search scope: {other}"
             ))),
         }
@@ -274,10 +274,10 @@ pub struct Barcode(pub String);
 pub struct ExternalProductId(String);
 
 impl ExternalProductId {
-    pub fn new(value: impl Into<String>) -> Result<Self, NutritionError> {
+    pub fn new(value: impl Into<String>) -> Result<Self, CatalogError> {
         let value = value.into().trim().to_owned();
         if value.is_empty() {
-            return Err(NutritionError::Validation(
+            return Err(CatalogError::Validation(
                 "external food must have a source id".into(),
             ));
         }
@@ -344,10 +344,10 @@ impl ProductOrigin {
 pub struct ProductName(String);
 
 impl ProductName {
-    pub fn new(value: &str) -> Result<Self, NutritionError> {
+    pub fn new(value: &str) -> Result<Self, CatalogError> {
         let trimmed = value.trim();
         if trimmed.is_empty() {
-            return Err(NutritionError::Validation("food name is required".into()));
+            return Err(CatalogError::Validation("food name is required".into()));
         }
         Ok(Self(trimmed.to_string()))
     }
@@ -405,17 +405,17 @@ impl DefaultQuantity {
         amount: Option<Decimal>,
         unit: Option<String>,
         servings: &[ProductServing],
-    ) -> Result<Option<Self>, NutritionError> {
+    ) -> Result<Option<Self>, CatalogError> {
         match (amount, unit) {
             (None, None) => Ok(None),
             (Some(amount), Some(unit)) => {
                 if amount <= Decimal::ZERO {
-                    return Err(NutritionError::Validation(
+                    return Err(CatalogError::Validation(
                         "default quantity must be positive".into(),
                     ));
                 }
                 if unit != "g" && !servings.iter().any(|serving| serving.unit.0 == unit) {
-                    return Err(NutritionError::Validation(format!(
+                    return Err(CatalogError::Validation(format!(
                         "default portion must be grams or use a configured serving unit: {unit}"
                     )));
                 }
@@ -424,7 +424,7 @@ impl DefaultQuantity {
                     unit: UnitCode(unit),
                 }))
             }
-            _ => Err(NutritionError::Validation(
+            _ => Err(CatalogError::Validation(
                 "default quantity and default unit must be provided together".into(),
             )),
         }
@@ -437,9 +437,9 @@ pub struct AmountPer100g(Decimal);
 impl AmountPer100g {
     const SCALE: u32 = 6;
 
-    pub fn new(amount: Decimal) -> Result<Self, NutritionError> {
+    pub fn new(amount: Decimal) -> Result<Self, CatalogError> {
         if amount < Decimal::ZERO {
-            return Err(NutritionError::Validation(
+            return Err(CatalogError::Validation(
                 "nutrient amount must be non-negative".into(),
             ));
         }
@@ -517,11 +517,11 @@ impl CustomProductBuilder {
         self,
         amount: Option<Decimal>,
         unit: Option<String>,
-    ) -> Result<Self, NutritionError> {
+    ) -> Result<Self, CatalogError> {
         match (amount, unit) {
             (None, None) => Ok(self),
             (Some(amount), Some(unit)) => Ok(self.default_portion(amount, unit)),
-            _ => Err(NutritionError::Validation(
+            _ => Err(CatalogError::Validation(
                 "default quantity and default unit must be provided together".into(),
             )),
         }
@@ -591,11 +591,11 @@ impl ExternalProductBuilder {
         self,
         amount: Option<Decimal>,
         unit: Option<String>,
-    ) -> Result<Self, NutritionError> {
+    ) -> Result<Self, CatalogError> {
         match (amount, unit) {
             (None, None) => Ok(self),
             (Some(amount), Some(unit)) => Ok(self.default_portion(amount, unit)),
-            _ => Err(NutritionError::Validation(
+            _ => Err(CatalogError::Validation(
                 "default quantity and default unit must be provided together".into(),
             )),
         }
@@ -626,7 +626,7 @@ impl Product {
         source: ExternalSource,
         input: ExternalProductBuilder,
         nutrient_catalog: &NutrientCatalog,
-    ) -> Result<Self, NutritionError> {
+    ) -> Result<Self, CatalogError> {
         let nutrients = build_product_nutrients(input.nutrients, nutrient_catalog)?;
         let servings = build_product_servings(input.servings)?;
         let (default_quantity, default_unit) = default_portion_parts(input.default_portion);
@@ -665,7 +665,7 @@ impl Product {
         user_id: Uuid,
         input: CustomProductBuilder,
         nutrient_catalog: &NutrientCatalog,
-    ) -> Result<Self, NutritionError> {
+    ) -> Result<Self, CatalogError> {
         let validated = validate_custom_food(input, nutrient_catalog)?;
 
         let now = Utc::now();
@@ -689,9 +689,9 @@ impl Product {
         &self,
         input: CustomProductBuilder,
         nutrient_catalog: &NutrientCatalog,
-    ) -> Result<Self, NutritionError> {
+    ) -> Result<Self, CatalogError> {
         if !matches!(self.origin, ProductOrigin::Custom { .. }) {
-            return Err(NutritionError::Validation(
+            return Err(CatalogError::Validation(
                 "external products cannot be updated as custom foods".into(),
             ));
         }
@@ -712,7 +712,7 @@ impl Product {
     pub fn validate_custom_draft(
         input: CustomProductBuilder,
         nutrient_catalog: &NutrientCatalog,
-    ) -> Result<(), NutritionError> {
+    ) -> Result<(), CatalogError> {
         validate_custom_food(input, nutrient_catalog)?;
         Ok(())
     }
@@ -774,7 +774,7 @@ impl Product {
 fn validate_custom_food(
     input: CustomProductBuilder,
     nutrient_catalog: &NutrientCatalog,
-) -> Result<ValidatedCustomFood, NutritionError> {
+) -> Result<ValidatedCustomFood, CatalogError> {
     let name = ProductName::new(&input.name)?;
     let nutrients = build_product_nutrients(input.nutrients, nutrient_catalog)?;
     validate_required_nutrients(&nutrients)?;
@@ -831,9 +831,9 @@ pub struct ProductServingInput {
 }
 
 impl ProductServing {
-    pub fn validate_grams_per_unit(grams_per_unit: Decimal) -> Result<(), NutritionError> {
+    pub fn validate_grams_per_unit(grams_per_unit: Decimal) -> Result<(), CatalogError> {
         if grams_per_unit <= Decimal::ZERO {
-            return Err(NutritionError::Validation(
+            return Err(CatalogError::Validation(
                 "serving grams per unit must be positive".into(),
             ));
         }
@@ -844,7 +844,7 @@ impl ProductServing {
 pub const REQUIRED_CUSTOM_FOOD_NUTRIENT_CODES: &[&str] =
     &["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"];
 
-fn validate_required_nutrients(nutrients: &[ProductNutrient]) -> Result<(), NutritionError> {
+fn validate_required_nutrients(nutrients: &[ProductNutrient]) -> Result<(), CatalogError> {
     let missing: Vec<&str> = REQUIRED_CUSTOM_FOOD_NUTRIENT_CODES
         .iter()
         .copied()
@@ -853,7 +853,7 @@ fn validate_required_nutrients(nutrients: &[ProductNutrient]) -> Result<(), Nutr
     if missing.is_empty() {
         Ok(())
     } else {
-        Err(NutritionError::Validation(format!(
+        Err(CatalogError::Validation(format!(
             "custom food is missing required nutrient(s): {}",
             missing.join(", ")
         )))
@@ -863,17 +863,17 @@ fn validate_required_nutrients(nutrients: &[ProductNutrient]) -> Result<(), Nutr
 fn build_product_nutrients(
     nutrients: Vec<ProductNutrientInput>,
     catalog: &NutrientCatalog,
-) -> Result<Vec<ProductNutrient>, NutritionError> {
+) -> Result<Vec<ProductNutrient>, CatalogError> {
     let mut seen: HashSet<String> = HashSet::new();
     nutrients
         .into_iter()
         .map(|nutrient| {
             let amount_per_100g = AmountPer100g::new(nutrient.amount_per_100g)?;
             let reference = catalog.get(&nutrient.code).ok_or_else(|| {
-                NutritionError::Validation(format!("unknown nutrient code: {}", nutrient.code))
+                CatalogError::Validation(format!("unknown nutrient code: {}", nutrient.code))
             })?;
             if !seen.insert(reference.code.0.clone()) {
-                return Err(NutritionError::Validation(format!(
+                return Err(CatalogError::Validation(format!(
                     "duplicate nutrient code: {}",
                     reference.code.0
                 )));
@@ -893,14 +893,14 @@ fn build_product_nutrients(
 
 fn build_product_servings(
     servings: Vec<ProductServingInput>,
-) -> Result<Vec<ProductServing>, NutritionError> {
+) -> Result<Vec<ProductServing>, CatalogError> {
     let mut seen_units = HashSet::new();
     servings
         .into_iter()
         .map(|serving| {
             ProductServing::validate_grams_per_unit(serving.grams_per_unit)?;
             if !seen_units.insert(serving.unit.clone()) {
-                return Err(NutritionError::Validation(format!(
+                return Err(CatalogError::Validation(format!(
                     "duplicate serving unit: {}",
                     serving.unit
                 )));
@@ -913,8 +913,7 @@ fn build_product_servings(
         .collect()
 }
 
-pub use crate::nutrition::error::NutritionError;
-
+pub use crate::catalog::error::CatalogError;
 /// A validated collection of complete external product aggregates.
 ///
 /// Construction enforces the invariants required by external catalog writes.
@@ -926,17 +925,17 @@ pub struct ExternalProductBatch {
 }
 
 impl ExternalProductBatch {
-    pub fn new(products: Vec<Product>) -> Result<Self, NutritionError> {
+    pub fn new(products: Vec<Product>) -> Result<Self, CatalogError> {
         let mut identities = HashSet::new();
 
         for product in &products {
             let Some((source, source_id)) = product.origin.external_identity() else {
-                return Err(NutritionError::Validation(
+                return Err(CatalogError::Validation(
                     "external product batch cannot contain custom products".into(),
                 ));
             };
             if !identities.insert((source, source_id)) {
-                return Err(NutritionError::Validation(format!(
+                return Err(CatalogError::Validation(format!(
                     "duplicate external product identity: ({}, {})",
                     source.as_str(),
                     source_id.as_str()
@@ -946,7 +945,7 @@ impl ExternalProductBatch {
             let mut nutrient_codes = HashSet::new();
             for nutrient in &product.nutrients {
                 if !nutrient_codes.insert(nutrient.nutrient_code.0.as_str()) {
-                    return Err(NutritionError::Validation(format!(
+                    return Err(CatalogError::Validation(format!(
                         "duplicate nutrient code for external product: {}",
                         nutrient.nutrient_code.0
                     )));
@@ -956,7 +955,7 @@ impl ExternalProductBatch {
             let mut serving_units = HashSet::new();
             for serving in &product.servings {
                 if !serving_units.insert(serving.unit.0.as_str()) {
-                    return Err(NutritionError::Validation(format!(
+                    return Err(CatalogError::Validation(format!(
                         "duplicate serving unit for external product: {}",
                         serving.unit.0
                     )));
@@ -991,28 +990,28 @@ pub trait ProductRepo: Send + Sync {
         &self,
         spec: &ProductSearchSpec,
         scope: CatalogSearchScope,
-    ) -> Result<Vec<ProductSearchFields>, NutritionError>;
+    ) -> Result<Vec<ProductSearchFields>, CatalogError>;
     async fn search_history_candidates(
         &self,
         spec: &ProductSearchSpec,
         user_id: Uuid,
-    ) -> Result<Vec<HistorySearchCandidate>, NutritionError>;
-    async fn category_counts(&self) -> Result<Vec<CategoryCount>, NutritionError>;
+    ) -> Result<Vec<HistorySearchCandidate>, CatalogError>;
+    async fn category_counts(&self) -> Result<Vec<CategoryCount>, CatalogError>;
     /// Loads search-result product summaries by ID. The caller owns the
     /// ranked ordering; the returned order is unspecified.
     async fn find_search_summaries(
         &self,
         ids: &[ProductId],
-    ) -> Result<Vec<Product>, NutritionError>;
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError>;
-    async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, NutritionError>;
+    ) -> Result<Vec<Product>, CatalogError>;
+    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, CatalogError>;
+    async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, CatalogError>;
     async fn find_by_barcode(
         &self,
         barcode: &str,
         user_id: Option<Uuid>,
-    ) -> Result<Option<Product>, NutritionError>;
-    async fn list_custom_foods(&self) -> Result<Vec<Product>, NutritionError>;
-    async fn create(&self, product: &Product) -> Result<(), NutritionError>;
+    ) -> Result<Option<Product>, CatalogError>;
+    async fn list_custom_foods(&self) -> Result<Vec<Product>, CatalogError>;
+    async fn create(&self, product: &Product) -> Result<(), CatalogError>;
     /// Creates or updates external products identified by `(source, source_id)`.
     ///
     /// Every product is the complete desired aggregate: its nutrients and servings replace the
@@ -1020,9 +1019,9 @@ pub trait ProductRepo: Send + Sync {
     async fn upsert_external_many(
         &self,
         batch: &ExternalProductBatch,
-    ) -> Result<ProductUpsertResult, NutritionError>;
-    async fn update(&self, product: &Product) -> Result<(), NutritionError>;
-    async fn delete(&self, id: ProductId) -> Result<(), NutritionError>;
+    ) -> Result<ProductUpsertResult, CatalogError>;
+    async fn update(&self, product: &Product) -> Result<(), CatalogError>;
+    async fn delete(&self, id: ProductId) -> Result<(), CatalogError>;
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -1033,7 +1032,7 @@ impl CatalogPolicy {
         &self,
         _actor_id: Uuid,
         _product: &Product,
-    ) -> Result<(), NutritionError> {
+    ) -> Result<(), CatalogError> {
         Ok(())
     }
 
@@ -1041,13 +1040,13 @@ impl CatalogPolicy {
         &self,
         actor_id: Uuid,
         product: &Product,
-    ) -> Result<(), NutritionError> {
+    ) -> Result<(), CatalogError> {
         match product.origin {
-            ProductOrigin::External { .. } => Err(NutritionError::Forbidden(
+            ProductOrigin::External { .. } => Err(CatalogError::Forbidden(
                 "system catalog products are read-only".into(),
             )),
             ProductOrigin::Custom { user_id } if user_id != actor_id => Err(
-                NutritionError::Forbidden("only the creator may modify this custom food".into()),
+                CatalogError::Forbidden("only the creator may modify this custom food".into()),
             ),
             ProductOrigin::Custom { .. } => Ok(()),
         }
@@ -1056,14 +1055,14 @@ impl CatalogPolicy {
 
 #[async_trait]
 pub trait NutrientRepo: Send + Sync {
-    async fn list_all(&self) -> Result<Vec<Nutrient>, NutritionError>;
-    async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, NutritionError>;
+    async fn list_all(&self) -> Result<Vec<Nutrient>, CatalogError>;
+    async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, CatalogError>;
 }
 
 #[async_trait]
 pub trait UnitRepo: Send + Sync {
-    async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, NutritionError>;
-    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, NutritionError>;
+    async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError>;
+    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError>;
 }
 
 #[cfg(test)]
@@ -1089,7 +1088,7 @@ mod tests {
     fn product_search_scope_parse_rejects_unknown_values() {
         assert!(matches!(
             ProductSearchScope::parse(Some("private")),
-            Err(NutritionError::Validation(_))
+            Err(CatalogError::Validation(_))
         ));
     }
 
@@ -1167,7 +1166,7 @@ mod tests {
         );
         assert!(matches!(
             blank_source_id,
-            Err(NutritionError::Validation(_))
+            Err(CatalogError::Validation(_))
         ));
     }
 
@@ -1300,7 +1299,7 @@ mod tests {
         };
 
         match result {
-            Err(NutritionError::Validation(message)) => {
+            Err(CatalogError::Validation(message)) => {
                 for expected in expected_fragments {
                     assert!(
                         message.contains(expected),
@@ -1322,13 +1321,13 @@ mod tests {
     fn custom_product_builder_rejects_half_default_quantity_pair() {
         let missing_unit = CustomProductBuilder::new("Food")
             .optional_default_portion(Some(Decimal::new(1, 0)), None);
-        assert!(matches!(missing_unit, Err(NutritionError::Validation(_))));
+        assert!(matches!(missing_unit, Err(CatalogError::Validation(_))));
 
         let missing_quantity = CustomProductBuilder::new("Food")
             .optional_default_portion(None, Some("serving".into()));
         assert!(matches!(
             missing_quantity,
-            Err(NutritionError::Validation(_))
+            Err(CatalogError::Validation(_))
         ));
     }
 
@@ -1349,7 +1348,7 @@ mod tests {
             &catalog,
         );
         match result {
-            Err(NutritionError::Validation(msg)) => {
+            Err(CatalogError::Validation(msg)) => {
                 assert!(msg.contains("NOT_A_CODE"), "msg: {msg}");
                 assert!(!msg.contains("missing required"), "msg: {msg}");
             }
@@ -1554,7 +1553,7 @@ mod tests {
                         amount < Decimal::ZERO,
                         "only negative amounts should be rejected: amount {amount}, error {error:?}"
                     );
-                    prop_assert!(matches!(error, NutritionError::Validation(_)));
+                    prop_assert!(matches!(error, CatalogError::Validation(_)));
                 }
             }
         }
@@ -1594,7 +1593,7 @@ mod tests {
                 source_id.trim()
             );
             match ExternalProductBatch::new(products) {
-                Err(NutritionError::Validation(message)) => {
+                Err(CatalogError::Validation(message)) => {
                     prop_assert_eq!(message, expected_message);
                 }
                 other => prop_assert!(
@@ -1658,7 +1657,7 @@ mod tests {
                 "duplicate nutrient code for external product: {duplicated_code}"
             );
             match ExternalProductBatch::new(products) {
-                Err(NutritionError::Validation(message)) => {
+                Err(CatalogError::Validation(message)) => {
                     prop_assert_eq!(message, expected_message);
                 }
                 other => prop_assert!(
@@ -1714,7 +1713,7 @@ mod tests {
             let expected_message =
                 format!("duplicate serving unit for external product: {duplicated_unit}");
             match ExternalProductBatch::new(products) {
-                Err(NutritionError::Validation(message)) => {
+                Err(CatalogError::Validation(message)) => {
                     prop_assert_eq!(message, expected_message);
                 }
                 other => prop_assert!(
@@ -1819,7 +1818,7 @@ mod tests {
                     }
                 };
                 match mutation {
-                    Err(NutritionError::Forbidden(message)) => {
+                    Err(CatalogError::Forbidden(message)) => {
                         prop_assert_eq!(message, expected_message.to_owned());
                     }
                     other => prop_assert!(

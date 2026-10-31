@@ -3,11 +3,11 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::calculation::{
+use crate::catalog::domain::calculation::{
     CalculatedNutrition, NutrientAmount, Quantity,
 };
-use crate::nutrition::catalog::domain::units::UnitConverter;
-use crate::nutrition::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
+use crate::catalog::domain::units::UnitConverter;
+use crate::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MealId(pub Uuid);

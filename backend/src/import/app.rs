@@ -3,12 +3,12 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::import::domain::*;
-use crate::nutrition::catalog::app::{ExternalProductWritePort, NutrientCatalogReadPort};
-use crate::nutrition::catalog::domain::{
+use crate::catalog::app::{ExternalProductWritePort, NutrientCatalogReadPort};
+use crate::catalog::domain::{
     AmountPer100g, ExternalProductBuilder, ExternalSource, NutrientCatalog, Product,
     ProductNutrientInput, ProductServingInput,
 };
-use crate::nutrition::error::NutritionError;
+use crate::catalog::error::CatalogError;
 
 fn validate_staged_food(food: &StagedImportProduct) -> Result<(), String> {
     ExternalSource::from_str(&food.source)?;
@@ -193,7 +193,7 @@ impl ImportService {
 
         let nutrient_catalog = match self.nutrient_catalog_reader.nutrient_catalog().await {
             Ok(catalog) => catalog,
-            Err(NutritionError::Validation(message)) => {
+            Err(CatalogError::Validation(message)) => {
                 self.repo
                     .finish_commit(import_id, ImportCommitOutcome::Failed)
                     .await?;
@@ -216,7 +216,7 @@ impl ImportService {
             .await
         {
             Ok(written) => written,
-            Err(NutritionError::Validation(message)) => {
+            Err(CatalogError::Validation(message)) => {
                 self.repo
                     .finish_commit(import_id, ImportCommitOutcome::Failed)
                     .await?;
@@ -351,9 +351,9 @@ fn assemble_products(
     Ok((products, errors))
 }
 
-fn import_product_error(error: NutritionError) -> ImportError {
+fn import_product_error(error: CatalogError) -> ImportError {
     match error {
-        NutritionError::Validation(message) => ImportError::Validation(message),
+        CatalogError::Validation(message) => ImportError::Validation(message),
         other => ImportError::Catalog(other.to_string()),
     }
 }
@@ -370,7 +370,7 @@ mod tests {
     use async_trait::async_trait;
     use std::sync::Mutex;
 
-    use crate::nutrition::catalog::domain::*;
+    use crate::catalog::domain::*;
 
     struct MockImportRepo {
         jobs: Mutex<Vec<ImportJob>>,
@@ -510,7 +510,7 @@ mod tests {
         async fn upsert_external_many(
             &self,
             products: Vec<Product>,
-        ) -> Result<ProductUpsertResult, NutritionError> {
+        ) -> Result<ProductUpsertResult, CatalogError> {
             self.upserted.lock().unwrap().extend(products);
             Ok(self.result)
         }
@@ -525,13 +525,13 @@ mod tests {
         async fn upsert_external_many(
             &self,
             _products: Vec<Product>,
-        ) -> Result<ProductUpsertResult, NutritionError> {
+        ) -> Result<ProductUpsertResult, CatalogError> {
             if self.error_is_validation {
-                Err(NutritionError::Validation(
+                Err(CatalogError::Validation(
                     "deterministic catalog validation failure".into(),
                 ))
             } else {
-                Err(NutritionError::ExternalUnavailable)
+                Err(CatalogError::ExternalUnavailable)
             }
         }
     }
@@ -549,7 +549,7 @@ mod tests {
 
     #[async_trait]
     impl NutrientCatalogReadPort for MockNutrientCatalogReader {
-        async fn nutrient_catalog(&self) -> Result<NutrientCatalog, NutritionError> {
+        async fn nutrient_catalog(&self) -> Result<NutrientCatalog, CatalogError> {
             Ok(vec![energy_nutrient()].into_iter().collect())
         }
     }

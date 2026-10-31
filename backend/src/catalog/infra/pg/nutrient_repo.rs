@@ -3,8 +3,8 @@ use sea_query::{Expr, ExprTrait, Order, PostgresQueryBuilder, Query, SelectState
 use sea_query_sqlx::SqlxBinder;
 use sqlx::postgres::PgPool;
 
-use crate::nutrition::catalog::domain::{
-    Nutrient, NutrientCode, NutrientRepo, NutritionError, UnitCode,
+use crate::catalog::domain::{
+    Nutrient, NutrientCode, NutrientRepo, CatalogError, UnitCode,
 };
 
 use super::iden::Nutrients;
@@ -50,7 +50,7 @@ impl PgNutrientRepo {
 
 #[async_trait]
 impl NutrientRepo for PgNutrientRepo {
-    async fn list_all(&self) -> Result<Vec<Nutrient>, NutritionError> {
+    async fn list_all(&self) -> Result<Vec<Nutrient>, CatalogError> {
         let (sql, values) = nutrient_list_all_statement().build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, NutrientRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
@@ -60,7 +60,7 @@ impl NutrientRepo for PgNutrientRepo {
         Ok(rows.into_iter().map(nutrient_row_to_nutrient).collect())
     }
 
-    async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, NutritionError> {
+    async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, CatalogError> {
         let (sql, values) = nutrient_find_by_code_statement(code).build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, NutrientRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)

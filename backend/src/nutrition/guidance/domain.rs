@@ -1,6 +1,6 @@
 use rust_decimal::Decimal;
 
-use crate::nutrition::catalog::domain::{NutrientCode, UnitCode};
+use crate::catalog::domain::{NutrientCode, UnitCode};
 use crate::nutrition::error::NutritionError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

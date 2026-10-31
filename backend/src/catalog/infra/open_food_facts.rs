@@ -7,9 +7,9 @@ use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::nutrition::catalog::app::ExternalProductCatalog;
-use crate::nutrition::catalog::domain::{
-    ExternalProductBuilder, NutritionError, ProductNutrientInput, ProductServingInput,
+use crate::catalog::app::ExternalProductCatalog;
+use crate::catalog::domain::{
+    ExternalProductBuilder, CatalogError, ProductNutrientInput, ProductServingInput,
 };
 
 const ENDPOINT: &str = "https://world.openfoodfacts.org/api/v3/product/";
@@ -41,20 +41,20 @@ impl ExternalProductCatalog for OpenFoodFactsClient {
     async fn find_by_barcode(
         &self,
         barcode: &str,
-    ) -> Result<Option<ExternalProductBuilder>, NutritionError> {
+    ) -> Result<Option<ExternalProductBuilder>, CatalogError> {
         let response = self
             .client
             .get(
                 self.endpoint
                     .join(barcode)
-                    .map_err(|_| NutritionError::ExternalInvalidResponse)?,
+                    .map_err(|_| CatalogError::ExternalInvalidResponse)?,
             )
             .query(&[("fields", FIELDS)])
             .send()
             .await
             .map_err(|error| {
                 tracing::warn!(error = %error, "Open Food Facts request failed");
-                NutritionError::ExternalUnavailable
+                CatalogError::ExternalUnavailable
             })?;
 
         if response.status() == StatusCode::NOT_FOUND {
@@ -62,26 +62,26 @@ impl ExternalProductCatalog for OpenFoodFactsClient {
         }
         if !response.status().is_success() {
             tracing::warn!(status = %response.status(), "Open Food Facts request failed");
-            return Err(NutritionError::ExternalUnavailable);
+            return Err(CatalogError::ExternalUnavailable);
         }
 
         let content_length = response.content_length();
         if content_length.is_some_and(|length| length > MAX_RESPONSE_BYTES as u64) {
-            return Err(NutritionError::ExternalInvalidResponse);
+            return Err(CatalogError::ExternalInvalidResponse);
         }
         let bytes = response
             .bytes()
             .await
-            .map_err(|_| NutritionError::ExternalUnavailable)?;
+            .map_err(|_| CatalogError::ExternalUnavailable)?;
         if bytes.len() > MAX_RESPONSE_BYTES {
-            return Err(NutritionError::ExternalInvalidResponse);
+            return Err(CatalogError::ExternalInvalidResponse);
         }
 
         let body: OffResponse =
-            serde_json::from_slice(&bytes).map_err(|_| NutritionError::ExternalInvalidResponse)?;
+            serde_json::from_slice(&bytes).map_err(|_| CatalogError::ExternalInvalidResponse)?;
         let product = body
             .product
-            .ok_or(NutritionError::ExternalInvalidResponse)?;
+            .ok_or(CatalogError::ExternalInvalidResponse)?;
         product.into_input(barcode).map(Some)
     }
 }
@@ -104,7 +104,7 @@ struct OffProduct {
 }
 
 impl OffProduct {
-    fn into_input(self, requested_barcode: &str) -> Result<ExternalProductBuilder, NutritionError> {
+    fn into_input(self, requested_barcode: &str) -> Result<ExternalProductBuilder, CatalogError> {
         let code = self
             .code
             .filter(|code| !code.trim().is_empty())
@@ -112,7 +112,7 @@ impl OffProduct {
         let name = self
             .product_name
             .filter(|name| !name.trim().is_empty())
-            .ok_or(NutritionError::ExternalInvalidResponse)?;
+            .ok_or(CatalogError::ExternalInvalidResponse)?;
         let nutrients = map_nutrients(&self.nutriments);
         let serving_grams = self.serving_size.as_deref().and_then(parse_gram_serving);
         let (default_quantity, default_unit, servings) = match serving_grams {
@@ -227,7 +227,7 @@ fn parse_gram_serving(value: &str) -> Option<Decimal> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nutrition::catalog::domain::{ExternalSource, NutrientCatalog, Product};
+    use crate::catalog::domain::{ExternalSource, NutrientCatalog, Product};
     use serde_json::json;
 
     #[test]

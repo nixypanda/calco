@@ -11,8 +11,7 @@ use crate::assistant::infra::{
     FoodDraftLlmAdapter, SafeImageSanitizer,
 };
 use crate::config::{AssistantAuth, AssistantConfig};
-use crate::nutrition::module::CatalogModule;
-
+use crate::catalog::module::CatalogModule;
 #[derive(Clone)]
 pub struct AssistantComponents {
     food_draft_service: Option<Arc<FoodDraftService>>,

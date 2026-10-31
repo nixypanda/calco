@@ -3,9 +3,9 @@ use chrono::NaiveDate;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::app::{CatalogReadPort, NutrientCatalogReadPort};
-use crate::nutrition::catalog::domain::calculation::Quantity;
-use crate::nutrition::catalog::domain::units::UnitConverter;
+use crate::catalog::app::{CatalogReadPort, NutrientCatalogReadPort};
+use crate::catalog::domain::calculation::Quantity;
+use crate::catalog::domain::units::UnitConverter;
 use crate::nutrition::food_log::domain::*;
 use crate::nutrition::meal::app::MealReadPort;
 
@@ -311,8 +311,8 @@ impl FoodLogQueryPort for FoodLogService {
 mod tests {
     use super::super::test_support::*;
     use super::*;
-    use crate::nutrition::catalog::domain::calculation::Quantity;
-    use crate::nutrition::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
+    use crate::catalog::domain::calculation::Quantity;
+    use crate::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
     use crate::nutrition::food_log::domain::{
         FoodLogItemRef, FoodLogItemSnapshot, FoodLogNutrientSnapshot, MealSlot, NutritionError,
     };

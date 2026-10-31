@@ -15,8 +15,8 @@ use std::str::FromStr;
 
 use crate::AppState;
 use crate::auth::api::http::{ReadUser, WriteUser};
-use crate::nutrition::catalog::domain::calculation::Quantity;
-use crate::nutrition::catalog::domain::{ProductId, UnitCode};
+use crate::catalog::domain::calculation::Quantity;
+use crate::catalog::domain::{ProductId, UnitCode};
 use crate::nutrition::error::NutritionError;
 use crate::nutrition::food_log::app::*;
 use crate::nutrition::food_log::domain::*;
@@ -545,8 +545,7 @@ fn parse_food_log_item_ref(item: &ItemRefDto) -> Result<FoodLogItemRef, Nutritio
 }
 
 fn parse_quantity(q: &QuantityDto) -> Result<Quantity, NutritionError> {
-    Quantity::new(q.amount, UnitCode(q.unit.clone()))
-}
+    Quantity::new(q.amount, UnitCode(q.unit.clone())).map_err(NutritionError::from)}
 
 fn parse_log_date(s: &str) -> Result<NaiveDate, NutritionError> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d")
@@ -632,7 +631,7 @@ fn ad_hoc_log_create_request_to_input(
             .nutrients
             .into_iter()
             .map(|nutrient| FoodLogNutrientSnapshot {
-                nutrient_code: crate::nutrition::catalog::domain::NutrientCode(nutrient.code),
+                nutrient_code: crate::catalog::domain::NutrientCode(nutrient.code),
                 amount: nutrient.amount,
                 unit: UnitCode(nutrient.unit),
             })

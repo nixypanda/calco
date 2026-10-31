@@ -7,22 +7,22 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 
 #[cfg(test)]
-use crate::nutrition::catalog::domain::search_ranking::{
+use crate::catalog::domain::search_ranking::{
     CategoryCount, HistorySearchCandidate, ProductSearchFields,
 };
-use crate::nutrition::catalog::domain::search_ranking::{
+use crate::catalog::domain::search_ranking::{
     PRODUCT_SEARCH_LIMIT, rank_catalog_candidates, rank_category_suggestions,
     rank_history_candidates,
 };
-use crate::nutrition::catalog::domain::units::UnitConverter;
-use crate::nutrition::catalog::domain::*;
+use crate::catalog::domain::units::UnitConverter;
+use crate::catalog::domain::*;
 
 #[async_trait]
 pub trait ExternalProductCatalog: Send + Sync {
     async fn find_by_barcode(
         &self,
         barcode: &str,
-    ) -> Result<Option<ExternalProductBuilder>, NutritionError>;
+    ) -> Result<Option<ExternalProductBuilder>, CatalogError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,7 +47,7 @@ pub trait CatalogReadPort: Send + Sync {
         &self,
         actor_id: Uuid,
         ids: &[ProductId],
-    ) -> Result<Vec<(ProductId, Product)>, NutritionError>;
+    ) -> Result<Vec<(ProductId, Product)>, CatalogError>;
 }
 
 /// Application-level write access for replacing external catalog aggregates.
@@ -60,14 +60,14 @@ pub trait ExternalProductWritePort: Send + Sync {
     async fn upsert_external_many(
         &self,
         products: Vec<Product>,
-    ) -> Result<ProductUpsertResult, NutritionError>;
+    ) -> Result<ProductUpsertResult, CatalogError>;
 }
 
 /// Application-level access to the nutrient definitions used to construct
 /// validated product aggregates outside the catalog context.
 #[async_trait]
 pub trait NutrientCatalogReadPort: Send + Sync {
-    async fn nutrient_catalog(&self) -> Result<NutrientCatalog, NutritionError>;
+    async fn nutrient_catalog(&self) -> Result<NutrientCatalog, CatalogError>;
 }
 
 #[derive(Clone)]
@@ -103,7 +103,7 @@ impl CatalogService {
         actor_id: Uuid,
         spec: ProductSearchSpec,
         scope: ProductSearchScope,
-    ) -> Result<Vec<Product>, NutritionError> {
+    ) -> Result<Vec<Product>, CatalogError> {
         let ids = match scope.catalog_scope() {
             Some(catalog_scope) => {
                 let candidates = self
@@ -139,7 +139,7 @@ impl CatalogService {
         _actor_id: Uuid,
         query: &str,
         limit: i64,
-    ) -> Result<Vec<CategorySuggestion>, NutritionError> {
+    ) -> Result<Vec<CategorySuggestion>, CatalogError> {
         let counts = self.product_repo.category_counts().await?;
         Ok(rank_category_suggestions(
             query,
@@ -148,7 +148,7 @@ impl CatalogService {
         ))
     }
 
-    pub async fn list_custom_foods(&self, actor_id: Uuid) -> Result<Vec<Product>, NutritionError> {
+    pub async fn list_custom_foods(&self, actor_id: Uuid) -> Result<Vec<Product>, CatalogError> {
         let products = self.product_repo.list_custom_foods().await?;
         for product in &products {
             self.policy.authorize_view(actor_id, product)?;
@@ -160,7 +160,7 @@ impl CatalogService {
         &self,
         actor_id: Uuid,
         barcode: &str,
-    ) -> Result<Option<BarcodeLookupResult>, NutritionError> {
+    ) -> Result<Option<BarcodeLookupResult>, CatalogError> {
         let barcode = barcode.trim();
         if let Some(product) = self
             .product_repo
@@ -200,7 +200,7 @@ impl CatalogService {
         };
         let nutrient_catalog = self.load_nutrient_catalog().await?;
         let product = Product::new_external(ExternalSource::Off, input, &nutrient_catalog)
-            .map_err(|_| NutritionError::ExternalInvalidResponse)?;
+            .map_err(|_| CatalogError::ExternalInvalidResponse)?;
 
         // CalCo is a small homelab deployment, so a plain create is intentional.
         // Concurrent first scans could race on (source, source_id); if that becomes
@@ -222,12 +222,12 @@ impl CatalogService {
         &self,
         actor_id: Uuid,
         id: ProductId,
-    ) -> Result<Product, NutritionError> {
+    ) -> Result<Product, CatalogError> {
         let product = self
             .product_repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| NutritionError::NotFound(format!("product {} not found", id.0)))?;
+            .ok_or_else(|| CatalogError::NotFound(format!("product {} not found", id.0)))?;
         self.policy.authorize_view(actor_id, &product)?;
         Ok(product)
     }
@@ -236,7 +236,7 @@ impl CatalogService {
         &self,
         actor_id: Uuid,
         input: CustomProductBuilder,
-    ) -> Result<Product, NutritionError> {
+    ) -> Result<Product, CatalogError> {
         let nutrient_catalog = self.load_nutrient_catalog().await?;
         let product = Product::new_custom(actor_id, input, &nutrient_catalog)?;
         self.product_repo.create(&product).await?;
@@ -246,7 +246,7 @@ impl CatalogService {
     pub async fn validate_custom_food_draft(
         &self,
         input: CustomProductBuilder,
-    ) -> Result<(), NutritionError> {
+    ) -> Result<(), CatalogError> {
         let nutrient_catalog = self.load_nutrient_catalog().await?;
         Product::validate_custom_draft(input, &nutrient_catalog)
     }
@@ -256,7 +256,7 @@ impl CatalogService {
         actor_id: Uuid,
         id: ProductId,
         input: CustomProductBuilder,
-    ) -> Result<Product, NutritionError> {
+    ) -> Result<Product, CatalogError> {
         let existing = self.get_product(actor_id, id).await?;
         self.policy.authorize_mutation(actor_id, &existing)?;
         let nutrient_catalog = self.load_nutrient_catalog().await?;
@@ -269,21 +269,21 @@ impl CatalogService {
         &self,
         actor_id: Uuid,
         id: ProductId,
-    ) -> Result<(), NutritionError> {
+    ) -> Result<(), CatalogError> {
         let product = self.get_product(actor_id, id).await?;
         self.policy.authorize_mutation(actor_id, &product)?;
         self.product_repo.delete(id).await
     }
 
-    pub async fn list_nutrients(&self) -> Result<Vec<Nutrient>, NutritionError> {
+    pub async fn list_nutrients(&self) -> Result<Vec<Nutrient>, CatalogError> {
         self.nutrient_repo.list_all().await
     }
 
-    pub async fn get_nutrient(&self, code: &str) -> Result<Option<Nutrient>, NutritionError> {
+    pub async fn get_nutrient(&self, code: &str) -> Result<Option<Nutrient>, CatalogError> {
         self.nutrient_repo.find_by_code(code).await
     }
 
-    pub async fn list_units(&self) -> Result<Vec<(UnitCode, String, String)>, NutritionError> {
+    pub async fn list_units(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
         self.unit_repo.list_all().await
     }
 
@@ -297,7 +297,7 @@ impl CatalogService {
     pub async fn allowed_units(
         &self,
         product: &Product,
-    ) -> Result<Vec<(UnitCode, String, String)>, NutritionError> {
+    ) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
         let all_units = self.unit_repo.list_all().await?;
         let allowed = product.allowed_unit_codes(&self.unit_converter);
         Ok(all_units
@@ -319,7 +319,7 @@ impl CatalogService {
             .collect()
     }
 
-    async fn load_nutrient_catalog(&self) -> Result<NutrientCatalog, NutritionError> {
+    async fn load_nutrient_catalog(&self) -> Result<NutrientCatalog, CatalogError> {
         Ok(self.nutrient_repo.list_all().await?.into_iter().collect())
     }
 }
@@ -345,7 +345,7 @@ impl ExternalProductWritePort for CatalogService {
     async fn upsert_external_many(
         &self,
         products: Vec<Product>,
-    ) -> Result<ProductUpsertResult, NutritionError> {
+    ) -> Result<ProductUpsertResult, CatalogError> {
         let batch = ExternalProductBatch::new(products)?;
         self.product_repo.upsert_external_many(&batch).await
     }
@@ -353,14 +353,14 @@ impl ExternalProductWritePort for CatalogService {
 
 #[async_trait]
 impl NutrientCatalogReadPort for CatalogService {
-    async fn nutrient_catalog(&self) -> Result<NutrientCatalog, NutritionError> {
+    async fn nutrient_catalog(&self) -> Result<NutrientCatalog, CatalogError> {
         self.load_nutrient_catalog().await
     }
 }
 
-fn validate_external_barcode(barcode: &str) -> Result<(), NutritionError> {
+fn validate_external_barcode(barcode: &str) -> Result<(), CatalogError> {
     if !(4..=24).contains(&barcode.len()) || !barcode.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(NutritionError::Validation(
+        return Err(CatalogError::Validation(
             "barcode must contain 4 to 24 digits".into(),
         ));
     }
@@ -373,7 +373,7 @@ impl CatalogReadPort for CatalogService {
         &self,
         actor_id: Uuid,
         ids: &[ProductId],
-    ) -> Result<Vec<(ProductId, Product)>, NutritionError> {
+    ) -> Result<Vec<(ProductId, Product)>, CatalogError> {
         let mut products = Vec::with_capacity(ids.len());
         for id in ids {
             products.push((*id, self.get_product(actor_id, *id).await?));
@@ -402,7 +402,7 @@ mod tests {
             &self,
             _spec: &ProductSearchSpec,
             _scope: CatalogSearchScope,
-        ) -> Result<Vec<ProductSearchFields>, NutritionError> {
+        ) -> Result<Vec<ProductSearchFields>, CatalogError> {
             Ok(Vec::new())
         }
 
@@ -410,29 +410,29 @@ mod tests {
             &self,
             _spec: &ProductSearchSpec,
             _user_id: Uuid,
-        ) -> Result<Vec<HistorySearchCandidate>, NutritionError> {
+        ) -> Result<Vec<HistorySearchCandidate>, CatalogError> {
             Ok(Vec::new())
         }
 
-        async fn category_counts(&self) -> Result<Vec<CategoryCount>, NutritionError> {
+        async fn category_counts(&self) -> Result<Vec<CategoryCount>, CatalogError> {
             Ok(vec![])
         }
 
         async fn find_search_summaries(
             &self,
             _ids: &[ProductId],
-        ) -> Result<Vec<Product>, NutritionError> {
+        ) -> Result<Vec<Product>, CatalogError> {
             Ok(vec![])
         }
 
-        async fn find_by_id(&self, _id: ProductId) -> Result<Option<Product>, NutritionError> {
+        async fn find_by_id(&self, _id: ProductId) -> Result<Option<Product>, CatalogError> {
             Ok(None)
         }
 
         async fn existing_ids(
             &self,
             _ids: &[ProductId],
-        ) -> Result<HashSet<ProductId>, NutritionError> {
+        ) -> Result<HashSet<ProductId>, CatalogError> {
             Ok(HashSet::new())
         }
 
@@ -440,15 +440,15 @@ mod tests {
             &self,
             _barcode: &str,
             _user_id: Option<Uuid>,
-        ) -> Result<Option<Product>, NutritionError> {
+        ) -> Result<Option<Product>, CatalogError> {
             Ok(self.found.clone())
         }
 
-        async fn list_custom_foods(&self) -> Result<Vec<Product>, NutritionError> {
+        async fn list_custom_foods(&self) -> Result<Vec<Product>, CatalogError> {
             Ok(vec![])
         }
 
-        async fn create(&self, product: &Product) -> Result<(), NutritionError> {
+        async fn create(&self, product: &Product) -> Result<(), CatalogError> {
             self.created.lock().unwrap().push(product.clone());
             Ok(())
         }
@@ -456,7 +456,7 @@ mod tests {
         async fn upsert_external_many(
             &self,
             batch: &ExternalProductBatch,
-        ) -> Result<ProductUpsertResult, NutritionError> {
+        ) -> Result<ProductUpsertResult, CatalogError> {
             self.upserted
                 .lock()
                 .unwrap()
@@ -467,11 +467,11 @@ mod tests {
             })
         }
 
-        async fn update(&self, _product: &Product) -> Result<(), NutritionError> {
+        async fn update(&self, _product: &Product) -> Result<(), CatalogError> {
             Ok(())
         }
 
-        async fn delete(&self, _id: ProductId) -> Result<(), NutritionError> {
+        async fn delete(&self, _id: ProductId) -> Result<(), CatalogError> {
             Ok(())
         }
     }
@@ -480,7 +480,7 @@ mod tests {
 
     #[async_trait]
     impl NutrientRepo for MockNutrientRepo {
-        async fn list_all(&self) -> Result<Vec<Nutrient>, NutritionError> {
+        async fn list_all(&self) -> Result<Vec<Nutrient>, CatalogError> {
             Ok(vec![Nutrient {
                 code: NutrientCode("PROTEIN_G".into()),
                 name: "Protein".into(),
@@ -489,7 +489,7 @@ mod tests {
             }])
         }
 
-        async fn find_by_code(&self, _code: &str) -> Result<Option<Nutrient>, NutritionError> {
+        async fn find_by_code(&self, _code: &str) -> Result<Option<Nutrient>, CatalogError> {
             Ok(None)
         }
     }
@@ -498,11 +498,11 @@ mod tests {
 
     #[async_trait]
     impl UnitRepo for MockUnitRepo {
-        async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, NutritionError> {
+        async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
             Ok(vec![])
         }
 
-        async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, NutritionError> {
+        async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError> {
             Ok(vec![])
         }
     }
@@ -517,7 +517,7 @@ mod tests {
         async fn find_by_barcode(
             &self,
             _barcode: &str,
-        ) -> Result<Option<ExternalProductBuilder>, NutritionError> {
+        ) -> Result<Option<ExternalProductBuilder>, CatalogError> {
             self.calls.fetch_add(1, Ordering::Relaxed);
             Ok(self.product.clone())
         }
@@ -651,7 +651,7 @@ mod tests {
             .find_by_barcode(Uuid::new_v4(), "not-a-barcode")
             .await;
 
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
+        assert!(matches!(result, Err(CatalogError::Validation(_))));
         assert_eq!(external.calls.load(Ordering::Relaxed), 0);
     }
 }

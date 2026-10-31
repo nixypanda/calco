@@ -4,7 +4,7 @@ use sea_query::{Expr, ExprTrait, Iden, Order, PostgresQueryBuilder, Query, Selec
 use sea_query_sqlx::SqlxBinder;
 use sqlx::postgres::PgPool;
 
-use crate::nutrition::catalog::domain::{NutritionError, UnitCode, UnitRepo};
+use crate::catalog::domain::{CatalogError, UnitCode, UnitRepo};
 
 #[derive(Iden)]
 enum Units {
@@ -46,7 +46,7 @@ impl PgUnitRepo {
 
 #[async_trait]
 impl UnitRepo for PgUnitRepo {
-    async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, NutritionError> {
+    async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
         let (sql, values) = unit_list_all_statement().build_sqlx(PostgresQueryBuilder);
         let rows = sqlx::query_as_with::<_, UnitRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .fetch_all(&self.pool)
@@ -58,7 +58,7 @@ impl UnitRepo for PgUnitRepo {
             .collect())
     }
 
-    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, NutritionError> {
+    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError> {
         let (sql, values) = mass_factor_list_all_statement().build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, MassFactorRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)

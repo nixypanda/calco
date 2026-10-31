@@ -12,8 +12,8 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::api::http::{ReadUser, WriteUser};
-use crate::nutrition::catalog::domain::calculation::Quantity;
-use crate::nutrition::catalog::domain::{Product, ProductId, UnitCode};
+use crate::catalog::domain::calculation::Quantity;
+use crate::catalog::domain::{Product, ProductId, UnitCode};
 use crate::nutrition::error::NutritionError;
 use crate::nutrition::meal::app::*;
 use crate::nutrition::meal::domain::*;
@@ -236,8 +236,7 @@ fn parse_component_item(item: &ItemRefDto) -> Result<MealComponentItem, Nutritio
 }
 
 fn parse_quantity_dto(q: &QuantityDto) -> Result<Quantity, NutritionError> {
-    Quantity::new(q.amount, UnitCode(q.unit.clone()))
-}
+    Quantity::new(q.amount, UnitCode(q.unit.clone())).map_err(NutritionError::from)}
 
 fn meal_create_request_to_input(req: CreateMealRequest) -> Result<CreateMealInput, NutritionError> {
     Ok(CreateMealInput {
@@ -317,7 +316,7 @@ async fn meal_to_response(
 fn meal_to_response_with_products(
     meal: &Meal,
     products: &[(ProductId, Product)],
-    unit_converter: &crate::nutrition::catalog::domain::units::UnitConverter,
+    unit_converter: &crate::catalog::domain::units::UnitConverter,
 ) -> MealResponse {
     MealResponse {
         id: meal.id.0,
@@ -349,7 +348,7 @@ fn meal_total_quantity_to_dto(meal: &Meal) -> Option<QuantityDto> {
 fn meal_component_to_dto(
     component: &MealComponent,
     products: &[(ProductId, Product)],
-    unit_converter: &crate::nutrition::catalog::domain::units::UnitConverter,
+    unit_converter: &crate::catalog::domain::units::UnitConverter,
 ) -> MealComponentDto {
     let (item_type, item_id) = meal_component_item_to_parts(&component.item);
     MealComponentDto {
@@ -395,7 +394,7 @@ fn meal_nutrition_to_response(nutrition: MealNutritionOutput) -> MealNutritionRe
 fn meal_declared_nutrition_summary(
     meal: &Meal,
     products: &[(ProductId, Product)],
-    unit_converter: &crate::nutrition::catalog::domain::units::UnitConverter,
+    unit_converter: &crate::catalog::domain::units::UnitConverter,
 ) -> Option<NutrientSummaryDto> {
     match (
         meal.total_quantity_amount,
@@ -424,7 +423,7 @@ fn meal_declared_nutrition_summary(
 fn meal_component_nutrition_summary(
     component: &MealComponent,
     products: &[(ProductId, Product)],
-    unit_converter: &crate::nutrition::catalog::domain::units::UnitConverter,
+    unit_converter: &crate::catalog::domain::units::UnitConverter,
 ) -> Option<NutrientSummaryDto> {
     let MealComponentItem::Product(product_id) = component.item;
     let product = products

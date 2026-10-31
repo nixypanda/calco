@@ -4,7 +4,7 @@ use sea_query_sqlx::SqlxBinder;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::nutrition::error::NutritionError;
+use crate::catalog::error::CatalogError;
 
 /// Iden for the shared `nutrients` catalog table.
 #[derive(Iden)]
@@ -23,7 +23,7 @@ pub async fn resolve_nutrient_ids(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     codes: &[String],
     entity: &str,
-) -> Result<HashMap<String, Uuid>, NutritionError> {
+) -> Result<HashMap<String, Uuid>, CatalogError> {
     if codes.is_empty() {
         return Ok(HashMap::new());
     }
@@ -51,7 +51,7 @@ pub async fn resolve_nutrient_ids(
         .filter(|c| nutrient_ids.contains_key(c.as_str()))
         .count();
     if resolved_count != codes.len() {
-        return Err(NutritionError::Validation(format!(
+        return Err(CatalogError::Validation(format!(
             "unknown nutrient code in {} (expected {} rows, inserted {})",
             entity,
             codes.len(),
@@ -73,7 +73,7 @@ pub async fn insert_chunked<F>(
     total: usize,
     chunk_size: usize,
     mut build: F,
-) -> Result<usize, NutritionError>
+) -> Result<usize, CatalogError>
 where
     F: FnMut(usize, usize) -> InsertStatement,
 {

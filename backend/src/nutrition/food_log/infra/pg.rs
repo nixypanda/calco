@@ -11,10 +11,9 @@ use sqlx::postgres::PgPool;
 use std::ops::Bound;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::*;
+use crate::catalog::domain::*;
 use crate::nutrition::food_log::domain::*;
-use crate::nutrition::infra::pg as nutrient_batch;
-use crate::nutrition::meal::domain::MealId;
+use crate::catalog::infra::pg as nutrient_batch;use crate::nutrition::meal::domain::MealId;
 
 #[derive(Iden)]
 enum FoodLogs {

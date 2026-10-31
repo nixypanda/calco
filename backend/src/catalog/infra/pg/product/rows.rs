@@ -2,10 +2,10 @@ use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::search_ranking::{
+use crate::catalog::domain::search_ranking::{
     HistorySearchCandidate, ProductSearchFields, SearchRecency,
 };
-use crate::nutrition::catalog::domain::*;
+use crate::catalog::domain::*;
 
 // ─── Row Types ─────────────────────────────────────────────────
 
@@ -157,14 +157,14 @@ pub(super) fn product_row_to_product(
     row: ProductRow,
     nutrients: Vec<ProductNutrient>,
     servings: Vec<ProductServing>,
-) -> Result<Product, NutritionError> {
+) -> Result<Product, CatalogError> {
     let origin = match row.source.as_str() {
         "USER" => {
             let user_id = row.user_id.ok_or_else(|| {
-                NutritionError::Internal("custom product row is missing user_id".into())
+                CatalogError::Internal("custom product row is missing user_id".into())
             })?;
             if row.source_id.is_some() || row.barcode.is_some() {
-                return Err(NutritionError::Internal(
+                return Err(CatalogError::Internal(
                     "custom product row contains external identity fields".into(),
                 ));
             }
@@ -174,17 +174,17 @@ pub(super) fn product_row_to_product(
             let source = row
                 .source
                 .parse::<ExternalSource>()
-                .map_err(NutritionError::Internal)?;
+                .map_err(CatalogError::Internal)?;
             if row.user_id.is_some() {
-                return Err(NutritionError::Internal(
+                return Err(CatalogError::Internal(
                     "external product row contains user_id".into(),
                 ));
             }
             let source_id = ExternalProductId::new(row.source_id.ok_or_else(|| {
-                NutritionError::Internal("external product row is missing source_id".into())
+                CatalogError::Internal("external product row is missing source_id".into())
             })?)
             .map_err(|_| {
-                NutritionError::Internal("external product row has a blank source_id".into())
+                CatalogError::Internal("external product row has a blank source_id".into())
             })?;
             ProductOrigin::External {
                 source,
@@ -200,7 +200,7 @@ pub(super) fn product_row_to_product(
         visibility: row
             .visibility
             .parse::<ProductVisibility>()
-            .map_err(NutritionError::Internal)?,
+            .map_err(CatalogError::Internal)?,
         name: ProductName::new(&row.name)?,
         brand: row.brand.map(Brand),
         categories: row.categories.into_iter().map(Category).collect(),
