@@ -12,6 +12,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Element.Region as Region
 import Html exposing (Html)
 import Html.Attributes
 import I18n
@@ -71,10 +72,7 @@ removableChip theme language config =
             , Font.center
             , Border.rounded radiusPill
             , uiClass "ui-chip-remove-target ui-pressable"
-            , Element.htmlAttribute
-                (Html.Attributes.attribute "aria-label"
-                    (I18n.t language (TidUiRemoveNamed config.label))
-                )
+            , Region.description (I18n.t language (TidUiRemoveNamed config.label))
             ]
             { onPress = Just config.onRemove
             , label =

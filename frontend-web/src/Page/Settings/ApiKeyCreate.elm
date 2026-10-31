@@ -22,6 +22,7 @@ import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
+import Element.Region as Region
 import Html
 import Html.Attributes
 import I18n
@@ -686,10 +687,7 @@ createdModal env createdModel =
         , actions =
             Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ actionButton env
-                    [ Element.htmlAttribute
-                        (Html.Attributes.attribute "aria-label"
-                            (I18n.t env.language TidApiKeysCopyAria)
-                        )
+                    [ Region.description (I18n.t env.language TidApiKeysCopyAria)
                     , Element.htmlAttribute
                         (Html.Attributes.title
                             (I18n.t env.language TidApiKeysCopyAria)

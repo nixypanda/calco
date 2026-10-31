@@ -14,7 +14,7 @@ import Api.Client as Client
 import Data.ApiKey exposing (ApiKey, ApiKeyScope(..))
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
-import Html.Attributes
+import Element.Region as Region
 import I18n
 import Lib.Date as LocalDate
 import Lib.Text as Text
@@ -352,11 +352,7 @@ keyRow env key =
             [ Chip.badge env.theme (scopeLabel env.language key.scope)
             , Button.textButtonWithAttributes env.device
                 env.theme
-                [ Element.htmlAttribute
-                    (Html.Attributes.attribute "aria-label"
-                        (I18n.t env.language (TidApiKeysRevokeNamed key.name))
-                    )
-                ]
+                [ Region.description (I18n.t env.language (TidApiKeysRevokeNamed key.name)) ]
                 { tone = Button.DangerOutline
                 , width = Button.ContentWidth
                 , label = I18n.t env.language TidApiKeysRevoke

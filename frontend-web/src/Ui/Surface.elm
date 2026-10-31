@@ -19,6 +19,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Element.Region as Region
 import Html.Attributes
 import I18n
 import Translations.Ids exposing (TranslationId(..))
@@ -455,7 +456,7 @@ accentDotLabeled config =
         , Background.color config.color
         , Border.rounded radiusHairline
         , Element.htmlAttribute (Html.Attributes.attribute "role" "img")
-        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
+        , Region.description config.label
         , Element.htmlAttribute (Html.Attributes.attribute "title" config.label)
         ]
         Element.none
