@@ -37,5 +37,3 @@ impl FromRef<AppState> for ImportModule {
     }
 }
 
-#[cfg(test)]
-mod architecture_tests {}

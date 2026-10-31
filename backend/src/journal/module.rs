@@ -162,5 +162,3 @@ impl FromRef<AppState> for JournalModule {
     }
 }
 
-#[cfg(test)]
-mod architecture_tests {}

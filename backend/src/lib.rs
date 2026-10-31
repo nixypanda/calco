@@ -35,6 +35,7 @@ pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Clone)]
 pub struct AppState {
     pub auth: AuthModule,
+    pub catalog: CatalogModule,
     pub journal: JournalModule,
     pub import: ImportModule,
     pub assistant: AssistantComponents,
@@ -56,6 +57,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
 
     Ok(AppState {
         auth,
+        catalog,
         journal,
         import,
         assistant,
