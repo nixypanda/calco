@@ -10,9 +10,8 @@ use crate::assistant::infra::{
     DEFAULT_MAX_TRACKED_USERS, DEFAULT_RATE_LIMIT_WINDOW, DEFAULT_REQUESTS_PER_WINDOW,
     FoodDraftLlmAdapter, SafeImageSanitizer,
 };
+use crate::catalog::module::CatalogModule;
 use crate::config::{AssistantAuth, AssistantConfig};
-use crate::nutrition::module::CatalogModule;
-
 #[derive(Clone)]
 pub struct AssistantComponents {
     food_draft_service: Option<Arc<FoodDraftService>>,

@@ -58,20 +58,21 @@ Repository ports remain storage-shaped.
 
 ## Bounded Contexts
 
-Four bounded contexts: `auth`, `nutrition`, `import`, and `assistant`. Each
-lives under its own top-level backend module. `auth`, `import`, and `assistant`
-nest the four layers (`domain`, `app`, `infra`, `api`) directly. `nutrition` is
+Five bounded contexts: `auth`, `catalog`, `journal`, `import`, and `assistant`. Each
+lives under its own top-level backend module. `auth`, `catalog`, `import`, and `assistant`
+nest the four layers (`domain`, `app`, `infra`, `api`) directly. `journal` is
 organized feature-first (see below): one folder per sub-context, each nesting the
 four layers inside.
 
 Dependency direction between contexts:
 
 ```text
-import -> nutrition -> auth
-assistant -> nutrition (read-only catalog vocabulary)
+import -> catalog
+assistant -> catalog (read-only catalog vocabulary)
+journal -> catalog, auth
 ```
 
-`auth` depends on nothing. `nutrition` depends on `auth` only at the API edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or app. `import` depends on `nutrition` only through the catalog domain (`catalog::Category`). Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
+`auth` depends on nothing. `catalog` depends on nothing. `journal` depends on `catalog` and on `auth` only at the API edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or app. `import` depends on `catalog`. `assistant` depends on `catalog` for read-only vocabulary. Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
 
 ### Auth
 
@@ -98,7 +99,7 @@ Auth persistence includes the `api_keys` table. Each row carries the owning
 identity, a security-stamp snapshot, name, token hash and hint, scope, and
 creation, last-use, expiry, and revocation timestamps.
 
-### Nutrition
+### Catalog And Journal
 
 Nutrition is one bounded context with five aggregate roots:
 

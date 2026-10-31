@@ -1,9 +1,9 @@
 pub mod assistant;
 pub mod auth;
+pub mod catalog;
 pub mod config;
 pub mod import;
-pub mod nutrition;
-
+pub mod journal;
 use axum::http::{HeaderValue, Method, header};
 use axum::{Router, routing::get};
 use sqlx::PgPool;
@@ -15,17 +15,17 @@ use crate::auth::api::SessionCookieConfig;
 use crate::auth::api::http::auth_routes;
 use crate::auth::domain::SessionPolicy;
 use crate::auth::module::AuthModule;
+use crate::catalog::api::http::catalog_routes;
+use crate::catalog::module::CatalogModule;
 use crate::config::{AppConfig, ServerConfig};
 use crate::import::api::http::import_routes;
 use crate::import::module::ImportModule;
-use crate::nutrition::catalog::api::http::catalog_routes;
-use crate::nutrition::diary::api::http::diary_prefs_routes;
-use crate::nutrition::food_log::api::http::food_log_routes;
-use crate::nutrition::goals::api::http::goal_target_routes;
-use crate::nutrition::guidance::api::http::nutrition_details_routes;
-use crate::nutrition::meal::api::http::meal_routes;
-use crate::nutrition::module::NutritionModule;
-
+use crate::journal::diary_prefs::api::http::diary_prefs_routes;
+use crate::journal::food_log::api::http::food_log_routes;
+use crate::journal::goals::api::http::goal_target_routes;
+use crate::journal::guidance::api::http::nutrition_details_routes;
+use crate::journal::meal::api::http::meal_routes;
+use crate::journal::module::JournalModule;
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// The composition root: one bounded-context module per top-level domain.
@@ -35,7 +35,8 @@ pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Clone)]
 pub struct AppState {
     pub auth: AuthModule,
-    pub nutrition: NutritionModule,
+    pub catalog: CatalogModule,
+    pub journal: JournalModule,
     pub import: ImportModule,
     pub assistant: AssistantComponents,
 }
@@ -49,17 +50,15 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         },
         SessionPolicy::new(chrono::Duration::seconds(config.session.ttl_seconds))?,
     );
-    let nutrition = NutritionModule::build(&pool).await?;
-    let import = ImportModule::build(
-        &pool,
-        nutrition.catalog.services.clone(),
-        nutrition.catalog.services.clone(),
-    );
-    let assistant = AssistantComponents::from_config(&config.assistant, &nutrition.catalog)?;
+    let catalog = CatalogModule::build(&pool).await?;
+    let journal = JournalModule::build(&pool, &catalog).await?;
+    let import = ImportModule::build(&pool, catalog.services.clone(), catalog.services.clone());
+    let assistant = AssistantComponents::from_config(&config.assistant, &catalog)?;
 
     Ok(AppState {
         auth,
-        nutrition,
+        catalog,
+        journal,
         import,
         assistant,
     })
