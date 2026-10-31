@@ -25,6 +25,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Element.Region as Region
 import Html
 import Html.Attributes
 import I18n
@@ -709,7 +710,7 @@ toggleSwitch theme config =
         , Element.height (Element.px minimumTargetSize)
         , Border.rounded radiusPill
         , uiClass "ui-pressable"
-        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
+        , Region.description config.label
         , Element.htmlAttribute
             (Html.Attributes.attribute "aria-pressed"
                 (if config.isActive then

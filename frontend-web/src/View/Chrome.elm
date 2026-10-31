@@ -203,8 +203,7 @@ profileInitialButton env onPress label =
         , Border.width 1
         , Border.color env.theme.divider
         , Element.htmlAttribute (Html.Attributes.title (I18n.t env.language TidCommonProfile))
-        , Element.htmlAttribute
-            (Html.Attributes.attribute "aria-label" (I18n.t env.language TidCommonProfile))
+        , Region.description (I18n.t env.language TidCommonProfile)
         ]
         { onPress = Just onPress, label = Element.text label }
 
