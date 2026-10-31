@@ -46,6 +46,6 @@ impl CatalogModule {
 
 impl FromRef<AppState> for CatalogModule {
     fn from_ref(app: &AppState) -> Self {
-        app.nutrition.catalog.clone()
+        app.journal.catalog.clone()
     }
 }

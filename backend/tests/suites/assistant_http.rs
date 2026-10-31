@@ -96,7 +96,7 @@ async fn app_with_model_result_and_real_vocabulary(
         observed_vocabulary: Some(observed_vocabulary.clone()),
     });
     let vocabulary = Arc::new(CatalogVocabularyAdapter::new(
-        state.nutrition.catalog.services.clone(),
+        state.journal.catalog.services.clone(),
     ));
     state.assistant = AssistantComponents::from_food_draft_service(Arc::new(
         FoodDraftService::new(model, vocabulary.clone(), vocabulary, None),
