@@ -75,3 +75,14 @@ Not the goal right now:
 Setup details live in the docs above, not in this README. Start with
 [Local Development](docs/local-development.md) for a working dev environment, or
 [Deployment](docs/deployment.md) to run CalCo on a server.
+
+## License
+
+CalCo is free software licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE) (AGPL-3.0-only).
+
+Copyright (C) 2026 CalCo contributors.
+
+Self-hosting CalCo for yourself or your household does not trigger any extra
+obligations. If you run a modified version as a network service, the AGPL
+requires you to offer that service's users the corresponding source code.

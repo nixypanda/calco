@@ -1,6 +1,7 @@
 {
   "name": "calco-frontend-web",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "version:write": "node -e \"const{execSync}=require('child_process');const{writeFileSync}=require('fs');let h=(process.env.CALCO_FRONTEND_VERSION||'').trim();if(!h){try{h=execSync('git rev-parse --short HEAD',{stdio:['ignore','pipe','ignore']}).toString().trim()}catch(e){h='dev'}}writeFileSync('public/version.json',JSON.stringify({version:h})+'\\n')\"",

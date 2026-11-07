@@ -72,6 +72,7 @@ rustPlatform.buildRustPackage {
 
   meta = {
     description = "CalCo backend (axum + sqlx)";
+    license = lib.licenses.agpl3Only;
     mainProgram = "calco-backend";
   };
 }

@@ -58,5 +58,8 @@ buildNpmPackage {
 
   dontNpmPrune = true;
 
-  meta.description = "CalCo frontend (Elm + Vite)";
+  meta = {
+    description = "CalCo frontend (Elm + Vite)";
+    license = lib.licenses.agpl3Only;
+  };
 }
