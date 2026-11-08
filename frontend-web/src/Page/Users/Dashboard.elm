@@ -15,6 +15,7 @@ import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
@@ -137,10 +138,12 @@ userListRow theme config =
 
 adminDashboardSkeleton : Theme -> Element msg
 adminDashboardSkeleton theme =
-    Surface.section theme
-        { header =
-            Just (Skeleton.barCustom theme { width = Element.px 120, height = 24 })
-        , body =
-            List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
-        , footer = Just (Skeleton.button theme)
-        }
+    Element.el [ Element.width Element.fill, UiCommon.skeletonRegion ]
+        (Surface.section theme
+            { header =
+                Just (Skeleton.barCustom theme { width = Element.px 120, height = 24 })
+            , body =
+                List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
+            , footer = Just (Skeleton.button theme)
+            }
+        )

@@ -40,6 +40,7 @@ import Lib.Ticket as Ticket exposing (Ticket)
 import Set exposing (Set)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -656,7 +657,11 @@ componentRowView :
     -> ComponentRow
     -> Element msg
 componentRowView env toMsg units row =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        , UiCommon.testId "component-row"
+        ]
         [ SearchView.searchInput env
             { id = "meal-component-completions-" ++ String.fromInt row.rowId
             , onChange = toMsg << ComponentSearchChanged row.rowId

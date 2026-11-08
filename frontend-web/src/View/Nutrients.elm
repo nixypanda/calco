@@ -272,17 +272,23 @@ titleCase word =
 
 skeletonPreview : Theme -> Element msg
 skeletonPreview theme =
-    Surface.section theme
-        { header = Just (Skeleton.bar theme)
-        , body =
-            [ Skeleton.bar theme
-            , Surface.hairline theme
-            , Skeleton.bar theme
-            , Skeleton.bar theme
-            , Skeleton.bar theme
-            ]
-        , footer = Nothing
-        }
+    Element.el
+        [ Element.width Element.fill
+        , UiCommon.testId "nutrition-card"
+        , UiCommon.skeletonRegion
+        ]
+        (Surface.section theme
+            { header = Just (Skeleton.bar theme)
+            , body =
+                [ Skeleton.bar theme
+                , Surface.hairline theme
+                , Skeleton.bar theme
+                , Skeleton.bar theme
+                , Skeleton.bar theme
+                ]
+            , footer = Nothing
+            }
+        )
 
 
 preview : Env -> NutritionState -> Element msg
@@ -552,16 +558,21 @@ the prior pattern of two stacked cards.
 -}
 nutritionCard : Env -> List NutrientAmount -> Element msg
 nutritionCard env nutrients =
-    Surface.section env.theme
-        { header =
-            Just (Typography.subsectionTitle env.theme (I18n.t env.language TidNutrientNutrition))
-        , body =
-            [ macroBreakdownView env nutrients
-            , Surface.hairline env.theme
-            , nutrientsTableInner env nutrients
-            ]
-        , footer = Nothing
-        }
+    Element.el [ Element.width Element.fill, UiCommon.testId "nutrition-card" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Typography.subsectionTitle env.theme
+                        (I18n.t env.language TidNutrientNutrition)
+                    )
+            , body =
+                [ macroBreakdownView env nutrients
+                , Surface.hairline env.theme
+                , nutrientsTableInner env nutrients
+                ]
+            , footer = Nothing
+            }
+        )
 
 
 macroColor : Theme -> Nutrition.Macro -> Element.Color

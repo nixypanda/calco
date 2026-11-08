@@ -23,6 +23,7 @@ import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -240,7 +241,11 @@ dateHeader env model =
 
 loadingView : Theme -> Element msg
 loadingView theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
         [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
         , Surface.card theme
             [ Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
@@ -319,6 +324,7 @@ overviewItem env nutrient =
         , Element.spacing DesignTokens.space2
         , Element.padding DesignTokens.space12
         , Background.color env.theme.inputFill
+        , UiCommon.testId "stat"
         ]
         [ Element.paragraph [ Font.color env.theme.textMuted, Typography.caption ]
             [ Element.text nutrient.name ]
@@ -406,10 +412,12 @@ coverageNotice env report =
                     )
     in
     if hasIncompleteData then
-        Feedback.warningBanner env.theme message
+        Element.el [ Element.width Element.fill, UiCommon.testId "coverage-banner" ]
+            (Feedback.warningBanner env.theme message)
 
     else
-        Feedback.infoBanner env.theme message
+        Element.el [ Element.width Element.fill, UiCommon.testId "coverage-banner" ]
+            (Feedback.infoBanner env.theme message)
 
 
 hasPartialCoverage : NutritionDetails -> Bool

@@ -4,6 +4,7 @@ import Data.Calendar as Calendar
 import Element exposing (Element)
 import Element.Font as Font
 import Html.Attributes as Attr
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
@@ -44,7 +45,7 @@ view config =
                     (List.map cell >> Element.row [ Element.width Element.fill ])
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Element.row [ Element.width Element.fill ]
+        [ Element.row [ Element.width Element.fill, UiCommon.testId "calendar-weekdays" ]
             (List.map
                 (\label ->
                     Element.el
@@ -58,7 +59,9 @@ view config =
                 )
                 config.weekdayLabels
             )
-        , Element.column [ Element.width Element.fill ] rows
+        , Element.column
+            [ Element.width Element.fill, UiCommon.testId "calendar-grid" ]
+            rows
         ]
 
 
@@ -77,7 +80,12 @@ skeleton theme config =
                 )
                 >> Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
             )
-        |> Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
+        |> Element.column
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space2
+            , UiCommon.skeletonRegion
+            , UiCommon.testId "calendar-grid"
+            ]
 
 
 equalColumn : Element.Attribute msg

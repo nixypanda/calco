@@ -22,6 +22,7 @@ import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -483,8 +484,9 @@ view env model =
                 [ Common.submitErrorBanner env.theme loaded.fields.submit
                 , Common.viewFormFields env FormMsg loaded.fields
                 , nutritionView env loaded
-                , Button.textButton env.device
+                , Button.textButtonWithAttributes env.device
                     env.theme
+                    [ UiCommon.testId "action-primary" ]
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label = I18n.t env.language TidMealUpdate
@@ -505,7 +507,11 @@ nutritionView env loaded =
 
 mealEditSkeleton : Theme -> Element msg
 mealEditSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
         [ Skeleton.input theme
         , Skeleton.input theme
         , Skeleton.input theme

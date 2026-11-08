@@ -954,7 +954,11 @@ adHocLogView env =
 
 searchInputView : Env -> Model -> Element Msg
 searchInputView env model =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space24 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space24
+        , UiCommon.testId "search-controls"
+        ]
         [ scopeControl env model.scope
         , if model.scope == Barcode then
             barcodeInputView env model

@@ -838,7 +838,11 @@ deleteModalView env loaded =
 
 foodLogEntrySkeleton : Theme -> Element Msg
 foodLogEntrySkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
         [ Skeleton.card theme { rows = 2 }
         , Skeleton.input theme
         , Skeleton.input theme

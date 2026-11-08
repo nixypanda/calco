@@ -3115,8 +3115,7 @@ view env model =
         Skeleton.loading env.theme
 
     else
-        Workspace.view env.device
-            (List.map (paneView env (selectedDiaryDate model.panes)) model.panes)
+        Workspace.view env.device (paneViews env model)
 
 
 selectedDiaryDate : List Pane -> Maybe LocalDate
@@ -3134,9 +3133,28 @@ selectedDiaryDate panes =
         |> List.head
 
 
-paneView : Env -> Maybe LocalDate -> Pane -> ( String, Element Msg )
-paneView env selectedDate pane =
+paneViews : Env -> Model -> List ( String, Workspace.PaneRole, Element Msg )
+paneViews env model =
+    let
+        paneCount : Int
+        paneCount =
+            List.length model.panes
+    in
+    List.indexedMap
+        (paneView env (selectedDiaryDate model.panes) paneCount)
+        model.panes
+
+
+paneView :
+    Env
+    -> Maybe LocalDate
+    -> Int
+    -> Int
+    -> Pane
+    -> ( String, Workspace.PaneRole, Element Msg )
+paneView env selectedDate paneCount index pane =
     ( paneKey pane
+    , paneRole paneCount index pane
     , case pane of
         LoginPane sub ->
             Element.map GotLoginMsg (AuthLogin.view env sub)
@@ -3217,6 +3235,46 @@ paneView env selectedDate pane =
         PlaceholderPane message ->
             Element.el [ Element.padding DesignTokens.space24 ] (Element.text message)
     )
+
+
+{-| Temporary Phase 0a role map. A two-pane contextual layout always ends in
+the detail pane; a standalone contextual detail route is a single pane, so its
+constructor supplies the role. Phase 1's `panePlanForRoute` will carry the role
+explicitly and this mapping goes away.
+-}
+paneRole : Int -> Int -> Pane -> Workspace.PaneRole
+paneRole paneCount index pane =
+    if paneCount > 1 then
+        if index == paneCount - 1 then
+            Workspace.DetailPane
+
+        else
+            Workspace.MainPane
+
+    else
+        singlePaneRole pane
+
+
+singlePaneRole : Pane -> Workspace.PaneRole
+singlePaneRole pane =
+    case pane of
+        FoodDetailPane _ _ ->
+            Workspace.DetailPane
+
+        FoodLogDetailPane _ _ ->
+            Workspace.DetailPane
+
+        MealDetailPane _ _ ->
+            Workspace.DetailPane
+
+        CustomFoodShowPane _ _ ->
+            Workspace.DetailPane
+
+        NutritionDetailsPane _ _ ->
+            Workspace.DetailPane
+
+        _ ->
+            Workspace.MainPane
 
 
 modalView : Env -> Model -> Maybe (Element Msg)

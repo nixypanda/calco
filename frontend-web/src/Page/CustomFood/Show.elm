@@ -390,7 +390,11 @@ customFoodEditRoute food =
 
 customFoodShowSkeleton : Theme -> Element msg
 customFoodShowSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
         [ Element.el
             [ Element.width Element.fill
             , Element.height (Element.px 120)

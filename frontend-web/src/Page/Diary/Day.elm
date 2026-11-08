@@ -553,50 +553,53 @@ dateCard env model =
         logs =
             diaryLogs model.currentDate model.diary
     in
-    Surface.section env.theme
-        { header =
-            Just
-                (Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                    [ Button.iconButton env.device
-                        env.theme
-                        { icon = Icon.ChevronLeft
-                        , title = I18n.t env.language TidDiaryPreviousDay
-                        , onPress = Just PreviousDayClicked
-                        , tone = Button.Primary
-                        }
-                    , Element.el [ Element.width Element.fill, Font.center ]
-                        (Typography.sectionTitle env.theme
-                            (LocalDate.display env.language model.currentDate)
-                        )
-                    , if canGoNext then
-                        Button.iconButton env.device
+    Element.el [ Element.width Element.fill, UiCommon.testId "diary-date-card" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Element.row
+                        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                        [ Button.iconButton env.device
                             env.theme
-                            { icon = Icon.ChevronRight
-                            , title = I18n.t env.language TidDiaryNextDay
-                            , onPress = Just NextDayClicked
+                            { icon = Icon.ChevronLeft
+                            , title = I18n.t env.language TidDiaryPreviousDay
+                            , onPress = Just PreviousDayClicked
                             , tone = Button.Primary
                             }
+                        , Element.el [ Element.width Element.fill, Font.center ]
+                            (Typography.sectionTitle env.theme
+                                (LocalDate.display env.language model.currentDate)
+                            )
+                        , if canGoNext then
+                            Button.iconButton env.device
+                                env.theme
+                                { icon = Icon.ChevronRight
+                                , title = I18n.t env.language TidDiaryNextDay
+                                , onPress = Just NextDayClicked
+                                , tone = Button.Primary
+                                }
 
-                      else
-                        Button.iconButton env.device
-                            env.theme
-                            { icon = Icon.ChevronRight
-                            , title = ""
-                            , onPress = Nothing
-                            , tone = Button.Primary
-                            }
-                    ]
-                )
-        , body =
-            [ case loadedGoalTargets model.currentDate model.diary of
-                Just targets ->
-                    totalsView env targets (Nutrition.totalsFromLogs logs)
+                          else
+                            Button.iconButton env.device
+                                env.theme
+                                { icon = Icon.ChevronRight
+                                , title = ""
+                                , onPress = Nothing
+                                , tone = Button.Primary
+                                }
+                        ]
+                    )
+            , body =
+                [ case loadedGoalTargets model.currentDate model.diary of
+                    Just targets ->
+                        totalsView env targets (Nutrition.totalsFromLogs logs)
 
-                Nothing ->
-                    totalsView env loadingGoalTargets (Nutrition.totalsFromLogs logs)
-            ]
-        , footer = Nothing
-        }
+                    Nothing ->
+                        totalsView env loadingGoalTargets (Nutrition.totalsFromLogs logs)
+                ]
+            , footer = Nothing
+            }
+        )
 
 
 totalsView : Env -> GoalTargets -> List NutrientAmount -> Element Msg
@@ -1118,22 +1121,24 @@ mealSlotCard env maybeSlot header bodyChildren =
                 { header = Just header, body = bodyChildren, footer = Nothing }
 
         Just slot ->
-            Surface.heroCard env.theme
-                { header = header
-                , body = bodyChildren
-                , mediaHeader =
-                    Just
-                        { height = DesignTokens.heroHeaderHeight
-                        , backgroundAttrs = mealSlotBackground slot
-                        , fade = True
-                        , contentPadding =
-                            { top = DesignTokens.heroHeaderPaddingTop
-                            , right = mealSlotHorizontalPadding env.device
-                            , bottom = DesignTokens.heroHeaderPaddingBottom
-                            , left = mealSlotHorizontalPadding env.device
+            Element.el [ Element.width Element.fill, UiCommon.testId "meal-slot-card" ]
+                (Surface.heroCard env.theme
+                    { header = header
+                    , body = bodyChildren
+                    , mediaHeader =
+                        Just
+                            { height = DesignTokens.heroHeaderHeight
+                            , backgroundAttrs = mealSlotBackground slot
+                            , fade = True
+                            , contentPadding =
+                                { top = DesignTokens.heroHeaderPaddingTop
+                                , right = mealSlotHorizontalPadding env.device
+                                , bottom = DesignTokens.heroHeaderPaddingBottom
+                                , left = mealSlotHorizontalPadding env.device
+                                }
                             }
-                        }
-                }
+                    }
+                )
 
 
 mealSlotHorizontalPadding : Device -> Int

@@ -21,6 +21,7 @@ import Lib.Date as LocalDate
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -400,8 +401,9 @@ view env model =
                         ]
                     , footer = Nothing
                     }
-                , Button.textButton env.device
+                , Button.textButtonWithAttributes env.device
                     env.theme
+                    [ UiCommon.testId "action-primary" ]
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label = I18n.t env.language TidGoalSettingsSave
@@ -447,15 +449,17 @@ isSaving save =
 
 goalsSettingsSkeleton : Theme -> Element msg
 goalsSettingsSkeleton theme =
-    Surface.section theme
-        { header =
-            Just (Skeleton.barCustom theme { width = Element.px 160, height = 24 })
-        , body =
-            [ Skeleton.input theme
-            , Skeleton.input theme
-            , Skeleton.input theme
-            , Skeleton.input theme
-            , Skeleton.button theme
-            ]
-        , footer = Nothing
-        }
+    Element.el [ Element.width Element.fill, UiCommon.skeletonRegion ]
+        (Surface.section theme
+            { header =
+                Just (Skeleton.barCustom theme { width = Element.px 160, height = 24 })
+            , body =
+                [ Skeleton.input theme
+                , Skeleton.input theme
+                , Skeleton.input theme
+                , Skeleton.input theme
+                , Skeleton.button theme
+                ]
+            , footer = Nothing
+            }
+        )

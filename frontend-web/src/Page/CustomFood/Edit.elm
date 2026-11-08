@@ -28,6 +28,7 @@ import I18n
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -400,8 +401,9 @@ bodyView env model =
         Loaded loaded ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Element.map FormMsg (Form.view env loaded.nutrients loaded.units loaded.form)
-                , Button.textButton env.device
+                , Button.textButtonWithAttributes env.device
                     env.theme
+                    [ UiCommon.testId "action-primary" ]
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label = I18n.t env.language TidCustomFoodSave
@@ -425,7 +427,11 @@ bodyView env model =
 
 customFoodFormSkeleton : Theme -> Element msg
 customFoodFormSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
         [ Skeleton.input theme
         , Skeleton.input theme
         , Skeleton.input theme

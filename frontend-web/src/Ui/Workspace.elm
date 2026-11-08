@@ -1,9 +1,19 @@
-module Ui.Workspace exposing (paneVisibility, view)
+module Ui.Workspace exposing (PaneRole(..), paneVisibility, view)
 
 import Element exposing (Device, Element)
 import Element.Keyed
 import Html.Attributes as Attr
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+
+
+{-| A pane's role is supplied by the route plan, not inferred from its position,
+so a Phone layout with only the contextual detail pane visible still reports
+`detail`.
+-}
+type PaneRole
+    = MainPane
+    | DetailPane
 
 
 {-| Panes are keyed by role so the virtual DOM keeps each pane tied to its own
@@ -20,10 +30,10 @@ setup forms — have nothing to centre in if this wrapper shrinks to their own
 height.
 
 -}
-view : Device -> List ( String, Element msg ) -> Element msg
+view : Device -> List ( String, PaneRole, Element msg ) -> Element msg
 view device panes =
     let
-        withVisibility : List ( ( String, Element msg ), Bool )
+        withVisibility : List ( ( String, PaneRole, Element msg ), Bool )
         withVisibility =
             paneVisibility device panes
 
@@ -54,20 +64,22 @@ view device panes =
 
     else
         case List.filter Tuple.second withVisibility of
-            [ ( pane, _ ) ] ->
+            [ ( ( key, role, content ), _ ) ] ->
                 Element.Keyed.el
-                    [ Element.centerX
-                    , Element.width (Element.fill |> Element.maximum 960)
-                    , Element.height Element.fill
-                    , Element.padding
+                    ([ Element.centerX
+                     , Element.width (Element.fill |> Element.maximum 960)
+                     , Element.height Element.fill
+                     , Element.padding
                         (if device.class == Element.Phone then
                             DesignTokens.space16
 
                          else
                             DesignTokens.space24
                         )
-                    ]
-                    pane
+                     ]
+                        ++ paneMarkerAttrs role
+                    )
+                    ( key, pageContent content )
 
             _ ->
                 Element.none
@@ -83,25 +95,57 @@ paneVisibility device keys =
     List.indexedMap (\index key -> ( key, index >= hiddenCount )) keys
 
 
-scrollingPane : ( ( String, Element msg ), Bool ) -> ( String, Element msg )
-scrollingPane ( ( key, content ), visible ) =
+scrollingPane : ( ( String, PaneRole, Element msg ), Bool ) -> ( String, Element msg )
+scrollingPane ( ( key, role, content ), visible ) =
     ( key
     , Element.column
-        (if visible then
-            [ Element.width (Element.fillPortion 1)
-            , Element.height Element.fill
-            , Element.alignTop
-            , Element.scrollbarY
-            , Element.htmlAttribute (Attr.class "ui-workspace-pane")
-            , Element.htmlAttribute (Attr.style "min-height" "0")
-            , Element.htmlAttribute (Attr.style "overscroll-behavior-y" "contain")
-            ]
+        (paneMarkerAttrs role
+            ++ (if visible then
+                    [ Element.width (Element.fillPortion 1)
+                    , Element.height Element.fill
+                    , Element.alignTop
+                    , Element.scrollbarY
+                    , Element.htmlAttribute (Attr.class "ui-workspace-pane")
+                    , Element.htmlAttribute (Attr.style "min-height" "0")
+                    , Element.htmlAttribute (Attr.style "overscroll-behavior-y" "contain")
+                    ]
 
-         else
-            [ hidden ]
+                else
+                    [ hidden ]
+               )
         )
-        [ content ]
+        [ pageContent content ]
     )
+
+
+{-| The page body keeps its own scroll/fill behaviour; this wrapper only carries
+the harness hook, so it must mirror the pane's fill height.
+-}
+pageContent : Element msg -> Element msg
+pageContent content =
+    Element.el
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , UiCommon.testId "page-content"
+        ]
+        content
+
+
+paneMarkerAttrs : PaneRole -> List (Element.Attribute msg)
+paneMarkerAttrs role =
+    [ UiCommon.testId "workspace-pane"
+    , UiCommon.dataAttribute "data-pane" (paneRoleName role)
+    ]
+
+
+paneRoleName : PaneRole -> String
+paneRoleName role =
+    case role of
+        MainPane ->
+            "main"
+
+        DetailPane ->
+            "detail"
 
 
 hidden : Element.Attribute msg

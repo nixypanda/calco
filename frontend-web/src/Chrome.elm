@@ -15,6 +15,7 @@ import Element exposing (Element)
 import Element.Region as Region
 import Lib.Text as Text
 import Translations.Util exposing (Language)
+import Ui.Common as UiCommon
 import Ui.Env exposing (Env)
 import View.Chrome
 
@@ -200,9 +201,12 @@ showBottomNav env session isLoadingPage route =
 
 pageAttrs : Bool -> List (Element.Attribute msg)
 pageAttrs useBottomNav =
+    -- Page loaded/loading markers wait for Phase 1's pane-aware `isBusy`;
+    -- `isLoadingPage` is only `waitingForToday`, not page-local loading.
     [ Element.width Element.fill
     , Element.height Element.fill
     , Region.mainContent
+    , UiCommon.testId "page-root"
     ]
         ++ (if useBottomNav then
                 [ Element.paddingEach { bottom = bottomNavClearance, top = 0, left = 0, right = 0 }

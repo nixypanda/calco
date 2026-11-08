@@ -108,6 +108,7 @@ topBarView env session route loading onMenuClick onProfileClick onThemeToggle on
         , Element.spacing DesignTokens.space12
         , Background.color env.theme.cardBg
         , Font.color env.theme.textPrimary
+        , UiCommon.testId "app-topbar"
         ]
         (if chromeShown then
             [ leadingButton env meta.leading onMenuClick onNavigate
@@ -220,6 +221,7 @@ updateBanner env onPress =
         , Background.color env.theme.brandBlueSoft
         , Font.color env.theme.brandBlue
         , Typography.body
+        , UiCommon.testId "update-banner"
         ]
         { onPress = Just onPress
         , label =
@@ -443,6 +445,7 @@ bottomNavContainer theme items =
         , Element.htmlAttribute (Html.Attributes.style "bottom" "0")
         , Element.htmlAttribute (Html.Attributes.style "left" "0")
         , Element.htmlAttribute (Html.Attributes.style "z-index" "10")
+        , UiCommon.testId "app-bottom-nav"
         ]
         items
 

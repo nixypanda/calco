@@ -20,6 +20,7 @@ import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -458,5 +459,9 @@ problemMessage language problem =
 
 editUserSkeleton : Theme -> Element msg
 editUserSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
         [ Skeleton.card theme { rows = 5 }, Skeleton.button theme ]

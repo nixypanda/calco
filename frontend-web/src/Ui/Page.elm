@@ -6,7 +6,7 @@ module Ui.Page exposing
 
 import Element exposing (Element)
 import Element.Font as Font
-import Ui.Common exposing (minWidthZero)
+import Ui.Common exposing (minWidthZero, testId)
 import Ui.DesignTokens exposing (space12, space16, space2, space4, space8)
 import Ui.Theme exposing (Theme)
 import Ui.Typography exposing (body, mutedBody)
@@ -32,6 +32,7 @@ pageContainer children =
         [ Element.centerX
         , Element.width (Element.fill |> Element.maximum 960)
         , Element.spacing space16
+        , testId "page-container"
         ]
         children
 
@@ -77,7 +78,12 @@ pageHeader theme config =
             else
                 Element.row [ Element.spacing space8 ] config.actions
     in
-    Element.wrappedRow [ Element.width Element.fill, Element.spacing space12, minWidthZero ]
+    Element.wrappedRow
+        [ Element.width Element.fill
+        , Element.spacing space12
+        , minWidthZero
+        , testId "page-header"
+        ]
         [ leadingElement, titleColumn, actionsRow ]
 
 

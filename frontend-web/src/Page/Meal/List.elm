@@ -16,6 +16,7 @@ import I18n
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -181,11 +182,13 @@ mealSummaryText meal =
 
 mealListSkeleton : Theme -> Element msg
 mealListSkeleton theme =
-    Surface.section theme
-        { header =
-            Just (Skeleton.button theme)
-        , body =
-            List.intersperse (Surface.hairline theme)
-                (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
-        , footer = Nothing
-        }
+    Element.el [ Element.width Element.fill, UiCommon.skeletonRegion ]
+        (Surface.section theme
+            { header =
+                Just (Skeleton.button theme)
+            , body =
+                List.intersperse (Surface.hairline theme)
+                    (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
+            , footer = Nothing
+            }
+        )

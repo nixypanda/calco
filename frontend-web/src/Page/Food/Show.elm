@@ -25,6 +25,7 @@ import I18n
 import Lib.Date exposing (LocalDate)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -518,7 +519,11 @@ foodNutrientsForDisplay food form =
 
 foodShowSkeleton : Theme -> Element msg
 foodShowSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
         [ Skeleton.barCustom theme { width = Element.fill, height = 120 }
         , Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
         , Skeleton.barCustom theme { width = Element.fillPortion 3, height = 12 }

@@ -26,6 +26,7 @@ import Lib.Number as Number
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -290,7 +291,7 @@ contentViewWithSelection env selectedDate model =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         (case model.status of
             Loading ->
-                calendarSkeleton env.theme model
+                [ calendarSkeleton env.theme model ]
 
             Failed message ->
                 [ Feedback.errorRetry env.theme
@@ -328,11 +329,20 @@ monthCellHeight =
     68
 
 
-calendarSkeleton : Theme -> Model -> List (Element msg)
+calendarSkeleton : Theme -> Model -> Element msg
 calendarSkeleton theme model =
-    monthRange model.newestMonth model.oldestMonth
-        |> List.map (monthSkeleton theme)
-        |> (\months -> months ++ [ Skeleton.button theme ])
+    let
+        months : List (Element msg)
+        months =
+            monthRange model.newestMonth model.oldestMonth
+                |> List.map (monthSkeleton theme)
+    in
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
+        (months ++ [ Skeleton.button theme ])
 
 
 monthSkeleton : Theme -> String -> Element msg

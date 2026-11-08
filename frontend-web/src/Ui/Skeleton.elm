@@ -11,7 +11,7 @@ module Ui.Skeleton exposing
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
-import Ui.Common exposing (uiClass)
+import Ui.Common exposing (skeletonRegion, testId, uiClass)
 import Ui.DesignTokens
     exposing
         ( radiusControl
@@ -28,7 +28,11 @@ import Ui.Theme exposing (Theme)
 
 loading : Theme -> Element msg
 loading theme =
-    Element.column [ Element.width Element.fill, Element.spacing space12 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing space12
+        , skeletonRegion
+        ]
         [ bar theme, bar theme, bar theme ]
 
 
@@ -40,6 +44,7 @@ bar theme =
         , Background.color theme.inputFill
         , Border.rounded radiusSmall
         , uiClass "ui-skeleton"
+        , skeletonRegion
         ]
         Element.none
 
@@ -52,6 +57,7 @@ barCustom theme config =
         , Background.color theme.inputFill
         , Border.rounded radiusSmall
         , uiClass "ui-skeleton"
+        , skeletonRegion
         ]
         Element.none
 
@@ -70,7 +76,8 @@ circle theme =
 
 input : Theme -> Element msg
 input theme =
-    Element.column [ Element.width Element.fill, Element.spacing space4 ]
+    Element.column
+        [ Element.width Element.fill, Element.spacing space4, skeletonRegion ]
         [ Element.el
             [ Element.width (Element.px 80)
             , Element.height (Element.px 12)
@@ -98,6 +105,7 @@ button theme =
         , Background.color theme.inputFill
         , Border.rounded radiusPill
         , uiClass "ui-skeleton"
+        , skeletonRegion
         ]
         Element.none
 
@@ -105,7 +113,12 @@ button theme =
 listRow : Theme -> Element msg
 listRow theme =
     Element.wrappedRow
-        [ Element.width Element.fill, Element.padding space16, Element.spacing space12 ]
+        [ Element.width Element.fill
+        , Element.padding space16
+        , Element.spacing space12
+        , skeletonRegion
+        , testId "list-row"
+        ]
         [ Element.el
             [ Element.width (Element.px 12)
             , Element.alignTop
@@ -135,4 +148,8 @@ listRow theme =
 
 card : Theme -> { rows : Int } -> Element msg
 card theme config =
-    Surface.card theme (List.map (\_ -> bar theme) (List.range 1 (max 1 config.rows)))
+    Element.el
+        [ Element.width Element.fill, skeletonRegion ]
+        (Surface.card theme
+            (List.map (\_ -> bar theme) (List.range 1 (max 1 config.rows)))
+        )

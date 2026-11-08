@@ -24,6 +24,7 @@ import Element.Font as Font
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -643,7 +644,11 @@ componentView env loaded component =
         quantityText =
             component.quantity.amount ++ " " ++ component.quantity.unit ++ summaryText
     in
-    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        , UiCommon.testId "component-row"
+        ]
         [ Element.el
             [ Element.width (Element.px 12)
             , Element.paddingEach { top = DesignTokens.space2, right = 0, bottom = 0, left = 0 }
@@ -714,7 +719,11 @@ deleteModalView env loaded =
 
 mealShowSkeleton : Theme -> Element msg
 mealShowSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
         [ Skeleton.card theme { rows = 2 }
         , Surface.section theme
             { header =

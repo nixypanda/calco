@@ -15,6 +15,7 @@ import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -204,8 +205,9 @@ view env model =
 
                     Saved ->
                         Element.none
-                , Button.textButton env.device
+                , Button.textButtonWithAttributes env.device
                     env.theme
+                    [ UiCommon.testId "action-primary" ]
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label =
@@ -234,15 +236,17 @@ slotCheckbox env selected slot =
 
 diarySettingsSkeleton : Theme -> Element msg
 diarySettingsSkeleton theme =
-    Surface.section theme
-        { header =
-            Just (Skeleton.barCustom theme { width = Element.px 140, height = 24 })
-        , body =
-            [ Skeleton.bar theme
-            , Skeleton.bar theme
-            , Skeleton.bar theme
-            , Skeleton.bar theme
-            , Skeleton.button theme
-            ]
-        , footer = Nothing
-        }
+    Element.el [ Element.width Element.fill, UiCommon.skeletonRegion ]
+        (Surface.section theme
+            { header =
+                Just (Skeleton.barCustom theme { width = Element.px 140, height = 24 })
+            , body =
+                [ Skeleton.bar theme
+                , Skeleton.bar theme
+                , Skeleton.bar theme
+                , Skeleton.bar theme
+                , Skeleton.button theme
+                ]
+            , footer = Nothing
+            }
+        )

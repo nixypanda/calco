@@ -18,6 +18,7 @@ import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -201,16 +202,19 @@ foodSummaryText language food =
 
 customFoodListSkeleton : Theme -> Element msg
 customFoodListSkeleton theme =
-    Surface.section theme
-        { header =
-            Just
-                (Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                    [ Element.el [ Element.width Element.fill ] (Skeleton.button theme)
-                    , Element.el [ Element.width Element.fill ] (Skeleton.button theme)
-                    ]
-                )
-        , body =
-            List.intersperse (Surface.hairline theme)
-                (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
-        , footer = Nothing
-        }
+    Element.el [ Element.width Element.fill, UiCommon.skeletonRegion ]
+        (Surface.section theme
+            { header =
+                Just
+                    (Element.row
+                        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                        [ Element.el [ Element.width Element.fill ] (Skeleton.button theme)
+                        , Element.el [ Element.width Element.fill ] (Skeleton.button theme)
+                        ]
+                    )
+            , body =
+                List.intersperse (Surface.hairline theme)
+                    (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
+            , footer = Nothing
+            }
+        )

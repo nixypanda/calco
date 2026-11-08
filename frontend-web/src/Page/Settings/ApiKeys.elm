@@ -22,6 +22,7 @@ import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
@@ -452,11 +453,13 @@ revokeModal env key state =
 
 apiKeysSkeleton : Theme -> Element msg
 apiKeysSkeleton theme =
-    Surface.section theme
-        { header =
-            Just (Skeleton.button theme)
-        , body =
-            List.intersperse (Surface.hairline theme)
-                (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
-        , footer = Nothing
-        }
+    Element.el [ Element.width Element.fill, UiCommon.skeletonRegion ]
+        (Surface.section theme
+            { header =
+                Just (Skeleton.button theme)
+            , body =
+                List.intersperse (Surface.hairline theme)
+                    (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
+            , footer = Nothing
+            }
+        )
