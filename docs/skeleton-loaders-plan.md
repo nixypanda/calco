@@ -375,7 +375,7 @@ Page skeleton functions cannot be private if `Page.elm` calls them. The public s
 |---|---|---|
 | `Page.Diary.Day` | `skeletonView : Env -> Maybe DiaryPrefs -> Element msg` | `Nothing` = neutral one-slot shell; `Just prefs` = exactly the enabled slots. The page's loading branch and `Page.bootstrapView` both call this. |
 | `Page.Diary.Calendar` | `skeletonView : Env -> List String -> Element msg` | Empty list = one generic month shell for the pre-date boot. Non-empty = exact month labels, using `MonthCalendar.skeleton` with `monthRows`. |
-| `Page.NutritionDetails` | `skeletonView : Env -> Element msg` | Date header shell + reserved banner shell + overview + four nutrient sections + reference. |
+| `Page.NutritionDetails` | `bootSkeleton : Env -> Element msg` | The public full boot body: page container + date-header skeleton + the private body skeleton (reserved banner shell + overview + four nutrient sections + reference). The page's own loading branch uses the real date header plus the private body skeleton, so the header is never duplicated. |
 | `Page.CustomFood.Edit` | `skeletonView : Env -> Element msg` | Wraps `pageContainer` + `Component.FoodEditor.skeletonView` + save placeholder. |
 | `Page.Meal.Edit` | `skeletonView : Env -> Element msg` | Wraps `pageContainer` + `Component.Meal.Form.skeletonView` + nutrition preview + save placeholder. |
 | `Page.Meal.Show` | `skeletonView : Env -> Element msg` | Section detail recipe. |
@@ -420,7 +420,7 @@ Land each primitive in the same change as its first real consumer. Test-only use
 | `pageHeader` | `pageHeader : { leading : Maybe (Element msg), title : Element msg, subtitle : List (Element msg), actions : List (Element msg) } -> Element msg` | Delegates to `Ui.Page.pageHeaderRaw`, which owns the `wrappedRow` width fill, spacing 12, min-width 0, title column spacing 4 and actions row spacing 8. `pageHeaderRaw` has no `Theme` parameter because it only composes caller-supplied elements; it always renders the leading and actions slots (even when `Nothing`/empty) so the title x matches. `Ui.Page.pageHeader` (which still takes `Theme`) maps its `PageHeaderSubtitle` to elements and calls the raw helper. |
 | `field` | `field : Theme -> { labelWidth : Element.Length, gap : Int } -> Element msg` | `elLine 13` label + `gap` + 44px control, radius 12. Use gap 0 for text inputs (`Ui/Input.elm:134-149`) and gap 4 for dropdowns (`Ui/Input.elm:609-614`). Existing `input` stays at 48px until its call sites migrate. |
 | `checkboxRow` | `checkboxRow : Theme -> Element msg` | 44px row: 28px circle + 12px gap + 16px title line. Mirrors `Ui/Input.checkbox` (`Ui/Input.elm:655-671`). |
-| `stat` | `stat : Theme -> Element msg` | Min width 130, padding 12, three paragraph lines (18 / 21 / 18) with 2px spacing. Mirrors `Page/NutritionDetails.overviewItem` (`Page/NutritionDetails.elm:315-333`); the third line is reserved so the common partial-coverage case is covered. |
+| `stat` | `stat : Theme -> Element msg` | Min width 130, padding 12, three one-line paragraph boxes (14 caption / 17 body / 14 caption) with 2px spacing. Mirrors `Page/NutritionDetails.overviewItem`, whose coverage caption is always rendered (empty text for complete coverage), so complete, partial and no-coverage tiles share the same height. |
 | `table` | `table : Theme -> { rows : Int } -> Element msg` | Header row + `rows` data rows, three columns: fill line, right-aligned amount line, unit line. Row height 32 (16 + 8 top + 8 bottom). Mirrors `View.Nutrients.nutrientsTableInner` (`View/Nutrients.elm:483-546`), which includes a header row. |
 | `bottomActions` | `bottomActions : Theme -> { count : Int } -> Element msg` | N full-width 48px buttons; row for 2, column for others. Mirrors `Button.bottomActionButtons` (`Ui/Button.elm:294-332`). |
 | `busy` | `busy : { label : String } -> List (Element msg) -> Element msg` | Root wrapper with width fill, `role="status"`, one visually hidden label, and `aria-hidden` on decorative children. No `Theme` parameter is needed; `NoUnused.Parameters` would fail on it. Do not put `aria-busy` here; it belongs on the persistent page root. |
@@ -435,10 +435,9 @@ Deliberately omitted:
 
 Existing primitives:
 
-- Keep `bar`, `barCustom`, `button`, `card` for current call sites.
-- Keep `input` and `listRow` unchanged in Phase 1. Add `field` and `row` with their first consumers. Delete the old names only when the last call site migrates.
+- Keep `bar`, `barCustom`, `button` and `input` for current call sites.
+- `card`, `listRow` and `circle` were removed in Phase 3d after the last call sites migrated to section/row recipes.
 - Remove `loading` after its two call sites are migrated (`Page.elm:3115`, `Main.elm:643`) and both boot paths use `bootShell`/`bootstrapView`.
-- `Skeleton.card` already has 20px body padding and 12px spacing via `Surface.card`; use it for card-shaped regions, not for panel/detail structures.
 
 ### 5.5 `pageHeaderRaw` and the real/skeleton header share
 

@@ -11,6 +11,7 @@ module Page.Food.Search exposing
     , init
     , isBusy
     , retarget
+    , skeletonView
     , update
     )
 
@@ -833,6 +834,164 @@ contentView env model =
         (searchInputView env model :: searchContentView env model :: adHocLogSection env model)
 
 
+{-| The route-boot body. The search controls are synchronous in the loaded
+page, so the boot shell reproduces their real geometry instead of a generic
+card stack; only the independent results slot is a skeleton. This is not a
+page-level busy wrapper: `Page.bootstrapView` owns the one status region.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Element.column
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.spacing DesignTokens.space24
+        ]
+        [ searchControlsSkeleton env
+        , resultsSectionSkeleton env
+        ]
+
+
+searchControlsSkeleton : Env -> Element msg
+searchControlsSkeleton env =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space24
+        , UiCommon.testId "search-controls"
+        ]
+        [ scopeControlSkeleton env.theme
+        , Skeleton.barCustom env.theme { width = Element.fill, height = 44 }
+        ]
+
+
+{-| Mirrors `scopeControl`: four equal 44px segments inside the 4px padded,
+1px bordered track, with the loaded 24px gap before the search field.
+-}
+scopeControlSkeleton : Theme -> Element msg
+scopeControlSkeleton theme =
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space4
+        , Element.padding DesignTokens.space4
+        , Background.color theme.inputFill
+        , Border.width 1
+        , Border.color theme.chipBorder
+        , Border.rounded DesignTokens.radiusControl
+        ]
+        (List.repeat 4
+            (Element.el [ Element.width (Element.fillPortion 1) ]
+                (Skeleton.barCustom theme { width = Element.fill, height = 44 })
+            )
+        )
+
+
+resultsSectionSkeleton : Env -> Element msg
+resultsSectionSkeleton env =
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "search-results" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Skeleton.elLine env.theme
+                        { size = 20, width = Element.px 120 }
+                    )
+            , body = List.repeat 3 (resultRowSkeleton env.theme)
+            , footer = Nothing
+            }
+        )
+
+
+resultRowSkeleton : Theme -> Element msg
+resultRowSkeleton theme =
+    Skeleton.row
+        { leading = [ Skeleton.dot theme ]
+        , title =
+            Skeleton.elLine theme { size = 17, width = Element.fill }
+        , subtitle =
+            [ Skeleton.elLine theme
+                { size = 17, width = Element.fillPortion 2 }
+            ]
+        , trailing = []
+        }
+
+
+recentsSectionSkeleton : Env -> Element msg
+recentsSectionSkeleton env =
+    Element.column
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.spacing DesignTokens.space8
+        ]
+        [ Element.el
+            [ Element.width Element.fill, UiCommon.testId "search-recents" ]
+            (Surface.section env.theme
+                { header =
+                    Just
+                        (Skeleton.elLine env.theme
+                            { size = 24, width = Element.px 120 }
+                        )
+                , body = List.repeat 3 (recentRowSkeleton env.theme)
+                , footer = Nothing
+                }
+            )
+        ]
+
+
+{-| A recent item row plus its quick-add chip row. The loaded row is a 47px
+list row with a 13px caption line (14px line box), followed by a 56px chip block
+(48px buttons with 4px padding). `Surface.staticRow` still reserves the 12px
+leading slot even with no dot, matching the loaded `macroDotGhost`.
+-}
+recentRowSkeleton : Theme -> Element msg
+recentRowSkeleton theme =
+    Element.column
+        [ Element.width Element.fill, UiCommon.testId "recent-item" ]
+        [ Skeleton.row
+            { leading = []
+            , title =
+                Skeleton.elLine theme { size = 17, width = Element.fill }
+            , subtitle =
+                [ Skeleton.elLine theme
+                    { size = 14, width = Element.fillPortion 2 }
+                ]
+            , trailing = []
+            }
+        , Element.wrappedRow
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
+            , Element.padding DesignTokens.space4
+            ]
+            (List.repeat 2 (quickAddChipSkeleton theme))
+        ]
+
+
+quickAddChipSkeleton : Theme -> Element msg
+quickAddChipSkeleton theme =
+    Element.el
+        [ Element.width (Element.px 80)
+        , Element.height (Element.px 48)
+        , Background.color theme.inputFill
+        , Border.rounded DesignTokens.radiusPill
+        , UiCommon.skeletonRegion
+        ]
+        Element.none
+
+
+barcodeSectionSkeleton : Env -> Element msg
+barcodeSectionSkeleton env =
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "barcode-result" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Skeleton.elLine env.theme
+                        { size = 20, width = Element.px 120 }
+                    )
+            , body = List.repeat 2 (resultRowSkeleton env.theme)
+            , footer = Nothing
+            }
+        )
+
+
 searchBody : Model -> SearchBody
 searchBody model =
     case model.scope of
@@ -1241,13 +1400,7 @@ bodyView env model =
             Feedback.emptyState env.theme (I18n.t env.language TidFoodSearchEmptyPrompt)
 
         Loading ->
-            Surface.section env.theme
-                { header =
-                    Just (Skeleton.barCustom env.theme { width = Element.px 120, height = 24 })
-                , body =
-                    List.map (\_ -> Skeleton.listRow env.theme) (List.range 1 3)
-                , footer = Nothing
-                }
+            resultsSectionSkeleton env
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
@@ -1260,24 +1413,29 @@ bodyView env model =
                 textEmptyState env model.scope
 
             else
-                Surface.section env.theme
-                    { header =
-                        Just
-                            (Typography.subsectionTitle env.theme
-                                (I18n.t env.language TidFoodSearchResults)
-                            )
-                    , body =
-                        List.map
-                            (\item ->
-                                SearchView.resultRow env
-                                    { query = model.search.query
-                                    , item = item
-                                    , onSelect = ResultClicked
-                                    }
-                            )
-                            items
-                    , footer = Nothing
-                    }
+                Element.el
+                    [ Element.width Element.fill
+                    , UiCommon.testId "search-results"
+                    ]
+                    (Surface.section env.theme
+                        { header =
+                            Just
+                                (Typography.subsectionTitle env.theme
+                                    (I18n.t env.language TidFoodSearchResults)
+                                )
+                        , body =
+                            List.map
+                                (\item ->
+                                    SearchView.resultRow env
+                                        { query = model.search.query
+                                        , item = item
+                                        , onSelect = ResultClicked
+                                        }
+                                )
+                                items
+                        , footer = Nothing
+                        }
+                    )
 
 
 searchContentView : Env -> Model -> Element Msg
@@ -1306,7 +1464,7 @@ barcodeBodyView env body =
             Element.none
 
         BarcodeLookingUp ->
-            Skeleton.card env.theme { rows = 3 }
+            barcodeSectionSkeleton env
 
         BarcodeNotFound ->
             Feedback.emptyStateWithIcon env.theme
@@ -1432,7 +1590,7 @@ recentsView env model =
                 noRecentsState env
 
             Loading ->
-                Skeleton.card env.theme { rows = 2 }
+                recentsSectionSkeleton env
 
             Failure _ ->
                 Element.none
@@ -1444,16 +1602,21 @@ recentsView env model =
                 else
                     Element.column
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                        [ Surface.section env.theme
-                            { header =
-                                Just
-                                    (Typography.sectionTitle env.theme
-                                        (I18n.t env.language TidFoodSearchRecent)
-                                    )
-                            , body =
-                                List.map (recentItemRow env model) items
-                            , footer = Nothing
-                            }
+                        [ Element.el
+                            [ Element.width Element.fill
+                            , UiCommon.testId "search-recents"
+                            ]
+                            (Surface.section env.theme
+                                { header =
+                                    Just
+                                        (Typography.sectionTitle env.theme
+                                            (I18n.t env.language TidFoodSearchRecent)
+                                        )
+                                , body =
+                                    List.map (recentItemRow env model) items
+                                , footer = Nothing
+                                }
+                            )
                         ]
         ]
 
@@ -1466,7 +1629,8 @@ noRecentsState env =
 
 recentItemRow : Env -> Model -> Logs.RecentItem -> Element Msg
 recentItemRow env model item =
-    Element.column [ Element.width Element.fill ]
+    Element.column
+        [ Element.width Element.fill, UiCommon.testId "recent-item" ]
         [ Surface.listRow
             { onSelect = RecentItemClicked item
             , leading = [ View.Product.macroDotGhost ]

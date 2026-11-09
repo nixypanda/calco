@@ -6,7 +6,6 @@ module Ui.Skeleton exposing
     , busy
     , button
     , buttonWithAttributes
-    , card
     , categoryChipRow
     , checkboxRow
     , chipRow
@@ -16,12 +15,12 @@ module Ui.Skeleton exposing
     , fieldWithoutLabel
     , icon
     , input
-    , listRow
     , pageHeader
     , paragraphLine
     , row
     , searchField
     , selectField
+    , stat
     )
 
 import Element exposing (Element)
@@ -37,7 +36,6 @@ import Ui.DesignTokens
         , radiusPill
         , radiusSmall
         , space12
-        , space16
         , space2
         , space4
         , space8
@@ -141,18 +139,6 @@ barCustom theme config =
         , Border.rounded radiusSmall
         , uiClass "ui-skeleton"
         , skeletonRegion
-        ]
-        Element.none
-
-
-circle : Theme -> Element msg
-circle theme =
-    Element.el
-        [ Element.width (Element.px 12)
-        , Element.height (Element.px 12)
-        , Background.color theme.inputFill
-        , Border.rounded 999
-        , uiClass "ui-skeleton"
         ]
         Element.none
 
@@ -442,6 +428,29 @@ bottomActions theme config =
                 buttonElements
 
 
+{-| A reserved overview stat tile. It mirrors `NutritionDetails.overviewItem`:
+a min-130 tile with 12px padding, the tile fill and 2px spacing between the
+caption, value and coverage lines. The third line is always reserved, so the
+loaded tile has the same height whether coverage is complete (empty caption),
+partial or absent. The line heights are the measured one-line paragraph boxes
+(14px caption, 17px body).
+-}
+stat : Theme -> Element msg
+stat theme =
+    Element.column
+        [ Element.width (Element.minimum 130 Element.fill)
+        , Element.spacing space2
+        , Element.padding space12
+        , Background.color theme.inputFill
+        , skeletonRegion
+        , testId "stat"
+        ]
+        [ elLine theme { size = 14, width = Element.fill }
+        , elLine theme { size = 17, width = Element.fill }
+        , elLine theme { size = 14, width = Element.fill }
+        ]
+
+
 button : Theme -> Element msg
 button theme =
     buttonWithAttributes theme []
@@ -460,42 +469,6 @@ buttonWithAttributes theme extraAttrs =
             ++ extraAttrs
         )
         Element.none
-
-
-listRow : Theme -> Element msg
-listRow theme =
-    Element.wrappedRow
-        [ Element.width Element.fill
-        , Element.padding space16
-        , Element.spacing space12
-        , skeletonRegion
-        , testId "list-row"
-        ]
-        [ Element.el
-            [ Element.width (Element.px 12)
-            , Element.alignTop
-            , Element.paddingEach { top = space2, right = 0, bottom = 0, left = 0 }
-            ]
-            (circle theme)
-        , Element.column [ Element.width Element.fill, Element.spacing space4, Element.alignTop ]
-            [ Element.el
-                [ Element.width (Element.fillPortion 2)
-                , Element.height (Element.px 16)
-                , Background.color theme.inputFill
-                , Border.rounded radiusSmall
-                , uiClass "ui-skeleton"
-                ]
-                Element.none
-            , Element.el
-                [ Element.width (Element.fillPortion 3)
-                , Element.height (Element.px 12)
-                , Background.color theme.inputFill
-                , Border.rounded radiusSmall
-                , uiClass "ui-skeleton"
-                ]
-                Element.none
-            ]
-        ]
 
 
 {-| A non-interactive list row placeholder. It delegates to
@@ -517,12 +490,3 @@ row config =
         , subtitle = config.subtitle
         , trailing = config.trailing
         }
-
-
-card : Theme -> { rows : Int } -> Element msg
-card theme config =
-    Element.el
-        [ Element.width Element.fill, skeletonRegion ]
-        (Surface.card theme
-            (List.map (\_ -> bar theme) (List.range 1 (max 1 config.rows)))
-        )

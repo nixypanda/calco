@@ -3,6 +3,7 @@ module Page.NutritionDetails exposing
     , Model(..)
     , Msg(..)
     , OutMsg(..)
+    , bootSkeleton
     , init
     , isBusy
     , update
@@ -14,6 +15,7 @@ import Data.NutritionDetails as Details exposing (Nutrient, NutritionDetails)
 import Data.Route as Route exposing (Route)
 import Element exposing (Element)
 import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import I18n
@@ -191,7 +193,9 @@ view env model =
         [ dateHeader env model
         , case model of
             Loading _ ->
-                loadingView env.theme
+                Skeleton.busy
+                    { label = I18n.t env.language TidCommonLoading }
+                    [ skeletonView env ]
 
             Loaded _ report expandedAdvice ->
                 reportView env report expandedAdvice
@@ -208,70 +212,240 @@ dateHeader env model =
         canGoNext =
             LocalDate.compare (currentDate model) (today model) == LT
     in
-    Surface.section env.theme
-        { header =
-            Just
-                (UiPage.pageHeader env.theme
-                    { leading =
-                        Just
-                            (Button.iconButton env.device
-                                env.theme
-                                { icon = Icon.ChevronLeft
-                                , title = I18n.t env.language TidNutritionDetailsPreviousDay
-                                , onPress = Just PreviousDayClicked
-                                , tone = Button.Primary
-                                }
-                            )
-                    , title =
-                        Typography.sectionTitle env.theme
-                            (LocalDate.display env.language (currentDate model))
-                    , subtitle = Nothing
-                    , actions =
-                        [ if canGoNext then
-                            Button.iconButton env.device
-                                env.theme
-                                { icon = Icon.ChevronRight
-                                , title = I18n.t env.language TidNutritionDetailsNextDay
-                                , onPress = Just NextDayClicked
-                                , tone = Button.Primary
-                                }
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "date-header" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (UiPage.pageHeader env.theme
+                        { leading =
+                            Just
+                                (Button.iconButton env.device
+                                    env.theme
+                                    { icon = Icon.ChevronLeft
+                                    , title = I18n.t env.language TidNutritionDetailsPreviousDay
+                                    , onPress = Just PreviousDayClicked
+                                    , tone = Button.Primary
+                                    }
+                                )
+                        , title =
+                            Typography.sectionTitle env.theme
+                                (LocalDate.display env.language (currentDate model))
+                        , subtitle = Nothing
+                        , actions =
+                            [ if canGoNext then
+                                Button.iconButton env.device
+                                    env.theme
+                                    { icon = Icon.ChevronRight
+                                    , title = I18n.t env.language TidNutritionDetailsNextDay
+                                    , onPress = Just NextDayClicked
+                                    , tone = Button.Primary
+                                    }
 
-                          else
-                            Button.iconButton env.device
-                                env.theme
-                                { icon = Icon.ChevronRight
-                                , title = ""
-                                , onPress = Nothing
-                                , tone = Button.Primary
-                                }
-                        ]
-                    }
-                )
-        , body = []
-        , footer = Nothing
-        }
+                              else
+                                Button.iconButton env.device
+                                    env.theme
+                                    { icon = Icon.ChevronRight
+                                    , title = ""
+                                    , onPress = Nothing
+                                    , tone = Button.Primary
+                                    }
+                            ]
+                        }
+                    )
+            , body = []
+            , footer = Nothing
+            }
+        )
 
 
-loadingView : Theme -> Element msg
-loadingView theme =
+{-| The full boot body. `Page.bootstrapView` has no route model to render the
+real date header from, so the boot shell includes the same 84px date-header
+surface the page renders before its body skeleton. The page's own loading state
+uses the real `dateHeader` and body-only `skeletonView`, so the header is never
+duplicated.
+-}
+bootSkeleton : Env -> Element msg
+bootSkeleton env =
+    UiPage.pageContainer
+        [ dateHeaderSkeleton env
+        , skeletonView env
+        ]
+
+
+dateHeaderSkeleton : Env -> Element msg
+dateHeaderSkeleton env =
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "date-header" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Skeleton.pageHeader
+                        { leading = Just (Skeleton.icon env.theme)
+                        , title =
+                            Skeleton.elLine env.theme
+                                { size = 24, width = Element.fill }
+                        , subtitle = []
+                        , actions = [ Skeleton.icon env.theme ]
+                        }
+                    )
+            , body = []
+            , footer = Nothing
+            }
+        )
+
+
+{-| The report body below the real date header. The page's own loading state
+and `Page.bootstrapView` both call this so the coverage banner, overview and
+first nutrient section keep their position while the report loads.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
-        , UiCommon.skeletonRegion
+        , UiCommon.testId "nutrition-details-skeleton"
         ]
-        [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
-        , Surface.card theme
-            [ Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
-            , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
-                , Skeleton.barCustom theme { width = Element.fill, height = 40 }
-                , Skeleton.barCustom theme { width = Element.fill, height = 40 }
-                ]
+        [ coverageBannerSkeleton env
+        , overviewSkeleton env
+        , nutrientSectionSkeleton env
+        , nutrientSectionSkeleton env
+        , nutrientSectionSkeleton env
+        , nutrientSectionSkeleton env
+        , referenceSkeleton env
+        ]
+
+
+{-| The loaded report always renders `Feedback.infoBanner` or
+`Feedback.warningBanner`. The shell keeps the loaded 12px padding and 4px
+paragraph line gap: one line on Tablet/Desktop and two on Phone, matching the
+seeded wrap. The banner text is data-derived, so a longer message can still add
+a line and is explicitly variable.
+-}
+coverageBannerSkeleton : Env -> Element msg
+coverageBannerSkeleton env =
+    let
+        lineCount : Int
+        lineCount =
+            if UiCommon.isSmall env.device then
+                2
+
+            else
+                1
+    in
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "coverage-banner" ]
+        (Element.column
+            [ Element.width Element.fill
+            , Element.padding DesignTokens.space12
+            , Element.spacing DesignTokens.space4
+            , Background.color env.theme.brandBlueSoft
+            , Border.rounded DesignTokens.radiusControl
+            , UiCommon.skeletonRegion
             ]
-        , Skeleton.card theme { rows = 3 }
-        , Skeleton.card theme { rows = 3 }
-        , Surface.card theme [ Skeleton.bar theme, Skeleton.bar theme ]
+            (List.repeat lineCount
+                (Skeleton.elLine env.theme
+                    { size = 17, width = Element.fill }
+                )
+            )
+        )
+
+
+{-| The backend guidance defines exactly four overview rows (energy, protein,
+carbohydrates and fat), so the skeleton reserves four tiles rather than a
+three-tile guess that reflows at intermediate pane widths.
+-}
+overviewNutrientCount : Int
+overviewNutrientCount =
+    4
+
+
+overviewSkeleton : Env -> Element msg
+overviewSkeleton env =
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "nutrition-overview" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Skeleton.elLine env.theme
+                        { size = 20, width = Element.px 120 }
+                    )
+            , body =
+                [ Element.wrappedRow
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space8
+                    ]
+                    (List.repeat overviewNutrientCount (Skeleton.stat env.theme))
+                ]
+            , footer = Nothing
+            }
+        )
+
+
+nutrientSectionSkeleton : Env -> Element msg
+nutrientSectionSkeleton env =
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "nutrient-section" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Skeleton.elLine env.theme
+                        { size = 20, width = Element.px 160 }
+                    )
+            , body =
+                List.repeat 4 (nutrientRowSkeleton env.theme)
+            , footer = Nothing
+            }
+        )
+
+
+{-| Mirrors the tappable `nutrientRow`: a bold 16px name with a right-aligned
+amount, a 10px progress bar and a 13px guidance caption. The advice chevron is
+decorative and has no effect on the row's vertical rhythm.
+-}
+nutrientRowSkeleton : Theme -> Element msg
+nutrientRowSkeleton theme =
+    Element.column
+        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        [ Element.row
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ Skeleton.elLine theme { size = 16, width = Element.fill }
+            , Skeleton.elLine theme { size = 16, width = Element.px 56 }
+            ]
+        , Element.el
+            [ Element.width Element.fill
+            , Element.height (Element.px 10)
+            , Background.color theme.inputFill
+            , Border.rounded DesignTokens.radiusPill
+            , UiCommon.skeletonRegion
+            ]
+            Element.none
+        , Skeleton.elLine theme
+            { size = 13, width = Element.fillPortion 2 }
         ]
+
+
+referenceSkeleton : Env -> Element msg
+referenceSkeleton env =
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "nutrition-reference" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Skeleton.elLine env.theme
+                        { size = 20, width = Element.px 160 }
+                    )
+            , body =
+                [ Skeleton.elLine env.theme
+                    { size = 17, width = Element.fill }
+                , Skeleton.elLine env.theme
+                    { size = 17, width = Element.fillPortion 2 }
+                , Skeleton.elLine env.theme
+                    { size = 17, width = Element.px 160 }
+                ]
+            , footer = Nothing
+            }
+        )
 
 
 reportView : Env -> NutritionDetails -> Set String -> Element Msg
@@ -310,24 +484,28 @@ overviewSection env nutrients =
         overview =
             inSection Details.Overview nutrients
     in
-    Surface.section env.theme
-        { header =
-            Just
-                (Typography.subsectionTitle env.theme
-                    (I18n.t env.language TidNutritionDetailsOverview)
-                )
-        , body =
-            if List.isEmpty overview then
-                [ Feedback.loading env.theme (I18n.t env.language TidNutritionDetailsOverviewEmpty)
-                ]
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "nutrition-overview" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Typography.subsectionTitle env.theme
+                        (I18n.t env.language TidNutritionDetailsOverview)
+                    )
+            , body =
+                if List.isEmpty overview then
+                    [ Feedback.loading env.theme
+                        (I18n.t env.language TidNutritionDetailsOverviewEmpty)
+                    ]
 
-            else
-                [ Element.wrappedRow
-                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                    (List.map (overviewItem env) overview)
-                ]
-        , footer = Nothing
-        }
+                else
+                    [ Element.wrappedRow
+                        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                        (List.map (overviewItem env) overview)
+                    ]
+            , footer = Nothing
+            }
+        )
 
 
 overviewItem : Env -> Nutrient -> Element msg
@@ -343,15 +521,15 @@ overviewItem env nutrient =
             [ Element.text nutrient.name ]
         , Element.paragraph [ Font.bold, Typography.body ]
             [ Element.text (knownAmountLabel nutrient) ]
-        , if nutrient.coverage == Details.CompleteCoverage then
-            Element.none
-
-          else
-            Element.paragraph [ Font.color env.theme.textMuted, Typography.caption ]
-                [ Element.text (coverageLabel env.language nutrient) ]
+        , Element.paragraph [ Font.color env.theme.textMuted, Typography.caption ]
+            [ Element.text (coverageLabel env.language nutrient) ]
         ]
 
 
+{-| Complete coverage returns a non-breaking space rather than an empty string
+because the overview caption is always rendered: the paragraph must keep its
+line box so complete, partial and no-coverage tiles share one height.
+-}
 coverageLabel : Language -> Nutrient -> String
 coverageLabel language nutrient =
     case nutrient.coverage of
@@ -362,7 +540,7 @@ coverageLabel language nutrient =
             I18n.t language TidNutritionDetailsKnownMinimum
 
         Details.CompleteCoverage ->
-            ""
+            "\u{00A0}"
 
 
 nutrientSection :
@@ -378,17 +556,21 @@ nutrientSection env expandedAdvice title section nutrients =
         selected =
             inSection section nutrients
     in
-    Surface.section env.theme
-        { header = Just (Typography.subsectionTitle env.theme title)
-        , body =
-            if List.isEmpty selected then
-                [ Feedback.loading env.theme (I18n.t env.language TidNutritionDetailsNoNutrientData)
-                ]
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "nutrient-section" ]
+        (Surface.section env.theme
+            { header = Just (Typography.subsectionTitle env.theme title)
+            , body =
+                if List.isEmpty selected then
+                    [ Feedback.loading env.theme
+                        (I18n.t env.language TidNutritionDetailsNoNutrientData)
+                    ]
 
-            else
-                List.map (nutrientRow env expandedAdvice) selected
-        , footer = Nothing
-        }
+                else
+                    List.map (nutrientRow env expandedAdvice) selected
+            , footer = Nothing
+            }
+        )
 
 
 inSection : Details.NutrientSection -> List Nutrient -> List Nutrient
@@ -707,28 +889,37 @@ formatAmount amount unit =
 
 referenceSection : Env -> NutritionDetails -> Element msg
 referenceSection env report =
-    Surface.section env.theme
-        { header =
-            Just
-                (Typography.subsectionTitle env.theme
-                    (I18n.t env.language TidNutritionDetailsAboutReferences)
-                )
-        , body =
-            [ Element.paragraph [ Font.color env.theme.textMuted, Typography.body ]
-                [ Element.text
-                    (I18n.t env.language
-                        (TidNutritionDetailsReferencesDescription
-                            report.reference.name
-                            report.reference.authority
-                            report.reference.jurisdiction
-                            report.reference.populationLabel
-                        )
+    Element.el
+        [ Element.width Element.fill, UiCommon.testId "nutrition-reference" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Typography.subsectionTitle env.theme
+                        (I18n.t env.language TidNutritionDetailsAboutReferences)
                     )
+            , body =
+                [ Element.paragraph [ Font.color env.theme.textMuted, Typography.body ]
+                    [ Element.text
+                        (I18n.t env.language
+                            (TidNutritionDetailsReferencesDescription
+                                report.reference.name
+                                report.reference.authority
+                                report.reference.jurisdiction
+                                report.reference.populationLabel
+                            )
+                        )
+                    ]
+                , Element.newTabLink
+                    [ Font.color env.theme.brandBlue
+                    , Font.underline
+                    , Typography.body
+                    ]
+                    { url = report.reference.sourceUrl
+                    , label =
+                        Element.text
+                            (I18n.t env.language TidNutritionDetailsViewReferenceSource)
+                    }
                 ]
-            , Element.newTabLink [ Font.color env.theme.brandBlue, Font.underline, Typography.body ]
-                { url = report.reference.sourceUrl
-                , label = Element.text (I18n.t env.language TidNutritionDetailsViewReferenceSource)
-                }
-            ]
-        , footer = Nothing
-        }
+            , footer = Nothing
+            }
+        )

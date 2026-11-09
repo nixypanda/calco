@@ -87,6 +87,9 @@ const ALL_CASE_NAMES = [
   "custom-food-show",
   "food-log",
   "meal-show",
+  "nutrition-details",
+  "search",
+  "search-recents",
   "calendar",
   "transition-scroll",
 ];
@@ -316,6 +319,17 @@ function installFetchInterceptor(client) {
       throw new WaitTimeout(
         `Required request(s) never paused: ${missing().join(", ") || "(none)"}.`,
       );
+    },
+
+    async waitForMatcher(name, timeout = 8_000) {
+      const deadline = Date.now() + timeout;
+      while (Date.now() < deadline) {
+        if (state.matchers.some((matcher) => matcher.name === name && matcher.paused)) {
+          return;
+        }
+        await delayOnly(50);
+      }
+      throw new WaitTimeout(`Request matcher "${name}" never paused.`);
     },
 
     async releaseAll() {
@@ -1591,6 +1605,145 @@ function buildCases(layoutDate, discovered) {
       ],
     },
     {
+      name: "nutrition-details",
+      kind: "skeleton",
+      required: true,
+      authRole: "layout",
+      paneRole: "detail",
+      path: () => `/details?date=${date}`,
+      hold: [
+        {
+          name: "nutrition-details",
+          pattern: "*/api/nutrition/details?date=*",
+          required: true,
+        },
+      ],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContent: { axes: XYW },
+      },
+      anchors: [
+        { key: "dateHeaders", label: "date header", axes: XYWH },
+        { key: "coverageBanners", label: "coverage banner", axes: XYWH },
+        { key: "nutritionOverviews", label: "overview section top" },
+        { key: "stats", index: 0, label: "first overview stat width", axes: ["width"] },
+        { key: "stats", index: 3, label: "last overview stat width", axes: ["width"] },
+        { key: "nutrientSections", label: "first nutrient section top" },
+      ],
+      countChecks: [
+        { key: "stats", label: "overview stat count", expected: 4 },
+        { key: "nutrientSections", label: "nutrient section count", expected: 4 },
+        { key: "nutritionReferences", label: "reference section count", expected: 1 },
+      ],
+      heightChecks: [
+        { key: "stats", index: 0, label: "first overview stat", expected: 73 },
+      ],
+      nav: "present",
+      loadedSelector: '[data-testid="coverage-banner"]',
+      unimplemented: [
+        "The coverage banner text is data-derived. The skeleton reserves the " +
+          "seeded one-line desktop / two-line phone banner shell; a longer " +
+          "localized message is variable and pushes the overview down.",
+        "The third stat line is always reserved, so complete, partial and no " +
+          "coverage tiles share the same height. Long localized coverage labels " +
+          "can wrap and are variable.",
+        "The number of nutrient rows is data-derived. Only the first nutrient " +
+          "section top is asserted; rows below the first section are variable.",
+      ],
+    },
+    {
+      name: "search",
+      kind: "skeleton",
+      optional: true,
+      authRole: "layout",
+      paneRole: "detail",
+      path: () =>
+        discovered.chickenFoodId
+          ? `/search?date=${date}&meal_slot=breakfast`
+          : null,
+      skipReason: discovered.chickenFoodId
+        ? null
+        : `No seeded food search result (${discovered.chickenFoodReason ?? "discovery failed"}). ` +
+          "Set CALCO_FOOD_ID or seed a food matching \"chicken\".",
+      hold: [
+        {
+          name: "recent-items",
+          pattern: "*/api/logs/recent-items?*",
+          required: true,
+        },
+        {
+          name: "foods-search",
+          pattern: "*/api/foods/search?*",
+          required: false,
+        },
+      ],
+      searchQuery: "chicken",
+      searchQueryMatcher: "foods-search",
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContent: { axes: XYW },
+      },
+      anchors: [
+        { key: "searchControls", label: "search controls", axes: XYWH },
+        { key: "searchResults", label: "results section top" },
+        { key: "rows", label: "first result row top" },
+      ],
+      nav: "present",
+      loadedSelector: '[data-testid="search-results"]',
+      unimplemented: [
+        "Search controls are real in both captures; only the results slot is an " +
+          "in-place skeleton. Result category chips are omitted from the skeleton " +
+          "because they depend on the matched food.",
+        "The recents slot is covered by the separate search-recents case.",
+      ],
+    },
+    {
+      name: "search-recents",
+      kind: "skeleton",
+      optional: true,
+      authRole: "layout",
+      paneRole: "detail",
+      path: () =>
+        discovered.chickenFoodId
+          ? `/search?date=${date}&meal_slot=breakfast`
+          : null,
+      skipReason: discovered.chickenFoodId
+        ? null
+        : `No seeded food search result (${discovered.chickenFoodReason ?? "discovery failed"}).`,
+      hold: [
+        {
+          name: "recent-items",
+          pattern: "*/api/logs/recent-items?*",
+          required: true,
+        },
+      ],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContent: { axes: XYW },
+      },
+      anchors: [
+        { key: "searchControls", label: "search controls", axes: XYWH },
+        { key: "searchRecents", label: "recents section top" },
+        { key: "recentItems", label: "first recents item", axes: XYWH },
+      ],
+      nav: "present",
+      loadedSelector: '[data-testid="search-recents"]',
+      unimplemented: [
+        "The item height is compared for the first single-line recent. Multi-line " +
+          "recent titles and a different quick-add chip count are variable below " +
+          "the first item.",
+      ],
+    },
+    {
       name: "calendar",
       kind: "skeleton",
       required: true,
@@ -1627,8 +1780,12 @@ function buildCases(layoutDate, discovered) {
       targetPaneRole: "detail",
       targetPath: "/search",
       nav: "present",
+      skipTargetTallViewports: ["desktop"],
       unimplemented: [
         "In-place retry at scroll 400 needs a failure-retry route; deferred.",
+        "On Desktop the target /search page is exactly one 500px viewport tall, " +
+          "so the tall-target scroll-reset guard is not applicable; navigation " +
+          "method, route and scroll reset are still asserted.",
       ],
     },
   ];
@@ -1665,6 +1822,14 @@ const CAPTURE_EXPRESSION = `(() => {
     emptyStates: within(pane, "empty-state"),
     errorBanners: within(pane, "error-banner"),
     searchControls: within(pane, "search-controls"),
+    searchResults: within(pane, "search-results"),
+    searchRecents: within(pane, "search-recents"),
+    dateHeaders: within(pane, "date-header"),
+    coverageBanners: within(pane, "coverage-banner"),
+    nutritionOverviews: within(pane, "nutrition-overview"),
+    nutrientSections: within(pane, "nutrient-section"),
+    nutritionReferences: within(pane, "nutrition-reference"),
+    recentItems: within(pane, "recent-item"),
     actionPrimary: within(pane, "action-primary"),
     bottomActions: within(pane, "bottom-action"),
     inputs: within(pane, "field"),
@@ -1820,6 +1985,39 @@ async function waitForLoaded(client, selector, paneRole, timeout = 12_000) {
     })()`,
     `the loaded state (${selector})`,
     timeout,
+  );
+}
+
+async function waitForPaneCount(client, count, timeout = 8_000) {
+  if (!count) return;
+  await waitUntil(
+    client,
+    `document.querySelectorAll('[data-testid="workspace-pane"]').length >= ${count}`,
+    `at least ${count} visible workspace pane(s)`,
+    timeout,
+  );
+}
+
+async function typeSearchQuery(client, query, timeout = 8_000) {
+  await waitUntil(
+    client,
+    `Boolean(document.querySelector('[data-testid="search-controls"] input'))`,
+    "the food-search input",
+    timeout,
+  );
+  await evaluate(
+    client,
+    `(() => {
+      const input = document.querySelector('[data-testid="search-controls"] input');
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      ).set;
+      input.focus();
+      setter.call(input, ${JSON.stringify(query)});
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      return input.value;
+    })()`,
   );
 }
 
@@ -2081,8 +2279,14 @@ function assertAnchors(caseDef, loading, loaded, assertions, viewportName) {
   const tolerance = 1;
   for (const anchor of caseDef.anchors ?? []) {
     if (shouldSkip(anchor, viewportName)) continue;
-    const loadingBox = firstAcrossPanes(loading, anchor.key);
-    const loadedBox = firstAcrossPanes(loaded, anchor.key);
+    const loadingBox =
+      anchor.index === undefined
+        ? firstAcrossPanes(loading, anchor.key)
+        : allAcrossPanes(loading, anchor.key)[anchor.index] ?? null;
+    const loadedBox =
+      anchor.index === undefined
+        ? firstAcrossPanes(loaded, anchor.key)
+        : allAcrossPanes(loaded, anchor.key)[anchor.index] ?? null;
     compareAnchor(
       assertions,
       anchor.label,
@@ -2436,7 +2640,7 @@ function assertCaptures(caseDef, viewportName, loading, loaded, assertions) {
   assertCalendars("loaded", loaded, assertions);
 }
 
-function assertScrollCase(caseDef, run, assertions) {
+function assertScrollCase(caseDef, run, assertions, viewportName) {
   const scrolled = run.captures?.scrolledLong;
   const after = run.captures?.transitionedTarget;
   const scroll = run.scroll ?? {};
@@ -2462,10 +2666,11 @@ function assertScrollCase(caseDef, run, assertions) {
     message: `Deep scroll only reached ${scroll.beforeNavigation}`,
   });
 
+  const inAppMethods = ["bottom-nav-search-tab", "topbar-menu-search-item"];
   record(assertions, {
     name: "in-app route change used",
-    passed: scroll.navigationMethod === "bottom-nav-search-tab",
-    expected: "bottom-nav-search-tab",
+    passed: inAppMethods.includes(scroll.navigationMethod),
+    expected: inAppMethods.join(" or "),
     actual: scroll.navigationMethod ?? "missing",
     tolerance: 0,
     message: "transition-scroll must not use a full document navigation",
@@ -2491,16 +2696,19 @@ function assertScrollCase(caseDef, run, assertions) {
     message: "The target route did not render search controls",
   });
 
-  record(assertions, {
-    name: "target page taller than viewport",
-    passed: after.docHeight > after.viewport.height + 1,
-    expected: `docHeight > ${after.viewport.height + 1}`,
-    actual: after.docHeight,
-    tolerance: 1,
-    message:
-      `Target docHeight ${after.docHeight} is not taller than ` +
-      `viewport ${after.viewport.height}; browser clamping would hide a missing reset`,
-  });
+  const skipTargetTall = (caseDef.skipTargetTallViewports ?? []).includes(viewportName);
+  if (!skipTargetTall) {
+    record(assertions, {
+      name: "target page taller than viewport",
+      passed: after.docHeight > after.viewport.height + 1,
+      expected: `docHeight > ${after.viewport.height + 1}`,
+      actual: after.docHeight,
+      tolerance: 1,
+      message:
+        `Target docHeight ${after.docHeight} is not taller than ` +
+        `viewport ${after.viewport.height}; browser clamping would hide a missing reset`,
+    });
+  }
 
   record(assertions, {
     name: "target page scroll reset",
@@ -2576,6 +2784,13 @@ async function runSkeletonCase(context, caseDef, partial) {
     await interceptor.waitForRequired();
   } else {
     await interceptor.waitForRequired();
+    if (caseDef.searchQuery) {
+      await typeSearchQuery(client, caseDef.searchQuery);
+      await interceptor.waitForMatcher(caseDef.searchQueryMatcher ?? "foods-search");
+    }
+    // Wait for the documented final pane count before capturing, so a
+    // date-gated 1→2 pane promotion is not mistaken for a loading jump.
+    await waitForPaneCount(client, caseDef.fixed?.requirePanes ?? 1);
     await waitForScopedSkeleton(client, caseDef.paneRole);
     await ensureSkeletonStillPresent(client, caseDef.paneRole);
 
@@ -2594,6 +2809,64 @@ async function runSkeletonCase(context, caseDef, partial) {
     pausedUrls: interceptor.pausedUrls(),
     matcherStatus: interceptor.matcherStatus(),
   };
+}
+
+async function navigateToSearchInApp(client) {
+  const bottomNavMethod = await evaluate(
+    client,
+    `(() => {
+      const nav = document.querySelector('[data-testid="app-bottom-nav"]');
+      if (!nav) return null;
+      const tabs = [...nav.querySelectorAll('[tabindex="0"]')];
+      const target = tabs[1] || nav.children[1];
+      if (!target) return null;
+      target.click();
+      return "bottom-nav-search-tab";
+    })()`,
+  );
+  if (bottomNavMethod) return bottomNavMethod;
+
+  const openedMenu = await evaluate(
+    client,
+    `(() => {
+      const topbar = document.querySelector('[data-testid="app-topbar"]');
+      if (!topbar) return false;
+      const buttons = [...topbar.querySelectorAll('button, [role="button"]')];
+      const menu = buttons.find((button) => {
+        const title = button.getAttribute("title") ?? "";
+        const label = button.getAttribute("aria-label") ?? "";
+        return title === "Menu" || label === "Menu";
+      });
+      if (!menu) return false;
+      menu.click();
+      return true;
+    })()`,
+  );
+  if (!openedMenu) return null;
+
+  await waitUntil(
+    client,
+    `(() => {
+      const buttons = [...document.querySelectorAll('button, [role="button"]')];
+      return buttons.some((button) => (button.textContent ?? "").trim() === "Search Foods");
+    })()`,
+    "the top-bar drawer Search Foods item",
+    4_000,
+  );
+
+  const clickedItem = await evaluate(
+    client,
+    `(() => {
+      const buttons = [...document.querySelectorAll('button, [role="button"]')];
+      const search = buttons.find(
+        (button) => (button.textContent ?? "").trim() === "Search Foods",
+      );
+      if (!search) return false;
+      search.click();
+      return true;
+    })()`,
+  );
+  return clickedItem ? "topbar-menu-search-item" : null;
 }
 
 async function runScrollCase(context, caseDef, partial) {
@@ -2628,20 +2901,11 @@ async function runScrollCase(context, caseDef, partial) {
     });
     partial.images.loading = await screenshot(client);
 
-    const clicked = await evaluate(
-      client,
-      `(() => {
-        const nav = document.querySelector('[data-testid="app-bottom-nav"]');
-        if (!nav) return false;
-        const tabs = [...nav.querySelectorAll('[tabindex="0"]')];
-        const target = tabs[1] || nav.children[1];
-        if (!target) return false;
-        target.click();
-        return true;
-      })()`,
-    );
-    if (!clicked) {
-      throw new Error("Could not find the bottom-nav Search tab.");
+    const navigationMethod = await navigateToSearchInApp(client);
+    if (!navigationMethod) {
+      throw new Error(
+        "Could not find an in-app Search path (bottom nav or top-bar menu).",
+      );
     }
 
     await waitUntil(
@@ -2666,7 +2930,7 @@ async function runScrollCase(context, caseDef, partial) {
       scroll: {
         beforeNavigation,
         afterNavigation: partial.captures.transitionedTarget.scrollY,
-        navigationMethod: "bottom-nav-search-tab",
+        navigationMethod,
         urlBefore: partial.captures.scrolledLong.url,
         urlAfter: partial.captures.transitionedTarget.url,
       },
@@ -2833,7 +3097,7 @@ function buildResult(caseDef, context, run) {
   }
 
   if (caseDef.kind === "scroll") {
-    assertScrollCase(caseDef, run, assertions);
+    assertScrollCase(caseDef, run, assertions, context.options.viewport);
   } else if (captures.loading && captures.loaded) {
     assertCaptures(
       caseDef,

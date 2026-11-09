@@ -751,8 +751,25 @@ skeletonTotals theme =
             ]
         , Surface.hairline theme
         , skeletonMacroRow theme
-        , Skeleton.button theme
+        , skeletonDetailsAction theme
         ]
+
+
+{-| The loaded details action measures 52px because its trailing chevron row
+overflows the shared 48px button height. Keep the date-card body height stable
+with a local 52px placeholder rather than changing every `Skeleton.button`.
+-}
+skeletonDetailsAction : Theme -> Element msg
+skeletonDetailsAction theme =
+    Element.el
+        [ Element.width Element.fill
+        , Element.height (Element.px 52)
+        , Background.color theme.inputFill
+        , Border.rounded DesignTokens.radiusPill
+        , UiCommon.uiClass "ui-skeleton"
+        , UiCommon.skeletonRegion
+        ]
+        Element.none
 
 
 {-| Pill-shaped skeleton bar, matching the loaded calorie and macro progress

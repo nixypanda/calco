@@ -1290,6 +1290,7 @@ nutritionPlan context dateParam =
         context.today
         "nutrition-details:pending"
         (\today -> nutritionDesired context today dateParam)
+        |> withSkeleton NutritionDetails.bootSkeleton
 
 
 goalsPlan : InitCtx -> PanePlan msg
@@ -1323,6 +1324,7 @@ foodSearchPlans context existing dateParam mealSlot =
         detail : PanePlan msg
         detail =
             readyPlan (searchDesired context dateParam mealSlot)
+                |> withSkeleton FoodSearch.skeletonView
     in
     case ( context.today, dateParam ) of
         ( Just _, Just _ ) ->
