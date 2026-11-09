@@ -8,11 +8,13 @@ real `Page.init`/`initPreserving` path.
 
 import Data.MealSlot as MealSlot
 import Data.Route exposing (Route(..))
+import Element
 import Expect
 import Lib.Date exposing (LocalDate)
 import Page
 import Support.Fixtures as Fixtures
 import Test exposing (Test, describe, test)
+import Ui.Workspace as Workspace
 
 
 type alias ContextualShape =
@@ -198,14 +200,48 @@ tests =
                     }
                     { root =
                         { plan = [ "placeholder:unmigrated" ]
-                        , rendered = [ "placeholder:This route is not migrated yet." ]
+                        , rendered = [ "placeholder:unmigrated" ]
                         , loading = False
                         }
                     , notFound =
                         { plan = [ "placeholder:unmigrated" ]
-                        , rendered = [ "placeholder:This route is not migrated yet." ]
+                        , rendered = [ "placeholder:unmigrated" ]
                         , loading = False
                         }
+                    }
+        , test "the date-gated boot plan keeps its shape and Phone shows the detail pane" <|
+            \_ ->
+                let
+                    context : Page.InitCtx
+                    context =
+                        { route = DiaryDay (Just date) (Just month), today = Nothing }
+
+                    plans : List (Page.PanePlan msg)
+                    plans =
+                        plansFor context []
+
+                    keys : List String
+                    keys =
+                        List.map .key plans
+
+                    visibleKeys : Element.DeviceClass -> List String
+                    visibleKeys class =
+                        Workspace.paneVisibility
+                            { class = class, orientation = Element.Portrait }
+                            keys
+                            |> List.filter Tuple.second
+                            |> List.map Tuple.first
+                in
+                Expect.equal
+                    { keys = keys
+                    , roles = List.map .role plans
+                    , phone = visibleKeys Element.Phone
+                    , desktop = visibleKeys Element.Desktop
+                    }
+                    { keys = [ "calendar:2026-07", "diary:pending" ]
+                    , roles = [ Workspace.MainPane, Workspace.DetailPane ]
+                    , phone = [ "diary:pending" ]
+                    , desktop = [ "calendar:2026-07", "diary:pending" ]
                     }
         , test "contextual plans preserve a main pane and fall back otherwise" <|
             \_ ->
@@ -299,7 +335,7 @@ resume route model =
         |> Fixtures.tupleFirst
 
 
-plansFor : Page.InitCtx -> List Page.Pane -> List Page.PanePlan
+plansFor : Page.InitCtx -> List Page.Pane -> List (Page.PanePlan msg)
 plansFor context existing =
     Page.panePlanForRoute context existing
 

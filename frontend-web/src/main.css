@@ -80,6 +80,18 @@ body {
   animation: ui-modal-in 180ms ease-out;
 }
 
+.ui-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .ui-skeleton {
   position: relative;
   overflow: hidden;

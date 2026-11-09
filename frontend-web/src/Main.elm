@@ -37,7 +37,6 @@ import Translations.Util exposing (Language(..))
 import Ui.Common as UiCommon exposing (uiClass)
 import Ui.Css as Css
 import Ui.Env as Env exposing (Env)
-import Ui.Skeleton as Skeleton
 import Ui.Theme as Theme exposing (Theme)
 import Ui.Workspace as Workspace
 import Url exposing (Url)
@@ -468,7 +467,7 @@ loadPage resetScroll route model =
 
         scrollCmd : Cmd Msg
         scrollCmd =
-            if resetScroll && rendersOnePane model.env page then
+            if resetScroll && rendersOnePane model.env route page then
                 Task.attempt (\_ -> ScrollToTopCompleted) (Browser.Dom.setViewport 0 0)
 
             else
@@ -482,11 +481,22 @@ loadPage resetScroll route model =
 
 {-| The scroll decision uses the pane visibility rule the workspace actually
 renders, not the model pane count. A Phone/Tablet contextual route can hold two
-model panes while showing only one of them.
+model panes while showing only one of them. While the local date is still
+missing, the boot body renders route-plan panes even though the model pane list
+is empty, so use the boot keys then.
 -}
-rendersOnePane : Env -> Page.Model -> Bool
-rendersOnePane env page =
-    Workspace.paneVisibility env.device (Page.paneKeys page)
+rendersOnePane : Env -> Route -> Page.Model -> Bool
+rendersOnePane env route page =
+    let
+        paneKeys : List String
+        paneKeys =
+            if Page.isLoading page then
+                Page.bootPaneKeys route
+
+            else
+                Page.paneKeys page
+    in
+    Workspace.paneVisibility env.device paneKeys
         |> List.filter Tuple.second
         |> List.length
         |> (==) 1
@@ -629,7 +639,7 @@ view model =
 
         pageBusy : Bool
         pageBusy =
-            Page.isBusy model.page
+            not (isBootstrapped model.bootstrap) || Page.isBusy model.page
 
         modal : Maybe (Element Msg)
         modal =
@@ -746,10 +756,10 @@ modalLayoutAttrs modal =
 pageView : Model -> Element Msg
 pageView model =
     if not (isBootstrapped model.bootstrap) then
-        Skeleton.loading model.env.theme
+        Page.bootShell model.env
 
     else
-        Element.map GotPageMsg (Page.view model.env model.page)
+        Element.map GotPageMsg (Page.view model.env model.route model.page)
 
 
 currentSession : Model -> Session

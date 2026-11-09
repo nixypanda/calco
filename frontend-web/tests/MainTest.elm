@@ -186,20 +186,32 @@ renderedPaneLayoutDrivesScrollReset =
     test "scroll resets from the rendered pane layout, not the model pane count" <|
         \_ ->
             let
+                twoPaneRoute : Route
+                twoPaneRoute =
+                    DiaryDay (Just Fixtures.today) (Just "2026-07")
+
                 twoPanePage : Page.Model
                 twoPanePage =
-                    pageFor (DiaryDay (Just Fixtures.today) (Just "2026-07"))
+                    pageFor twoPaneRoute
 
                 onePanePage : Page.Model
                 onePanePage =
                     pageFor MealList
+
+                bootPage : Page.Model
+                bootPage =
+                    Page.init { route = twoPaneRoute, today = Nothing }
+                        |> Fixtures.tupleFirst
             in
             Expect.all
-                [ \_ -> Main.rendersOnePane (scrollEnv Phone) twoPanePage |> Expect.equal True
-                , \_ -> Main.rendersOnePane (scrollEnv Tablet) twoPanePage |> Expect.equal True
-                , \_ -> Main.rendersOnePane (scrollEnv Desktop) twoPanePage |> Expect.equal False
-                , \_ -> Main.rendersOnePane (scrollEnv BigDesktop) twoPanePage |> Expect.equal False
-                , \_ -> Main.rendersOnePane (scrollEnv Desktop) onePanePage |> Expect.equal True
+                [ \_ -> scrollOn Phone twoPaneRoute twoPanePage |> Expect.equal True
+                , \_ -> scrollOn Tablet twoPaneRoute twoPanePage |> Expect.equal True
+                , \_ -> scrollOn Desktop twoPaneRoute twoPanePage |> Expect.equal False
+                , \_ -> scrollOn BigDesktop twoPaneRoute twoPanePage |> Expect.equal False
+                , \_ -> scrollOn Desktop MealList onePanePage |> Expect.equal True
+                , \_ -> Page.isLoading bootPage |> Expect.equal True
+                , \_ -> scrollOn Phone twoPaneRoute bootPage |> Expect.equal True
+                , \_ -> scrollOn Desktop twoPaneRoute bootPage |> Expect.equal False
                 ]
                 ()
 
@@ -231,6 +243,11 @@ scrollEnv class =
     , device = { class = class, orientation = Portrait }
     , language = EN_US
     }
+
+
+scrollOn : DeviceClass -> Route -> Page.Model -> Bool
+scrollOn class route page =
+    Main.rendersOnePane (scrollEnv class) route page
 
 
 {-| Any target except the generic `FoodSearch Nothing Nothing`, which is the one

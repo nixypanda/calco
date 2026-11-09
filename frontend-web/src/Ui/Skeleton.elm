@@ -1,18 +1,20 @@
 module Ui.Skeleton exposing
     ( bar
     , barCustom
+    , busy
     , button
     , buttonWithAttributes
     , card
+    , elLine
     , input
     , listRow
-    , loading
+    , paragraphLine
     )
 
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
-import Ui.Common exposing (skeletonRegion, testId, uiClass)
+import Ui.Common exposing (dataAttribute, skeletonRegion, testId, uiClass)
 import Ui.DesignTokens
     exposing
         ( radiusControl
@@ -27,14 +29,51 @@ import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 
 
-loading : Theme -> Element msg
-loading theme =
+{-| The page-level loading wrapper. It owns the one `role="status"` per pane
+and the visually hidden label; the persistent page root owns `aria-busy`. The
+root's `aria-busy` is the primary loading signal; this status label is the
+secondary announcement. The decorative skeleton subtree is hidden from
+assistive technology so the status announces one loading message instead of an
+empty element tree.
+-}
+busy : { label : String } -> List (Element msg) -> Element msg
+busy config children =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing space12
+        , dataAttribute "role" "status"
+        , dataAttribute "data-skeleton-page" "true"
         , skeletonRegion
         ]
-        [ bar theme, bar theme, bar theme ]
+        [ Element.el [ uiClass "ui-visually-hidden" ] (Element.text config.label)
+        , Element.el
+            [ Element.width Element.fill
+            , dataAttribute "aria-hidden" "true"
+            ]
+            (Element.column [ Element.width Element.fill, Element.spacing space12 ] children)
+        ]
+
+
+{-| A bar exactly `size` pixels high, mirroring an elm-ui text line.
+-}
+elLine : Theme -> { size : Int, width : Element.Length } -> Element msg
+elLine theme config =
+    Element.el
+        [ Element.width config.width
+        , Element.height (Element.px config.size)
+        , Background.color theme.inputFill
+        , Border.rounded radiusSmall
+        , uiClass "ui-skeleton"
+        , skeletonRegion
+        ]
+        Element.none
+
+
+{-| A bar exactly `size + spacing` pixels high, mirroring an elm-ui paragraph
+line whose default spacing is 5.
+-}
+paragraphLine : Theme -> { size : Int, spacing : Int, width : Element.Length } -> Element msg
+paragraphLine theme config =
+    elLine theme { size = config.size + config.spacing, width = config.width }
 
 
 bar : Theme -> Element msg
