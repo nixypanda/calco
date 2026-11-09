@@ -22,6 +22,15 @@ tests =
                     |> Fixtures.tupleFirst
                     |> Page.isBusy
                     |> Expect.equal True
+        , test "in-place search recents fetch does not mark the page busy" <|
+            \_ ->
+                Page.init
+                    { route = FoodSearch (Just (Fixtures.date "2026-05-29")) Nothing
+                    , today = Nothing
+                    }
+                    |> Fixtures.tupleFirst
+                    |> Page.isBusy
+                    |> Expect.equal False
         , test "a P1 page is busy while loading, and settled after loaded or failed" <|
             \_ ->
                 let

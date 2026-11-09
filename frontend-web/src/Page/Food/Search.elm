@@ -166,18 +166,15 @@ init date mealSlot =
     }
 
 
-{-| The recent-items fetch is this page's initial data load; query-result and
-barcode lookups are in-place sub-skeletons, so they do not mark the whole page
-busy.
+{-| This page has no page-level pending state. The recents fetch, query results
+and barcode lookup all fill their own slots with in-place, non-announcing
+skeletons, so the page root must not report `aria-busy` without a page status
+region. Keep these sub-skeletons silent; a page-level `Skeleton.busy` would
+duplicate status announcements when an in-place fetch is still running.
 -}
 isBusy : Model -> Bool
-isBusy model =
-    case model.recentItems of
-        Loading ->
-            True
-
-        _ ->
-            False
+isBusy _ =
+    False
 
 
 retarget : Maybe LocalDate -> Maybe MealSlot -> Model -> ( Model, Bool )
@@ -836,8 +833,10 @@ contentView env model =
 
 {-| The route-boot body. The search controls are synchronous in the loaded
 page, so the boot shell reproduces their real geometry instead of a generic
-card stack; only the independent results slot is a skeleton. This is not a
-page-level busy wrapper: `Page.bootstrapView` owns the one status region.
+card stack. The body below them matches the page's first load: the recents
+section (header, recent rows and quick-add chips) that `/search` shows while
+the recent-items fetch is pending. This is not a page-level busy wrapper:
+`Page.bootstrapView` owns the one status region.
 -}
 skeletonView : Env -> Element msg
 skeletonView env =
@@ -847,7 +846,7 @@ skeletonView env =
         , Element.spacing DesignTokens.space24
         ]
         [ searchControlsSkeleton env
-        , resultsSectionSkeleton env
+        , recentsSectionSkeleton env
         ]
 
 

@@ -437,6 +437,36 @@ Disallowed examples:
 NavigateToPath ("/search?date=" ++ date ++ "&meal_slot=" ++ slot)
 ```
 
+### Boot And Pane Plan
+
+`Page.panePlanForRoute` is the single route-plan exception: `Data.Route` owns URL
+parsing and serialization, while `panePlanForRoute` owns the pane shape for a
+route. It is the only place that maps a `Route` to pane keys, order, role,
+whether the pane needs the local date (`requiresToday`), and the skeleton shown
+while that pane is pending.
+
+The plan has two consumers:
+
+- `Page.panesForRoute` reads `.desired` to reconcile the loaded workspace.
+  A plan with `requiresToday = True` and no local date produces no panes yet.
+- `Page.bootstrapView` reads `.key`, `.role` and `.skeleton` to render the same
+  pane shape before the route model exists.
+
+Do not add a second route table or a page-skeleton dispatcher. New routes add
+one case to `panePlanForRoute`; routes with a page-specific loading body override
+the neutral `skeleton` through `withSkeleton`.
+
+`Page.bootShell` is the pre-session shell. The route and session are still
+unknown then, so it renders only the neutral workspace skeleton; it must not
+guess Diary, Admin or Login. `Page.isBusy` is the page-root `aria-busy`/loading
+marker source of truth: it covers the local-date gate and page-level initial
+loads, but not settled failures.
+
+The Chrome layer reserves the Phone bottom-nav space from the route/session
+predicate, not from the loading flag, so ordinary fetches and the date gate do
+not make the nav appear or disappear. See
+[skeleton-loaders-plan.md](skeleton-loaders-plan.md) for the route matrix.
+
 ## API Boundary
 
 API modules live in `frontend-web/src/Api/`:
@@ -713,8 +743,8 @@ Control conventions:
   `Ui.fullWidthDangerButton`, and icon-button helpers for actions.
 - use `Ui.input`, `Ui.passwordInput`, and `Ui.selectDropdown` for
   form fields.
-- use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, `Ui.loading`, and
-  `Ui.skeletonLoading` for common states.
+- use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, and `Ui.Feedback.loading`
+  for common states.
 - use `Ui.panel` when several related blocks belong under one header: the panel
   owns one tinted header band and its sub-blocks use plain-text titles separated
   by hairlines. Reserve a headerless `Ui.card` for content inside a panel or a
@@ -722,6 +752,30 @@ Control conventions:
   block on its own surface.
 - use `Ui.badge` for compact metadata.
 - use `Ui.statBlockGroup` and progress helpers for nutrition summaries.
+
+Loading skeletons have two layers:
+
+- `Ui.Skeleton` owns the measured primitives: `busy` (one status region per
+  pane), `elLine`/`paragraphLine`, `pageHeader`, `field`/`selectField`/
+  `searchField`, `row` (via `Surface.staticRow`), `bottomActions`, `stat`,
+  `checkboxRow`, `chipRow`/`categoryChipRow`, `icon`, `dot`, `badge` and the
+  bar/button helpers. They only describe geometry; they never fetch data or
+  know a route.
+- Page and component modules own their `skeletonView` recipe. The page's own
+  loading branch and `Page.bootstrapView` call the same public function, so the
+  boot skeleton cannot drift from the in-page one. The one in-place exception is
+  `/search`: its boot skeleton and initial recents body share the
+  `searchControlsSkeleton`/`recentsSectionSkeleton` recipes, but the page has no
+  page-level pending state, so `isBusy` is always `False` and the sub-skeletons
+  stay non-announcing. The food and meal editor recipes live in
+  `Component.FoodEditor` and `Component.Meal.Form`; the reusable nutrition card
+  lives in `View.Nutrients.skeletonCard`.
+
+Dependency direction is `Ui.Skeleton -> Ui.Page`: the skeleton module may call
+`Ui.Page.pageHeaderRaw` so its header geometry matches the loaded header.
+`Ui.Page` must not import `Ui.Skeleton`, `Page`, `Component` or route data.
+Page-specific copy, conditional sections and route context stay in the page
+module.
 
 Rules:
 
@@ -785,4 +839,10 @@ cd frontend-web
 npm run build
 ```
 
-No browser e2e suite is configured at the moment.
+Elm tests are DOM-less. Layout stability is covered separately by the Chrome
+DevTools Protocol harness in
+`docs/scripts/check-skeleton-stability.mjs`, run through
+`just check-skeleton-layout`. It needs PostgreSQL, the backend, the Vite
+frontend, Chrome, and the layout/admin test accounts; it is deliberately not
+part of `just check-frontend`. See [testing.md](testing.md) for prerequisites,
+viewports, report-only versus required mode, and the promotion policy.

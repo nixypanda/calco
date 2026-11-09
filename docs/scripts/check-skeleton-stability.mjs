@@ -34,7 +34,7 @@
 //
 // Usage:
 //   node docs/scripts/check-skeleton-stability.mjs \
-//     --base-url http://localhost:1234 --viewport phone \
+//     --base-url http://localhost:1234 --viewport phone|tablet|desktop \
 //     [--case diary --case goals] [--headed] [--report-only]
 //
 // Artifacts: docs/images/skeleton-stability/<timestamp>/<case>/{loading.png,
@@ -65,6 +65,7 @@ const DEFAULT_LAYOUT_DATE = "2026-10-27";
 const FALLBACK_PAST_DATE = "2025-10-27";
 const VIEWPORTS = {
   phone: { width: 390, height: 844, label: "Phone" },
+  tablet: { width: 768, height: 1024, label: "Tablet" },
   desktop: { width: 1440, height: 900, label: "Desktop" },
 };
 const XYW = ["x", "y", "width"];
@@ -1670,6 +1671,9 @@ function buildCases(layoutDate, discovered) {
       optional: true,
       authRole: "layout",
       paneRole: "detail",
+      // The page only renders in-place slot skeletons; it has no page-level
+      // status region, so assert the opposite of the default page-level case.
+      pageLevelSkeleton: false,
       path: () =>
         discovered.chickenFoodId
           ? `/search?date=${date}&meal_slot=breakfast`
@@ -1719,6 +1723,8 @@ function buildCases(layoutDate, discovered) {
       optional: true,
       authRole: "layout",
       paneRole: "detail",
+      // Recents is an in-place slot skeleton, not a page-level load.
+      pageLevelSkeleton: false,
       path: () =>
         discovered.chickenFoodId
           ? `/search?date=${date}&meal_slot=breakfast`
@@ -2707,28 +2713,58 @@ function assertCaptures(caseDef, viewportName, loading, loaded, assertions) {
     });
   }
 
-  if (loading.pageSkeletons > 0 || loaded.pageSkeletons > 0) {
+  const pageLevelSkeleton = caseDef.pageLevelSkeleton !== false;
+  if (pageLevelSkeleton) {
     record(assertions, {
       name: "page-level skeleton marker present while loading",
       passed: loading.pageSkeletons >= 1,
       expected: ">= 1 page-level skeleton",
       actual: loading.pageSkeletons,
       tolerance: 0,
-      message: "data-skeleton-page exists but the loading capture has none",
+      message: "A page-level skeleton case rendered no data-skeleton-page marker",
     });
-  }
 
-  for (const pane of loading.panes) {
-    if (pane.pageSkeletons === 0) continue;
     record(assertions, {
-      name: `pane[${pane.role ?? "unknown"}] has exactly one page status region`,
-      passed: pane.pageSkeletons === 1,
-      expected: 1,
-      actual: pane.pageSkeletons,
+      name: "page-level skeleton marker gone after load",
+      passed: loaded.pageSkeletons === 0,
+      expected: 0,
+      actual: loaded.pageSkeletons,
+      tolerance: 0,
+      message: `${loaded.pageSkeletons} page-level skeleton status region(s) remained after load`,
+    });
+
+    for (const pane of loading.panes) {
+      if (pane.skeletonRegions === 0) continue;
+      record(assertions, {
+        name: `pane[${pane.role ?? "unknown"}] has exactly one page status region`,
+        passed: pane.pageSkeletons === 1,
+        expected: 1,
+        actual: pane.pageSkeletons,
+        tolerance: 0,
+        message:
+          `pane[${pane.role ?? "unknown"}] has ${pane.pageSkeletons} ` +
+          "page-level skeleton status region(s) for its skeleton body",
+      });
+    }
+  } else {
+    record(assertions, {
+      name: "in-place case has no page-level skeleton marker",
+      passed: loading.pageSkeletons === 0,
+      expected: 0,
+      actual: loading.pageSkeletons,
       tolerance: 0,
       message:
-        `pane[${pane.role ?? "unknown"}] has ${pane.pageSkeletons} ` +
-        "page-level skeleton status region(s)",
+        "An in-place case rendered a page-level status region; the page root " +
+        "would report aria-busy without an in-place announcement contract",
+    });
+
+    record(assertions, {
+      name: "in-place case renders skeleton regions while loading",
+      passed: loading.skeletonRegions > 0,
+      expected: "> 0 skeleton regions",
+      actual: loading.skeletonRegions,
+      tolerance: 0,
+      message: "An in-place case rendered no skeleton region",
     });
   }
 
@@ -2834,14 +2870,6 @@ function assertScrollCase(caseDef, run, assertions, viewportName) {
 
 function deferredAssertions(caseDef, captures) {
   const items = [];
-  const loading = captures.loading;
-  const loaded = captures.loaded;
-  if (!loading?.pageLoaded && !loaded?.pageLoaded) {
-    items.push("pageLoaded/data-page-loaded marker (Phase 1)");
-  }
-  if ((loading?.pageSkeletons ?? 0) + (loaded?.pageSkeletons ?? 0) === 0) {
-    items.push("pageSkeletons/data-skeleton-page marker (Phase 1)");
-  }
   if (captures.scrolledLong && captures.transitionedTarget) {
     items.push("scroll-position preservation for in-place retries (later phase)");
   }
@@ -3369,7 +3397,7 @@ async function main() {
   if (options.help) {
     console.log(
       "Usage: node docs/scripts/check-skeleton-stability.mjs " +
-        "[--case <name>]... [--base-url <url>] [--viewport phone|desktop] " +
+        "[--case <name>]... [--base-url <url>] [--viewport phone|tablet|desktop] " +
         "[--headed] [--report-only]",
     );
     return;

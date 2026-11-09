@@ -87,8 +87,9 @@ elLine theme config =
 {-| A bar exactly `size + spacing` pixels high, mirroring an elm-ui paragraph
 line whose default spacing is 5. This models a line plus one inter-line gap; for
 a single-line paragraph the measured line box is closer to `size + 1` (17px for
-a 16px paragraph), so prefer `elLine` for one-line cases. Changing that model
-globally is deferred to a later phase.
+a 16px paragraph, 25px for a 24px paragraph), so use `elLine` with the measured
+single-line height for one-line cases and `paragraphLine` for genuine
+multi-line blocks.
 -}
 paragraphLine : Theme -> { size : Int, spacing : Int, width : Element.Length } -> Element msg
 paragraphLine theme config =

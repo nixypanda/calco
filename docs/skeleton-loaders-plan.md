@@ -1,6 +1,6 @@
 # Structure-Matched Skeleton Loaders for CalCo
 
-- **Status:** Final proposal (revised after architecture, layout and testing review)
+- **Status:** Implemented and verified (Phases 0-5 delivered; layout harness green on Phone, Tablet and Desktop)
 - **Date:** 2026-11-09
 - **Scope:** `frontend-web/` Elm 0.19.2 + elm-ui. Shell, route boot, page loading states, skeleton primitives and recipes, layout-stability testing.
 - **Out of scope:** Visual redesign, new design tokens, replacing elm-ui, adding a browser-automation runtime dependency, changing route URLs or backend APIs. The only data-model changes are internal page state modelling needed to distinguish "pending" from "failed", and the route-plan refactor needed to keep pane geometry in one place.
@@ -41,6 +41,10 @@ For the routes in the blocking matrix, the fixed shell, page frame, first surfac
 
 ## 2. Problem Statement
 
+Sections 2-4 describe the pre-change baseline that motivated this plan. The
+measured current truth lives in §12's implementation notes and §14.2; where the
+two disagree, the implementation notes and §14.2 win.
+
 ### 2.1 Route transition lifecycle
 
 There is no "keep the old page while the next one loads" state. A link pushes the URL (`frontend-web/src/Main.elm:139-155`); `UrlChanged` calls `changeRouteTo` synchronously (`Main.elm:149-155`, `376-395`), which calls `Page.initPreserving` (`Main.elm:389-395`). `Page.initPreserving` reconciles panes by key (`frontend-web/src/Page.elm:312-331`, `333-365`). Reused pane keys keep the same DOM and scroll; every new key is initialized immediately. Contextual routes may preserve an existing main pane on desktop through `contextualWorkspace` (`Page.elm:1242-1253`), but there is no cross-fade, no stale-page state, and no general DOM retention from the old route.
@@ -63,8 +67,8 @@ It does **not** mean a page fetch is in progress. Page-level loading is each pag
 
 Two consequences:
 
-- **First paint:** `Main.pageView` renders `Skeleton.loading` while the session and bootstrap status are unresolved (`Main.elm:640-646`). The session is `Auth.Loading`, so `showsAppChrome` is false.
-- **After bootstrap but before local date:** `Page.view` renders the same `Skeleton.loading` instead of `Workspace.view` (`Page.elm:3112-3120`).
+- **First paint (pre-change):** `Main.pageView` rendered `Skeleton.loading` while the session and bootstrap status were unresolved (`Main.elm:640-646`). The session was `Auth.Loading`, so `showsAppChrome` was false.
+- **After bootstrap but before local date (pre-change):** `Page.view` rendered the same `Skeleton.loading` instead of `Workspace.view` (`Page.elm:3112-3120`).
 
 Both are three full-width 16px bars (`Ui/Skeleton.elm:29-32`) rendered outside the workspace/page container. When the loaded pane appears, it snaps into the centered 960px column with a 16px Phone / 24px Tablet-and-up gutter (`Ui/Workspace.elm:55-70`).
 
@@ -82,14 +86,14 @@ The bottom nav is **Phone-only**: `Ui.Common.isSmall` is `device.class == Phone`
 
 This affects initial boot, auth reset/logout, and the date-gated routes: Diary Day, Calendar, Nutrition Details and Goals Settings.
 
-### 2.4 Bare `Skeleton.loading`
+### 2.4 Bare `Skeleton.loading` (removed)
 
-`Skeleton.loading` is three 16px bars, spacing 12 (`Ui/Skeleton.elm:29-32`). It is used in two places:
+The pre-change shell used `Skeleton.loading`: three 16px bars, spacing 12 (`Ui/Skeleton.elm:29-32`). It appeared in two places:
 
 - `Main.elm:640-646` before bootstrap;
 - `Page.elm:3112-3120` while waiting for today.
 
-It has no page header, no section shell, no list rows and no page-container rhythm. It is the single largest cause of the first-paint snap.
+It had no page header, no section shell, no list rows and no page-container rhythm. It was the single largest cause of the first-paint snap and has since been removed.
 
 ### 2.5 Page-local generic skeletons
 
@@ -113,7 +117,7 @@ Most pages already have a loading branch, but the branch is a generic stack of `
 
 Existing primitive geometry is also off:
 
-- `Skeleton.input` is an 80x12 label + 4px gap + **48px** field (`Ui/Skeleton.elm:71-90`). Real text controls are **44px** (`Ui/Input.elm:72-74`, `134-149`); a text input is label 13 + 44 with **no gap** because `Input.labelAbove []` adds no spacing. A dropdown is label 13 + 4px gap + 44 (`Ui/Input.elm:609-614`).
+- `Skeleton.input` is an 80x12 label + 4px gap + **48px** field (`Ui/Skeleton.elm:71-90`). Real text controls measure **64px** (13px label + 7px gap + 44px control) (`Ui/Input.elm:134-149`); dropdowns measure **61px** (13 + 4 + 44) (`Ui/Input.elm:609-614`). The migrated `Skeleton.input` now shares the `field` geometry instead of the old 48px control.
 - `Skeleton.listRow` always has a 12x12 circle (`Ui/Skeleton.elm:105-133`). `Surface.listRow`/`staticRow` always reserve a 12px leading slot and use a 4x24 macro dot, no leading content, or a trailing chip/button (`Ui/Surface.elm:349-436`).
 - `Skeleton.card` delegates to `Surface.card`, which already supplies **20px body padding and 12px spacing** (`Ui/Surface.elm:71-77`). It cannot reproduce a tinted header band, hairlines or a footer (`Ui/Surface.elm:215-297`); the draft's "no body padding" claim was wrong.
 - There is no page-header skeleton, so the first block is usually a flat card.
@@ -382,7 +386,7 @@ Page skeleton functions cannot be private if `Page.elm` calls them. The public s
 | `Page.Food.Show` | `skeletonView : Env -> Element msg` | Panel detail recipe; render the route-known `lookup_note` banner if present. |
 | `Page.FoodLog.Entry` | `skeletonView : Env -> Element msg` | Panel detail recipe with the 25px single-line title and Phone two-line subtitle. |
 | `Page.CustomFood.Show` | `skeletonView : Env -> Element msg` | Header section + nutrition card + optional action placeholders. |
-| `Page.Food.Search` | `skeletonView : Env -> Element msg` | Search controls shell + results section; recents/barcode are in-place. |
+| `Page.Food.Search` | `skeletonView : Env -> Element msg` | Search controls shell + recents section; results/barcode are in-place and non-announcing. |
 | `Page.Goals.Settings` | `skeletonView : Env -> Element msg` | Section header + 4 fields + save outside. |
 | `Page.Diary.Settings` | `skeletonView : Env -> Element msg` | Section header + 5 checkbox rows + save outside. |
 | `Page.Settings.ApiKeys` | `skeletonView : Env -> Element msg` | Description + section with create-button header + 3 rows. |
@@ -418,7 +422,7 @@ Land each primitive in the same change as its first real consumer. Test-only use
 | `chip` | `chip : Theme -> Element msg` | Height 22, width 64, radius 999. Mirrors `.ui-chip` (`frontend-web/src/main.css:174-191`). |
 | `chipRow` | `chipRow : Theme -> { count : Int } -> Element msg` | Row with 4px gap, N category chips. For category rows, compose the leading ghost dot separately: `Element.row [ spacing 12 ] [ dotGhost, chipRow ... ]` (`View/Product.elm:56-64`). |
 | `pageHeader` | `pageHeader : { leading : Maybe (Element msg), title : Element msg, subtitle : List (Element msg), actions : List (Element msg) } -> Element msg` | Delegates to `Ui.Page.pageHeaderRaw`, which owns the `wrappedRow` width fill, spacing 12, min-width 0, title column spacing 4 and actions row spacing 8. `pageHeaderRaw` has no `Theme` parameter because it only composes caller-supplied elements; it always renders the leading and actions slots (even when `Nothing`/empty) so the title x matches. `Ui.Page.pageHeader` (which still takes `Theme`) maps its `PageHeaderSubtitle` to elements and calls the raw helper. |
-| `field` | `field : Theme -> { labelWidth : Element.Length, gap : Int } -> Element msg` | `elLine 13` label + `gap` + 44px control, radius 12. Use gap 0 for text inputs (`Ui/Input.elm:134-149`) and gap 4 for dropdowns (`Ui/Input.elm:609-614`). Existing `input` stays at 48px until its call sites migrate. |
+| `field` | `field : Theme -> { labelWidth : Element.Length, gap : Int } -> Element msg` | `elLine 13` label + `gap` + 44px control, radius 12. Use gap 7 for text inputs (13 + 7 + 44 = **64px**) and gap 4 for dropdowns (13 + 4 + 44 = **61px**). `Skeleton.input` now shares this field geometry instead of the old 48px control. |
 | `checkboxRow` | `checkboxRow : Theme -> Element msg` | 44px row: 28px circle + 12px gap + 16px title line. Mirrors `Ui/Input.checkbox` (`Ui/Input.elm:655-671`). |
 | `stat` | `stat : Theme -> Element msg` | Min width 130, padding 12, three one-line paragraph boxes (14 caption / 17 body / 14 caption) with 2px spacing. Mirrors `Page/NutritionDetails.overviewItem`, whose coverage caption is always rendered (empty text for complete coverage), so complete, partial and no-coverage tiles share the same height. |
 | `table` | `table : Theme -> { rows : Int } -> Element msg` | Header row + `rows` data rows, three columns: fill line, right-aligned amount line, unit line. Row height 32 (16 + 8 top + 8 bottom). Mirrors `View.Nutrients.nutrientsTableInner` (`View/Nutrients.elm:483-546`), which includes a header row. |
@@ -453,7 +457,7 @@ pageHeaderRaw :
     -> Element msg
 ```
 
-The real `pageHeader` maps `SubtitleText` to `mutedBody` (16px el), `SubtitleMeta` to one paragraph (17px for a single line, or 21px per line via `paragraphLine` when it wraps), and `SubtitleMetaLines` to a spacing-2 column of paragraphs, then calls `pageHeaderRaw`. The skeleton passes `elLine`/`paragraphLine` elements of the same shape. This prevents the real and skeleton headers from drifting, and preserves the empty leading slot that keeps the title x stable.
+The real `pageHeader` maps `SubtitleMeta` to one body paragraph (17px for a single line, or 21px per line via `paragraphLine` when it wraps) and `SubtitleMetaLines` to a spacing-2 column of paragraphs, then calls `pageHeaderRaw`. The skeleton passes `elLine`/`paragraphLine` elements of the same shape. This prevents the real and skeleton headers from drifting, and preserves the empty leading slot that keeps the title x stable.
 
 Do not expose `titleSize`/`subtitleLines` as the only knobs: the title may be an `Element.el` 24px line or a `truncatedHeader` paragraph (25px for one line; another 25px per wrapped line), and the subtitle may be a 16px el, one 17px single-line paragraph, or two single-line paragraphs on Phone.
 
@@ -561,9 +565,9 @@ Meal Show is not a panel. `MealShow.view` is a `pageContainer` containing a head
 
 There are three different furniture patterns:
 
-- **Goals Settings:** `pageContainer` → optional error banner → `Surface.section` whose header is `Surface.sectionHeader` (title 24 + description paragraph 21) → body of 4 numeric text fields (label 13 + 7 gap + 44 = 64) → save button **outside** the section (`Page/Goals/Settings.elm:319-413`).
+- **Goals Settings:** `pageContainer` → optional error banner → `Surface.section` whose header is `Surface.sectionHeader` (title 24 + description paragraph **17**) → body of 4 numeric text fields (label 13 + 7 gap + 44 = 64) → save button **outside** the section (`Page/Goals/Settings.elm:319-413`).
 - **Diary Settings:** `pageContainer` → `Surface.section` with title 24 + description paragraph (1-2 lines) → body of 5 `Ui.Input.checkbox` rows at 44px → optional error banner → save button **outside** (`Page/Diary/Settings.elm:157-222`).
-- **API Keys:** `pageContainer` → description `mutedBodyParagraph` above the section → `Surface.section` whose header is a full-width create button → body of rows (`Surface.staticRow`) with title 21, subtitle body paragraph 21 + caption paragraph 18, trailing scope badge 21 and revoke button 48; empty state is one paragraph (`Page/Settings/ApiKeys.elm:292-365`).
+- **API Keys:** `pageContainer` → description `mutedBodyParagraph` above the section → `Surface.section` whose header is a full-width create button → body of rows (`Surface.staticRow`) with title **17**, subtitle body paragraph **17** + caption paragraph **14**, trailing scope badge 21 and revoke button 48; empty state is one paragraph (`Page/Settings/ApiKeys.elm:292-365`).
 - **Admin Edit User:** `pageContainer` → optional error banner → `Surface.section` whose header is a column title 24 + username paragraph 17 → body of two detail rows, hairline, then a reset block (title paragraph 17 + password field 64 + 48px button) → separate bottom action 48 outside (`Page/Users/EditUser.elm:279-406`).
 
 **Recipe:**
@@ -573,7 +577,7 @@ There are three different furniture patterns:
   - `Surface.formSection` uses `subsectionTitle` 20 and no description (`Ui/Surface.elm:344-346`). Use it for the editor sections, not for Goals/Diary Settings.
   - `Surface.sectionHeader` uses `sectionTitle` 24 plus an optional description (`Ui/Surface.elm:324-341`). Use 24 + 16 paragraph for Goals/Diary Settings/Admin Edit.
 - Render static descriptions as real `Typography.mutedParagraph`/`mutedBodyParagraph` text inside the skeleton's `aria-hidden` subtree. They are known from i18n; this gets the exact phone wrap (API Keys is ~2 lines at 390; Diary Settings 1-2). A single `elLine 16` is wrong.
-- Fields: `field { labelWidth, gap = 0 }` for text inputs; `gap = 4` for dropdowns. Do not use the old 48px `input`.
+- Fields: `field { labelWidth, gap = 7 }` for text inputs (13 + 7 + 44 = 64); `gap = 4` for dropdowns (13 + 4 + 44 = 61). `Skeleton.input` already shares this geometry; do not reintroduce the old 48px control.
 - Checkbox rows: 5 rows for Diary Settings, because the loaded page always maps `MealSlot.all`.
 - Admin Edit User: two detail rows (`caption 13` label + chip 21/caption 13 value), hairline, reset block with password field, bottom action outside.
 - Save placement: outside the section for Goals/Diary Settings; outside the section for Admin Edit bottom action; no footer for API Keys.
@@ -602,7 +606,7 @@ Meal slots (`956-1220`):
 - `logGroupsView` maps `MealSlot.all`, filters with `shouldShowSection` (logs present or prefs enabled), and appends an unslotted `Nothing` section if there are unslotted logs.
 - For `Just slot`, `Surface.heroCard` with media height 118, `fade = True`, content padding top 38 / bottom 20 / left and right 16 (Phone) or 34 (wider), and a header row padding 12 spacing 12 [column spacing 4: `sectionTitle` 24 + caption 13 macro summary; caption 13 kcal].
 - Body: `Surface.hairline`, then either:
-  - logs: `logRow`s (`Input.button`, width fill, padding 12, row spacing 12 [macro dot 4x24, `wrappedListItemTitle` paragraph 21, trailing caption 13 quantity + caption 13 kcal]);
+  - logs: `logRow`s (`Input.button`, width fill, padding 12, row spacing 12 [macro dot 4x24, `wrappedListItemTitle` paragraph 17 for a single line, trailing caption 13 quantity + caption 13 kcal]);
   - empty slot: `emptySlotView` = `Element.el [ width fill, padding 12 ]` around a 48px text button, i.e. a **72px block** (`1026-1070`);
   - then `Surface.hairline` and a full-width 48px add-food button.
 - For `Nothing`, `Surface.section` with the same header and only log rows.
@@ -803,9 +807,9 @@ Priority:
 | P1 | `/foods/custom/:id` | `Page/CustomFood/Show.elm` | 120px block + bars + card rows 3 + 2 buttons (`391-407`) | Header section + card | Header section with dot + 25px single-line title + 17px meta + category row; nutrition card; 2 action placeholders for user foods (`328-343`, `346-366`) | `pageHeaderRaw`, `chipRow`, `bottomActions`, `View.Nutrients.skeletonCard` | page container; header section top/header band (46/86). **Not** nutrition card/action row |
 | P1 | `/details` | `Page/NutritionDetails.elm` | 40px bar + stat card + 2 cards + card (`241-256`) | Detail/settings hybrid | Date header real (or skeleton at boot); **always** banner shell; overview stats; four nutrient sections; reference; variable rows (`259-285`, `315-333`, `380-413`) | `section`, `stat`, `table`, `paragraphLine` | date header top/height; banner shell top/height (seed line count); overview top; first nutrient section top only in seeded case |
 | P1 | `/search` | `Page/Food/Search.elm` | Results 3 rows; recents card rows 3; barcode card rows 2 (`1224-1231`, `1290`, `1416`) | List section / in-place | Search controls stay real; results section header 20 + 3 rows; recents/barcode are in-place skeleton regions; empty result uses `Feedback.emptyState` | `row`, `section`, `paragraphLine` | search controls top/height; results section top; first result row top; in-place region present/gone |
-| P1 | `/settings/goals` | `Page/Goals/Settings.elm` | header 24 + 4 inputs + button inside (`448-461`) | Settings form | Section title 24 + description paragraph 21; 4 fields 64; save outside (`333-413`) | `section`, `field`, `button`, real static description | section top/header; first field/save top only in the seeded one-line-status case |
+| P1 | `/settings/goals` | `Page/Goals/Settings.elm` | header 24 + 4 inputs + button inside (`448-461`) | Settings form | Section title 24 + description paragraph 17; 4 fields 64; save outside (`333-413`) | `section`, `field`, `button`, real static description | section top/header; first field/save top only in the seeded one-line-status case |
 | P1 | `/settings/diary` | `Page/Diary/Settings.elm` | header 24 + 4 bars + button (`235-247`) | Settings form | Section title 24 + description paragraph; 5 checkbox rows 44; save outside (`171-222`) | `section`, `checkboxRow`, `button`, real static description | section top/header; first checkbox top; save top (real static description, fixed 5 rows) |
-| P1 | `/settings/api-keys` | `Page/Settings/ApiKeys.elm` | button header + 3 rows (`453-462`) | List/settings | Description above section; section header button 48; 3 static rows with title 21 + 2 subtitle lines + badge/revoke; no footer (`306-338`); empty case | `section`, `row`, `paragraphLine`, `chip`, `button` | description top/height (seed locale); section top; first row top/height (seeded key) |
+| P1 | `/settings/api-keys` | `Page/Settings/ApiKeys.elm` | button header + 3 rows (`453-462`) | List/settings | Description above section; section header button 48; 3 static rows with title 17 + 2 subtitle lines (17 + 14) + badge/revoke; no footer (`306-338`); empty case | `section`, `row`, `paragraphLine`, `chip`, `button` | description top/height (seed locale); section top; first row top/height (seeded key) |
 | P2 | `/calendar` | `Page/Diary/Calendar.elm` | Month skeleton missing weekday row, 2px gaps (`331-346`; `Ui/MonthCalendar.elm:68-80`) | Calendar | Weekday row; no inter-cell spacing; 68px-tall equal-width cells; `monthRows` shared; keep load-earlier button | `Ui.MonthCalendar` fix | month section top; weekday row top/height; first grid row top; cell height 68; width ≈ grid/7; no overflow |
 | P2 | `/foods/custom` | `Page/CustomFood/List.elm` | Section header 2 buttons + 3 rows (`202-216`) | List | Keep 2 header buttons; dot leading; title `elLine 17` + body `elLine 17` + chip row; hairlines; empty paragraph | `row`, `dot`, `categoryChipRow` | section top/header; first row top/width/height for the seeded single-line row. **Not** footer/row count/empty state |
 | P2 | `/meals` | `Page/Meal/List.elm` | Section header button + 3 rows (`182-191`) | List | Keep header create button; dot leading; title `elLine 17` + 1 subtitle line `elLine 17`; hairlines; empty paragraph | `row`, `dot` | section top/header; first row top/width; minimum loaded row height. Multi-line-title row heights variable; empty state deferred |
@@ -1284,14 +1288,61 @@ Sizes are rough engineer-days for one engineer familiar with the codebase, inclu
 
 | Phase | Work | Size | Risk | Exit criteria |
 |---|---|---:|---|---|
-| 0. Test seams + baseline | Add `data-testid`/skeleton markers to shared roots; extract CDP lib (separate commit); write the harness route matrix against current code; add auth/seed/date seam; capture baseline failures for P0/P1 | 3-5 d | Low | Harness runs locally; baseline JSON/screenshots stored; no production visual change; paused-URL preflight works |
-| 1. Shell + pane plan + Diary | `elLine`, `paragraphLine`, `icon`, `dot`, `busy`; `panePlanForRoute` + `bootstrapView` + `bootShell`; chrome suppression split; nav reservation; scroll policy; `PrefsState`; Diary date card/slots; remove `Skeleton.loading` | 5-7 d | Medium-High | Boot/date-gate/diary cases pass topbar/nav/workspace/date-card/first-slot assertions; chrome no longer hides on date gate; Diary no longer shows zero goals/zero totals; no second route table |
-| 2. P0 edit pages | Custom Food Edit; Meal Edit; Admin Edit User; `Component.FoodEditor.skeletonView`; `Component.Meal.Form.skeletonView`; `field`; `bottomActions` | 3-4 d | Medium | P0 route cases green at Phone/Tablet/Desktop; first field 64; section/header and first row anchors stable; save-top below variable rows not asserted |
-| 3. P1 detail/settings/search/admin | Admin Dashboard, Meal Show, Food Show, Food Log Entry, Custom Food Show, Nutrition Details, Food Search, Goals, Diary Settings, API Keys; add `pageHeaderRaw`, `row`, `chipRow`, `stat`, `table`, `checkboxRow`, `bottomActions`, `View.Nutrients.skeletonCard` | 6-9 d | Medium | P1 matrix green; coverage banner reserved; Meal Show section structure correct; three portion controls; empty/failure variants for the chosen P1 pages |
-| 4. P2 calendar/lists | `MonthCalendar` weekday row/spacing/`monthRows`; Calendar; Custom Food List; Meal List | 2-3 d | Low | Calendar cell height 68 / width ≈ grid/7 / no overflow; list first-row anchors stable |
-| 5. Hardening | Remove dead exports/old primitives; tune tolerances; docs (`frontend.md`, `testing.md`, `qa-runbook.md`); promote harness per policy | 2-3 d | Low | `just check-frontend` green; harness policy documented; 20-run/14-day record before blocking |
+| 0. Test seams + baseline ✅ | Add `data-testid`/skeleton markers to shared roots; extract CDP lib (separate commit); write the harness route matrix against current code; add auth/seed/date seam; capture baseline failures for P0/P1 | 3-5 d | Low | Harness runs locally; baseline JSON/screenshots stored; no production visual change; paused-URL preflight works |
+| 1. Shell + pane plan + Diary ✅ | `elLine`, `paragraphLine`, `icon`, `dot`, `busy`; `panePlanForRoute` + `bootstrapView` + `bootShell`; chrome suppression split; nav reservation; scroll policy; `PrefsState`; Diary date card/slots; remove `Skeleton.loading` | 5-7 d | Medium-High | Boot/date-gate/diary cases pass topbar/nav/workspace/date-card/first-slot assertions; chrome no longer hides on date gate; Diary no longer shows zero goals/zero totals; no second route table |
+| 2. P0 edit pages ✅ | Custom Food Edit; Meal Edit; Admin Edit User; `Component.FoodEditor.skeletonView`; `Component.Meal.Form.skeletonView`; `field`; `bottomActions` | 3-4 d | Medium | P0 route cases green at Phone/Tablet/Desktop; first field 64; section/header and first row anchors stable; save-top below variable rows not asserted |
+| 3. P1 detail/settings/search/admin ✅ | Admin Dashboard, Meal Show, Food Show, Food Log Entry, Custom Food Show, Nutrition Details, Food Search, Goals, Diary Settings, API Keys; add `pageHeaderRaw`, `row`, `chipRow`, `stat`, `table`, `checkboxRow`, `bottomActions`, `View.Nutrients.skeletonCard` | 6-9 d | Medium | P1 matrix green; coverage banner reserved; Meal Show section structure correct; three portion controls; empty/failure variants for the chosen P1 pages |
+| 4. P2 calendar/lists ✅ | `MonthCalendar` weekday row/spacing/`monthRows`; Calendar; Custom Food List; Meal List | 2-3 d | Low | Calendar cell height 68 / width ≈ grid/7 / no overflow; list first-row anchors stable |
+| 5. Hardening ✅ | Remove dead exports/old primitives; tune tolerances; docs (`frontend.md`, `testing.md`, `qa-runbook.md`); promote harness per policy | 2-3 d | Low | `just check-frontend` green; harness policy documented; 20-run/14-day record before blocking |
 
 Total: roughly **24-31 engineer-days**, or **6-8 calendar weeks** for one engineer including review, QA and the unavoidable integration work. The first draft's 11-18 days was optimistic.
+
+### Implementation notes
+
+Delivered behavior differs from the design text in these measured or deliberate
+ways:
+
+- **Fields:** text-control wrappers measure **64px** (13px label + 7px gap +
+  44px control); suffix/select wrappers measure **61px** (13 + 4 + 44); search
+  fields measure **67px** (16 + 7 + 44). `Ui.Skeleton.input` survives only as the
+  `FoodAssistant` status-card placeholder and now shares the `field` geometry
+  instead of the old 48px control.
+- **Single-line paragraphs:** measured line boxes are **17px** for a 16px
+  paragraph and **25px** for a 24px paragraph, so single-line cases use
+  `elLine` at those heights rather than `paragraphLine` (`size + 5`). The
+  `paragraphLine` helper remains for genuine multi-line blocks.
+- **Nutrition Details:** the overview always reserves **four** stat tiles, the
+  coverage banner reserves one line on Desktop/Tablet and two on Phone, and the
+  third stat line is always reserved so complete/partial/no-coverage tiles share
+  a height.
+- **Calendar:** cells are **68px** tall, equal width, with a weekday row and no
+  inter-cell gaps.
+- **Diary:** the date card keeps its 40px status pill and 16px macro labels; meal
+  slots reserve the 118px media header and the 72px empty-slot block; prefs
+  distinguish pending from failed instead of leaving a permanent skeleton.
+- **Route plan:** `Page.panePlanForRoute` is the only route table. Loaded pane
+  roles are still inferred from pane count/order by `Page.paneRole`, while boot
+  consumes the plan's explicit role; this is a role projection, not a second
+  route table.
+- **Search busy semantics:** `/search` has no page-level pending state. The
+  initial recents fetch, result lookup and barcode lookup are in-place,
+  non-announcing sub-skeletons, so `FoodSearch.isBusy` is always `False` and the
+  boot body uses the same search-controls + recents shape as the first page load.
+  The harness treats `search`/`search-recents` as `pageLevelSkeleton: false`.
+- **Neutral shell:** `Page.genericPaneSkeleton` remains the neutral boot/fallback
+  body for routes without a page-specific skeleton. It is not a page recipe and
+  never renders the old three-bar stack.
+- **Harness fixtures:** the API-key fixture is deleted through the API but the
+  backend **soft-revokes** keys, so a revoked row can remain. The empty
+  API-key/admin/custom-food/meal-list cases are deferred because the CDP
+  interceptor can hold/continue requests but does not fulfil synthetic
+  responses; the three-row skeleton is a populated-list over-approximation.
+- **Harness viewports:** Phone (390x844), Tablet (768x1024) and Desktop
+  (1440x900) are supported and green. The Desktop transition-scroll target is
+  exactly one 500px viewport tall, so only navigation and scroll reset are
+  asserted there.
+- **No CI gate:** the harness is report-only/manual/nightly until the documented
+  20-green-runs/14-day promotion rule is met.
 
 ### 12.1 Smaller MVP path
 
@@ -1397,6 +1448,23 @@ just check-skeleton-layout   # after Phase 0; browser/DB required
 11. `just check-frontend` passes; the layout harness is documented with a report-only/nightly policy and a measurable promotion rule; no required job silently skips Chrome.
 12. No new runtime dependency and no visual-language redesign.
 
+### Verification record (2026-11-09)
+
+| # | Result | Evidence |
+|---|---|---|
+| 1 | Pass | `Skeleton.loading` is absent from `Ui.Skeleton`; all page loading branches render page-shaped skeletons. |
+| 2 | Pass | `Page.bootstrapView`/`bootShell` render inside `Ui.Workspace`; harness checks topbar 58px and route titles. |
+| 3 | Pass | `Page.PanePlanTest` matches plan keys to initialized panes; `bootstrapView` consumes the same plan. |
+| 4 | Pass | Page `skeletonView`s are public `Element msg`; page loading and boot call the same functions, except the in-place `/search` route. Its boot body now uses the same controls + recents recipes as the first page load, but it has no page-level pending state. |
+| 5 | Pass | Harness asserts Phone nav 56px in loading/loaded and no nav on Tablet/auth/admin. |
+| 6 | Pass | Full 23-case matrix green at 390x844, 768x1024 and 1440x900 with report-only runs. |
+| 7 | Pass | Calendar harness case asserts weekday row, 68px cells and no horizontal overflow. |
+| 8 | Pass | Diary harness case asserts date-card/first-slot anchors; prefs failure is a warned/failed state, not a permanent skeleton. |
+| 9 | Pass | Nutrition coverage banner, Meal Show sections and three portion controls are present and harness-checked. |
+| 10 | Pass | `Skeleton.busy` ARIA tests and harness status/focusable checks pass. Page-level cases require a status marker while loading and none after; in-place `search`/`search-recents` require zero page markers. Reduced-motion CSS removes animation while keeping the skeleton visible. |
+| 11 | Pass | `just check-frontend` green; harness policy documented in `testing.md`; no CI job exists. |
+| 12 | Pass | No package manifest change; no visual-language redesign. |
+
 ---
 
 ## 14. Appendix
@@ -1441,7 +1509,7 @@ just check-skeleton-layout   # after Phase 0; browser/DB required
 - `Element.el` text is line-height 1: height = font size. `Element.paragraph` has a 1.05 line-height: a single line measures ~`size + 1` (17px for 16, 25px for 24); `paragraphLine size+5` models a line plus the inter-line gap for genuinely multi-line blocks.
 - `Typography` sizes: caption 13, body 16, screen/subsection 20, section 24, page title 32, hero stat 44 (`Ui/Typography.elm:29-93`).
 - `truncatedHeader` is a 24px paragraph -> **25px for one line** (`Ui/Typography.elm:135-146`); `wrappedListItemTitle`, `mutedParagraph` and `mutedBodyParagraph` are 16px paragraphs -> **17px for one line**. A wrapped title/subtitle adds another ~25/17px line, not 29/21.
-- Text input: label 13 + **no gap** + 44 (`Ui/Input.elm:134-149`). Dropdown: label 13 + 4px gap + 44 (`Ui/Input.elm:609-614`). The old `Skeleton.input` is 48 (`Ui/Skeleton.elm:71-90`).
+- Text input: label 13 + 7px gap + 44 = **64px** (`Ui/Input.elm:134-149`). Dropdown: label 13 + 4px gap + 44 = **61px** (`Ui/Input.elm:609-614`). Search field: 16 + 7 + 44 = **67px**. `Skeleton.input` now shares the field geometry instead of the old 48px control (`Ui/Skeleton.elm`).
 - Button 48 (`Ui/Button.elm:232-256`); icon button 44 (`Ui/Button.elm:390-403`); checkbox row 44 (`Ui/Input.elm:655-671`).
 - Surface card/section/panel body padding 20, spacing 12 (`Ui/Surface.elm:71-77`, `215-321`); section/card radius from tokens.
 - `Surface.listRow`/`staticRow`: padding 16, spacing 12, leading slot always 12px (`Ui/Surface.elm:349-436`).

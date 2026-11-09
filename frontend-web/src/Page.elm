@@ -1141,9 +1141,11 @@ panesForRoute context existing =
             Just (List.filterMap .desired plans)
 
 
-{-| The temporary Phase 1 route shell. It is a section surface with a
-section-title line and three body lines inside the normal workspace, so booting
-and the date gate do not paint a bare bar stack. Phase 1d replaces it per page.
+{-| The neutral shell used while the route is unknown or a route has no
+page-specific loading body. It is a section surface with a section-title line
+and three body lines inside the normal workspace, so booting and the date gate
+do not paint a bare bar stack. Routes with a real page skeleton override this
+through `withSkeleton`.
 -}
 genericPaneSkeleton : Env -> Element msg
 genericPaneSkeleton env =
