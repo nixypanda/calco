@@ -13,6 +13,7 @@ module Ui.Skeleton exposing
     , input
     , listRow
     , paragraphLine
+    , searchField
     , selectField
     )
 
@@ -143,7 +144,16 @@ suffix inputs use 4 (61px wrapper).
 -}
 field : Theme -> { labelWidth : Element.Length, gap : Int } -> Element msg
 field theme config =
-    fieldWithKind theme config Nothing
+    fieldWithKind theme 13 config Nothing
+
+
+{-| A search-input placeholder. `UiInput.searchInput` uses a 16px body label
+instead of the 13px caption used by ordinary fields, so the wrapper is 67px
+(16 + 7 + 44), not 64px.
+-}
+searchField : Theme -> Element msg
+searchField theme =
+    fieldWithKind theme 16 { labelWidth = Element.px 80, gap = 7 } Nothing
 
 
 {-| A select/dropdown placeholder: label 13, 4px gap and a 44px trigger. The
@@ -152,7 +162,7 @@ same control type instead of inferring it from spacing.
 -}
 selectField : Theme -> { labelWidth : Element.Length } -> Element msg
 selectField theme config =
-    fieldWithKind theme { labelWidth = config.labelWidth, gap = 4 } (Just "select")
+    fieldWithKind theme 13 { labelWidth = config.labelWidth, gap = 4 } (Just "select")
 
 
 {-| A control placeholder with no visible label. The loaded category input is
@@ -175,8 +185,13 @@ fieldWithoutLabel theme config =
         [ control theme ]
 
 
-fieldWithKind : Theme -> { labelWidth : Element.Length, gap : Int } -> Maybe String -> Element msg
-fieldWithKind theme config kind =
+fieldWithKind :
+    Theme
+    -> Int
+    -> { labelWidth : Element.Length, gap : Int }
+    -> Maybe String
+    -> Element msg
+fieldWithKind theme labelHeight config kind =
     Element.column
         ([ Element.width Element.fill
          , Element.spacing config.gap
@@ -193,7 +208,7 @@ fieldWithKind theme config kind =
         )
         [ Element.el
             [ Element.width config.labelWidth
-            , Element.height (Element.px 13)
+            , Element.height (Element.px labelHeight)
             , Background.color theme.inputFill
             , Border.rounded radiusSmall
             , uiClass "ui-skeleton"

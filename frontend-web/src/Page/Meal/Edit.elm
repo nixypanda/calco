@@ -8,6 +8,7 @@ module Page.Meal.Edit exposing
     , isBusy
     , loadId
     , modelId
+    , skeletonView
     , update
     , view
     )
@@ -29,7 +30,6 @@ import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
-import Ui.Theme exposing (Theme)
 import View.Nutrients
     exposing
         ( NutritionState(..)
@@ -482,7 +482,11 @@ view : Env -> Model -> Element Msg
 view env model =
     case model of
         LoadingEdit _ ->
-            UiPage.pageContainer [ mealEditSkeleton env.theme ]
+            UiPage.pageContainer
+                [ Skeleton.busy
+                    { label = I18n.t env.language TidCommonLoading }
+                    [ skeletonView env ]
+                ]
 
         EditLoadFailed failed ->
             UiPage.pageContainer
@@ -518,17 +522,19 @@ nutritionView env loaded =
         [ View.Nutrients.preview env loaded.nutrition ]
 
 
-mealEditSkeleton : Theme -> Element msg
-mealEditSkeleton theme =
+{-| The page body below `UiPage.pageContainer`. The caller owns the single
+`Skeleton.busy` wrapper so the page view and `Page.bootstrapView` cannot nest
+status regions.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
-        , UiCommon.skeletonRegion
         ]
-        [ Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.card theme { rows = 3 }
-        , Skeleton.button theme
+        [ Common.skeletonView env
+        , Element.column
+            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ View.Nutrients.skeletonCard env ]
+        , Skeleton.buttonWithAttributes env.theme [ UiCommon.testId "action-primary" ]
         ]

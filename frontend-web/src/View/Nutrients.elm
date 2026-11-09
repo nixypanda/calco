@@ -8,6 +8,7 @@ module View.Nutrients exposing
     , nutritionCard
     , nutritionInput
     , preview
+    , skeletonCard
     )
 
 import Data.Nutrition as Nutrition exposing (NutrientAmount, defaultCode)
@@ -270,25 +271,81 @@ titleCase word =
             word
 
 
-skeletonPreview : Theme -> Element msg
-skeletonPreview theme =
+{-| The shared nutrition-card loading body. It mirrors `nutritionCard`: a 20px
+header line, the responsive macro breakdown, a hairline, and the nutrient
+table. It is an in-place sub-skeleton, not a page-level status region.
+-}
+skeletonCard : Env -> Element msg
+skeletonCard env =
     Element.el
         [ Element.width Element.fill
         , UiCommon.testId "nutrition-card"
         , UiCommon.skeletonRegion
         ]
-        (Surface.section theme
-            { header = Just (Skeleton.bar theme)
+        (Surface.section env.theme
+            { header =
+                Just (Skeleton.elLine env.theme { size = 20, width = Element.px 160 })
             , body =
-                [ Skeleton.bar theme
-                , Surface.hairline theme
-                , Skeleton.bar theme
-                , Skeleton.bar theme
-                , Skeleton.bar theme
+                [ Element.column
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                    [ Skeleton.barCustom env.theme { width = Element.fill, height = 24 }
+                    , macroLegendSkeleton env
+                    ]
+                , Surface.hairline env.theme
+                , skeletonNutrientTable env.theme
                 ]
             , footer = Nothing
             }
         )
+
+
+{-| Mirrors `responsiveMacroLegend`: three stacked legend rows on phones and
+one row above.
+-}
+macroLegendSkeleton : Env -> Element msg
+macroLegendSkeleton env =
+    let
+        lines : List (Element msg)
+        lines =
+            List.repeat 3 (Skeleton.elLine env.theme { size = 16, width = Element.fill })
+    in
+    if UiCommon.isSmall env.device then
+        Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ] lines
+
+    else
+        Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space16 ] lines
+
+
+skeletonNutrientTable : Theme -> Element msg
+skeletonNutrientTable theme =
+    Element.column [ Element.width Element.fill ]
+        (skeletonTableHeader theme :: List.repeat 6 (skeletonTableRow theme))
+
+
+skeletonTableHeader : Theme -> Element msg
+skeletonTableHeader theme =
+    Element.row
+        [ Element.width Element.fill
+        , Element.paddingXY 0 DesignTokens.space8
+        , Element.spacing DesignTokens.space8
+        ]
+        [ Skeleton.elLine theme { size = 16, width = Element.px 120 }
+        , Skeleton.elLine theme { size = 16, width = Element.px 48 }
+        , Skeleton.elLine theme { size = 16, width = Element.px 28 }
+        ]
+
+
+skeletonTableRow : Theme -> Element msg
+skeletonTableRow theme =
+    Element.row
+        [ Element.width Element.fill
+        , Element.paddingXY 0 DesignTokens.space8
+        , Element.spacing DesignTokens.space8
+        ]
+        [ Skeleton.elLine theme { size = 16, width = Element.fill }
+        , Skeleton.elLine theme { size = 16, width = Element.px 56 }
+        , Skeleton.elLine theme { size = 16, width = Element.px 32 }
+        ]
 
 
 preview : Env -> NutritionState -> Element msg
@@ -296,7 +353,7 @@ preview env state =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ case state of
             NutritionLoading _ ->
-                skeletonPreview env.theme
+                skeletonCard env
 
             NutritionLoaded _ nutrients ->
                 nutritionCard env nutrients

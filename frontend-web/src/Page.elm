@@ -1094,7 +1094,10 @@ panePlanForRoute context existing =
             [ readyPlan (mealCreateDesired context) ]
 
         MealEdit mealId ->
-            [ readyPlan (mealEditDesired context mealId) ]
+            [ readyPlan (mealEditDesired context mealId)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ MealEdit.skeletonView env ])
+            ]
 
         MealShow mealId ->
             mealShowPlans context existing mealId

@@ -11,6 +11,7 @@ module Component.Meal.Form exposing
     , emptyComponentRow
     , emptyFormFields
     , isSubmitting
+    , skeletonView
     , submitErrorBanner
     , toMealRequest
     , updateFormField
@@ -46,6 +47,7 @@ import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Input as UiInput
+import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -410,6 +412,62 @@ viewFormFields env toMsg form =
                         }
                     )
             }
+        ]
+
+
+{-| The meal form's loading body. It mirrors `viewFormFields`: basic info,
+total, and a components section with two representative rows. The caller owns
+the single `Skeleton.busy` wrapper so the page view and `Page.bootstrapView`
+cannot nest status regions.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        [ Surface.formSection env.theme
+            (I18n.t env.language TidFoodEditorBasicInfo)
+            [ Skeleton.field env.theme { labelWidth = Element.px 80, gap = 7 }
+            , Skeleton.field env.theme { labelWidth = Element.px 80, gap = 7 }
+            ]
+        , Surface.formSection env.theme
+            (I18n.t env.language TidMealTotal)
+            [ Skeleton.field env.theme { labelWidth = Element.px 80, gap = 7 }
+            , Skeleton.selectField env.theme { labelWidth = Element.px 80 }
+            ]
+        , Surface.section env.theme
+            { header =
+                Just
+                    (Typography.subsectionTitle env.theme
+                        (I18n.t env.language TidMealComponents)
+                    )
+            , body =
+                List.intersperse (Surface.hairline env.theme)
+                    (List.repeat 2 (componentRowSkeleton env.theme))
+            , footer = Just (Skeleton.button env.theme)
+            }
+        ]
+
+
+{-| Mirrors `componentRowView`: the search field, then the quantity/unit/remove
+row. Search results are not reserved because they are absent until the user
+types.
+-}
+componentRowSkeleton : Theme -> Element msg
+componentRowSkeleton theme =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        , UiCommon.testId "component-row"
+        , UiCommon.skeletonRegion
+        ]
+        [ Skeleton.searchField theme
+        , Element.row
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
+            ]
+            [ Skeleton.field theme { labelWidth = Element.px 80, gap = 7 }
+            , Skeleton.selectField theme { labelWidth = Element.px 80 }
+            , Element.el [ Element.centerY ] (Skeleton.icon theme)
+            ]
         ]
 
 

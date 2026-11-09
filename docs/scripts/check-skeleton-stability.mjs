@@ -21,8 +21,8 @@
 // skip.
 //
 // A clean database still needs either seed data or the fixture-id overrides
-// above for custom-food-edit, food-show and meal-show. Required MVP cases
-// (bootstrap-auth, diary-date-gate, diary, goals, admin-boot, calendar,
+// above for custom-food-edit, meal-edit, food-show and meal-show. Required MVP
+// cases (bootstrap-auth, diary-date-gate, diary, goals, admin-boot, calendar,
 // transition-scroll) do not depend on those ids.
 //
 // Usage:
@@ -69,6 +69,7 @@ const ALL_CASE_NAMES = [
   "goals",
   "admin-boot",
   "custom-food-edit",
+  "meal-edit",
   "food-show",
   "meal-show",
   "calendar",
@@ -607,6 +608,57 @@ function buildCases(layoutDate, discovered) {
       unimplemented: [
         "The plan's 57px text-field target is stale: elm-ui labelAbove makes the measured " +
           "label+control wrapper 64px. Reconcile the Phase 2 documentation.",
+      ],
+    },
+    {
+      name: "meal-edit",
+      kind: "skeleton",
+      optional: true,
+      authRole: "layout",
+      paneRole: "main",
+      path: () =>
+        discovered.mealId ? `/meals/${encodeURIComponent(discovered.mealId)}/edit` : null,
+      skipReason: discovered.mealId
+        ? null
+        : `No meal id available (${discovered.mealReason ?? "discovery failed"}). ` +
+          "Set CALCO_MEAL_ID or seed a meal.",
+      hold: discovered.mealId
+        ? [
+            {
+              name: "meal-detail",
+              pattern: `*/api/meals/${discovered.mealId}`,
+              required: true,
+            },
+            { name: "units", pattern: "*/api/units", required: true },
+          ]
+        : [],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContainer: { axes: XYW },
+        pageContent: { axes: XYW },
+        surfaces: { axes: XYW },
+        surfaceHeaders: { axes: XYWH },
+      },
+      anchors: [
+        { key: "inputs", label: "first field" },
+        { key: "componentRows", label: "first meal component row", axes: XYWH },
+      ],
+      heightChecks: [
+        { key: "inputs", label: "first text field wrapper", expected: 64 },
+        { key: "selectFields", label: "first select field wrapper", expected: 61 },
+        { key: "fieldControls", label: "first field inner control", expected: 44 },
+      ],
+      nav: "present",
+      loadedSelector: '[data-testid="action-primary"]',
+      unimplemented: [
+        "The plan's 57px text-field target is stale: elm-ui labelAbove makes the measured " +
+          "label+control wrapper 64px. The component row height is compared (143px in this " +
+          "fixture); the nutrition card and save remain below variable content and are not " +
+          "asserted. Inner skeleton control widths are full-width, while loaded inputs inset " +
+          "their content; this is a pre-existing Skeleton.control limitation and is non-blocking.",
       ],
     },
     {
@@ -2050,6 +2102,7 @@ async function main() {
 
     const missingOptional = [
       ["custom-food-edit", discovered.customFoodReason],
+      ["meal-edit", discovered.mealReason],
       ["food-show", discovered.chickenFoodReason],
       ["meal-show", discovered.mealReason],
     ];
