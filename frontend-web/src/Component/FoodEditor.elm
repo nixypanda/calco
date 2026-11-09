@@ -27,6 +27,7 @@ module Component.FoodEditor exposing
     , fromProductDetail
     , isSubmitting
     , logPortionWeight
+    , skeletonView
     , toAdHocLogRequest
     , toCreateFoodRequest
     , toCustomFoodFromLogRequest
@@ -73,6 +74,7 @@ import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Input as UiInput
+import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -1563,6 +1565,182 @@ view env nutrients units form =
         , servingsCard env form units
         , defaultPortionCard env units form
         ]
+
+
+{-| The editor's page-shaped loading body. The caller owns the single
+`Skeleton.busy` wrapper so the page view and `Page.bootstrapView` cannot nest
+status regions.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        [ basicInfoSkeleton env
+        , nutrientsSkeleton env
+        , servingsSkeleton env
+        , defaultPortionSkeleton env
+        ]
+
+
+basicInfoSkeleton : Env -> Element msg
+basicInfoSkeleton env =
+    Surface.formSection env.theme
+        (I18n.t env.language TidFoodEditorBasicInfo)
+        [ Skeleton.field env.theme { labelWidth = Element.px 80, gap = 7 }
+        , Skeleton.field env.theme { labelWidth = Element.px 80, gap = 7 }
+        , categorySkeleton env
+        ]
+
+
+{-| The category block is a representative populated case, not a stable
+fresh-food state: a fresh food has no suggestion list or chips, so the loaded
+block is shorter; a food with tags renders the removable chip row. Everything
+below the first basic-info field is explicitly variable in the page contract.
+-}
+categorySkeleton : Env -> Element msg
+categorySkeleton env =
+    Element.column [ Element.width Element.fill ]
+        [ Element.row
+            [ Element.width Element.fill
+            , UiCommon.minWidthZero
+            , Element.spacing DesignTokens.space4
+            ]
+            [ Skeleton.elLine env.theme { size = 13, width = Element.px 90 }
+            , Skeleton.elLine env.theme { size = 14, width = Element.px 150 }
+            ]
+        , Element.row [ Element.width Element.fill ]
+            [ Element.el [ Element.width Element.fill ]
+                (Skeleton.fieldWithoutLabel env.theme { gap = 7 })
+            , Element.el
+                [ Element.paddingEach
+                    { top = DesignTokens.space4
+                    , right = 0
+                    , bottom = 0
+                    , left = DesignTokens.space4
+                    }
+                ]
+                (Skeleton.icon env.theme)
+            ]
+        , Skeleton.elLine env.theme { size = 13, width = Element.px 120 }
+        , Skeleton.chipRow env.theme { count = 2 }
+        ]
+
+
+nutrientsSkeleton : Env -> Element msg
+nutrientsSkeleton env =
+    Surface.section env.theme
+        { header =
+            Just
+                (Element.column
+                    [ Element.width Element.fill
+                    , UiCommon.minWidthZero
+                    , Element.spacing DesignTokens.space8
+                    ]
+                    [ Skeleton.elLine env.theme { size = 20, width = Element.fill }
+                    , Skeleton.elLine env.theme { size = 14, width = Element.fill }
+                    ]
+                )
+        , body =
+            [ Element.column
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                (List.repeat 5 (editorRowSkeleton env))
+            ]
+        , footer = Just (Skeleton.button env.theme)
+        }
+
+
+servingsSkeleton : Env -> Element msg
+servingsSkeleton env =
+    Surface.section env.theme
+        { header = Just (Skeleton.elLine env.theme { size = 20, width = Element.px 120 })
+        , body =
+            [ Element.column
+                [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                (List.repeat 2 (editorRowSkeleton env))
+            ]
+        , footer = Just (Skeleton.button env.theme)
+        }
+
+
+{-| Represents the populated default portion: the loaded quantity field is
+omitted while no default unit is set, so a fresh food renders shorter. This is
+an intentional populated-case over-approximation.
+-}
+defaultPortionSkeleton : Env -> Element msg
+defaultPortionSkeleton env =
+    Surface.formSection env.theme
+        (I18n.t env.language TidFoodEditorDefaultPortion)
+        [ defaultPortionFieldsSkeleton env
+        , Skeleton.elLine env.theme { size = 14, width = Element.fill }
+        ]
+
+
+{-| Nutrient and serving rows share the same responsive shell: a column of
+select plus amount/action on Phone, one row on wider screens.
+-}
+editorRowSkeleton : Env -> Element msg
+editorRowSkeleton env =
+    let
+        selectField : Element msg
+        selectField =
+            Skeleton.selectField env.theme { labelWidth = Element.px 80 }
+
+        amountField : Element msg
+        amountField =
+            Skeleton.field env.theme { labelWidth = Element.px 80, gap = 4 }
+
+        action : Element msg
+        action =
+            rowActionSkeleton env.theme
+    in
+    if UiCommon.isSmall env.device then
+        Element.column
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ selectField
+            , Element.row
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                [ amountField, action ]
+            ]
+
+    else
+        Element.row
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ selectField, amountField, action ]
+
+
+rowActionSkeleton : Theme -> Element msg
+rowActionSkeleton theme =
+    Element.el
+        [ Element.width (Element.px 44)
+        , Element.paddingEach
+            { top = DesignTokens.space16
+            , right = 0
+            , bottom = 0
+            , left = 0
+            }
+        ]
+        (Skeleton.icon theme)
+
+
+defaultPortionFieldsSkeleton : Env -> Element msg
+defaultPortionFieldsSkeleton env =
+    let
+        attributes : List (Element.Attribute msg)
+        attributes =
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+
+        unitField : Element msg
+        unitField =
+            Skeleton.selectField env.theme { labelWidth = Element.px 80 }
+
+        quantityField : Element msg
+        quantityField =
+            Skeleton.field env.theme { labelWidth = Element.px 80, gap = 7 }
+    in
+    if UiCommon.isSmall env.device then
+        Element.column attributes [ unitField, quantityField ]
+
+    else
+        Element.row attributes [ unitField, quantityField ]
 
 
 viewForCreate : Env -> List NutrientItem -> FormModel -> Element Msg

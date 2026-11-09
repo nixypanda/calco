@@ -8,6 +8,7 @@ module Page.CustomFood.Edit exposing
     , isBusy
     , loadId
     , modelId
+    , skeletonView
     , update
     , view
     )
@@ -35,7 +36,6 @@ import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
-import Ui.Theme exposing (Theme)
 
 
 
@@ -435,19 +435,21 @@ bodyView env model =
                 { message = failed.message, onRetry = RetryClicked }
 
         Loading _ ->
-            customFoodFormSkeleton env.theme
+            Skeleton.busy
+                { label = I18n.t env.language TidCommonLoading }
+                [ skeletonView env ]
 
 
-customFoodFormSkeleton : Theme -> Element msg
-customFoodFormSkeleton theme =
+{-| The page body below `UiPage.pageContainer`. `Page.bootstrapView` wraps this
+same body in the plan's page container; the page's own `view` already supplies
+one, so this function must not add another.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
-        , UiCommon.skeletonRegion
         ]
-        [ Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.button theme
+        [ Form.skeletonView env
+        , Skeleton.buttonWithAttributes env.theme [ UiCommon.testId "action-primary" ]
         ]

@@ -5,11 +5,15 @@ module Ui.Skeleton exposing
     , button
     , buttonWithAttributes
     , card
+    , chipRow
     , elLine
+    , field
+    , fieldWithoutLabel
     , icon
     , input
     , listRow
     , paragraphLine
+    , selectField
     )
 
 import Element exposing (Element)
@@ -25,6 +29,7 @@ import Ui.DesignTokens
         , space16
         , space2
         , space4
+        , space8
         )
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -132,32 +137,120 @@ icon theme =
         Element.none
 
 
-input : Theme -> Element msg
-input theme =
+{-| A labelled text-control placeholder. `gap` is the measured space between
+the 13px label line and the 44px control: text inputs use 7 (64px wrapper),
+suffix inputs use 4 (61px wrapper).
+-}
+field : Theme -> { labelWidth : Element.Length, gap : Int } -> Element msg
+field theme config =
+    fieldWithKind theme config Nothing
+
+
+{-| A select/dropdown placeholder: label 13, 4px gap and a 44px trigger. The
+explicit `data-field-kind="select"` marker lets the layout harness measure the
+same control type instead of inferring it from spacing.
+-}
+selectField : Theme -> { labelWidth : Element.Length } -> Element msg
+selectField theme config =
+    fieldWithKind theme { labelWidth = config.labelWidth, gap = 4 } (Just "select")
+
+
+{-| A control placeholder with no visible label. The loaded category input is
+`Input.labelAbove` with an empty label, which measures as the label gap plus the
+44px control (51px).
+-}
+fieldWithoutLabel : Theme -> { gap : Int } -> Element msg
+fieldWithoutLabel theme config =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing space4
+        , Element.paddingEach
+            { top = config.gap
+            , right = 0
+            , bottom = 0
+            , left = 0
+            }
         , skeletonRegion
         , testId "field"
         ]
+        [ control theme ]
+
+
+fieldWithKind : Theme -> { labelWidth : Element.Length, gap : Int } -> Maybe String -> Element msg
+fieldWithKind theme config kind =
+    Element.column
+        ([ Element.width Element.fill
+         , Element.spacing config.gap
+         , skeletonRegion
+         , testId "field"
+         ]
+            ++ (case kind of
+                    Just value ->
+                        [ dataAttribute "data-field-kind" value ]
+
+                    Nothing ->
+                        []
+               )
+        )
         [ Element.el
-            [ Element.width (Element.px 80)
-            , Element.height (Element.px 12)
+            [ Element.width config.labelWidth
+            , Element.height (Element.px 13)
             , Background.color theme.inputFill
             , Border.rounded radiusSmall
             , uiClass "ui-skeleton"
             ]
             Element.none
-        , Element.el
-            [ Element.width Element.fill
-            , Element.height (Element.px 48)
-            , Background.color theme.inputFill
-            , Border.rounded radiusControl
-            , uiClass "ui-skeleton"
-            , testId "field-control"
-            ]
-            Element.none
+        , control theme
         ]
+
+
+control : Theme -> Element msg
+control theme =
+    Element.el
+        [ Element.width Element.fill
+        , Element.height (Element.px 44)
+        , Background.color theme.inputFill
+        , Border.rounded radiusControl
+        , uiClass "ui-skeleton"
+        , testId "field-control"
+        ]
+        Element.none
+
+
+{-| The legacy 64px field wrapper. It now shares `field` geometry so every
+call site gets the real 13px label and 44px control without changing the
+measured outer height.
+-}
+input : Theme -> Element msg
+input theme =
+    field theme { labelWidth = Element.px 80, gap = 7 }
+
+
+{-| A removable-chip placeholder: a 44px-tall target around a pill, matching
+`Chip.removableChip`.
+-}
+chip : Theme -> Element msg
+chip theme =
+    Element.el
+        [ Element.width (Element.px 80)
+        , Element.height (Element.px 44)
+        , Background.color theme.inputFill
+        , Border.rounded radiusPill
+        , uiClass "ui-skeleton"
+        , skeletonRegion
+        ]
+        Element.none
+
+
+{-| A wrapped row of removable-chip placeholders.
+-}
+chipRow : Theme -> { count : Int } -> Element msg
+chipRow theme config =
+    Element.wrappedRow
+        [ Element.width Element.fill
+        , Element.paddingXY 0 space4
+        , Element.spacing space8
+        ]
+        (List.repeat (max 0 config.count) (chip theme))
 
 
 button : Theme -> Element msg

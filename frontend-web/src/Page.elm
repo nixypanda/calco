@@ -90,6 +90,7 @@ import Store exposing (Store)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Workspace as Workspace
@@ -1075,7 +1076,10 @@ panePlanForRoute context existing =
             ]
 
         CustomFoodEdit productId ->
-            [ readyPlan (customFoodEditDesired context productId) ]
+            [ readyPlan (customFoodEditDesired context productId)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ CustomFoodEdit.skeletonView env ])
+            ]
 
         CustomFoodShow productId ->
             customFoodShowPlans context existing productId

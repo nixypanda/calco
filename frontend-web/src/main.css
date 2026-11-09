@@ -80,7 +80,10 @@ body {
   animation: ui-modal-in 180ms ease-out;
 }
 
-.ui-visually-hidden {
+.ui-visually-hidden.ui-visually-hidden {
+  /* Doubled class: elm-ui appends its single-class layout rules after this
+     stylesheet, so a plain `.ui-visually-hidden` loses position/width/height
+     and the loading label would be painted in the page. */
   position: absolute;
   width: 1px;
   height: 1px;
