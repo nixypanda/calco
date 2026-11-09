@@ -1,5 +1,6 @@
 module Page exposing
-    ( DiaryGoalResult
+    ( DesiredPane
+    , DiaryGoalResult
     , DiaryLogsResult
     , DiaryPaneId
     , InitCtx
@@ -9,6 +10,7 @@ module Page exposing
     , NutrientsResult
     , OutMsg(..)
     , Pane(..)
+    , PanePlan
     , PrefsResult
     , UnitsResult
     , barcodeScannerEventReceived
@@ -20,6 +22,7 @@ module Page exposing
     , localCtxReceived
     , modalView
     , paneKeys
+    , panePlanForRoute
     , photoPreviewUrls
     , reconcile
     , update
@@ -133,7 +136,18 @@ type alias DiaryPaneId =
 
 
 type DesiredPane
-    = DesiredPane String (() -> ( Pane, Cmd Msg, OutMsg ))
+    = DesiredPane String (Int -> ( Pane, Cmd Msg, OutMsg ))
+
+
+{-| The route's pane shape: the eventual key, whether the pane needs the local
+date before it can be built, and the pane itself when it can be built. Both
+`panesForRoute` and the future `bootstrapView` consume this one plan.
+-}
+type alias PanePlan =
+    { key : String
+    , requiresToday : Bool
+    , desired : Maybe DesiredPane
+    }
 
 
 type alias ReconcileResult pane effect =
@@ -316,7 +330,7 @@ initPreserving context current =
         generation =
             current.nextApiKeysGeneration + 1
     in
-    case panesForRoute context generation current.panes of
+    case panesForRoute context current.panes of
         Nothing ->
             ( { current | panes = [], waitingForToday = True, nextApiKeysGeneration = generation }
             , Cmd.none
@@ -327,7 +341,13 @@ initPreserving context current =
             finishReconcile context
                 current.store
                 generation
-                (reconcile paneKey desiredPaneKey initDesiredPane current.panes desiredPanes)
+                (reconcile
+                    paneKey
+                    desiredPaneKey
+                    (initDesiredPane generation)
+                    current.panes
+                    desiredPanes
+                )
 
 
 reconcile :
@@ -370,11 +390,11 @@ desiredPaneKey (DesiredPane key _) =
     key
 
 
-initDesiredPane : DesiredPane -> ( Pane, ( Cmd Msg, OutMsg ) )
-initDesiredPane (DesiredPane _ initialize) =
+initDesiredPane : Int -> DesiredPane -> ( Pane, ( Cmd Msg, OutMsg ) )
+initDesiredPane generation (DesiredPane _ initialize) =
     let
         ( pane, cmd, outMsg ) =
-            initialize ()
+            initialize generation
     in
     ( pane, ( cmd, outMsg ) )
 
@@ -880,117 +900,297 @@ retargetSearch dateParam mealSlot panes =
     ( List.map Tuple.first results, results |> List.map Tuple.second |> Cmd.batch )
 
 
-panesForRoute : InitCtx -> Int -> List Pane -> Maybe (List DesiredPane)
-panesForRoute context generation existing =
+{-| The single route table for pane count, order and keys. Every `Route`
+constructor is listed explicitly; there is no catch-all.
+
+Date-gated routes (`DiaryDay`, `DiaryCalendar`, `NutritionDetails`,
+`GoalSettings`) set `requiresToday` and carry `desired = Nothing` until the
+local date arrives. `FoodSearch`/`FoodShow` with an explicit `date` are
+deliberately **not** gated: they render their own usable pane while `today` is
+missing and gain the diary main pane once it arrives. That documented 1→2 pane
+policy lives here so the loaded panes and the boot shell cannot drift.
+
+-}
+panePlanForRoute : InitCtx -> List Pane -> List PanePlan
+panePlanForRoute context existing =
     case context.route of
+        Root ->
+            placeholderPlans
+
+        NotFound ->
+            placeholderPlans
+
         AuthLogin ->
-            Just [ simpleDesired "login" (LoginPane AuthLogin.init) ]
+            [ readyPlan (simpleDesired "login" (LoginPane AuthLogin.init)) ]
 
         BootstrapSetup ->
-            Just [ simpleDesired "setup" (SetupPane BootstrapSetup.init) ]
+            [ readyPlan (simpleDesired "setup" (SetupPane BootstrapSetup.init)) ]
 
         AdminDashboard ->
-            Just [ adminDesired context ]
+            [ readyPlan (adminDesired context) ]
 
         AdminCreateUser ->
-            Just [ simpleDesired "admin-create-user" (AdminCreateUserPane AdminCreateUser.init) ]
+            [ readyPlan
+                (simpleDesired "admin-create-user"
+                    (AdminCreateUserPane AdminCreateUser.init)
+                )
+            ]
 
         AdminEditUser userId ->
-            Just [ adminEditDesired context userId ]
+            [ readyPlan (adminEditDesired context userId) ]
 
         DiaryDay dateParam calendarMonth ->
-            context.today
-                |> Maybe.map
-                    (\today ->
-                        case calendarMonth of
-                            Just month ->
-                                contextualWorkspace existing
-                                    [ calendarDesired context today (Just month) ]
-                                    (diaryDesired context today dateParam calendarMonth)
-
-                            Nothing ->
-                                [ diaryDesired context today dateParam Nothing ]
-                    )
+            diaryDayPlans context existing dateParam calendarMonth
 
         DiaryCalendar monthParam ->
-            context.today |> Maybe.map (\today -> [ calendarDesired context today monthParam ])
+            [ calendarPlan context monthParam ]
 
         NutritionDetails dateParam ->
-            context.today
-                |> Maybe.map
-                    (\today ->
-                        contextualWorkspace existing
-                            [ diaryDesired context today dateParam Nothing ]
-                            (nutritionDesired context today dateParam)
-                    )
+            contextualPlans existing
+                [ diaryPlan context dateParam Nothing ]
+                (nutritionPlan context dateParam)
 
         GoalSettings ->
-            context.today |> Maybe.map (\today -> [ goalsDesired context today ])
+            [ goalsPlan context ]
 
         DiarySettings ->
-            Just [ diarySettingsDesired context ]
+            [ readyPlan (diarySettingsDesired context) ]
 
         SettingsApiKeys ->
-            Just [ apiKeysDesired context generation ]
+            [ readyPlan (apiKeysDesired context) ]
 
         SettingsApiKeyCreate ->
-            Just [ apiKeyCreateDesired context generation ]
+            [ readyPlan (apiKeyCreateDesired context) ]
 
         FoodSearch dateParam mealSlot ->
-            Just (searchWorkspaceDesired context existing dateParam mealSlot)
+            foodSearchPlans context existing dateParam mealSlot
 
         FoodShow productId dateParam mealSlot lookupNote ->
-            Just (foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote)
+            foodShowPlans context existing productId dateParam mealSlot lookupNote
 
         FoodLogEntry logId _ _ ->
-            Just [ foodLogDetailDesired context logId ]
+            [ readyPlan (foodLogDetailDesired context logId) ]
 
         AdHocLogCreate dateParam mealSlot ->
-            Just [ createAdHocLogDesired context dateParam mealSlot ]
+            [ readyPlan (createAdHocLogDesired context dateParam mealSlot) ]
 
         AiLogCreate dateParam mealSlot ->
-            Just [ createWithAiLogDesired context dateParam mealSlot ]
+            [ readyPlan (createWithAiLogDesired context dateParam mealSlot) ]
 
         CustomFoodCreate ->
-            Just [ customFoodCreatePaneDesired context CustomFoodCreate.init ]
+            [ readyPlan (customFoodCreatePaneDesired context CustomFoodCreate.init) ]
 
         CustomFoodCreateWithAi ->
-            Just [ customFoodCreatePaneDesired context CustomFoodCreate.initWithAssistant ]
+            [ readyPlan
+                (customFoodCreatePaneDesired context CustomFoodCreate.initWithAssistant)
+            ]
 
         CustomFoodEdit productId ->
-            Just [ customFoodEditDesired context productId ]
+            [ readyPlan (customFoodEditDesired context productId) ]
 
         CustomFoodShow productId ->
-            Just
-                (contextualWorkspace existing
-                    [ customFoodListDesired context ]
-                    (customFoodShowDesired context productId)
-                )
+            customFoodShowPlans context existing productId
 
         CustomFoodList ->
-            Just [ customFoodListDesired context ]
+            [ readyPlan (customFoodListDesired context) ]
 
         MealList ->
-            Just [ mealListDesired context ]
+            [ readyPlan (mealListDesired context) ]
 
         MealCreate ->
-            Just [ mealCreateDesired context ]
+            [ readyPlan (mealCreateDesired context) ]
 
         MealEdit mealId ->
-            Just [ mealEditDesired context mealId ]
+            [ readyPlan (mealEditDesired context mealId) ]
 
         MealShow mealId ->
-            Just
-                (contextualWorkspace existing
-                    [ mealListDesired context ]
-                    (mealDetailDesired context mealId)
-                )
+            mealShowPlans context existing mealId
+
+
+{-| Thin projection from the shared plan. A missing local date only clears the
+workspace when a pane truly cannot be constructed without it.
+-}
+panesForRoute : InitCtx -> List Pane -> Maybe (List DesiredPane)
+panesForRoute context existing =
+    let
+        plans : List PanePlan
+        plans =
+            panePlanForRoute context existing
+    in
+    case ( List.any .requiresToday plans, context.today ) of
+        ( True, Nothing ) ->
+            Nothing
 
         _ ->
-            Just
-                [ simpleDesired "placeholder:unmigrated"
-                    (PlaceholderPane (I18n.en TidCommonRouteNotMigrated))
-                ]
+            Just (List.filterMap .desired plans)
+
+
+placeholderPlans : List PanePlan
+placeholderPlans =
+    [ readyPlan
+        (simpleDesired "placeholder:unmigrated"
+            (PlaceholderPane (I18n.en TidCommonRouteNotMigrated))
+        )
+    ]
+
+
+readyPlan : DesiredPane -> PanePlan
+readyPlan desired =
+    { key = desiredPaneKey desired
+    , requiresToday = False
+    , desired = Just desired
+    }
+
+
+{-| A date-gated plan. When `today` is missing the pane cannot be built:
+`desired` is `Nothing` and `key` is a stable pending placeholder because the
+eventual key depends on the resolved local date.
+-}
+todayPlan : Maybe LocalDate -> String -> (LocalDate -> DesiredPane) -> PanePlan
+todayPlan today pendingKey build =
+    case today of
+        Just date ->
+            let
+                desired : DesiredPane
+                desired =
+                    build date
+            in
+            { key = desiredPaneKey desired
+            , requiresToday = True
+            , desired = Just desired
+            }
+
+        Nothing ->
+            { key = pendingKey
+            , requiresToday = True
+            , desired = Nothing
+            }
+
+
+preservedPlan : Pane -> PanePlan
+preservedPlan pane =
+    { key = paneKey pane
+    , requiresToday = False
+    , desired = Just (preservePane pane)
+    }
+
+
+{-| Shared contextual shape: a visible main pane stays in the first slot and
+the detail is appended; otherwise use the route's fallback main plus detail.
+The plan-level form keeps the same count, order and keys as the loaded pane
+list.
+
+A main pane whose key is already the detail key is the route's own pane, not a
+contextual main. Preserving it would append a second copy of itself, so that
+case falls back to the route's main instead.
+
+-}
+contextualPlans : List Pane -> List PanePlan -> PanePlan -> List PanePlan
+contextualPlans existing fallbackMain detail =
+    case List.head existing of
+        Just pane ->
+            if isMainPane pane && paneKey pane /= detail.key then
+                [ preservedPlan pane, detail ]
+
+            else
+                fallbackMain ++ [ detail ]
+
+        Nothing ->
+            fallbackMain ++ [ detail ]
+
+
+diaryPlan : InitCtx -> Maybe LocalDate -> Maybe String -> PanePlan
+diaryPlan context dateParam calendarMonth =
+    todayPlan context.today
+        "diary:pending"
+        (\today -> diaryDesired context today dateParam calendarMonth)
+
+
+calendarPlan : InitCtx -> Maybe String -> PanePlan
+calendarPlan context monthParam =
+    todayPlan context.today
+        ("calendar:" ++ Maybe.withDefault "pending" monthParam)
+        (\today -> calendarDesired context today monthParam)
+
+
+nutritionPlan : InitCtx -> Maybe LocalDate -> PanePlan
+nutritionPlan context dateParam =
+    todayPlan context.today
+        "nutrition-details:pending"
+        (\today -> nutritionDesired context today dateParam)
+
+
+goalsPlan : InitCtx -> PanePlan
+goalsPlan context =
+    todayPlan context.today
+        "goals-settings:pending"
+        (\today -> goalsDesired context today)
+
+
+diaryDayPlans : InitCtx -> List Pane -> Maybe LocalDate -> Maybe String -> List PanePlan
+diaryDayPlans context existing dateParam calendarMonth =
+    let
+        diary : PanePlan
+        diary =
+            diaryPlan context dateParam calendarMonth
+    in
+    case calendarMonth of
+        Just _ ->
+            contextualPlans existing [ calendarPlan context calendarMonth ] diary
+
+        Nothing ->
+            [ diary ]
+
+
+foodSearchPlans : InitCtx -> List Pane -> Maybe LocalDate -> Maybe MealSlot -> List PanePlan
+foodSearchPlans context existing dateParam mealSlot =
+    let
+        detail : PanePlan
+        detail =
+            readyPlan (searchDesired context dateParam mealSlot)
+    in
+    case ( context.today, dateParam ) of
+        ( Just _, Just _ ) ->
+            contextualPlans existing [ diaryPlan context dateParam Nothing ] detail
+
+        _ ->
+            [ detail ]
+
+
+foodShowPlans :
+    InitCtx
+    -> List Pane
+    -> String
+    -> Maybe LocalDate
+    -> Maybe MealSlot
+    -> Maybe String
+    -> List PanePlan
+foodShowPlans context existing productId dateParam mealSlot lookupNote =
+    let
+        detail : PanePlan
+        detail =
+            readyPlan (foodDetailDesired context productId dateParam mealSlot lookupNote)
+    in
+    case ( context.today, dateParam ) of
+        ( Just _, Just _ ) ->
+            contextualPlans existing [ diaryPlan context dateParam Nothing ] detail
+
+        _ ->
+            contextualPlans existing [] detail
+
+
+customFoodShowPlans : InitCtx -> List Pane -> String -> List PanePlan
+customFoodShowPlans context existing productId =
+    contextualPlans existing
+        [ readyPlan (customFoodListDesired context) ]
+        (readyPlan (customFoodShowDesired context productId))
+
+
+mealShowPlans : InitCtx -> List Pane -> String -> List PanePlan
+mealShowPlans context existing mealId =
+    contextualPlans existing
+        [ readyPlan (mealListDesired context) ]
+        (readyPlan (mealDetailDesired context mealId))
 
 
 simpleDesired : String -> Pane -> DesiredPane
@@ -1100,10 +1300,10 @@ diarySettingsDesired context =
         (\_ -> DiarySettings.init)
 
 
-apiKeysDesired : InitCtx -> Int -> DesiredPane
-apiKeysDesired context generation =
+apiKeysDesired : InitCtx -> DesiredPane
+apiKeysDesired context =
     DesiredPane "api-keys"
-        (\_ ->
+        (\generation ->
             let
                 ( subModel, subOut ) =
                     SettingsApiKeys.init
@@ -1115,10 +1315,10 @@ apiKeysDesired context generation =
         )
 
 
-apiKeyCreateDesired : InitCtx -> Int -> DesiredPane
-apiKeyCreateDesired context generation =
+apiKeyCreateDesired : InitCtx -> DesiredPane
+apiKeyCreateDesired context =
     DesiredPane "api-key-create"
-        (\_ ->
+        (\generation ->
             let
                 ( subModel, subOut ) =
                     SettingsApiKeyCreate.init
@@ -1139,45 +1339,6 @@ searchDesired _ dateParam mealSlot =
             , NoOutMsg
             )
         )
-
-
-searchWorkspaceDesired :
-    InitCtx
-    -> List Pane
-    -> Maybe LocalDate
-    -> Maybe MealSlot
-    -> List DesiredPane
-searchWorkspaceDesired context existing dateParam mealSlot =
-    case ( context.today, dateParam ) of
-        ( Just today, Just _ ) ->
-            contextualWorkspace existing
-                [ diaryDesired context today dateParam Nothing ]
-                (searchDesired context dateParam mealSlot)
-
-        _ ->
-            [ searchDesired context dateParam mealSlot ]
-
-
-foodWorkspaceDesired :
-    InitCtx
-    -> List Pane
-    -> String
-    -> Maybe LocalDate
-    -> Maybe MealSlot
-    -> Maybe String
-    -> List DesiredPane
-foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote =
-    let
-        detail : DesiredPane
-        detail =
-            foodDetailDesired context productId dateParam mealSlot lookupNote
-    in
-    case ( context.today, dateParam ) of
-        ( Just today, Just _ ) ->
-            contextualWorkspace existing [ diaryDesired context today dateParam Nothing ] detail
-
-        _ ->
-            contextualWorkspace existing [] detail
 
 
 foodDetailDesired :
@@ -1237,20 +1398,6 @@ createWithAiLogDesired context dateParam mealSlot =
 preservePane : Pane -> DesiredPane
 preservePane pane =
     simpleDesired (paneKey pane) pane
-
-
-contextualWorkspace : List Pane -> List DesiredPane -> DesiredPane -> List DesiredPane
-contextualWorkspace existing fallbackMain contextual =
-    case List.head existing of
-        Just pane ->
-            if isMainPane pane then
-                [ preservePane pane, contextual ]
-
-            else
-                fallbackMain ++ [ contextual ]
-
-        Nothing ->
-            fallbackMain ++ [ contextual ]
 
 
 customFoodListDesired : InitCtx -> DesiredPane
