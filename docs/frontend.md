@@ -464,8 +464,8 @@ loads, but not settled failures.
 
 The Chrome layer reserves the Phone bottom-nav space from the route/session
 predicate, not from the loading flag, so ordinary fetches and the date gate do
-not make the nav appear or disappear. See
-[skeleton-loaders-plan.md](skeleton-loaders-plan.md) for the route matrix.
+not make the nav appear or disappear. The browser layout harness exercises the
+route matrix across Phone, Tablet, and Desktop.
 
 ## API Boundary
 
