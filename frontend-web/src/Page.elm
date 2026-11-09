@@ -1282,6 +1282,15 @@ calendarPlan context monthParam =
         context.today
         ("calendar:" ++ Maybe.withDefault "pending" monthParam)
         (\today -> calendarDesired context today monthParam)
+        |> withSkeleton
+            (\env ->
+                DiaryCalendar.skeletonView env
+                    (monthParam
+                        |> Maybe.andThen DiaryCalendar.validMonth
+                        |> Maybe.map List.singleton
+                        |> Maybe.withDefault []
+                    )
+            )
 
 
 nutritionPlan : InitCtx -> Maybe LocalDate -> PanePlan msg

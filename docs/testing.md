@@ -201,6 +201,8 @@ a test fails:
 - change the macro factors in `Data.Nutrition`;
 - change `addDays`/`previousDay` month-end behavior;
 - change `shiftMonth` year-boundary behavior;
+- change `Ui.MonthCalendar.monthRows` to six rows or `List.take 4` (the
+  calendar partition property must fail);
 - remove the generation check in `Store.settle`;
 - change `Store.settle` so an `Err` result is not cached (the failed-settlement
   law must fail);

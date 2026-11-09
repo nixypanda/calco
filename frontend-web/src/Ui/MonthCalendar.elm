@@ -1,4 +1,4 @@
-module Ui.MonthCalendar exposing (skeleton, view)
+module Ui.MonthCalendar exposing (monthRows, skeleton, view)
 
 import Data.Calendar as Calendar
 import Element exposing (Element)
@@ -39,8 +39,7 @@ view config =
 
         rows : List (Element msg)
         rows =
-            Calendar.monthCells config.period
-                |> chunks 7
+            monthRows config.period
                 |> List.map
                     (List.map cell >> Element.row [ Element.width Element.fill ])
     in
@@ -66,26 +65,63 @@ view config =
 
 
 {-| Placeholder with the same grid geometry as `view`, so swapping in loaded
-data does not shift the layout.
+data does not shift the layout. A known period uses the same `monthRows`
+partition as `view`; a `Nothing` period renders `rows` neutral weeks for the
+pre-date boot shell.
 -}
-skeleton : Theme -> { period : String, cellHeight : Int } -> Element msg
+skeleton : Theme -> { period : Maybe String, rows : Int, cellHeight : Int } -> Element msg
 skeleton theme config =
-    Calendar.monthCells config.period
-        |> chunks 7
-        |> List.map
-            (List.map
-                (\_ ->
-                    Skeleton.barCustom theme
-                        { width = Element.fillPortion 1, height = config.cellHeight }
+    let
+        rows : List (List (Maybe Int))
+        rows =
+            case config.period of
+                Just period ->
+                    monthRows period
+
+                Nothing ->
+                    List.repeat config.rows (List.repeat 7 Nothing)
+
+        cell : Maybe Int -> Element msg
+        cell _ =
+            Element.el
+                [ Element.width (Element.fillPortion 1)
+                , Element.height (Element.px config.cellHeight)
+                , equalColumn
+                ]
+                (Skeleton.barCustom theme
+                    { width = Element.fill, height = config.cellHeight }
                 )
-                >> Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
+
+        weekdayPlaceholder : Element msg
+        weekdayPlaceholder =
+            Element.el
+                [ Element.width (Element.fillPortion 1)
+                , equalColumn
+                ]
+                (Skeleton.elLine theme { size = 13, width = Element.fill })
+    in
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space8
+        , UiCommon.skeletonRegion
+        ]
+        [ Element.row [ Element.width Element.fill, UiCommon.testId "calendar-weekdays" ]
+            (List.repeat 7 weekdayPlaceholder)
+        , Element.column
+            [ Element.width Element.fill, UiCommon.testId "calendar-grid" ]
+            (List.map
+                (List.map cell >> Element.row [ Element.width Element.fill ])
+                rows
             )
-        |> Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space2
-            , UiCommon.skeletonRegion
-            , UiCommon.testId "calendar-grid"
-            ]
+        ]
+
+
+{-| The shared row partition. Both `view` and `skeleton` use it so the
+skeleton row count cannot drift from the real grid.
+-}
+monthRows : String -> List (List (Maybe Int))
+monthRows period =
+    Calendar.monthCells period |> chunks 7
 
 
 equalColumn : Element.Attribute msg

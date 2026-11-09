@@ -28,8 +28,8 @@
 // above for custom-food-edit, meal-edit, food-show, food-log and meal-show.
 // Required MVP
 // cases (bootstrap-auth, diary-date-gate, diary, goals, diary-settings,
-// api-keys, admin-boot, calendar, transition-scroll) do not depend on those
-// ids. The api-keys case creates one uniquely named layout-user key before the
+// api-keys, admin-boot, calendar, calendar-date-gate, transition-scroll) do not
+// depend on those ids. The api-keys case creates one uniquely named layout-user key before the
 // case and deletes it in a finally step.
 //
 // Usage:
@@ -91,6 +91,7 @@ const ALL_CASE_NAMES = [
   "search",
   "search-recents",
   "calendar",
+  "calendar-date-gate",
   "transition-scroll",
 ];
 
@@ -853,6 +854,15 @@ function buildCases(layoutDate, discovered) {
     dateCards: { axes: XYWH },
     surfaces: { axes: XYW },
     surfaceHeaders: { axes: XYWH },
+  };
+  const calendarFixed = {
+    topbar: { axes: XYWH },
+    pageRoot: { axes: XYW },
+    panes: true,
+    requirePanes: 1,
+    pageContent: { axes: XYW },
+    surfaces: { axes: XYW },
+    weekdayRows: { axes: XYWH },
   };
   const foodSeedCategories = discovered.chickenFoodCategories;
   const zeroCategoryFood = foodSeedCategories === 0;
@@ -1751,21 +1761,28 @@ function buildCases(layoutDate, discovered) {
       paneRole: "main",
       path: () => "/calendar",
       hold: [{ name: "calendar-summary", pattern: "*/api/logs/summary?*", required: true }],
-      fixed: {
-        topbar: { axes: XYWH },
-        pageRoot: { axes: XYW },
-        panes: true,
-        requirePanes: 1,
-        pageContent: { axes: XYW },
-        surfaces: { axes: XYW },
-        weekdayRows: { axes: XYW },
-      },
+      fixed: calendarFixed,
       anchors: [{ key: "weekdayRows", label: "calendar weekday row" }],
       nav: "present",
       loadedSelector: '[data-testid="calendar-grid"]',
-      unimplemented: [
-        "Calendar skeleton weekday row and the 2px inter-cell width mismatch are Phase 4 work.",
-      ],
+    },
+    {
+      // An invalid month exercises `Page.calendarPlan`'s validMonth
+      // normalization and the generic period=None, rows=5 boot shell. The
+      // loaded page falls back to the current month, so month/row count is
+      // deliberately variable across states.
+      name: "calendar-date-gate",
+      kind: "skeleton",
+      required: true,
+      authRole: "layout",
+      paneRole: "main",
+      path: () => "/calendar?month=garbage&holdLocalCtx=1",
+      hold: [{ name: "calendar-summary", pattern: "*/api/logs/summary?*", required: true }],
+      dateGate: true,
+      fixed: calendarFixed,
+      anchors: [{ key: "weekdayRows", label: "calendar weekday row" }],
+      nav: "present",
+      loadedSelector: '[data-testid="calendar-grid"]',
     },
     {
       name: "transition-scroll",
@@ -1860,6 +1877,9 @@ const CAPTURE_EXPRESSION = `(() => {
         clientWidth: grid.clientWidth,
         scrollWidth: grid.scrollWidth,
         cellCount: cells.length,
+        rowCount: rows.length,
+        firstRow: box(rows[0]),
+        secondRow: box(rows[1]),
         firstCell: box(cells[0]),
       };
     });
@@ -2545,6 +2565,97 @@ function assertCalendars(label, capture, assertions) {
   }
 }
 
+function assertCalendarStability(caseDef, loading, loaded, assertions) {
+  const loadingCalendars = loading.calendarGeometry ?? [];
+  const loadedCalendars = loaded.calendarGeometry ?? [];
+
+  if (loadedCalendars.length > 0) {
+    record(assertions, {
+      name: "loading calendar present",
+      passed: loadingCalendars.length > 0,
+      expected: "> 0 calendar grids",
+      actual: loadingCalendars.length,
+      tolerance: 0,
+      message: "The loading capture has no calendar grid",
+    });
+  }
+
+  for (const [label, calendars] of [
+    ["loading", loadingCalendars],
+    ["loaded", loadedCalendars],
+  ]) {
+    for (const [index, geometry] of calendars.entries()) {
+      const name = `${label} calendar[${index}]`;
+      const rowCount = geometry.rowCount ?? 0;
+      record(assertions, {
+        name: `${name} row count`,
+        passed: rowCount >= 4 && rowCount <= 6,
+        expected: "4-6 rows",
+        actual: rowCount,
+        tolerance: 0,
+        message: `${name} rendered ${rowCount} grid rows`,
+      });
+
+      if (!geometry.firstRow || !geometry.secondRow) {
+        record(assertions, {
+          name: `${name} second grid row present`,
+          passed: false,
+          expected: "first and second grid rows",
+          actual:
+            `first=${geometry.firstRow ? "present" : "missing"}, ` +
+            `second=${geometry.secondRow ? "present" : "missing"}`,
+          tolerance: 0,
+          message: `${name} is missing a measurable grid row`,
+        });
+        continue;
+      }
+
+      const pitch = geometry.secondRow.y - geometry.firstRow.y;
+      record(assertions, {
+        name: `${name} row pitch`,
+        passed: withinTolerance(pitch, 68, 1),
+        expected: 68,
+        actual: pitch,
+        tolerance: 1,
+        message: `${name} first-to-second row pitch was ${pitch}`,
+      });
+    }
+  }
+
+  const count = Math.min(loadingCalendars.length, loadedCalendars.length);
+  for (let index = 0; index < count; index += 1) {
+    compareBox(
+      assertions,
+      `calendar[${index}] first grid row`,
+      loadingCalendars[index].firstRow,
+      loadedCalendars[index].firstRow,
+      1,
+      ["y", "height"],
+    );
+    compareBox(
+      assertions,
+      `calendar[${index}] second grid row`,
+      loadingCalendars[index].secondRow,
+      loadedCalendars[index].secondRow,
+      1,
+      ["y", "height"],
+    );
+    if (!caseDef.dateGate) {
+      record(assertions, {
+        name: `calendar[${index}] row count stable`,
+        passed:
+          loadingCalendars[index].rowCount === loadedCalendars[index].rowCount,
+        expected: loadingCalendars[index].rowCount,
+        actual: loadedCalendars[index].rowCount,
+        tolerance: 0,
+        message:
+          `calendar[${index}] row count changed from ` +
+          `${loadingCalendars[index].rowCount} to ${loadedCalendars[index].rowCount}`,
+      });
+    }
+  }
+}
+
 function assertCaptures(caseDef, viewportName, loading, loaded, assertions) {
   record(assertions, {
     name: "loading skeleton present",
@@ -2638,6 +2749,7 @@ function assertCaptures(caseDef, viewportName, loading, loaded, assertions) {
   assertChrome(caseDef, viewportName, loading, loaded, assertions);
   assertCalendars("loading", loading, assertions);
   assertCalendars("loaded", loaded, assertions);
+  assertCalendarStability(caseDef, loading, loaded, assertions);
 }
 
 function assertScrollCase(caseDef, run, assertions, viewportName) {
