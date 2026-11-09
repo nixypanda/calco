@@ -688,7 +688,7 @@ hydratePrefs : PrefsResult -> Pane -> Pane
 hydratePrefs result pane =
     case pane of
         DiaryPane paneId model ->
-            DiaryPane paneId (modelOnly (DiaryDay.update (DiaryDay.PrefsLoaded result) model))
+            DiaryPane paneId (modelOnly (DiaryDay.update (DiaryDay.PrefsReceived result) model))
 
         DiarySettingsPane model ->
             DiarySettingsPane
@@ -1167,6 +1167,11 @@ withRole role plan =
     { plan | role = role }
 
 
+withSkeleton : (Env -> Element msg) -> PanePlan msg -> PanePlan msg
+withSkeleton skeleton plan =
+    { plan | skeleton = skeleton }
+
+
 {-| A date-gated plan. When `today` is missing the pane cannot be built:
 `desired` is `Nothing` and `key` is a stable pending placeholder because the
 eventual key depends on the resolved local date.
@@ -1241,6 +1246,7 @@ diaryPlan context dateParam calendarMonth =
         context.today
         "diary:pending"
         (\today -> diaryDesired context today dateParam calendarMonth)
+        |> withSkeleton (\env -> DiaryDay.skeletonView env Nothing)
 
 
 calendarPlan : InitCtx -> Maybe String -> PanePlan msg
@@ -1768,7 +1774,7 @@ isDiaryOperation msg =
                 DiaryDay.GoalLoaded _ _ ->
                     False
 
-                DiaryDay.PrefsLoaded _ ->
+                DiaryDay.PrefsReceived _ ->
                     False
 
                 DiaryDay.LatestSlotsReceived _ _ ->

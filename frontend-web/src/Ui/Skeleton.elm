@@ -6,6 +6,7 @@ module Ui.Skeleton exposing
     , buttonWithAttributes
     , card
     , elLine
+    , icon
     , input
     , listRow
     , paragraphLine
@@ -110,6 +111,23 @@ circle theme =
         , Background.color theme.inputFill
         , Border.rounded 999
         , uiClass "ui-skeleton"
+        ]
+        Element.none
+
+
+{-| A 44px circular icon placeholder. Mirrors `Button.iconButton` and keeps
+the date card's leading/trailing controls from shifting when the real icons
+arrive.
+-}
+icon : Theme -> Element msg
+icon theme =
+    Element.el
+        [ Element.width (Element.px 44)
+        , Element.height (Element.px 44)
+        , Background.color theme.inputFill
+        , Border.rounded radiusPill
+        , uiClass "ui-skeleton"
+        , skeletonRegion
         ]
         Element.none
 

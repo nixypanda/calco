@@ -5,9 +5,17 @@ import Data.DiaryPrefs as DiaryPrefs exposing (DiaryPrefs)
 import Url.Builder as Builder
 
 
+prefsTimeoutMs : Int
+prefsTimeoutMs =
+    10000
+
+
 get : (Result Client.ApiError DiaryPrefs -> msg) -> Cmd msg
 get toMsg =
-    Client.get (Builder.absolute [ "api", "diary-preferences" ] []) DiaryPrefs.decoder toMsg
+    Client.getWithTimeout prefsTimeoutMs
+        (Builder.absolute [ "api", "diary-preferences" ] [])
+        DiaryPrefs.decoder
+        toMsg
 
 
 put : DiaryPrefs -> (Result Client.ApiError DiaryPrefs -> msg) -> Cmd msg
