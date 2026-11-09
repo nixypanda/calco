@@ -114,12 +114,12 @@ export function findChrome() {
   throw new Error("Chrome/Chromium was not found. Set CHROME=/path/to/chrome and retry.");
 }
 
-export async function launchChrome(profileDir) {
+export async function launchChrome(profileDir, { headed = false } = {}) {
   const chromePath = findChrome();
   const child = spawn(
     chromePath,
     [
-      "--headless=new",
+      ...(headed ? [] : ["--headless=new"]),
       "--disable-gpu",
       "--disable-dev-shm-usage",
       "--hide-scrollbars",
@@ -321,7 +321,10 @@ export async function typeIntoInput(client, text) {
       });
       if (!input) return false;
       input.focus();
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value"
+      ).set;
       setter.call(input, ${JSON.stringify(text)});
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -342,7 +345,8 @@ export async function injectStaticStyles(client) {
         document.head.appendChild(style);
       }
       style.textContent =
-        "*, *::before, *::after { transition: none !important; animation: none !important; caret-color: transparent !important; }";
+        "*, *::before, *::after { transition: none !important; " +
+        "animation: none !important; caret-color: transparent !important; }";
       return true;
     })()`,
   );

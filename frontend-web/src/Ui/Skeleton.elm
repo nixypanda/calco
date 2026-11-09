@@ -2,6 +2,7 @@ module Ui.Skeleton exposing
     ( bar
     , barCustom
     , button
+    , buttonWithAttributes
     , card
     , input
     , listRow
@@ -77,7 +78,11 @@ circle theme =
 input : Theme -> Element msg
 input theme =
     Element.column
-        [ Element.width Element.fill, Element.spacing space4, skeletonRegion ]
+        [ Element.width Element.fill
+        , Element.spacing space4
+        , skeletonRegion
+        , testId "field"
+        ]
         [ Element.el
             [ Element.width (Element.px 80)
             , Element.height (Element.px 12)
@@ -92,6 +97,7 @@ input theme =
             , Background.color theme.inputFill
             , Border.rounded radiusControl
             , uiClass "ui-skeleton"
+            , testId "field-control"
             ]
             Element.none
         ]
@@ -99,14 +105,21 @@ input theme =
 
 button : Theme -> Element msg
 button theme =
+    buttonWithAttributes theme []
+
+
+buttonWithAttributes : Theme -> List (Element.Attribute msg) -> Element msg
+buttonWithAttributes theme extraAttrs =
     Element.el
-        [ Element.width Element.fill
-        , Element.height (Element.px 48)
-        , Background.color theme.inputFill
-        , Border.rounded radiusPill
-        , uiClass "ui-skeleton"
-        , skeletonRegion
-        ]
+        ([ Element.width Element.fill
+         , Element.height (Element.px 48)
+         , Background.color theme.inputFill
+         , Border.rounded radiusPill
+         , uiClass "ui-skeleton"
+         , skeletonRegion
+         ]
+            ++ extraAttrs
+        )
         Element.none
 
 

@@ -102,6 +102,10 @@ dev-frontend:
 screenshots:
     node docs/scripts/capture-readme-screenshots.mjs
 
+# Check skeleton layout stability (run `just dev` first; report-only by default).
+check-skeleton-layout:
+    node docs/scripts/check-skeleton-stability.mjs
+
 # Build the frontend.
 [working-directory("frontend-web")]
 build-frontend:

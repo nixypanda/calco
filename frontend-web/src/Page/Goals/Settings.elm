@@ -458,7 +458,7 @@ goalsSettingsSkeleton theme =
                 , Skeleton.input theme
                 , Skeleton.input theme
                 , Skeleton.input theme
-                , Skeleton.button theme
+                , Skeleton.buttonWithAttributes theme [ UiCommon.testId "action-primary" ]
                 ]
             , footer = Nothing
             }

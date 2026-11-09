@@ -245,7 +245,7 @@ diarySettingsSkeleton theme =
                 , Skeleton.bar theme
                 , Skeleton.bar theme
                 , Skeleton.bar theme
-                , Skeleton.button theme
+                , Skeleton.buttonWithAttributes theme [ UiCommon.testId "action-primary" ]
                 ]
             , footer = Nothing
             }
