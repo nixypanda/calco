@@ -104,7 +104,8 @@ requestWithTimeout timeoutMillis method path body decoder toMsg =
         , url = path
         , body = body
         , expect = expectJson decoder toMsg
-        , timeout = Maybe.map (\millis -> toFloat millis / 1000) timeoutMillis
+        , -- elm/http measures the timeout in milliseconds.
+          timeout = Maybe.map toFloat timeoutMillis
         , tracker = Nothing
         }
 

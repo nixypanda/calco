@@ -5,6 +5,8 @@ import Data.DiaryPrefs as DiaryPrefs exposing (DiaryPrefs)
 import Url.Builder as Builder
 
 
+{-| elm/http measures `timeout` in milliseconds, so this is a 10-second bound.
+-}
 prefsTimeoutMs : Int
 prefsTimeoutMs =
     10000

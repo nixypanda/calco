@@ -1046,13 +1046,22 @@ panePlanForRoute context existing =
                 (nutritionPlan context dateParam)
 
         GoalSettings ->
-            [ goalsPlan context ]
+            [ goalsPlan context
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ GoalsSettings.skeletonView env ])
+            ]
 
         DiarySettings ->
-            [ readyPlan (diarySettingsDesired context) ]
+            [ readyPlan (diarySettingsDesired context)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ DiarySettings.skeletonView env ])
+            ]
 
         SettingsApiKeys ->
-            [ readyPlan (apiKeysDesired context) ]
+            [ readyPlan (apiKeysDesired context)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ SettingsApiKeys.skeletonView env ])
+            ]
 
         SettingsApiKeyCreate ->
             [ readyPlan (apiKeyCreateDesired context) ]

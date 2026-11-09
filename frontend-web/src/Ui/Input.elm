@@ -690,7 +690,7 @@ checkbox theme config =
         [ Element.width Element.fill
         , Element.height (Element.px minimumTargetSize)
         , Element.spacing space12
-        , testId "field"
+        , testId "checkbox-row"
         ]
         { onChange = config.onChange
         , icon = checkboxIcon theme

@@ -8,6 +8,7 @@ module Ui.Skeleton exposing
     , buttonWithAttributes
     , card
     , categoryChipRow
+    , checkboxRow
     , chipRow
     , dot
     , elLine
@@ -147,6 +148,36 @@ icon theme =
         , skeletonRegion
         ]
         Element.none
+
+
+{-| A 44px checkbox row: a 28px circle, a 12px gap and a 16px title line.
+Mirrors `Ui.Input.checkbox`, whose 44px minimum target and 28px icon keep the
+form row height stable while preferences load.
+-}
+checkboxRow : Theme -> Element msg
+checkboxRow theme =
+    Element.row
+        [ Element.width Element.fill
+        , Element.height (Element.px 44)
+        , Element.spacing space12
+        , skeletonRegion
+        , testId "checkbox-row"
+        ]
+        [ Element.el
+            [ Element.width (Element.px 28)
+            , Element.height (Element.px 28)
+            , Background.color theme.inputFill
+            , Border.rounded radiusPill
+            , uiClass "ui-skeleton"
+            , Element.centerY
+            ]
+            Element.none
+        , Element.el
+            [ Element.width Element.fill
+            , Element.centerY
+            ]
+            (elLine theme { size = 16, width = Element.fill })
+        ]
 
 
 {-| A 4x24 macro-dot placeholder. Mirrors `Surface.accentDotLabeled`, which

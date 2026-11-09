@@ -25,8 +25,10 @@
 //
 // A clean database still needs either seed data or the fixture-id overrides
 // above for custom-food-edit, meal-edit, food-show and meal-show. Required MVP
-// cases (bootstrap-auth, diary-date-gate, diary, goals, admin-boot, calendar,
-// transition-scroll) do not depend on those ids.
+// cases (bootstrap-auth, diary-date-gate, diary, goals, diary-settings,
+// api-keys, admin-boot, calendar, transition-scroll) do not depend on those
+// ids. The api-keys case creates one uniquely named layout-user key before the
+// case and deletes it in a finally step.
 //
 // Usage:
 //   node docs/scripts/check-skeleton-stability.mjs \
@@ -70,6 +72,8 @@ const ALL_CASE_NAMES = [
   "diary-date-gate",
   "diary",
   "goals",
+  "diary-settings",
+  "api-keys",
   "admin-boot",
   "admin-list",
   "admin-edit",
@@ -375,6 +379,97 @@ async function login(client, network, credentials, baseUrl) {
   }
 }
 
+function apiKeyFixtureName() {
+  // Keep this under the Phone title width so the seeded key title stays one
+  // line; the run prefix plus timestamp and pid still makes it unique.
+  return `skel-${Date.now().toString(36)}-${process.pid}`;
+}
+
+async function createApiKeyFixture(context) {
+  const { client, network, auth, options, interceptor } = context;
+  const name = apiKeyFixtureName();
+
+  await interceptor.continueAll();
+  await login(client, network, auth.layout, options.baseUrl);
+
+  const result = await evaluate(
+    client,
+    `(async () => {
+      try {
+        const response = await fetch("/api/auth/api-keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            name: ${JSON.stringify(name)},
+            scope: "read_write"
+          })
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          return {
+            ok: false,
+            status: response.status,
+            body: text.slice(0, 300)
+          };
+        }
+        const data = JSON.parse(text);
+        return { ok: true, id: data.id, name: data.name };
+      } catch (error) {
+        return { ok: false, status: 0, error: String(error) };
+      }
+    })()`,
+    true,
+  );
+
+  if (!result?.ok || !result.id) {
+    const detail =
+      result?.status ? `HTTP ${result.status}` : result?.error ?? result?.body ?? "unknown error";
+    throw new Error(
+      `Could not create the api-keys fixture for "${name}" (${detail}). ` +
+        "The api-keys case needs a layout-user key.",
+    );
+  }
+
+  return { id: result.id, name: result.name ?? name };
+}
+
+async function deleteApiKeyFixture(context, fixture) {
+  const { client, network, auth, options, interceptor } = context;
+  let lastFailure = null;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await interceptor.continueAll();
+      await login(client, network, auth.layout, options.baseUrl);
+      const result = await evaluate(
+        client,
+        `(async () => {
+          try {
+            const response = await fetch(
+              ${JSON.stringify(`/api/auth/api-keys/${encodeURIComponent(fixture.id)}`)},
+              { method: "DELETE", credentials: "include" }
+            );
+            return { ok: response.ok, status: response.status };
+          } catch (error) {
+            return { ok: false, status: 0, error: String(error) };
+          }
+        })()`,
+        true,
+      );
+      if (result?.ok) return;
+      lastFailure = result?.status ? `HTTP ${result.status}` : result?.error ?? "unknown error";
+    } catch (error) {
+      lastFailure = String(error);
+    }
+  }
+
+  throw new Error(
+    `Could not delete the api-keys fixture "${fixture.name}" (id ${fixture.id}): ` +
+      `${lastFailure ?? "unknown error"}. Remove it manually.`,
+  );
+}
+
 async function discoverIds(client) {
   return evaluate(
     client,
@@ -593,12 +688,96 @@ function buildCases(layoutDate, discovered) {
         surfaces: { axes: XYW },
         surfaceHeaders: { axes: XYWH },
       },
-      anchors: [{ key: "actionPrimary", label: "first primary action" }],
+      anchors: [
+        { key: "inputs", label: "first goals field" },
+        { key: "actionPrimary", label: "first primary action" },
+      ],
       heightChecks: [
+        { key: "inputs", label: "first goals field wrapper", expected: 64 },
         { key: "actionPrimary", label: "first primary action", expected: 48 },
       ],
       nav: "present",
       loadedSelector: '[data-testid="action-primary"]',
+      unimplemented: [
+        "The status message is data-derived. The skeleton reserves one 17px " +
+          "description line, which matches the current en-US seed; longer " +
+          "statuses and locales wrap and are variable, so one-line stability is " +
+          "not promised.",
+      ],
+    },
+    {
+      name: "diary-settings",
+      kind: "skeleton",
+      required: true,
+      authRole: "layout",
+      paneRole: "main",
+      path: () => "/settings/diary",
+      hold: [
+        { name: "diary-preferences", pattern: "*/api/diary-preferences", required: true },
+      ],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContainer: { axes: XYW },
+        pageContent: { axes: XYW },
+        surfaces: { axes: XYW },
+        surfaceHeaders: { axes: XYWH },
+      },
+      anchors: [
+        { key: "checkboxRows", label: "first settings checkbox row" },
+        { key: "actionPrimary", label: "first primary action" },
+      ],
+      heightChecks: [
+        { key: "checkboxRows", label: "first settings checkbox row", expected: 44 },
+        { key: "actionPrimary", label: "first primary action", expected: 48 },
+      ],
+      nav: "present",
+      loadedSelector: '[data-testid="action-primary"]',
+      unimplemented: [
+        "The static description is rendered as the real muted paragraph inside " +
+          "the aria-hidden skeleton subtree, so its wrap and header height match; " +
+          "the saved-status label swap does not change height.",
+      ],
+    },
+    {
+      name: "api-keys",
+      kind: "skeleton",
+      required: true,
+      authRole: "layout",
+      paneRole: "main",
+      setup: createApiKeyFixture,
+      teardown: deleteApiKeyFixture,
+      path: () => "/settings/api-keys",
+      hold: [{ name: "api-keys", pattern: "*/api/auth/api-keys", required: true }],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContainer: { axes: XYW },
+        pageContent: { axes: XYW },
+        surfaces: { axes: XYW },
+        surfaceHeaders: { axes: XYWH },
+      },
+      anchors: [
+        { key: "apiKeyDescriptions", label: "API keys description", axes: XYWH },
+        { key: "rows", label: "first API key row", axes: XYWH },
+      ],
+      nav: "present",
+      loadedSelector: '[data-testid="list-row"]',
+      unimplemented: [
+        "The key fixture is created per run and deleted in a finally step; the " +
+          "backend revokes rather than hard-deletes, so a revoked row can remain " +
+          "in the database.",
+        "The empty API-keys case is deferred: the harness Fetch interceptor can " +
+          "hold and continue requests but has no fulfillRequest response path. " +
+          "The loaded empty paragraph carries data-testid=\"empty-state\" for " +
+          "when that path lands.",
+        "Row count, long key names, and long localized meta text remain variable " +
+          "below the first-row anchor.",
+      ],
     },
     {
       name: "admin-boot",
@@ -1011,6 +1190,8 @@ const CAPTURE_EXPRESSION = `(() => {
     bottomActions: within(pane, "bottom-action"),
     inputs: within(pane, "field"),
     fieldControls: within(pane, "field-control"),
+    checkboxRows: within(pane, "checkbox-row"),
+    apiKeyDescriptions: within(pane, "api-keys-description"),
     selectFields: [
       ...pane.querySelectorAll('[data-testid="field"][data-field-kind="select"]'),
     ].map(box),
@@ -1413,9 +1594,14 @@ function assertEnvelope(caseDef, loading, loaded, assertions) {
   }
 }
 
-function assertAnchors(caseDef, loading, loaded, assertions) {
+function shouldSkip(spec, viewportName) {
+  return (spec.skipViewports ?? []).includes(viewportName);
+}
+
+function assertAnchors(caseDef, loading, loaded, assertions, viewportName) {
   const tolerance = 1;
   for (const anchor of caseDef.anchors ?? []) {
+    if (shouldSkip(anchor, viewportName)) continue;
     const loadingBox = firstAcrossPanes(loading, anchor.key);
     const loadedBox = firstAcrossPanes(loaded, anchor.key);
     compareAnchor(
@@ -1429,9 +1615,10 @@ function assertAnchors(caseDef, loading, loaded, assertions) {
   }
 }
 
-function assertHeightChecks(caseDef, loading, loaded, assertions) {
+function assertHeightChecks(caseDef, loading, loaded, assertions, viewportName) {
   const tolerance = 1;
   for (const check of caseDef.heightChecks ?? []) {
+    if (shouldSkip(check, viewportName)) continue;
     const loadingBox = firstAcrossPanes(loading, check.key);
     const loadedBox = firstAcrossPanes(loaded, check.key);
     if (!loadingBox || !loadedBox) {
@@ -1728,8 +1915,8 @@ function assertCaptures(caseDef, viewportName, loading, loaded, assertions) {
   });
 
   assertEnvelope(caseDef, loading, loaded, assertions);
-  assertAnchors(caseDef, loading, loaded, assertions);
-  assertHeightChecks(caseDef, loading, loaded, assertions);
+  assertAnchors(caseDef, loading, loaded, assertions, viewportName);
+  assertHeightChecks(caseDef, loading, loaded, assertions, viewportName);
   assertMinRowHeights(caseDef, loading, loaded, assertions);
   assertChrome(caseDef, viewportName, loading, loaded, assertions);
   assertCalendars("loading", loading, assertions);
@@ -2019,7 +2206,33 @@ function attemptRecord(attempt, partial, error, context) {
 
 async function runCaseWithRetry(context, caseDef) {
   const attempts = [];
+  let fixture = null;
 
+  try {
+    fixture = caseDef.setup ? await caseDef.setup(context) : null;
+  } catch (error) {
+    return {
+      error: `Fixture setup failed: ${error.message}`,
+      captures: {},
+      images: {},
+      attempts,
+    };
+  }
+
+  try {
+    return await runCaseAttempts(context, caseDef, attempts);
+  } finally {
+    if (fixture) {
+      try {
+        await caseDef.teardown(context, fixture);
+      } catch (error) {
+        console.warn(`  ${caseDef.name}: fixture cleanup failed: ${error.message}`);
+      }
+    }
+  }
+}
+
+async function runCaseAttempts(context, caseDef, attempts) {
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const partial = { captures: {}, images: {} };
     try {
