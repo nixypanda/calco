@@ -1027,7 +1027,10 @@ panePlanForRoute context existing =
             ]
 
         AdminEditUser userId ->
-            [ readyPlan (adminEditDesired context userId) ]
+            [ readyPlan (adminEditDesired context userId)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ AdminEditUser.skeletonView env ])
+            ]
 
         DiaryDay dateParam calendarMonth ->
             diaryDayPlans context existing dateParam calendarMonth

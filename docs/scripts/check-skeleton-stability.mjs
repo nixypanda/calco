@@ -11,8 +11,11 @@
 //     printed or written to artifacts.
 //   - CALCO_URL overrides the default base URL and CALCO_LAYOUT_DATE overrides
 //     the fixed route date (default 2026-10-27; a future date falls back).
-//   - Optional CALCO_CUSTOM_FOOD_ID, CALCO_FOOD_ID and CALCO_MEAL_ID override
-//     the ids discovered from the API. Explicit overrides always win.
+//   - Optional CALCO_CUSTOM_FOOD_ID, CALCO_FOOD_ID, CALCO_MEAL_ID and
+//     CALCO_ADMIN_EDIT_USER_ID override the ids discovered from the API.
+//     Explicit overrides always win. Without an admin-edit override the harness
+//     uses the `me`/layout user when present, then falls back to the first user
+//     returned by /api/admin/users (normally the authenticated admin).
 //
 // The harness is report-only by default: layout failures are printed, artifacts
 // are written, and the process exits 0. Set CALCO_REQUIRE_LAYOUT=1 to make
@@ -68,6 +71,7 @@ const ALL_CASE_NAMES = [
   "diary",
   "goals",
   "admin-boot",
+  "admin-edit",
   "custom-food-edit",
   "meal-edit",
   "food-show",
@@ -376,9 +380,11 @@ async function discoverIds(client) {
         customFoodId: null,
         chickenFoodId: null,
         mealId: null,
+        adminEditUserId: null,
         customFoodReason: null,
         chickenFoodReason: null,
-        mealReason: null
+        mealReason: null,
+        adminEditUserReason: null
       };
 
       const firstId = (data) =>
@@ -431,6 +437,40 @@ async function discoverIds(client) {
       }
 
       return result;
+    })()`,
+    true,
+  );
+}
+
+async function discoverAdminEditUserId(client, layoutUsername) {
+  const layoutLiteral = JSON.stringify(layoutUsername ?? "");
+  return evaluate(
+    client,
+    `(async () => {
+      try {
+        const response = await fetch("/api/admin/users", { credentials: "include" });
+        if (!response.ok) {
+          return {
+            id: null,
+            reason: "GET /api/admin/users returned HTTP " + response.status
+          };
+        }
+        const data = await response.json();
+        const users = Array.isArray(data.users) ? data.users : [];
+        const match =
+          users.find((user) => user.username === "me") ??
+          users.find((user) => user.username === ${layoutLiteral}) ??
+          users[0];
+        if (!match) {
+          return {
+            id: null,
+            reason: "GET /api/admin/users returned an empty user list"
+          };
+        }
+        return { id: match.id, reason: null };
+      } catch (error) {
+        return { id: null, reason: "GET /api/admin/users failed: " + String(error) };
+      }
     })()`,
     true,
   );
@@ -565,6 +605,59 @@ function buildCases(layoutDate, discovered) {
       loadedSelector: '[data-testid="list-row"]',
     },
     {
+      name: "admin-edit",
+      kind: "skeleton",
+      optional: true,
+      authRole: "admin",
+      paneRole: "main",
+      path: () =>
+        discovered.adminEditUserId
+          ? `/admin/users/${encodeURIComponent(discovered.adminEditUserId)}/edit`
+          : null,
+      skipReason: discovered.adminEditUserId
+        ? null
+        : `No admin edit target available (${discovered.adminEditUserReason ?? "discovery failed"}). ` +
+          "Set CALCO_ADMIN_EDIT_USER_ID or ensure /api/admin/users returns at least one user.",
+      hold: discovered.adminEditUserId
+        ? [
+            {
+              name: "admin-user-detail",
+              pattern: `*/api/admin/users/${discovered.adminEditUserId}`,
+              required: true,
+            },
+          ]
+        : [],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContainer: { axes: XYW },
+        pageContent: { axes: XYW },
+        surfaces: { axes: XYW },
+        surfaceHeaders: { axes: XYWH },
+      },
+      anchors: [
+        { key: "detailRows", label: "first detail row", axes: XYWH },
+        { key: "fieldControls", label: "password field inner control", axes: ["x", "width"] },
+        { key: "bottomActions", label: "first bottom action", axes: XYWH },
+      ],
+      heightChecks: [
+        { key: "inputs", label: "password field wrapper", expected: 64 },
+        { key: "fieldControls", label: "password field inner control", expected: 44 },
+        { key: "bottomActions", label: "first bottom action", expected: 48 },
+      ],
+      nav: "absent",
+      loadedSelector: '[data-testid="detail-row"]',
+      unimplemented: [
+        "The passing fixture uses a seeded short username; multi-line username wrapping is " +
+          "outside this case's contract.",
+        "paragraphLine currently models size+spacing (16/5 -> 21px), but a single-line 16px " +
+          "paragraph measures ~17px. Admin Edit uses elLine 17 for its username/reset title; " +
+          "revisit the primitive in a later phase.",
+      ],
+    },
+    {
       name: "custom-food-edit",
       kind: "skeleton",
       optional: true,
@@ -597,7 +690,10 @@ function buildCases(layoutDate, discovered) {
         surfaces: { axes: XYW },
         surfaceHeaders: { axes: XYWH },
       },
-      anchors: [{ key: "inputs", label: "first field" }],
+      anchors: [
+        { key: "inputs", label: "first field" },
+        { key: "fieldControls", label: "first field inner control", axes: ["x", "width"] },
+      ],
       heightChecks: [
         { key: "inputs", label: "first text field wrapper", expected: 64 },
         { key: "selectFields", label: "first select field wrapper", expected: 61 },
@@ -606,8 +702,8 @@ function buildCases(layoutDate, discovered) {
       nav: "present",
       loadedSelector: '[data-testid="action-primary"]',
       unimplemented: [
-        "The plan's 57px text-field target is stale: elm-ui labelAbove makes the measured " +
-          "label+control wrapper 64px. Reconcile the Phase 2 documentation.",
+        "Text-field wrappers measure 64px (label 13 + 7 gap + 44). Category, nutrient rows " +
+          "and save remain below variable content and are not asserted.",
       ],
     },
     {
@@ -654,11 +750,9 @@ function buildCases(layoutDate, discovered) {
       nav: "present",
       loadedSelector: '[data-testid="action-primary"]',
       unimplemented: [
-        "The plan's 57px text-field target is stale: elm-ui labelAbove makes the measured " +
-          "label+control wrapper 64px. The component row height is compared (143px in this " +
-          "fixture); the nutrition card and save remain below variable content and are not " +
-          "asserted. Inner skeleton control widths are full-width, while loaded inputs inset " +
-          "their content; this is a pre-existing Skeleton.control limitation and is non-blocking.",
+        "Text-field wrappers measure 64px (label 13 + 7 gap + 44). The component row height " +
+          "is compared (143px in this fixture); the nutrition card and save remain below " +
+          "variable content and are not asserted.",
       ],
     },
     {
@@ -795,6 +889,7 @@ const CAPTURE_EXPRESSION = `(() => {
     surfaces: within(pane, "surface"),
     surfaceHeaders: within(pane, "surface-header"),
     rows: within(pane, "list-row"),
+    detailRows: within(pane, "detail-row"),
     componentRows: within(pane, "component-row"),
     stats: within(pane, "stat"),
     nutritionCards: within(pane, "nutrition-card"),
@@ -806,6 +901,7 @@ const CAPTURE_EXPRESSION = `(() => {
     errorBanners: within(pane, "error-banner"),
     searchControls: within(pane, "search-controls"),
     actionPrimary: within(pane, "action-primary"),
+    bottomActions: within(pane, "bottom-action"),
     inputs: within(pane, "field"),
     fieldControls: within(pane, "field-control"),
     selectFields: [
@@ -2086,6 +2182,16 @@ async function main() {
       discovered.mealId = process.env.CALCO_MEAL_ID;
       discovered.mealReason = null;
     }
+    if (process.env.CALCO_ADMIN_EDIT_USER_ID) {
+      discovered.adminEditUserId = process.env.CALCO_ADMIN_EDIT_USER_ID;
+      discovered.adminEditUserReason = null;
+    } else {
+      await interceptor.continueAll();
+      await login(cdp, network, auth.admin, options.baseUrl);
+      const adminEdit = await discoverAdminEditUserId(cdp, auth.layout.username);
+      discovered.adminEditUserId = adminEdit.id;
+      discovered.adminEditUserReason = adminEdit.reason;
+    }
 
     const allCases = buildCases(layoutDate, discovered);
     const selectedCases =
@@ -2105,6 +2211,7 @@ async function main() {
       ["meal-edit", discovered.mealReason],
       ["food-show", discovered.chickenFoodReason],
       ["meal-show", discovered.mealReason],
+      ["admin-edit", discovered.adminEditUserReason],
     ];
     for (const [name, reason] of missingOptional) {
       if (reason) {

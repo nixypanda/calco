@@ -441,7 +441,12 @@ listRowLeading leading =
 
 detailRow : Theme -> Language -> String -> Element msg -> Element msg
 detailRow theme language label value =
-    Element.row [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing space4
+        , minWidthZero
+        , testId "detail-row"
+        ]
         [ Element.el [ Font.color theme.textMedium, caption ]
             (Element.text (I18n.t language (TidUiDetailRowLabelSuffix label)))
         , Element.el [ Element.width Element.fill, minWidthZero ] value
