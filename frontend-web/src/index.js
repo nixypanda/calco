@@ -2,6 +2,15 @@ import "./main.css";
 import { Elm } from "./Main.elm";
 import { createBarcodeScanner } from "./barcodeScanner";
 
+// Elm owns the route-change scroll policy: it resets the document when the new
+// route's rendered workspace has exactly one visible pane (including Phone and
+// Tablet contextual routes with two model panes), and leaves two-pane desktop
+// layouts alone. Browser restoration would otherwise fight that policy on
+// back/forward.
+if ("scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual";
+}
+
 const stored = localStorage.getItem("themeMode") || "light";
 const app = Elm.Main.init({
     node: document.getElementById("root"),

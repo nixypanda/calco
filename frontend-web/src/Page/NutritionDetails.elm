@@ -4,6 +4,7 @@ module Page.NutritionDetails exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , isBusy
     , update
     , view
     )
@@ -55,6 +56,18 @@ type OutMsg
 init : { date : LocalDate, today : LocalDate } -> ( Model, OutMsg )
 init args =
     ( Loading { currentDate = args.date, today = args.today }, RequestNutritionDetails args.date )
+
+
+{-| Only the initial fetch is busy; `Failed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 type Msg

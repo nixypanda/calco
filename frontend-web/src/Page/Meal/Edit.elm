@@ -5,6 +5,7 @@ module Page.Meal.Edit exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , isBusy
     , loadId
     , modelId
     , update
@@ -70,6 +71,18 @@ init mealId =
         { mealId = mealId, nutrition = NutritionLoading defaultNutritionInput, units = [] }
     , RequestMeal mealId
     )
+
+
+{-| Only the initial fetch is busy; `EditLoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        LoadingEdit _ ->
+            True
+
+        _ ->
+            False
 
 
 

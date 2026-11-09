@@ -4,6 +4,7 @@ module Page.Meal.List exposing
     , OutMsg(..)
     , contentView
     , init
+    , isBusy
     , update
     )
 
@@ -47,6 +48,18 @@ type OutMsg
 init : ( Model, OutMsg )
 init =
     ( Loading, RequestMeals )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 

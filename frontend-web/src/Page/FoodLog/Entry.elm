@@ -10,6 +10,7 @@ module Page.FoodLog.Entry exposing
     , ProductState
     , contentView
     , init
+    , isBusy
     , loadId
     , modalView
     , modelId
@@ -96,6 +97,18 @@ type alias LoadFailedModel =
 init : String -> ( Model, OutMsg )
 init logId =
     ( Loading { logId = logId, log = Nothing, units = Nothing }, RequestInitialData logId )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 

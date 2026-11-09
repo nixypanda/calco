@@ -112,8 +112,8 @@ bottomNavLayoutAttrs :
     -> Bool
     -> (Msg -> msg)
     -> List (Element.Attribute msg)
-bottomNavLayoutAttrs env session route isLoadingPage toMsg =
-    if showBottomNav env session isLoadingPage route then
+bottomNavLayoutAttrs env session route chromeSuppressed toMsg =
+    if showBottomNav env session chromeSuppressed route then
         [ Element.inFront
             (Element.el [ Element.width Element.fill, Element.alignBottom ]
                 (View.Chrome.bottomNavBar env route (toMsg << NavigateClicked))
@@ -130,15 +130,20 @@ viewFrame :
     -> Session
     -> Route
     -> Bool
+    -> Bool
     -> Maybe (Element msg)
     -> Element msg
     -> (Msg -> msg)
     -> Element msg
-viewFrame env model session route isLoadingPage updateBanner page toMsg =
+viewFrame env model session route chromeSuppressed pageBusy updateBanner page toMsg =
     let
         useBottomNav : Bool
         useBottomNav =
-            showBottomNav env session isLoadingPage route
+            showBottomNav env session chromeSuppressed route
+
+        reserveBottomNav : Bool
+        reserveBottomNav =
+            View.Chrome.shouldReserveBottomNav env session route
 
         chromeAttrs : List (Element.Attribute msg)
         chromeAttrs =
@@ -149,6 +154,7 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
                 View.Chrome.drawerOverlay env
                     session
                     route
+                    chromeSuppressed
                     (isMenuOpen DrawerMenu model)
                     (toMsg DrawerClosed)
                     (toMsg << NavigateClicked)
@@ -157,7 +163,7 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
         profileMenuEl =
             if
                 isMenuOpen ProfileMenu model
-                    && View.Chrome.showsAppChrome session isLoadingPage route
+                    && View.Chrome.showsAppChrome session chromeSuppressed route
             then
                 Just
                     (View.Chrome.profileMenu env
@@ -183,38 +189,49 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
         (View.Chrome.topBarView env
             session
             route
-            isLoadingPage
+            chromeSuppressed
             (toMsg MenuClicked)
             (toMsg ProfileClicked)
             (toMsg ThemeToggleClicked)
             (toMsg << NavigateClicked)
             { profileLabel = profileLetter session, profileMenu = profileMenuEl }
             :: updateBannerItems
-            ++ [ Element.el (pageAttrs useBottomNav) page ]
+            ++ [ Element.el (pageAttrs reserveBottomNav pageBusy) page ]
         )
 
 
 showBottomNav : Env -> Session -> Bool -> Route -> Bool
-showBottomNav env session isLoadingPage route =
-    View.Chrome.showBottomNav env session isLoadingPage route
+showBottomNav env session chromeSuppressed route =
+    View.Chrome.showBottomNav env session chromeSuppressed route
 
 
-pageAttrs : Bool -> List (Element.Attribute msg)
-pageAttrs useBottomNav =
-    -- Page loaded/loading markers wait for Phase 1's pane-aware `isBusy`;
-    -- `isLoadingPage` is only `waitingForToday`, not page-local loading.
+pageAttrs : Bool -> Bool -> List (Element.Attribute msg)
+pageAttrs reserveBottomNav pageBusy =
     [ Element.width Element.fill
     , Element.height Element.fill
     , Region.mainContent
     , UiCommon.testId "page-root"
     ]
-        ++ (if useBottomNav then
+        ++ (if reserveBottomNav then
                 [ Element.paddingEach { bottom = bottomNavClearance, top = 0, left = 0, right = 0 }
                 ]
 
             else
                 []
            )
+        ++ [ if pageBusy then
+                UiCommon.dataAttribute "data-page-state" "loading"
+
+             else
+                UiCommon.dataAttribute "data-page-loaded" "true"
+           , UiCommon.dataAttribute "aria-busy"
+                (if pageBusy then
+                    "true"
+
+                 else
+                    "false"
+                )
+           ]
 
 
 bottomNavClearance : Int

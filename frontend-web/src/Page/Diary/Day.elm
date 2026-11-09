@@ -14,6 +14,7 @@ module Page.Diary.Day exposing
     , contentView
     , currentLogs
     , init
+    , isBusy
     , update
     )
 
@@ -87,6 +88,19 @@ type alias Model =
 asMain : Model -> Model
 asMain model =
     { model | calendarMonth = Nothing }
+
+
+{-| A pending diary fetch keeps its loading shell; `Loaded` and `Failed` are
+both settled states, so only `Loading` counts as busy.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model.diary of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 {-| Only the loaded state carries a date: suggestions must not be rendered

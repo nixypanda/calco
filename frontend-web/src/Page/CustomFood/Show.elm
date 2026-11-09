@@ -5,6 +5,7 @@ module Page.CustomFood.Show exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , isBusy
     , loadId
     , modalView
     , modelId
@@ -65,6 +66,18 @@ init productId =
     ( Loading { productId = productId, food = Nothing, units = Nothing }
     , RequestInitialData productId
     )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 

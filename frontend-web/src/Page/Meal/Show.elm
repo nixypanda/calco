@@ -5,6 +5,7 @@ module Page.Meal.Show exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , isBusy
     , loadId
     , modalView
     , modelId
@@ -81,6 +82,18 @@ init mealId =
         }
     , RequestInitialData mealId
     )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 

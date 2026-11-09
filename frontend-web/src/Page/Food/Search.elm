@@ -9,6 +9,7 @@ module Page.Food.Search exposing
     , SearchScope(..)
     , contentView
     , init
+    , isBusy
     , retarget
     , update
     )
@@ -162,6 +163,20 @@ init date mealSlot =
     , addedToken = Ticket.initial
     , completionSelection = Nothing
     }
+
+
+{-| The recent-items fetch is this page's initial data load; query-result and
+barcode lookups are in-place sub-skeletons, so they do not mark the whole page
+busy.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model.recentItems of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 retarget : Maybe LocalDate -> Maybe MealSlot -> Model -> ( Model, Bool )

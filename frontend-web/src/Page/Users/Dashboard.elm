@@ -4,6 +4,7 @@ module Page.Users.Dashboard exposing
     , OutMsg(..)
     , contentView
     , init
+    , isBusy
     , update
     )
 
@@ -37,6 +38,18 @@ type Model
 init : ( Model, OutMsg )
 init =
     ( Loading, RequestUsers )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 

@@ -5,6 +5,7 @@ module Page.Settings.ApiKeys exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , isBusy
     , modalView
     , update
     , view
@@ -67,6 +68,18 @@ type OutMsg
 init : ( Model, OutMsg )
 init =
     ( Loading, RequestList )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 

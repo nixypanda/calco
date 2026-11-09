@@ -17,6 +17,7 @@ module Page exposing
     , clearStore
     , init
     , initPreserving
+    , isBusy
     , isLoading
     , loading
     , localCtxReceived
@@ -171,9 +172,80 @@ type OutMsg
     | SetupSucceeded Auth.LoginSession
 
 
+{-| "Waiting for today's date" only; the shell no longer uses this to decide
+whether to show app chrome.
+-}
 isLoading : Model -> Bool
 isLoading model =
     model.waitingForToday
+
+
+{-| Pane-aware page load state for the DOM marker the layout harness reads.
+`waitingForToday` and panes that are still fetching their initial data are
+busy; settled `Failed` states are not. Create forms and in-place refreshes have
+no page-level pending state, so they report `False`.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    model.waitingForToday || List.any paneIsBusy model.panes
+
+
+paneIsBusy : Pane -> Bool
+paneIsBusy pane =
+    case pane of
+        AdminPane dashboard ->
+            AdminDashboard.isBusy dashboard
+
+        AdminEditUserPane _ edit ->
+            AdminEditUser.isBusy edit
+
+        DiaryPane _ diary ->
+            DiaryDay.isBusy diary
+
+        DiaryCalendarPane _ calendar ->
+            DiaryCalendar.isBusy calendar
+
+        NutritionDetailsPane _ details ->
+            NutritionDetails.isBusy details
+
+        GoalsSettingsPane _ goals ->
+            GoalsSettings.isBusy goals
+
+        DiarySettingsPane settings ->
+            DiarySettings.isBusy settings
+
+        ApiKeysPane _ keys ->
+            SettingsApiKeys.isBusy keys
+
+        FoodSearchPane search ->
+            FoodSearch.isBusy search
+
+        FoodDetailPane _ food ->
+            FoodShow.isBusy food
+
+        FoodLogDetailPane _ entry ->
+            FoodLogEntry.isBusy entry
+
+        CustomFoodListPane foods ->
+            CustomFoodList.isBusy foods
+
+        CustomFoodEditPane _ edit ->
+            CustomFoodEdit.isBusy edit
+
+        CustomFoodShowPane _ food ->
+            CustomFoodShow.isBusy food
+
+        MealListPane meals ->
+            MealList.isBusy meals
+
+        MealEditPane _ edit ->
+            MealEdit.isBusy edit
+
+        MealDetailPane _ meal ->
+            MealShow.isBusy meal
+
+        _ ->
+            False
 
 
 loading : Model

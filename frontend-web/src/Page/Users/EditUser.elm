@@ -7,6 +7,7 @@ module Page.Users.EditUser exposing
     , Problem(..)
     , Status(..)
     , init
+    , isBusy
     , modalView
     , update
     , view
@@ -68,6 +69,18 @@ type Problem
 init : String -> ( Model, OutMsg )
 init userId =
     ( { userId = userId, status = Loading }, RequestUser userId )
+
+
+{-| Only the initial user fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model.status of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 

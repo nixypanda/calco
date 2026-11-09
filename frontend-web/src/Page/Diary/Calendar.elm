@@ -6,6 +6,7 @@ module Page.Diary.Calendar exposing
     , compactCalories
     , contentViewWithSelection
     , init
+    , isBusy
     , update
     )
 
@@ -88,6 +89,19 @@ init args =
             }
     in
     ( model, requestForMonths 0 oldestMonth newestMonth args.today )
+
+
+{-| The initial month load is busy; `LoadingEarlier` keeps the loaded calendar
+on screen, and `Failed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model.status of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 validMonth : String -> Maybe String

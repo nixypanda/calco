@@ -4,6 +4,7 @@ module Page.Diary.Settings exposing
     , OutMsg(..)
     , SaveState(..)
     , init
+    , isBusy
     , update
     , view
     )
@@ -58,6 +59,18 @@ type OutMsg
 init : ( Model, OutMsg )
 init =
     ( Loading, RequestPrefs )
+
+
+{-| Only the initial fetch is busy; `Failed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )

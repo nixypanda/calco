@@ -6,6 +6,7 @@ module Page.Food.Show exposing
     , OutMsg(..)
     , contentView
     , init
+    , isBusy
     , loadId
     , modelId
     , update
@@ -97,6 +98,18 @@ init productId logDate mealSlot lookupNote =
         }
     , RequestInitialData productId
     )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 
