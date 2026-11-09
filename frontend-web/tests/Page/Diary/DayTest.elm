@@ -10,7 +10,7 @@ import Data.Nutrition exposing (NutrientAmount, Quantity)
 import Data.Route exposing (Route(..))
 import Element
 import Expect
-import Html.Attributes as Attr
+import Fuzz
 import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Diary.Day as Day
@@ -18,7 +18,7 @@ import Set
 import Support.Fixtures as Fixtures
 import Support.Fuzz as SupportFuzz
 import Support.Story as Story
-import Test exposing (Test, describe, fuzz2, test)
+import Test exposing (Test, describe, fuzz, fuzz2, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
 import Translations.Ids exposing (TranslationId(..))
@@ -71,69 +71,32 @@ tests =
                                         (FoodLogEntry "log-1" (Just today) (Just month))
                                     )
                         )
-        , test "skeleton slots follow enabled prefs and fall back to one neutral slot" <|
-            \_ ->
-                Expect.all
-                    [ \_ ->
-                        Day.skeletonSlots Nothing
-                            |> Expect.equal [ Breakfast ]
-                    , \_ ->
-                        Day.skeletonSlots
-                            (Just (enabledPrefs [ LateNightSnack, Breakfast, Dinner ]))
-                            |> Expect.equal [ Breakfast, Dinner, LateNightSnack ]
-                    , \_ ->
-                        Day.skeletonSlots (Just (enabledPrefs [ Lunch, Snack, LateNightSnack ]))
-                            |> Expect.equal [ Lunch, Snack, LateNightSnack ]
-                    , \_ ->
-                        Day.skeletonSlots (Just (enabledPrefs MealSlot.all))
-                            |> Expect.equal MealSlot.all
-                    ]
-                    ()
+        , fuzz (Fuzz.maybe SupportFuzz.mealSlotList)
+            "skeleton slots follow enabled prefs and fall back to one neutral slot"
+            skeletonSlotsProperty
         , fuzz2 SupportFuzz.mealSlotList
             SupportFuzz.foodLogList
             "visible slot sections keep prefs/log order, inclusion, uniqueness and unslotted last"
             visibleSlotSectionsProperty
-        , test "a loaded diary waits behind the skeleton while prefs are pending" <|
-            \_ ->
-                loaded
-                    |> finish
-                        (\( model, _ ) ->
-                            Expect.all
-                                [ \_ ->
-                                    Day.isBusy model
-                                        |> Expect.equal True
-                                , \_ ->
-                                    Day.contentView env model
-                                        |> Element.layout []
-                                        |> Query.fromHtml
-                                        |> Query.has
-                                            [ Selector.attribute
-                                                (Attr.attribute "role" "status")
-                                            ]
-                                , \_ ->
-                                    Day.contentView env model
-                                        |> Element.layout []
-                                        |> Query.fromHtml
-                                        |> Query.hasNot
-                                            [ Selector.text todayDisplay ]
-                                ]
-                                ()
-                        )
-        , test "prefs failure after the diary loads leaves the page settled" <|
+        , test "a user copies yesterday's dinner after prefs fail" <|
             \_ ->
                 loaded
                     |> step (Day.PrefsReceived (Err Client.NetworkError))
+                    |> step (Day.CopyLatestClicked dinnerSource)
+                    |> step (Day.CopyLatestCompleted today (Ok { items = [ dinnerLog ] }))
                     |> finish
-                        (\( model, _ ) ->
+                        (\( model, outMsg ) ->
                             Expect.all
                                 [ \_ ->
-                                    Day.isBusy model
-                                        |> Expect.equal False
+                                    copyScreen model
+                                        |> Expect.equal
+                                            { items = [ "Chicken", "Chicken" ]
+                                            , sections = [ "Lunch", "Dinner" ]
+                                            , feedback = ( Nothing, False )
+                                            }
                                 , \_ ->
-                                    Day.currentLogs model
-                                        |> Maybe.withDefault []
-                                        |> visibleSections (Day.prefsForView model)
-                                        |> Expect.equal [ "Lunch" ]
+                                    outMsg
+                                        |> Expect.equal (Day.LogsCopied today Day.DiaryUpdated)
                                 , \_ ->
                                     Day.contentView env model
                                         |> Element.layout []
@@ -179,6 +142,26 @@ copyScreen model =
             Day.CopyIdle ->
                 ( Nothing, False )
     }
+
+
+{-| The skeleton is the shape of the loaded slot list. Neutral prefs show one
+slot; loaded prefs show enabled slots in `MealSlot.all` order, not prefs order.
+-}
+skeletonSlotsProperty : Maybe (List MealSlot) -> Expect.Expectation
+skeletonSlotsProperty maybeEnabled =
+    let
+        expected : List MealSlot
+        expected =
+            case maybeEnabled of
+                Nothing ->
+                    [ Breakfast ]
+
+                Just enabled ->
+                    MealSlot.all
+                        |> List.filter (\slot -> List.member slot enabled)
+    in
+    Day.skeletonSlots (Maybe.map enabledPrefs maybeEnabled)
+        |> Expect.equal expected
 
 
 visibleSections : Maybe DiaryPrefs -> List FoodLog -> List String

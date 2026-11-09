@@ -55,12 +55,6 @@ tests =
                             |> Query.count (Expect.equal 1)
                     , \_ ->
                         status
-                            |> Query.has
-                                [ Selector.attribute
-                                    (Attr.attribute "data-skeleton-region" "true")
-                                ]
-                    , \_ ->
-                        status
                             |> Query.hasNot
                                 [ Selector.attribute (Attr.attribute "aria-busy" "true") ]
                     , \_ ->

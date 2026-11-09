@@ -10,9 +10,11 @@ as rendering, so the two cannot drift. Chrome suppression is a shell state
 
 import Data.Auth as Auth exposing (Session(..))
 import Data.Route exposing (Route(..))
-import Element exposing (DeviceClass(..), Orientation(..))
+import Element exposing (Device)
 import Expect
-import Test exposing (Test, describe, test)
+import Fuzz
+import Support.Fuzz as SupportFuzz
+import Test exposing (Test, describe, fuzz2, fuzz3)
 import Translations.Util exposing (Language(..))
 import Ui.Env exposing (Env)
 import Ui.Theme as Theme
@@ -23,83 +25,71 @@ tests : Test
 tests =
     describe "View.Chrome"
         [ describe "shouldReserveBottomNav"
-            [ test "reserves on a Phone app route for an authenticated non-admin" <|
-                \_ ->
-                    Chrome.shouldReserveBottomNav phoneEnv user appRoute
-                        |> Expect.equal True
-            , test "does not reserve for an admin" <|
-                \_ ->
-                    Chrome.shouldReserveBottomNav phoneEnv admin appRoute
+            [ fuzz2 SupportFuzz.device
+                SupportFuzz.route
+                "authenticated non-admins reserve only on Phone app routes"
+                (\device route ->
+                    Chrome.shouldReserveBottomNav (envFor device) user route
+                        |> Expect.equal (reservesOnPhone device route)
+                )
+            , fuzz2 SupportFuzz.device
+                SupportFuzz.route
+                "admins never reserve"
+                (\device route ->
+                    Chrome.shouldReserveBottomNav (envFor device) admin route
                         |> Expect.equal False
-            , test "does not reserve on login or setup" <|
-                \_ ->
-                    Expect.all
-                        [ \_ ->
-                            Chrome.shouldReserveBottomNav phoneEnv user AuthLogin
-                                |> Expect.equal False
-                        , \_ ->
-                            Chrome.shouldReserveBottomNav phoneEnv user BootstrapSetup
-                                |> Expect.equal False
-                        ]
-                        ()
-            , test "reserves on a Phone contextual detail route" <|
-                \_ ->
-                    Chrome.shouldReserveBottomNav phoneEnv user (MealShow "meal-1")
-                        |> Expect.equal True
-            , test "does not reserve on a Tablet" <|
-                \_ ->
-                    Chrome.shouldReserveBottomNav tabletEnv user appRoute
+                )
+            , fuzz2 SupportFuzz.device
+                SupportFuzz.route
+                "anonymous users never reserve"
+                (\device route ->
+                    Chrome.shouldReserveBottomNav (envFor device) anonymous route
                         |> Expect.equal False
-            , test "does not reserve when unauthenticated" <|
-                \_ ->
-                    Chrome.shouldReserveBottomNav phoneEnv anonymous appRoute
-                        |> Expect.equal False
+                )
             ]
         , describe "showBottomNav"
-            [ test "follows the reservation predicate when chrome is not suppressed" <|
-                \_ ->
-                    Chrome.showBottomNav phoneEnv user False appRoute
-                        |> Expect.equal
-                            (Chrome.shouldReserveBottomNav phoneEnv user appRoute)
-            , test "hides the nav while chrome is suppressed even where it is reserved" <|
-                \_ ->
-                    Expect.all
-                        [ \_ ->
-                            Chrome.shouldReserveBottomNav phoneEnv user appRoute
-                                |> Expect.equal True
-                        , \_ ->
-                            Chrome.showBottomNav phoneEnv user True appRoute
-                                |> Expect.equal False
-                        ]
-                        ()
+            [ fuzz3 SupportFuzz.device
+                SupportFuzz.route
+                Fuzz.bool
+                "renders exactly when reserved and chrome is not suppressed"
+                (\device route suppressed ->
+                    Chrome.showBottomNav (envFor device) user suppressed route
+                        |> Expect.equal (reservesOnPhone device route && not suppressed)
+                )
             ]
         , describe "showsAppChrome"
-            [ test "shows for an authenticated app route when not suppressed" <|
-                \_ ->
-                    Chrome.showsAppChrome user False appRoute
-                        |> Expect.equal True
-            , test "is hidden by the suppression flag, independent of page loading" <|
-                \_ ->
-                    Chrome.showsAppChrome user True appRoute
+            [ fuzz2 SupportFuzz.route
+                Fuzz.bool
+                "authenticated app routes show chrome unless suppressed"
+                (\route suppressed ->
+                    Chrome.showsAppChrome user suppressed route
+                        |> Expect.equal (isAppRoute route && not suppressed)
+                )
+            , fuzz2 SupportFuzz.route
+                Fuzz.bool
+                "anonymous sessions never show app chrome"
+                (\route suppressed ->
+                    Chrome.showsAppChrome anonymous suppressed route
                         |> Expect.equal False
+                )
             ]
         ]
 
 
-phoneEnv : Env
-phoneEnv =
-    env Phone
+reservesOnPhone : Device -> Route -> Bool
+reservesOnPhone device route =
+    device.class == Element.Phone && isAppRoute route
 
 
-tabletEnv : Env
-tabletEnv =
-    env Tablet
+isAppRoute : Route -> Bool
+isAppRoute route =
+    route /= AuthLogin && route /= BootstrapSetup
 
 
-env : DeviceClass -> Env
-env class =
+envFor : Device -> Env
+envFor device =
     { theme = Theme.forMode Theme.Light
-    , device = { class = class, orientation = Portrait }
+    , device = device
     , language = EN_US
     }
 
@@ -117,8 +107,3 @@ admin =
 anonymous : Session
 anonymous =
     Unauthenticated
-
-
-appRoute : Route
-appRoute =
-    DiaryDay Nothing Nothing
