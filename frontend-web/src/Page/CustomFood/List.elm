@@ -5,6 +5,7 @@ module Page.CustomFood.List exposing
     , contentView
     , init
     , isBusy
+    , skeletonView
     , update
     )
 
@@ -19,13 +20,11 @@ import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
-import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
-import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
 
@@ -147,7 +146,9 @@ bodyView env model =
             Element.none
 
         Loading ->
-            customFoodListSkeleton env.theme
+            Skeleton.busy
+                { label = I18n.t env.language TidCommonLoading }
+                [ skeletonView env ]
 
 
 createActions : Env -> Element Msg
@@ -213,21 +214,42 @@ foodSummaryText language food =
         |> Text.dotSeparated
 
 
-customFoodListSkeleton : Theme -> Element msg
-customFoodListSkeleton theme =
-    Element.el [ Element.width Element.fill, UiCommon.skeletonRegion ]
-        (Surface.section theme
-            { header =
-                Just
-                    (Element.row
-                        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                        [ Element.el [ Element.width Element.fill ] (Skeleton.button theme)
-                        , Element.el [ Element.width Element.fill ] (Skeleton.button theme)
-                        ]
-                    )
-            , body =
-                List.intersperse (Surface.hairline theme)
-                    (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
-            , footer = Nothing
-            }
-        )
+{-| The page body below `contentView`'s column. The caller owns the single
+`Skeleton.busy` wrapper so the page view and `Page.bootstrapView` cannot nest
+status regions.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Surface.section env.theme
+        { header =
+            Just
+                (Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space12
+                    ]
+                    [ Element.el [ Element.width Element.fill ]
+                        (Skeleton.button env.theme)
+                    , Element.el [ Element.width Element.fill ]
+                        (Skeleton.button env.theme)
+                    ]
+                )
+        , body =
+            List.intersperse (Surface.hairline env.theme)
+                (List.map (\_ -> foodRowSkeleton env) (List.range 1 3))
+        , footer = Nothing
+        }
+
+
+foodRowSkeleton : Env -> Element msg
+foodRowSkeleton env =
+    Skeleton.row
+        { leading = [ Skeleton.dot env.theme ]
+        , -- The loaded title is a single-line 16px paragraph; its measured line
+          -- box is 17px in this app.
+          title = Skeleton.elLine env.theme { size = 17, width = Element.fill }
+        , subtitle =
+            [ Skeleton.elLine env.theme { size = 17, width = Element.fill }
+            , Skeleton.categoryChipRow env.theme { count = 3 }
+            ]
+        , trailing = []
+        }

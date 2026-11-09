@@ -1017,7 +1017,9 @@ panePlanForRoute context existing =
             [ readyPlan (simpleDesired "setup" (SetupPane BootstrapSetup.init)) ]
 
         AdminDashboard ->
-            [ readyPlan (adminDesired context) ]
+            [ readyPlan (adminDesired context)
+                |> withSkeleton AdminDashboard.skeletonView
+            ]
 
         AdminCreateUser ->
             [ readyPlan
@@ -1088,10 +1090,14 @@ panePlanForRoute context existing =
             customFoodShowPlans context existing productId
 
         CustomFoodList ->
-            [ readyPlan (customFoodListDesired context) ]
+            [ readyPlan (customFoodListDesired context)
+                |> withSkeleton CustomFoodList.skeletonView
+            ]
 
         MealList ->
-            [ readyPlan (mealListDesired context) ]
+            [ readyPlan (mealListDesired context)
+                |> withSkeleton MealList.skeletonView
+            ]
 
         MealCreate ->
             [ readyPlan (mealCreateDesired context) ]

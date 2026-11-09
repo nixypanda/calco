@@ -5,6 +5,7 @@ module Page.Users.Dashboard exposing
     , contentView
     , init
     , isBusy
+    , skeletonView
     , update
     )
 
@@ -118,21 +119,26 @@ bodyView env model =
                         users
                 , footer =
                     Just
-                        (Button.textButton env.device
-                            env.theme
-                            { tone = Button.Ghost
-                            , width = Button.FullWidth
-                            , label = I18n.t env.language TidUsersCreateUser
-                            , onPress = NavigateCreateUser
-                            , submitState = Nothing
-                            , submittingLabel = Nothing
-                            , trailing = Nothing
-                            }
+                        (Element.el
+                            [ Element.width Element.fill, UiCommon.testId "list-footer" ]
+                            (Button.textButton env.device
+                                env.theme
+                                { tone = Button.Ghost
+                                , width = Button.FullWidth
+                                , label = I18n.t env.language TidUsersCreateUser
+                                , onPress = NavigateCreateUser
+                                , submitState = Nothing
+                                , submittingLabel = Nothing
+                                , trailing = Nothing
+                                }
+                            )
                         )
                 }
 
         Loading ->
-            adminDashboardSkeleton env.theme
+            Skeleton.busy
+                { label = I18n.t env.language TidCommonLoading }
+                [ skeletonView env ]
 
         LoadFailed error ->
             Feedback.errorBanner env.theme (Client.displayError error)
@@ -149,14 +155,35 @@ userListRow theme config =
         }
 
 
-adminDashboardSkeleton : Theme -> Element msg
-adminDashboardSkeleton theme =
-    Element.el [ Element.width Element.fill, UiCommon.skeletonRegion ]
-        (Surface.section theme
-            { header =
-                Just (Skeleton.barCustom theme { width = Element.px 120, height = 24 })
-            , body =
-                List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
-            , footer = Just (Skeleton.button theme)
-            }
-        )
+{-| The admin list body. The caller owns the single `Skeleton.busy` wrapper so
+the page view and `Page.bootstrapView` cannot nest status regions.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Surface.section env.theme
+        { header =
+            Just
+                (Skeleton.elLine env.theme
+                    { size = 24, width = Element.px 120 }
+                )
+        , body =
+            List.map (\_ -> userRowSkeleton env) (List.range 1 3)
+        , footer =
+            Just
+                (Element.el
+                    [ Element.width Element.fill, UiCommon.testId "list-footer" ]
+                    (Skeleton.button env.theme)
+                )
+        }
+
+
+userRowSkeleton : Env -> Element msg
+userRowSkeleton env =
+    Skeleton.row
+        { leading = []
+        , -- The loaded username and display name are single-line 16px
+          -- paragraphs; each measured line box is 17px.
+          title = Skeleton.elLine env.theme { size = 17, width = Element.fill }
+        , subtitle = [ Skeleton.elLine env.theme { size = 17, width = Element.fill } ]
+        , trailing = [ Skeleton.badge env.theme ]
+        }

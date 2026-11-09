@@ -71,7 +71,10 @@ const ALL_CASE_NAMES = [
   "diary",
   "goals",
   "admin-boot",
+  "admin-list",
   "admin-edit",
+  "foods-list",
+  "meals-list",
   "custom-food-edit",
   "meal-edit",
   "food-show",
@@ -464,12 +467,17 @@ async function discoverAdminEditUserId(client, layoutUsername) {
         if (!match) {
           return {
             id: null,
+            count: users.length,
             reason: "GET /api/admin/users returned an empty user list"
           };
         }
-        return { id: match.id, reason: null };
+        return { id: match.id, count: users.length, reason: null };
       } catch (error) {
-        return { id: null, reason: "GET /api/admin/users failed: " + String(error) };
+        return {
+          id: null,
+          count: null,
+          reason: "GET /api/admin/users failed: " + String(error)
+        };
       }
     })()`,
     true,
@@ -493,6 +501,15 @@ function buildCases(layoutDate, discovered) {
     surfaces: { axes: XYW },
     surfaceHeaders: { axes: XYWH },
   };
+
+  const adminFooterAnchors = [
+    // Footer x/width/height are stable regardless of the loaded row count; only
+    // y moves when the loaded list has a different number of rows.
+    { key: "listFooters", label: "admin footer box", axes: ["x", "width", "height"] },
+    ...(discovered.adminUserCount === 3
+      ? [{ key: "listFooters", label: "admin footer top", axes: ["y"] }]
+      : []),
+  ];
 
   return [
     {
@@ -602,7 +619,96 @@ function buildCases(layoutDate, discovered) {
       },
       anchors: [{ key: "rows", label: "first admin user row", axes: XYWH }],
       nav: "absent",
+      loadedSelector: '[data-testid="list-footer"]',
+    },
+    {
+      name: "admin-list",
+      kind: "skeleton",
+      required: true,
+      authRole: "admin",
+      paneRole: "main",
+      path: () => "/admin",
+      hold: [{ name: "admin-users", pattern: "*/api/admin/users", required: true }],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContent: { axes: XYW },
+        surfaces: { axes: XYW },
+        surfaceHeaders: { axes: XYWH },
+      },
+      anchors: [
+        { key: "rows", label: "first admin user row", axes: XYWH },
+        ...adminFooterAnchors,
+      ],
+      nav: "absent",
+      loadedSelector: '[data-testid="list-footer"]',
+      unimplemented: [
+        "The admin footer x/width/height are asserted; its y depends on the row count " +
+          "and is only compared when the loaded user count equals the three-row " +
+          `skeleton (this seed has ${discovered.adminUserCount ?? "an unknown number of"} ` +
+          "user(s)).",
+        "Empty admin list rendering is not covered yet: the three-row skeleton is a " +
+          "populated-list over-approximation, and the loaded admin page has no " +
+          "dedicated empty-state node to anchor.",
+      ],
+    },
+    {
+      name: "foods-list",
+      kind: "skeleton",
+      required: true,
+      authRole: "layout",
+      paneRole: "main",
+      path: () => "/foods/custom",
+      hold: [{ name: "custom-foods", pattern: "*/api/foods/custom", required: true }],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContent: { axes: XYW },
+        surfaces: { axes: XYW },
+        surfaceHeaders: { axes: XYWH },
+      },
+      anchors: [{ key: "rows", label: "first custom food row", axes: XYWH }],
+      nav: "present",
       loadedSelector: '[data-testid="list-row"]',
+      unimplemented: [
+        "Empty custom-food list rendering is not covered yet: the three-row skeleton " +
+          "is a populated-list over-approximation, and the loaded empty body collapses " +
+          "to one muted paragraph.",
+      ],
+    },
+    {
+      name: "meals-list",
+      kind: "skeleton",
+      required: true,
+      authRole: "layout",
+      paneRole: "main",
+      path: () => "/meals",
+      hold: [{ name: "meals", pattern: "*/api/meals", required: true }],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContent: { axes: XYW },
+        surfaces: { axes: XYW },
+        surfaceHeaders: { axes: XYWH },
+      },
+      anchors: [{ key: "rows", label: "first meal row", axes: XYW }],
+      minRowHeightChecks: [{ key: "rows", label: "meal row" }],
+      nav: "present",
+      loadedSelector: '[data-testid="list-row"]',
+      unimplemented: [
+        "The first seeded meal has a multi-line title, so only its top/width is " +
+          "anchored; wrapping is variable. The minimum loaded row height is asserted " +
+          "against the single-line skeleton row height.",
+        "Empty meal list rendering is not covered yet: the three-row skeleton is a " +
+          "populated-list over-approximation, and the loaded empty body collapses to " +
+          "one muted paragraph.",
+      ],
     },
     {
       name: "admin-edit",
@@ -889,6 +995,7 @@ const CAPTURE_EXPRESSION = `(() => {
     surfaces: within(pane, "surface"),
     surfaceHeaders: within(pane, "surface-header"),
     rows: within(pane, "list-row"),
+    listFooters: within(pane, "list-footer"),
     detailRows: within(pane, "detail-row"),
     componentRows: within(pane, "component-row"),
     stats: within(pane, "stat"),
@@ -1121,6 +1228,14 @@ function firstAcrossPanes(capture, key) {
   return null;
 }
 
+function allAcrossPanes(capture, key) {
+  for (const pane of capture.panes) {
+    const values = pane[key];
+    if (Array.isArray(values) && values.length > 0) return values;
+  }
+  return [];
+}
+
 function scopedSkeletonCount(capture, paneRole) {
   if (paneRole) {
     const pane = findPane(capture, paneRole);
@@ -1346,6 +1461,33 @@ function assertHeightChecks(caseDef, loading, loaded, assertions) {
         message: `${label} ${check.label} height was ${box.height}`,
       });
     }
+  }
+}
+
+function assertMinRowHeights(caseDef, loading, loaded, assertions) {
+  const tolerance = 1;
+  for (const check of caseDef.minRowHeightChecks ?? []) {
+    const loadingRows = allAcrossPanes(loading, check.key);
+    const loadedRows = allAcrossPanes(loaded, check.key);
+    const loadingMin = loadingRows.length
+      ? Math.min(...loadingRows.map((row) => row.height))
+      : null;
+    const loadedMin = loadedRows.length
+      ? Math.min(...loadedRows.map((row) => row.height))
+      : null;
+    record(assertions, {
+      name: `${check.label} minimum row height`,
+      passed:
+        loadingMin !== null &&
+        loadedMin !== null &&
+        withinTolerance(loadedMin, loadingMin, tolerance),
+      expected: loadingMin,
+      actual: loadedMin,
+      tolerance,
+      message:
+        `${check.label}: skeleton minimum ${loadingMin}, ` +
+        `loaded minimum ${loadedMin}`,
+    });
   }
 }
 
@@ -1588,6 +1730,7 @@ function assertCaptures(caseDef, viewportName, loading, loaded, assertions) {
   assertEnvelope(caseDef, loading, loaded, assertions);
   assertAnchors(caseDef, loading, loaded, assertions);
   assertHeightChecks(caseDef, loading, loaded, assertions);
+  assertMinRowHeights(caseDef, loading, loaded, assertions);
   assertChrome(caseDef, viewportName, loading, loaded, assertions);
   assertCalendars("loading", loading, assertions);
   assertCalendars("loaded", loaded, assertions);
@@ -2185,12 +2328,14 @@ async function main() {
     if (process.env.CALCO_ADMIN_EDIT_USER_ID) {
       discovered.adminEditUserId = process.env.CALCO_ADMIN_EDIT_USER_ID;
       discovered.adminEditUserReason = null;
+      discovered.adminUserCount = null;
     } else {
       await interceptor.continueAll();
       await login(cdp, network, auth.admin, options.baseUrl);
       const adminEdit = await discoverAdminEditUserId(cdp, auth.layout.username);
       discovered.adminEditUserId = adminEdit.id;
       discovered.adminEditUserReason = adminEdit.reason;
+      discovered.adminUserCount = adminEdit.count;
     }
 
     const allCases = buildCases(layoutDate, discovered);

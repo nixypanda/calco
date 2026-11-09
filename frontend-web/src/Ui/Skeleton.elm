@@ -1,12 +1,15 @@
 module Ui.Skeleton exposing
-    ( bar
+    ( badge
+    , bar
     , barCustom
     , bottomActions
     , busy
     , button
     , buttonWithAttributes
     , card
+    , categoryChipRow
     , chipRow
+    , dot
     , elLine
     , field
     , fieldWithoutLabel
@@ -14,6 +17,7 @@ module Ui.Skeleton exposing
     , input
     , listRow
     , paragraphLine
+    , row
     , searchField
     , selectField
     )
@@ -21,10 +25,13 @@ module Ui.Skeleton exposing
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
-import Ui.Common exposing (dataAttribute, skeletonRegion, testId, uiClass)
+import Html exposing (Html)
+import Html.Attributes
+import Ui.Common exposing (dataAttribute, skeletonRegion, testId, toCssColor, uiClass)
 import Ui.DesignTokens
     exposing
         ( radiusControl
+        , radiusHairline
         , radiusPill
         , radiusSmall
         , space12
@@ -134,6 +141,39 @@ icon theme =
     Element.el
         [ Element.width (Element.px 44)
         , Element.height (Element.px 44)
+        , Background.color theme.inputFill
+        , Border.rounded radiusPill
+        , uiClass "ui-skeleton"
+        , skeletonRegion
+        ]
+        Element.none
+
+
+{-| A 4x24 macro-dot placeholder. Mirrors `Surface.accentDotLabeled`, which
+reserves the 12px leading slot with a 4x24 accent bar in list rows.
+-}
+dot : Theme -> Element msg
+dot theme =
+    Element.el
+        [ Element.width (Element.px 4)
+        , Element.height (Element.px 24)
+        , Background.color theme.inputFill
+        , Border.rounded radiusHairline
+        , uiClass "ui-skeleton"
+        , skeletonRegion
+        ]
+        Element.none
+
+
+{-| A 21px-tall status-badge placeholder. Mirrors `Chip.statusBadge` /
+`Chip.coloredPill`, whose caption line plus 4px vertical padding is 21px high.
+The 64px width is illustrative: the real pill width depends on the status label.
+-}
+badge : Theme -> Element msg
+badge theme =
+    Element.el
+        [ Element.width (Element.px 64)
+        , Element.height (Element.px 21)
         , Background.color theme.inputFill
         , Border.rounded radiusPill
         , uiClass "ui-skeleton"
@@ -290,6 +330,30 @@ chipRow theme config =
         (List.repeat (max 0 config.count) (chip theme))
 
 
+{-| A row of 22px category-chip placeholders. The loaded chips render through
+`Element.html` (`.ui-chip-group` with a 4px gap), so this helper does too: the
+parent `Surface.staticRow` text column then does not add its own 4px spacing
+before the row. The 64px chip width is illustrative; the loaded width depends on
+the category label.
+-}
+categoryChipRow : Theme -> { count : Int } -> Element msg
+categoryChipRow theme config =
+    Element.html
+        (Html.div
+            [ Html.Attributes.class "ui-chip-group" ]
+            (List.repeat (max 0 config.count) (categoryChipHtml theme))
+        )
+
+
+categoryChipHtml : Theme -> Html msg
+categoryChipHtml theme =
+    Html.span
+        [ Html.Attributes.class "ui-skeleton ui-skeleton-chip"
+        , Html.Attributes.style "background-color" (toCssColor theme.inputFill)
+        ]
+        []
+
+
 {-| Bottom action placeholders matching `Button.bottomActionButtons`: two
 buttons share a row, any other non-zero count stacks in a column, and every
 button is a full-width 48px pill. The order of the cases is intentional so the
@@ -377,6 +441,27 @@ listRow theme =
                 Element.none
             ]
         ]
+
+
+{-| A non-interactive list row placeholder. It delegates to
+`Surface.staticRow` so the 16px row padding, 12px spacing, and leading/trailing
+slots match `Surface.listRow` exactly. Callers provide skeleton content in each
+slot because the required text height depends on the loaded row.
+-}
+row :
+    { leading : List (Element msg)
+    , title : Element msg
+    , subtitle : List (Element msg)
+    , trailing : List (Element msg)
+    }
+    -> Element msg
+row config =
+    Surface.staticRow
+        { leading = config.leading
+        , title = config.title
+        , subtitle = config.subtitle
+        , trailing = config.trailing
+        }
 
 
 card : Theme -> { rows : Int } -> Element msg
