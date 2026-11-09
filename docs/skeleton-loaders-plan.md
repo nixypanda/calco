@@ -9,7 +9,7 @@
 
 The first draft had the right diagnosis and the right testing direction, but several recipes and the no-jump contract were not true to the code. This revision:
 
-1. Replaces the `round(fontSize * 1.5)` text-line guess with explicit `elLine` and `paragraphLine` geometry. elm-ui `Element.el` text is one font-size high; `Element.paragraph` defaults to `size + 5`. Known static copy is rendered as real text inside an `aria-hidden` skeleton subtree where that gives exact wrapping.
+1. Replaces the `round(fontSize * 1.5)` text-line guess with explicit `elLine` and `paragraphLine` geometry. elm-ui `Element.el` text is one font-size high; a single-line `Element.paragraph` line box is about `size + 1` (17px for 16px), while multi-line blocks add 5px inter-line spacing. Known static copy is rendered as real text inside an `aria-hidden` skeleton subtree where that gives exact wrapping.
 2. Redefines "no jump" as a **fixed envelope plus the first anchor before variable content**. It no longer promises stable top or height for save buttons, nutrition cards, footers, or fields below variable nutrient/component/list rows, optional categories, notes, or banners.
 3. Removes `Page.Skeleton` as a second route table. `Page.elm` owns one route plan (`panePlanForRoute`) consumed by both `panesForRoute` and `bootstrapView`.
 4. Defines the page skeleton public surface explicitly. Page modules expose `skeletonView`; the food and meal editor recipes live in `Component/FoodEditor` and `Component/Meal/Form`.
@@ -125,7 +125,7 @@ Several pages render partially loaded data instead of a full-page skeleton:
 - **Diary Day** has no loading skeleton at all. `contentView` always renders the real date card (`Page/Diary/Day.elm:515-599`). While loading it shows zero goals (`loadingGoalTargets`, `937-939`), zero totals and only sections with logs or enabled prefs (`956-984`). Meal-slot cards are `Surface.heroCard`s with a 118px media header (`1113-1136`; `DesignTokens.heroHeaderHeight = 118`, `Ui/DesignTokens.elm:34-36`). When data arrives, up to five large cards appear below the date card.
 - **Diary Day** also loads prefs and latest slots independently (`Page/Diary/Day.elm:215-243`, `966-984`, `1026-1065`). Prefs determine which empty slots exist; latest slots only change the action label inside an existing empty slot.
 - **Meal Show** loads the meal first, then requests component names and nutrition (`Page/Meal/Show.elm:150-162`, `340-365`, `368-381`). The component-name placeholder is a 16px `Skeleton.bar` in a row whose loaded text is a 16px `Typography.body` el line (`356-365`), so the row does **not** grow when the name arrives. Keep a 16px el line; do not replace it with a 24px guess.
-- **Food Log Entry** has an in-page title bar until product detail arrives (`Page/FoodLog/Entry.elm:716-725`). The current bar is 16px, but the loaded title is `Typography.truncatedHeader`, a 24px paragraph with a 29px line box (`Ui/Typography.elm:135-146`), so this one **does** grow. Use a 29px paragraph line.
+- **Food Log Entry** has an in-page title bar until product detail arrives (`Page/FoodLog/Entry.elm:716-725`). The current bar is 16px, but the loaded title is `Typography.truncatedHeader`, a 24px paragraph whose single line measures 25px (`Ui/Typography.elm:135-146`), so this one **does** grow. Use a 25px `elLine` for the single-line title (a wrapped title grows by another 25px line).
 - **Food Search** has independent results, recents and barcode bodies (`Page/Food/Search.elm:1218-1261`, `1289-1290`, `1415-1416`).
 - **Nutrition Details** always prepends a coverage banner (`Page/NutritionDetails.elm:259-285`); `coverageNotice` always returns `Feedback.warningBanner` or `Feedback.infoBanner` (`380-413`). Only the message and colour are conditional.
 - **Meal Show** header body is the notes paragraph or `Element.none`; categories on Food Show/Food Log Entry are optional sections above the portion form.
@@ -235,8 +235,8 @@ Compare x, y and width only. Height is not compared because the content below is
 | Meal Edit | page container, basic section top/header band, first field height 64 | first component row top | save, nutrition preview, later sections |
 | Admin Edit User | page container, section top/header band, first detail row height, password field 64 | first detail row top | nothing below fixed rows; bottom action is stable for the seed |
 | Meal Show | page container, header section top/header band | first component row top (seed with no notes) | nutrition card, bottom actions, notes variant |
-| Food Show / Food Log Entry | panel top/header band, title line | first control only in the seeded no-category variant | nutrition card, footer, category variant |
-| Custom Food Show | page container, header section top/header band | header band content | nutrition card, action row |
+| Food Show / Food Log Entry | panel top/header band (page header 46, surface band 86 for the one-line seed), title line | first control only in the seeded no-category variant; control heights 61/64 | nutrition card, footer, category variant |
+| Custom Food Show | page container, header section top/header band (page header 46, surface band 86) | header band content | nutrition card, action row |
 | Nutrition Details | date header top/height, banner shell top/min height, overview section top | first nutrient section top only in the seeded coverage case | later sections, reference, long messages |
 | Food Search | search controls top/height, results section top | first result row top | ad-hoc section, total page height |
 | Goals / Diary Settings | page container, section top/header band (height when the description line count is fixed by the seed or is static) | first field/checkbox top when the description line count is fixed | save only in the seeded one-line description/fixed-row case; validation banners |
@@ -255,7 +255,7 @@ The matrix in §8 repeats the route-specific acceptance in executable form. Ther
 2. **Reuse the production shells for geometry.**
    `Surface.section`/`panel`/`heroCard`/`card`, `Ui.Page.pageHeaderRaw`/`pageContainer`, `Ui.Workspace`, `Ui.MonthCalendar` and `Ui.Input` own padding, radius, gutter, header and control geometry. Skeleton recipes compose them rather than copy their numbers.
 3. **Measure the real line box.**
-   `Element.el` text is one font-size high; `Element.paragraph` defaults to `size + 5`. Use `elLine` and `paragraphLine`. Where the copy is static and known, render the real `Typography` text inside an `aria-hidden` skeleton wrapper; the browser then measures the same wrapping.
+   `Element.el` text is one font-size high; a single-line `Element.paragraph` line box is about `size + 1` because elm-ui applies a 1.05 line-height (17px for 16px, 25px for 24px). `paragraphLine` adds the 5px inter-line gap for genuinely multi-line blocks. Use `elLine` and `paragraphLine` accordingly. Where the copy is static and known, render the real `Typography` text inside an `aria-hidden` skeleton wrapper; the browser then measures the same wrapping.
 4. **The contract is an envelope plus an anchor, not whole-page equality.**
    Content below a variable block is allowed to move. Name the anchor and stop.
 5. **One route plan.**
@@ -380,7 +380,7 @@ Page skeleton functions cannot be private if `Page.elm` calls them. The public s
 | `Page.Meal.Edit` | `skeletonView : Env -> Element msg` | Wraps `pageContainer` + `Component.Meal.Form.skeletonView` + nutrition preview + save placeholder. |
 | `Page.Meal.Show` | `skeletonView : Env -> Element msg` | Section detail recipe. |
 | `Page.Food.Show` | `skeletonView : Env -> Element msg` | Panel detail recipe; render the route-known `lookup_note` banner if present. |
-| `Page.FoodLog.Entry` | `skeletonView : Env -> Element msg` | Panel detail recipe with the 29px title line and Phone two-line subtitle. |
+| `Page.FoodLog.Entry` | `skeletonView : Env -> Element msg` | Panel detail recipe with the 25px single-line title and Phone two-line subtitle. |
 | `Page.CustomFood.Show` | `skeletonView : Env -> Element msg` | Header section + nutrition card + optional action placeholders. |
 | `Page.Food.Search` | `skeletonView : Env -> Element msg` | Search controls shell + results section; recents/barcode are in-place. |
 | `Page.Goals.Settings` | `skeletonView : Env -> Element msg` | Section header + 4 fields + save outside. |
@@ -412,12 +412,12 @@ Land each primitive in the same change as its first real consumer. Test-only use
 | Primitive | Signature | Geometry / use |
 |---|---|---|
 | `elLine` | `elLine : Theme -> { size : Int, width : Element.Length } -> Element msg` | A bar exactly `size` px high. Mirrors `Element.el` + `Typography` text lines: 13 (caption), 16 (body), 20 (screen/subsection), 24 (section/title), 32 (page title), 44 (hero stat). |
-| `paragraphLine` | `paragraphLine : Theme -> { size : Int, spacing : Int, width : Element.Length } -> Element msg` | A bar exactly `size + spacing` px high. Default elm-ui paragraph spacing is 5, so 16 -> 21, 24 -> 29. This models a line plus one inter-line gap; a **single-line** 16px paragraph measures ~17px (Admin Edit uses `elLine 17`). Prefer `paragraphLine` for multi-line/list titles and `truncatedHeader`. |
+| `paragraphLine` | `paragraphLine : Theme -> { size : Int, spacing : Int, width : Element.Length } -> Element msg` | A bar exactly `size + spacing` px high. Default elm-ui paragraph spacing is 5, so 16 -> 21, 24 -> 29. This models a line plus one inter-line gap for genuinely multi-line blocks; a **single-line** paragraph measures ~`size + 1` (17px for 16, 25px for a `truncatedHeader`'s 24px), so use `elLine 17` / `elLine 25` for the common one-line case. |
 | `icon` | `icon : Theme -> Element msg` | 44x44, radius 999. Mirrors `Button.iconButton` (`Ui/Button.elm:390-403`). |
 | `dot` | `dot : Theme -> Element msg` | 4x24, radius 2. Mirrors `Surface.accentDotLabeled` (`Ui/Surface.elm:451-462`). |
 | `chip` | `chip : Theme -> Element msg` | Height 22, width 64, radius 999. Mirrors `.ui-chip` (`frontend-web/src/main.css:174-191`). |
 | `chipRow` | `chipRow : Theme -> { count : Int } -> Element msg` | Row with 4px gap, N category chips. For category rows, compose the leading ghost dot separately: `Element.row [ spacing 12 ] [ dotGhost, chipRow ... ]` (`View/Product.elm:56-64`). |
-| `pageHeader` | `pageHeader : Theme -> { leading : Maybe (Element msg), title : Element msg, subtitle : List (Element msg), actions : List (Element msg) } -> Element msg` | Delegates to a new `Ui.Page.pageHeaderRaw` that owns the `wrappedRow` width fill, spacing 12, min-width 0, title column spacing 4 and actions row spacing 8. `pageHeaderRaw` always renders the leading and actions slots (even when `Nothing`/empty) so the title x matches. `Ui.Page.pageHeader` maps its `PageHeaderSubtitle` to elements and calls the same raw helper. |
+| `pageHeader` | `pageHeader : { leading : Maybe (Element msg), title : Element msg, subtitle : List (Element msg), actions : List (Element msg) } -> Element msg` | Delegates to `Ui.Page.pageHeaderRaw`, which owns the `wrappedRow` width fill, spacing 12, min-width 0, title column spacing 4 and actions row spacing 8. `pageHeaderRaw` has no `Theme` parameter because it only composes caller-supplied elements; it always renders the leading and actions slots (even when `Nothing`/empty) so the title x matches. `Ui.Page.pageHeader` (which still takes `Theme`) maps its `PageHeaderSubtitle` to elements and calls the raw helper. |
 | `field` | `field : Theme -> { labelWidth : Element.Length, gap : Int } -> Element msg` | `elLine 13` label + `gap` + 44px control, radius 12. Use gap 0 for text inputs (`Ui/Input.elm:134-149`) and gap 4 for dropdowns (`Ui/Input.elm:609-614`). Existing `input` stays at 48px until its call sites migrate. |
 | `checkboxRow` | `checkboxRow : Theme -> Element msg` | 44px row: 28px circle + 12px gap + 16px title line. Mirrors `Ui/Input.checkbox` (`Ui/Input.elm:655-671`). |
 | `stat` | `stat : Theme -> Element msg` | Min width 130, padding 12, three paragraph lines (18 / 21 / 18) with 2px spacing. Mirrors `Page/NutritionDetails.overviewItem` (`Page/NutritionDetails.elm:315-333`); the third line is reserved so the common partial-coverage case is covered. |
@@ -446,18 +446,17 @@ Add `Ui.Page.pageHeaderRaw` with the same geometry as `pageHeader`, but accept c
 
 ```elm
 pageHeaderRaw :
-    Theme
-    -> { leading : Maybe (Element msg)
-       , title : Element msg
-       , subtitle : List (Element msg)
-       , actions : List (Element msg)
-       }
+    { leading : Maybe (Element msg)
+    , title : Element msg
+    , subtitle : List (Element msg)
+    , actions : List (Element msg)
+    }
     -> Element msg
 ```
 
-The real `pageHeader` maps `SubtitleText` to `mutedBody` (16px el), `SubtitleMeta` to one 21px paragraph, and `SubtitleMetaLines` to a spacing-2 column of 21px paragraphs, then calls `pageHeaderRaw`. The skeleton passes `paragraphLine`/`elLine` elements of the same shape. This prevents the real and skeleton headers from drifting, and preserves the empty leading slot that keeps the title x stable.
+The real `pageHeader` maps `SubtitleText` to `mutedBody` (16px el), `SubtitleMeta` to one paragraph (17px for a single line, or 21px per line via `paragraphLine` when it wraps), and `SubtitleMetaLines` to a spacing-2 column of paragraphs, then calls `pageHeaderRaw`. The skeleton passes `elLine`/`paragraphLine` elements of the same shape. This prevents the real and skeleton headers from drifting, and preserves the empty leading slot that keeps the title x stable.
 
-Do not expose `titleSize`/`subtitleLines` as the only knobs: the title may be an `Element.el` 24px line or a `truncatedHeader` 29px paragraph, and the subtitle may be a 16px el, one 21px paragraph, or two 21px paragraphs on Phone.
+Do not expose `titleSize`/`subtitleLines` as the only knobs: the title may be an `Element.el` 24px line or a `truncatedHeader` paragraph (25px for one line; another 25px per wrapped line), and the subtitle may be a 16px el, one 17px single-line paragraph, or two single-line paragraphs on Phone.
 
 ### 5.6 elm-review constraints and phasing
 
@@ -478,7 +477,7 @@ Practical rules:
 
 ## 6. Shared Layout Recipes
 
-Each recipe names the loaded DOM it mirrors, the shells/primitives it reuses, what may legitimately grow, and the stable landmarks. The line model from §5.4 applies everywhere: `elLine size` = `size` px; `paragraphLine size` = `size + 5` px unless another paragraph spacing is explicit. A single-line paragraph is closer to `elLine size` (~17px for 16px) than to `paragraphLine 16/5`.
+Each recipe names the loaded DOM it mirrors, the shells/primitives it reuses, what may legitimately grow, and the stable landmarks. The line model from §5.4 applies everywhere: `elLine size` = `size` px; `paragraphLine size` = `size + 5` px and is reserved for genuinely multi-line paragraph blocks. A single-line paragraph measures `size + 1` because elm-ui applies a 1.05 line-height (17px for 16px, 25px for 24px), so use `elLine 17` / `elLine 25` for the common single-line case.
 
 ### 6.1 List section
 
@@ -506,28 +505,28 @@ Each recipe names the loaded DOM it mirrors, the shells/primitives it reuses, wh
 
 ### 6.2 Panel detail: Food Show and Food Log Entry
 
-**Loaded structure:** `Element.column [ width fill, spacing 16 ]` containing an optional error banner, an optional route-known `lookup_note` info banner (Food Show), one `Surface.panel`, and a nutrition card. The panel header is `View.Product.foodHeaderElement` or `Page/FoodLog/Entry.itemHeaderElement`: a `Ui.Page.pageHeader` with a macro dot, a `truncatedHeader` 24px paragraph (29px line), and a subtitle. Sections:
+**Loaded structure:** `Element.column [ width fill, spacing 16 ]` containing an optional error banner, an optional route-known `lookup_note` info banner (Food Show), one `Surface.panel`, and a nutrition card. The panel header is `View.Product.foodHeaderElement` or `Page/FoodLog/Entry.itemHeaderElement`: a `Ui.Page.pageHeader` with a macro dot, a `truncatedHeader` 24px paragraph (25px for one line; 46px page header with a 17px one-line subtitle; 86px panel header band), and a subtitle. Sections:
 
 1. optional category section (body: `Element.row spacing 12 [ macroDotGhost, Chip.chips ]`);
-2. portion section: title `subsectionTitle` 20px, body exactly `FoodLogForm.fields` — **three controls**: meal-slot dropdown, quantity/unit dropdown, notes input;
+2. portion section: title `subsectionTitle` 20px, body exactly `FoodLogForm.fields` — **three controls**: meal-slot dropdown, quantity/unit group (amount field + unit dropdown), notes input;
 3. footer: full-width submit button 48px.
 
 Then `View.Nutrients.nutritionCard`.
 
-References: `Page/Food/Show.elm:420-494`; `Page/FoodLog/Entry.elm:524-619`; `Component/FoodLogForm.elm:259-288`; `View/Product.elm:36-64`.
+References: `Page/Food/Show.elm:420-494`; `Page/FoodLog/Entry.elm:524-619`; `Component/FoodLogForm.elm:259-288`; `View/QuantityInput.elm:14-42`; `View/Product.elm:36-64`.
 
 **Recipe:**
 
 - Same wrapper as loaded: Food Show/Food Log Entry use their own column spacing 16, not `pageContainer`. Get the root column right; a `page-container` is optional and must not be invented.
 - If the route carries `lookup_note`, render the real info banner in the skeleton; it is known synchronously from `Route` (`Data/Route.elm:33`, `78-84`). Otherwise no banner.
 - `Surface.panel`:
-  - header: `Skeleton.pageHeader` with `leading = Just (Skeleton.dot)`, `title = paragraphLine 24` (29px), `subtitle`:
-    - Food Show: one `paragraphLine 16` (21px) for `SubtitleMeta`;
-    - Food Log Entry: one on Desktop/Tablet, two `paragraphLine 16` (21px each) plus a spacing-2 column on Phone, matching `SubtitleMetaLines` and the two-line fallback (`Page/FoodLog/Entry.elm:737-770`).
+  - header: `Skeleton.pageHeader` with `leading = Just (Skeleton.dot)`, `title = elLine 25` (the measured one-line `truncatedHeader`), `subtitle`:
+    - Food Show: one `elLine 17` for the single-line `SubtitleMeta`;
+    - Food Log Entry: one `elLine 17` on Desktop/Tablet, two `elLine 17` plus a spacing-2 column on Phone, matching `SubtitleMetaLines` and the two-line fallback (`Page/FoodLog/Entry.elm:737-770`).
   - category section: **do not invent a category row in the generic skeleton**. Categories are optional and unknown while loading. The skeleton represents the no-category case; a food with categories pushes the portion section down. This is explicitly variable. If the product wants no movement for a known seed, add an exact-seed variant, not a general claim.
   - portion section: title `elLine 20` (20px) and three controls:
-    - meal slot dropdown: label 13 + gap 4 + 44px trigger = 61px;
-    - quantity/unit dropdown: 61px;
+    - meal-slot dropdown: label 13 + gap 4 + 44px trigger = 61px;
+    - quantity/unit group: amount text field 64px + 12px column spacing + unit dropdown 61px (the real `View.QuantityInput.dropdown`, not a single control);
     - notes text input: label 13 + 7 gap + 44px = 64px;
     - the panel body column spacing 12 separates them.
   - footer: full-width `Skeleton.button` 48px.
@@ -535,7 +534,7 @@ References: `Page/Food/Show.elm:420-494`; `Page/FoodLog/Entry.elm:524-619`; `Com
 - Do not use the draft's "two fields" recipe. There are three controls.
 
 **May grow:** category section, wrapped title/subtitle, nutrition rows, notes.
-**Stable:** panel top/left/width, panel header band top/height, title line top when the seed fixes the title, first control top only in the seeded no-category variant. **Not stable:** first control across category variants, footer, nutrition card.
+**Stable:** panel top/left/width, panel header band top/height (46px page header / 86px band for the one-line seed), title line top when the seed fixes the title, first control top and the 61/64/61/64 control heights only in the seeded no-category variant. **Not stable:** first control across category variants, footer, nutrition card.
 
 ### 6.3 Section detail: Meal Show
 
@@ -545,13 +544,13 @@ Meal Show is not a panel. `MealShow.view` is a `pageContainer` containing a head
 
 - `pageContainer` with the same spacing 16.
 - Header `Surface.section`:
-  - header: `Skeleton.pageHeader` with `leading = Just (Skeleton.dot)`, `title = paragraphLine 24` (29px), `subtitle = []` (the loaded header has **no subtitle**), `actions = []`.
+  - header: `Skeleton.pageHeader` with `leading = Just (Skeleton.dot)`, `title = elLine 25` (the measured one-line `truncatedHeader`), `subtitle = []` (the loaded header has **no subtitle**), `actions = []`.
   - body: `Element.none` to match the loaded `[ Element.none ]` when there are no notes. This still creates the 20px-padded body region that the loaded page has. If the seed has notes, the loaded body grows by paragraph lines; notes are variable. Do not promise the components section top across notes variants.
 - Components `Surface.section`:
   - header: `elLine 20` (`subsectionTitle`);
   - body: 2 custom component rows with `Surface.hairline` interspersed. A component row is `Element.row [ width fill, spacing 12 ]` with a 12px leading slot (4x24 macro dot or empty), then a column spacing 4 with a 16px name el line and a 16px quantity el line. It is not `Surface.listRow`; do not use the list-row padding.
 - Nutrition column `Element.column [ width fill, spacing 12 ]`:
-  - `Surface.formSection` title 20 with a 61px quantity/unit dropdown;
+  - `Surface.formSection` title 20 with the quantity/unit group (amount field 64 + 12 + unit dropdown 61);
   - `View.Nutrients.skeletonCard` (the loaded preview is `View.Nutrients.preview`, which wraps `nutritionCard`).
 - Bottom actions: `Skeleton.bottomActions { count = 2 }` (row of two full-width 48px buttons).
 - The loaded bottom actions are below the variable component/nutrition content; their top is not stable.
@@ -800,9 +799,9 @@ Priority:
 | P0 | `/admin/users/:id/edit` | `Page/Users/EditUser.elm` | card rows 5 + button (`459-462`) | Settings/detail form | Section title + username; 2 detail rows; hairline; password field; reset button; bottom action outside (`326-406`) | section, `field`, `button`, `bottomActions` | section top/header; first detail row height; password field 64; bottom action top (fixed rows, seeded short username) |
 | P1 | `/admin` | `Page/Users/Dashboard.elm` | section title + 3 rows + footer button (`138-146`) | List | Section title 24; no-leading rows; username `elLine 17` + display name `elLine 17`; status badge 21; footer create button; no hairlines | `row`, `elLine`, `badge`, `button` | section top/header; first row top/height; footer x/width/height. Footer y only with a fixed user count |
 | P1 | `/meals/:id` | `Page/Meal/Show.elm` | card rows 2 + section + 3 rows + 3 cards + 2 buttons (`715-731`) | Section detail | Header section (no subtitle, notes body slot); components section custom rows; nutrition formSection + preview; bottom actions (`542-616`, `661-700`) | `pageHeaderRaw`, `dot`, `field`, `bottomActions`, `View.Nutrients` | page container; header section top/header band; first component row top (seed no notes). **Not** nutrition card/bottom actions |
-| P1 | `/logs/:id` | `Page/FoodLog/Entry.elm` | card rows 2 + 3 inputs + button + card rows 3 (`839-848`) | Panel detail | Panel header with 29px title + Phone two-line subtitle; optional categories; three controls; footer action; nutrition card (`563-619`) | `pageHeaderRaw`, `field`, `View.Nutrients.skeletonCard` | panel top/header band; title line. **Not** first field (category variant), footer, nutrition card |
-| P1 | `/foods/:id` | `Page/Food/Show.elm` | 120px block + bars + input + button + card rows 3 (`519-528`) | Panel detail | Panel header dot + 29px title + 21px meta; optional categories; three controls; footer action; nutrition card; render route `lookup_note` synchronously (`449-494`) | `pageHeaderRaw`, `field`, `dot`, `View.Nutrients.skeletonCard` | panel top/header band. **Not** first field (category variant), footer, nutrition card |
-| P1 | `/foods/custom/:id` | `Page/CustomFood/Show.elm` | 120px block + bars + card rows 3 + 2 buttons (`391-407`) | Header section + card | Header section with dot + 29px title + meta + category row; nutrition card; 2 action placeholders for user foods (`328-343`, `346-366`) | `pageHeaderRaw`, `chipRow`, `bottomActions`, `View.Nutrients.skeletonCard` | page container; header section top/header band. **Not** nutrition card/action row |
+| P1 | `/logs/:id` | `Page/FoodLog/Entry.elm` | card rows 2 + 3 inputs + button + card rows 3 (`839-848`) | Panel detail | Panel header with 25px single-line title + Phone two-line subtitle; optional categories; three controls; footer action; nutrition card (`563-619`) | `pageHeaderRaw`, `field`, `View.Nutrients.skeletonCard` | panel top/header band; title line. **Not** first field (category variant), footer, nutrition card |
+| P1 | `/foods/:id` | `Page/Food/Show.elm` | 120px block + bars + input + button + card rows 3 (`519-528`) | Panel detail | Panel header dot + 25px single-line title + 17px meta; optional categories; three controls (meal select 61, amount 64 + 12 + unit select 61, notes 64); footer action; nutrition card; render route `lookup_note` synchronously (`449-494`) | `pageHeaderRaw`, `field`, `dot`, `View.Nutrients.skeletonCard` | panel top/header band (46/86); title line; zero-category seed: first control and 61/64/61/64 heights, nutrition card top. **Not** category variant, footer |
+| P1 | `/foods/custom/:id` | `Page/CustomFood/Show.elm` | 120px block + bars + card rows 3 + 2 buttons (`391-407`) | Header section + card | Header section with dot + 25px single-line title + 17px meta + category row; nutrition card; 2 action placeholders for user foods (`328-343`, `346-366`) | `pageHeaderRaw`, `chipRow`, `bottomActions`, `View.Nutrients.skeletonCard` | page container; header section top/header band (46/86). **Not** nutrition card/action row |
 | P1 | `/details` | `Page/NutritionDetails.elm` | 40px bar + stat card + 2 cards + card (`241-256`) | Detail/settings hybrid | Date header real (or skeleton at boot); **always** banner shell; overview stats; four nutrient sections; reference; variable rows (`259-285`, `315-333`, `380-413`) | `section`, `stat`, `table`, `paragraphLine` | date header top/height; banner shell top/height (seed line count); overview top; first nutrient section top only in seeded case |
 | P1 | `/search` | `Page/Food/Search.elm` | Results 3 rows; recents card rows 3; barcode card rows 2 (`1224-1231`, `1290`, `1416`) | List section / in-place | Search controls stay real; results section header 20 + 3 rows; recents/barcode are in-place skeleton regions; empty result uses `Feedback.emptyState` | `row`, `section`, `paragraphLine` | search controls top/height; results section top; first result row top; in-place region present/gone |
 | P1 | `/settings/goals` | `Page/Goals/Settings.elm` | header 24 + 4 inputs + button inside (`448-461`) | Settings form | Section title 24 + description paragraph 21; 4 fields 64; save outside (`333-413`) | `section`, `field`, `button`, real static description | section top/header; first field/save top only in the seeded one-line-status case |
@@ -836,7 +835,7 @@ The rule: **gate the page if the missing data is logically required to draw the 
 | Meal Edit | meal, units | Gate on both. `LoadingModel` already carries `units` (`Page/Meal/Edit.elm:43-44`); do not switch to `Editing` with an empty unit list. If component names are missing, use an in-place 16px name line. |
 | Food Show | food, units, optional last-used | Already gates on food+units (`Page/Food/Show.elm:336-353`). Keep. The route `lookup_note` banner is known synchronously and belongs in both skeleton and loaded. |
 | Meal Show | meal, product names, nutrition preview | Gate on meal. Component names arrive independently; use a 16px `elLine` in the name slot (the loaded name is a 16px el, so no growth). Nutrition preview uses `View.Nutrients.skeletonCard` in place below the portion form. |
-| Food Log Entry | log, product detail | Gate on log. Product detail title uses a 29px `paragraphLine 24` placeholder; Phone subtitle uses two 21px paragraph lines. Categories/nutrients fill in place. |
+| Food Log Entry | log, product detail | Gate on log. Product detail title uses a 25px `elLine 25` placeholder; Phone subtitle uses two 17px single-line placeholders. Categories/nutrients fill in place. |
 | Food Search | results, recents, barcode | Controls are synchronous and must not skeleton. Results, recents and barcode are independent in-place regions: results section header 20 + 3 rows; recents card rows 3; barcode card rows 2. Empty results use `Feedback.emptyState`. |
 | Nutrition Details | report, coverage banner, expanded advice | Gate on report. The coverage banner is **always present**; reserve a banner shell (one line on Desktop, two on Phone, or render the known static message when possible). Do not exempt it. The date header is the stable first surface; the overview follows the banner. |
 | Settings forms | load, save state | Gate on load. Save/validation updates in place; never re-render a page skeleton for a submit. |
@@ -1191,8 +1190,8 @@ The blocking matrix uses light mode, Phone + Desktop; Tablet is blocking for she
 | `admin-list` | `/admin` | `*/api/admin/users` | section top/header, first row top/height | footer, user count |
 | `meal-show` | `/meals/:id` | `*/api/meals/{id}`, `*/api/meals/{id}/nutrients?*`, `*/api/foods/{id}` | header section top/header band, first component row top | nutrition card, bottom actions, notes variant |
 | `food-log` | `/logs/:id` | `*/api/logs/{id}`, `*/api/units`, `*/api/foods/{id}` | panel top/header band, title line | first field (category variant), footer, nutrition card |
-| `food-show` | `/foods/:id?date=...&meal_slot=...` | `*/api/foods/{id}`, `*/api/units`, `*/api/logs/last-used` | panel top/header band, title line; seeded no-category first control variant | nutrition card, category variant, footer |
-| `custom-food-show` | `/foods/custom/:id` | `*/api/foods/{id}` | page container, header section top/header band | nutrition card, action row |
+| `food-show` | `/foods/:id?date=...&meal_slot=...` | `*/api/foods/{id}`, `*/api/units`, `*/api/logs/last-used` | panel top/header band (46/86), title line; zero-category seed: first control top, 61/64/61/64 control heights, nutrition card top | nutrition card bottom, category variant, footer |
+| `custom-food-show` | `/foods/custom/:id` | `*/api/foods/{id}` | page container, header section top/header band (46/86), title line | nutrition card, action row |
 | `nutrition-details` | `/details?date=CALCO_LAYOUT_DATE` | `*/api/nutrition/details?date=*` | date header top/height, coverage banner top/height, overview top, first nutrient section top in seeded case | later sections, long message variant |
 | `search` | `/search?date=...` plus a typed seeded query | `*/api/logs/recent-items?*`, `*/api/foods/search?*`; type query | search controls top/height, results section top, first result row top; in-place region present/gone | ad-hoc section, total height |
 | `goals` | `/settings/goals` | `*/api/goal?date=*` | section top/header; first field/save top only in seeded one-line-status case | validation/multi-line status variant |
@@ -1439,9 +1438,9 @@ just check-skeleton-layout   # after Phase 0; browser/DB required
 
 #### Line and control geometry
 
-- `Element.el` text is line-height 1: height = font size. `Element.paragraph` defaults to `size + 5`.
+- `Element.el` text is line-height 1: height = font size. `Element.paragraph` has a 1.05 line-height: a single line measures ~`size + 1` (17px for 16, 25px for 24); `paragraphLine size+5` models a line plus the inter-line gap for genuinely multi-line blocks.
 - `Typography` sizes: caption 13, body 16, screen/subsection 20, section 24, page title 32, hero stat 44 (`Ui/Typography.elm:29-93`).
-- `truncatedHeader` is a 24px paragraph -> 29px line (`Ui/Typography.elm:135-146`); `wrappedListItemTitle`, `mutedParagraph` and `mutedBodyParagraph` are 16px paragraphs -> 21px lines.
+- `truncatedHeader` is a 24px paragraph -> **25px for one line** (`Ui/Typography.elm:135-146`); `wrappedListItemTitle`, `mutedParagraph` and `mutedBodyParagraph` are 16px paragraphs -> **17px for one line**. A wrapped title/subtitle adds another ~25/17px line, not 29/21.
 - Text input: label 13 + **no gap** + 44 (`Ui/Input.elm:134-149`). Dropdown: label 13 + 4px gap + 44 (`Ui/Input.elm:609-614`). The old `Skeleton.input` is 48 (`Ui/Skeleton.elm:71-90`).
 - Button 48 (`Ui/Button.elm:232-256`); icon button 44 (`Ui/Button.elm:390-403`); checkbox row 44 (`Ui/Input.elm:655-671`).
 - Surface card/section/panel body padding 20, spacing 12 (`Ui/Surface.elm:71-77`, `215-321`); section/card radius from tokens.
@@ -1457,7 +1456,7 @@ just check-skeleton-layout   # after Phase 0; browser/DB required
 #### Structure and state
 
 - Meal Show is not one panel: header `Surface.section` with notes body, separate components section with custom rows, nutrition `Surface.formSection` + preview, bottom actions (`Page/Meal/Show.elm:542-700`). Its header has no subtitle.
-- Food Show / Food Log Entry portion form has three controls: meal slot, quantity/unit, notes (`Component/FoodLogForm.elm:259-288`).
+- Food Show / Food Log Entry portion form has three controls: meal slot, quantity/unit group (amount field 64 + 12 + unit dropdown 61), notes (`Component/FoodLogForm.elm:259-288`, `View/QuantityInput.elm:14-42`).
 - Nutrition Details coverage banner is always present (`Page/NutritionDetails.elm:259-285`, `380-413`); the date header is `surface-0`, overview is after the banner; `View.Nutrients.skeletonCard` is not used by Nutrition Details.
 - `Page.isLoading` is exactly `waitingForToday` (`Page.elm:160-162`); `Page.loading` starts `panes = []`, `waitingForToday = True` (`165-171`); `initPreserving` clears panes on `Nothing` (`313-331`).
 - `panesForRoute` runs `Page.elm:883-999`; `contextualWorkspace` `1242-1253`; `isMainPane` `1323`; `Page.view` `3112-3120`.

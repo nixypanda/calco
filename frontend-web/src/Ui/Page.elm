@@ -2,6 +2,7 @@ module Ui.Page exposing
     ( PageHeaderSubtitle(..)
     , pageContainer
     , pageHeader
+    , pageHeaderRaw
     )
 
 import Element exposing (Element)
@@ -47,6 +48,34 @@ pageHeader :
         }
     -> Element msg
 pageHeader theme config =
+    pageHeaderRaw
+        { leading = config.leading
+        , title = config.title
+        , subtitle =
+            case config.subtitle of
+                Just subtitle ->
+                    [ pageHeaderSubtitle theme subtitle ]
+
+                Nothing ->
+                    []
+        , actions = config.actions
+        }
+
+
+{-| The shared header geometry with concrete subtitle elements. Page skeletons
+pass measured line placeholders so their header cannot drift from the loaded
+header: `pageHeader` maps `PageHeaderSubtitle` to real text and then calls this
+function. The leading and actions slots are always rendered, even when empty, so
+the title's x position stays stable.
+-}
+pageHeaderRaw :
+    { leading : Maybe (Element msg)
+    , title : Element msg
+    , subtitle : List (Element msg)
+    , actions : List (Element msg)
+    }
+    -> Element msg
+pageHeaderRaw config =
     let
         leadingElement : Element msg
         leadingElement =
@@ -60,15 +89,7 @@ pageHeader theme config =
         titleColumn : Element msg
         titleColumn =
             Element.column [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
-                (config.title
-                    :: (case config.subtitle of
-                            Just subtitle ->
-                                [ pageHeaderSubtitle theme subtitle ]
-
-                            Nothing ->
-                                []
-                       )
-                )
+                (config.title :: config.subtitle)
 
         actionsRow : Element msg
         actionsRow =

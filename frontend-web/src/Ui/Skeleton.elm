@@ -17,6 +17,7 @@ module Ui.Skeleton exposing
     , icon
     , input
     , listRow
+    , pageHeader
     , paragraphLine
     , row
     , searchField
@@ -41,6 +42,7 @@ import Ui.DesignTokens
         , space4
         , space8
         )
+import Ui.Page as UiPage
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 
@@ -93,6 +95,28 @@ globally is deferred to a later phase.
 paragraphLine : Theme -> { size : Int, spacing : Int, width : Element.Length } -> Element msg
 paragraphLine theme config =
     elLine theme { size = config.size + config.spacing, width = config.width }
+
+
+{-| A non-interactive page-header placeholder. It delegates to
+`Ui.Page.pageHeaderRaw` so the wrapped row, leading slot, title column spacing
+and actions row match the loaded header exactly. Callers pass measured line
+elements for the title and subtitle because the loaded header may use an el line
+or a paragraph line.
+-}
+pageHeader :
+    { leading : Maybe (Element msg)
+    , title : Element msg
+    , subtitle : List (Element msg)
+    , actions : List (Element msg)
+    }
+    -> Element msg
+pageHeader config =
+    UiPage.pageHeaderRaw
+        { leading = config.leading
+        , title = config.title
+        , subtitle = config.subtitle
+        , actions = config.actions
+        }
 
 
 bar : Theme -> Element msg

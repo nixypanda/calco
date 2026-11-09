@@ -1346,6 +1346,7 @@ foodShowPlans context existing productId dateParam mealSlot lookupNote =
         detail =
             detailReadyPlan
                 (foodDetailDesired context productId dateParam mealSlot lookupNote)
+                |> withSkeleton (\env -> FoodShow.skeletonView env lookupNote)
     in
     case ( context.today, dateParam ) of
         ( Just _, Just _ ) ->
@@ -1359,7 +1360,10 @@ customFoodShowPlans : InitCtx -> List Pane -> String -> List (PanePlan msg)
 customFoodShowPlans context existing productId =
     contextualPlans existing
         [ readyPlan (customFoodListDesired context) ]
-        (detailReadyPlan (customFoodShowDesired context productId))
+        (detailReadyPlan (customFoodShowDesired context productId)
+            |> withSkeleton
+                (\env -> UiPage.pageContainer [ CustomFoodShow.skeletonView env ])
+        )
 
 
 mealShowPlans : InitCtx -> List Pane -> String -> List (PanePlan msg)

@@ -82,6 +82,7 @@ const ALL_CASE_NAMES = [
   "custom-food-edit",
   "meal-edit",
   "food-show",
+  "custom-food-show",
   "meal-show",
   "calendar",
   "transition-scroll",
@@ -477,6 +478,8 @@ async function discoverIds(client) {
       const result = {
         customFoodId: null,
         chickenFoodId: null,
+        chickenFoodName: null,
+        chickenFoodCategories: null,
         mealId: null,
         adminEditUserId: null,
         customFoodReason: null,
@@ -487,6 +490,19 @@ async function discoverIds(client) {
 
       const firstId = (data) =>
         Array.isArray(data.items) && data.items[0] ? data.items[0].id : null;
+
+      const firstWithoutCategories = (data) => {
+        if (!Array.isArray(data.items)) return null;
+        const zeroCategory = data.items
+          .filter(
+            (item) => Array.isArray(item.categories) && item.categories.length === 0,
+          )
+          .sort((left, right) => {
+            const nameDelta = String(left.name ?? "").length - String(right.name ?? "").length;
+            return nameDelta || String(left.name ?? "").localeCompare(String(right.name ?? ""));
+          });
+        return zeroCategory[0] ?? data.items[0] ?? null;
+      };
 
       try {
         const response = await fetch("/api/foods/custom", { credentials: "include" });
@@ -512,7 +528,11 @@ async function discoverIds(client) {
             "GET /api/foods/search?q=chicken returned HTTP " + response.status;
         } else {
           const data = await response.json();
-          result.chickenFoodId = firstId(data);
+          const chosen = firstWithoutCategories(data);
+          result.chickenFoodId = chosen ? chosen.id : null;
+          result.chickenFoodName = chosen ? (chosen.name ?? null) : null;
+          result.chickenFoodCategories =
+            chosen && Array.isArray(chosen.categories) ? chosen.categories.length : null;
           if (!result.chickenFoodId) {
             result.chickenFoodReason = "chicken search returned no items";
           }
@@ -535,6 +555,40 @@ async function discoverIds(client) {
       }
 
       return result;
+    })()`,
+    true,
+  );
+}
+
+async function discoverFoodCategoryCount(client, id) {
+  return evaluate(
+    client,
+    `(async () => {
+      try {
+        const response = await fetch(
+          "/api/foods/" + encodeURIComponent(${JSON.stringify(id)}),
+          { credentials: "include" }
+        );
+        if (!response.ok) {
+          return {
+            count: null,
+            name: null,
+            reason: "GET /api/foods/{id} returned HTTP " + response.status
+          };
+        }
+        const data = await response.json();
+        return {
+          count: Array.isArray(data.categories) ? data.categories.length : null,
+          name: typeof data.name === "string" ? data.name : null,
+          reason: null
+        };
+      } catch (error) {
+        return {
+          count: null,
+          name: null,
+          reason: "food category probe failed: " + String(error)
+        };
+      }
     })()`,
     true,
   );
@@ -596,6 +650,15 @@ function buildCases(layoutDate, discovered) {
     surfaces: { axes: XYW },
     surfaceHeaders: { axes: XYWH },
   };
+  const foodSeedCategories = discovered.chickenFoodCategories;
+  const zeroCategoryFood = foodSeedCategories === 0;
+  const foodSeed = discovered.chickenFoodId
+    ? {
+        id: discovered.chickenFoodId,
+        name: discovered.chickenFoodName ?? null,
+        categories: foodSeedCategories ?? null,
+      }
+    : null;
 
   const adminFooterAnchors = [
     // Footer x/width/height are stable regardless of the loaded row count; only
@@ -1062,6 +1125,8 @@ function buildCases(layoutDate, discovered) {
               pattern: `*/api/foods/${discovered.chickenFoodId}`,
               required: true,
             },
+            { name: "units", pattern: "*/api/units", required: true },
+            { name: "last-used", pattern: "*/api/logs/last-used", required: true },
           ]
         : [],
       fixed: {
@@ -1073,9 +1138,99 @@ function buildCases(layoutDate, discovered) {
         surfaces: { axes: XYW },
         surfaceHeaders: { axes: XYWH },
       },
-      anchors: [],
+      seed: foodSeed,
+      requiresZeroCategorySeed: true,
+      anchors: zeroCategoryFood
+        ? [
+            { key: "pageHeader", label: "panel header", axes: XYWH },
+            { key: "inputs", label: "first portion control", axes: XYWH },
+            { key: "nutritionCards", label: "nutrition card top" },
+          ]
+        : [{ key: "pageHeader", label: "panel header", axes: XYWH }],
+      heightChecks: zeroCategoryFood
+        ? [
+            {
+              key: "selectFields",
+              index: 0,
+              label: "meal-slot select wrapper",
+              expected: 61,
+            },
+            {
+              key: "inputs",
+              index: 1,
+              label: "quantity amount field wrapper",
+              expected: 64,
+            },
+            {
+              key: "selectFields",
+              index: 1,
+              label: "quantity unit select wrapper",
+              expected: 61,
+            },
+            {
+              key: "inputs",
+              index: 3,
+              label: "notes field wrapper",
+              expected: 64,
+            },
+          ]
+        : [],
       nav: "present",
-      loadedSelector: '[data-testid="surface"]',
+      loadedSelector: '[data-testid="nutrition-card"]',
+      unimplemented: [
+        ...(zeroCategoryFood
+          ? []
+          : [
+              `Seed has ${foodSeedCategories ?? "unknown"} categories: first portion ` +
+                "control and nutrition-card top assertions were skipped. Set " +
+                "CALCO_FOOD_ID to a zero-category food for full coverage; required " +
+                "mode fails this case.",
+            ]),
+        "The skeleton represents the no-category food. A category section pushes the " +
+          "portion form and everything below it down.",
+      ],
+    },
+    {
+      name: "custom-food-show",
+      kind: "skeleton",
+      optional: true,
+      authRole: "layout",
+      paneRole: "detail",
+      path: () =>
+        discovered.customFoodId
+          ? `/foods/custom/${encodeURIComponent(discovered.customFoodId)}`
+          : null,
+      skipReason: discovered.customFoodId
+        ? null
+        : `No custom food id available (${discovered.customFoodReason ?? "discovery failed"}). ` +
+          "Set CALCO_CUSTOM_FOOD_ID or seed a custom food.",
+      hold: discovered.customFoodId
+        ? [
+            {
+              name: "custom-food-detail",
+              pattern: `*/api/foods/${discovered.customFoodId}`,
+              required: true,
+            },
+          ]
+        : [],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContainer: { axes: XYW },
+        pageContent: { axes: XYW },
+        surfaces: { axes: XYW },
+        surfaceHeaders: { axes: XYWH },
+      },
+      anchors: [{ key: "pageHeader", label: "header title line", axes: XYWH }],
+      nav: "present",
+      loadedSelector: '[data-testid="nutrition-card"]',
+      unimplemented: [
+        "The category chip row is an over-approximation for custom foods without " +
+          "categories. Nutrition and the action row sit below the variable category " +
+          "row and are not asserted.",
+      ],
     },
     {
       name: "meal-show",
@@ -1619,8 +1774,9 @@ function assertHeightChecks(caseDef, loading, loaded, assertions, viewportName) 
   const tolerance = 1;
   for (const check of caseDef.heightChecks ?? []) {
     if (shouldSkip(check, viewportName)) continue;
-    const loadingBox = firstAcrossPanes(loading, check.key);
-    const loadedBox = firstAcrossPanes(loaded, check.key);
+    const index = check.index ?? 0;
+    const loadingBox = allAcrossPanes(loading, check.key)[index] ?? null;
+    const loadedBox = allAcrossPanes(loaded, check.key)[index] ?? null;
     if (!loadingBox || !loadedBox) {
       record(assertions, {
         name: `${check.label} height present in both captures`,
@@ -1902,6 +2058,20 @@ function assertCaptures(caseDef, viewportName, loading, loaded, assertions) {
       actual: loading.pageSkeletons,
       tolerance: 0,
       message: "data-skeleton-page exists but the loading capture has none",
+    });
+  }
+
+  for (const pane of loading.panes) {
+    if (pane.pageSkeletons === 0) continue;
+    record(assertions, {
+      name: `pane[${pane.role ?? "unknown"}] has exactly one page status region`,
+      passed: pane.pageSkeletons === 1,
+      expected: 1,
+      actual: pane.pageSkeletons,
+      tolerance: 0,
+      message:
+        `pane[${pane.role ?? "unknown"}] has ${pane.pageSkeletons} ` +
+        "page-level skeleton status region(s)",
     });
   }
 
@@ -2290,6 +2460,7 @@ function skipResult(caseDef, context) {
     optional: Boolean(caseDef.optional),
     skipped: true,
     skipReason: caseDef.skipReason,
+    seed: caseDef.seed ?? null,
     error: null,
     assertions: [],
     pausedUrls: [],
@@ -2351,6 +2522,7 @@ function buildResult(caseDef, context, run) {
     optional: Boolean(caseDef.optional),
     skipped: false,
     skipReason: null,
+    seed: caseDef.seed ?? null,
     error: run.error ?? null,
     assertions,
     pausedUrls: run.pausedUrls ?? [],
@@ -2419,6 +2591,13 @@ function printCaseSummary(result, artifactDir) {
     if (failures.length > 12) {
       console.log(`  ... ${failures.length - 12} more failure(s) in result.json`);
     }
+  }
+
+  if (result.seed) {
+    console.log(
+      `     seed: id=${result.seed.id} name=${JSON.stringify(result.seed.name)} ` +
+        `categories=${result.seed.categories ?? "unknown"}`,
+    );
   }
 
   if (result.unimplemented?.length) {
@@ -2532,8 +2711,24 @@ async function main() {
     }
     if (process.env.CALCO_FOOD_ID) {
       discovered.chickenFoodId = process.env.CALCO_FOOD_ID;
+      discovered.chickenFoodName = null;
       discovered.chickenFoodReason = null;
     }
+
+    // Probe the selected food as the layout user, before the admin login below.
+    // Always probe so the case knows whether the full no-category anchors are
+    // available. Discovery treats a missing categories field as unknown, not
+    // as zero.
+    if (discovered.chickenFoodId) {
+      await interceptor.continueAll();
+      const foodMeta = await discoverFoodCategoryCount(cdp, discovered.chickenFoodId);
+      if (foodMeta.count !== null) discovered.chickenFoodCategories = foodMeta.count;
+      if (foodMeta.name) discovered.chickenFoodName = foodMeta.name;
+      if (foodMeta.reason) {
+        console.warn(`food-show: seed category probe failed: ${foodMeta.reason}`);
+      }
+    }
+
     if (process.env.CALCO_MEAL_ID) {
       discovered.mealId = process.env.CALCO_MEAL_ID;
       discovered.mealReason = null;
@@ -2557,6 +2752,21 @@ async function main() {
         ? allCases.filter((caseDef) => options.cases.includes(caseDef.name))
         : allCases;
 
+    for (const caseDef of selectedCases) {
+      if (
+        !options.reportOnly &&
+        caseDef.requiresZeroCategorySeed &&
+        caseDef.seed?.categories !== 0
+      ) {
+        caseDef.skipReason =
+          `${caseDef.name} requires a zero-category food seed, but ` +
+          `${caseDef.seed?.id ?? "no food id"} ` +
+          `(${JSON.stringify(caseDef.seed?.name ?? null)}) has ` +
+          `${caseDef.seed?.categories ?? "unknown"} categories. ` +
+          "Set CALCO_FOOD_ID to a zero-category food for required mode.";
+      }
+    }
+
     console.log(
       `Skeleton layout harness: ${selectedCases.length} case(s), ` +
         `${viewport.label} ${viewport.width}x${viewport.height}, date ${layoutDate}` +
@@ -2568,6 +2778,7 @@ async function main() {
       ["custom-food-edit", discovered.customFoodReason],
       ["meal-edit", discovered.mealReason],
       ["food-show", discovered.chickenFoodReason],
+      ["custom-food-show", discovered.customFoodReason],
       ["meal-show", discovered.mealReason],
       ["admin-edit", discovered.adminEditUserReason],
     ];
