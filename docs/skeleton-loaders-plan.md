@@ -235,7 +235,7 @@ Compare x, y and width only. Height is not compared because the content below is
 | Meal Edit | page container, basic section top/header band, first field height 64 | first component row top | save, nutrition preview, later sections |
 | Admin Edit User | page container, section top/header band, first detail row height, password field 64 | first detail row top | nothing below fixed rows; bottom action is stable for the seed |
 | Meal Show | page container, header section top/header band | first component row top (seed with no notes) | nutrition card, bottom actions, notes variant |
-| Food Show / Food Log Entry | panel top/header band (page header 46, surface band 86 for the one-line seed), title line | first control only in the seeded no-category variant; control heights 61/64 | nutrition card, footer, category variant |
+| Food Show / Food Log Entry | panel top/header band (page header 46 one-line / 65 two-line; surface band 86 / 105), title line | first control only in the seeded no-category variant; control heights 61/64 | nutrition card, footer, category variant |
 | Custom Food Show | page container, header section top/header band (page header 46, surface band 86) | header band content | nutrition card, action row |
 | Nutrition Details | date header top/height, banner shell top/min height, overview section top | first nutrient section top only in the seeded coverage case | later sections, reference, long messages |
 | Food Search | search controls top/height, results section top | first result row top | ad-hoc section, total page height |
@@ -522,14 +522,14 @@ References: `Page/Food/Show.elm:420-494`; `Page/FoodLog/Entry.elm:524-619`; `Com
 - `Surface.panel`:
   - header: `Skeleton.pageHeader` with `leading = Just (Skeleton.dot)`, `title = elLine 25` (the measured one-line `truncatedHeader`), `subtitle`:
     - Food Show: one `elLine 17` for the single-line `SubtitleMeta`;
-    - Food Log Entry: one `elLine 17` on Desktop/Tablet, two `elLine 17` plus a spacing-2 column on Phone, matching `SubtitleMetaLines` and the two-line fallback (`Page/FoodLog/Entry.elm:737-770`).
+    - Food Log Entry: one `elLine 17` on Desktop/Tablet; on Phone two `elLine 17` inside a spacing-2 column when the log snapshot has a brand, otherwise one line. The line count follows `FoodLog.itemBrand`, so branded, unbranded, loading and unavailable logs keep the same header height. The boot path has no snapshot and over-reserves two Phone lines.
   - category section: **do not invent a category row in the generic skeleton**. Categories are optional and unknown while loading. The skeleton represents the no-category case; a food with categories pushes the portion section down. This is explicitly variable. If the product wants no movement for a known seed, add an exact-seed variant, not a general claim.
   - portion section: title `elLine 20` (20px) and three controls:
     - meal-slot dropdown: label 13 + gap 4 + 44px trigger = 61px;
     - quantity/unit group: amount text field 64px + 12px column spacing + unit dropdown 61px (the real `View.QuantityInput.dropdown`, not a single control);
     - notes text input: label 13 + 7 gap + 44px = 64px;
     - the panel body column spacing 12 separates them.
-  - footer: full-width `Skeleton.button` 48px.
+  - footer: a row of two full-width 48px buttons (`Skeleton.bottomActions { count = 2 }`) for Save and Delete, matching `detailActionsView`.
 - `View.Nutrients.skeletonCard` after the panel. Card header `elLine 20`, macro row, hairline, table header and 6 rows.
 - Do not use the draft's "two fields" recipe. There are three controls.
 
@@ -545,7 +545,7 @@ Meal Show is not a panel. `MealShow.view` is a `pageContainer` containing a head
 - `pageContainer` with the same spacing 16.
 - Header `Surface.section`:
   - header: `Skeleton.pageHeader` with `leading = Just (Skeleton.dot)`, `title = elLine 25` (the measured one-line `truncatedHeader`), `subtitle = []` (the loaded header has **no subtitle**), `actions = []`.
-  - body: `Element.none` to match the loaded `[ Element.none ]` when there are no notes. This still creates the 20px-padded body region that the loaded page has. If the seed has notes, the loaded body grows by paragraph lines; notes are variable. Do not promise the components section top across notes variants.
+  - body: `Element.none` to match the loaded `[ Element.none ]` when there are no notes. This still creates the 20px-padded body region that the loaded page has. Notes are variable: a meal with notes grows the body by paragraph lines and pushes the components section down. The harness needs a no-notes seed for the first-component-row assertion; it creates a short-name fixture when the database has none.
 - Components `Surface.section`:
   - header: `elLine 20` (`subsectionTitle`);
   - body: 2 custom component rows with `Surface.hairline` interspersed. A component row is `Element.row [ width fill, spacing 12 ]` with a 12px leading slot (4x24 macro dot or empty), then a column spacing 4 with a 16px name el line and a 16px quantity el line. It is not `Surface.listRow`; do not use the list-row padding.

@@ -1073,7 +1073,9 @@ panePlanForRoute context existing =
             foodShowPlans context existing productId dateParam mealSlot lookupNote
 
         FoodLogEntry logId _ _ ->
-            [ detailReadyPlan (foodLogDetailDesired context logId) ]
+            [ detailReadyPlan (foodLogDetailDesired context logId)
+                |> withSkeleton (\env -> FoodLogEntry.skeletonView env Nothing)
+            ]
 
         AdHocLogCreate dateParam mealSlot ->
             [ readyPlan (createAdHocLogDesired context dateParam mealSlot) ]
@@ -1370,7 +1372,9 @@ mealShowPlans : InitCtx -> List Pane -> String -> List (PanePlan msg)
 mealShowPlans context existing mealId =
     contextualPlans existing
         [ readyPlan (mealListDesired context) ]
-        (detailReadyPlan (mealDetailDesired context mealId))
+        (detailReadyPlan (mealDetailDesired context mealId)
+            |> withSkeleton (\env -> UiPage.pageContainer [ MealShow.skeletonView env ])
+        )
 
 
 simpleDesired : String -> Pane -> DesiredPane

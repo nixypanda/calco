@@ -10,12 +10,11 @@ import Element.Font as Font
 import Ui.Common exposing (minWidthZero, testId)
 import Ui.DesignTokens exposing (space12, space16, space2, space4, space8)
 import Ui.Theme exposing (Theme)
-import Ui.Typography exposing (body, mutedBody)
+import Ui.Typography exposing (body)
 
 
 type PageHeaderSubtitle
-    = SubtitleText String
-    | SubtitleMeta { items : List String, separator : String }
+    = SubtitleMeta { items : List String, separator : String }
     | SubtitleMetaLines { lines : List (List String), separator : String }
 
 
@@ -111,9 +110,6 @@ pageHeaderRaw config =
 pageHeaderSubtitle : Theme -> PageHeaderSubtitle -> Element msg
 pageHeaderSubtitle theme subtitle =
     case subtitle of
-        SubtitleText text ->
-            mutedBody theme text
-
         SubtitleMeta meta ->
             Element.paragraph
                 [ Font.color theme.textMuted, body, Element.width Element.fill, minWidthZero ]

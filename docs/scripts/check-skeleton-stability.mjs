@@ -11,11 +11,12 @@
 //     printed or written to artifacts.
 //   - CALCO_URL overrides the default base URL and CALCO_LAYOUT_DATE overrides
 //     the fixed route date (default 2026-10-27; a future date falls back).
-//   - Optional CALCO_CUSTOM_FOOD_ID, CALCO_FOOD_ID, CALCO_MEAL_ID and
-//     CALCO_ADMIN_EDIT_USER_ID override the ids discovered from the API.
-//     Explicit overrides always win. Without an admin-edit override the harness
-//     uses the `me`/layout user when present, then falls back to the first user
-//     returned by /api/admin/users (normally the authenticated admin).
+//   - Optional CALCO_CUSTOM_FOOD_ID, CALCO_FOOD_ID, CALCO_MEAL_ID,
+//     CALCO_LOG_ID and CALCO_ADMIN_EDIT_USER_ID override the ids discovered
+//     from the API. Explicit overrides always win. Without an admin-edit
+//     override the harness uses the `me`/layout user when present, then falls
+//     back to the first user returned by /api/admin/users (normally the
+//     authenticated admin).
 //
 // The harness is report-only by default: layout failures are printed, artifacts
 // are written, and the process exits 0. Set CALCO_REQUIRE_LAYOUT=1 to make
@@ -24,7 +25,8 @@
 // skip.
 //
 // A clean database still needs either seed data or the fixture-id overrides
-// above for custom-food-edit, meal-edit, food-show and meal-show. Required MVP
+// above for custom-food-edit, meal-edit, food-show, food-log and meal-show.
+// Required MVP
 // cases (bootstrap-auth, diary-date-gate, diary, goals, diary-settings,
 // api-keys, admin-boot, calendar, transition-scroll) do not depend on those
 // ids. The api-keys case creates one uniquely named layout-user key before the
@@ -83,6 +85,7 @@ const ALL_CASE_NAMES = [
   "meal-edit",
   "food-show",
   "custom-food-show",
+  "food-log",
   "meal-show",
   "calendar",
   "transition-scroll",
@@ -386,6 +389,96 @@ function apiKeyFixtureName() {
   return `skel-${Date.now().toString(36)}-${process.pid}`;
 }
 
+async function createSkeletonMealFixture(client, discovered) {
+  const foodId = discovered.chickenFoodId ?? discovered.customFoodId;
+  if (!foodId) return null;
+
+  const name = "CalCo Skeleton Meal";
+  const result = await evaluate(
+    client,
+    `(async () => {
+      try {
+        const response = await fetch("/api/meals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            name: ${JSON.stringify(name)},
+            notes: null,
+            total_quantity: null,
+            components: [
+              {
+                item: { type: "product", id: ${JSON.stringify(foodId)} },
+                quantity: { amount: "100", unit: "g" }
+              }
+            ]
+          })
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          return { ok: false, status: response.status, body: text.slice(0, 300) };
+        }
+        const data = JSON.parse(text);
+        return { ok: true, id: data.id, name: data.name };
+      } catch (error) {
+        return { ok: false, status: 0, error: String(error) };
+      }
+    })()`,
+    true,
+  );
+
+  if (!result?.ok || !result.id) {
+    const detail =
+      result?.status ? `HTTP ${result.status}` : result?.error ?? result?.body ?? "unknown error";
+    console.warn(`meal-show: could not create a no-notes meal fixture (${detail}).`);
+    return null;
+  }
+
+  discovered.mealId = result.id;
+  discovered.mealReason = null;
+  discovered.mealName = result.name ?? name;
+  discovered.mealNameLength = discovered.mealName.length;
+  discovered.mealNotesLength = 0;
+  discovered.mealSeedSource = "fixture";
+  return { id: result.id, name: discovered.mealName };
+}
+
+async function deleteSkeletonMealFixture(context, fixture) {
+  const { client, network, auth, options, interceptor } = context;
+  let lastFailure = null;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await interceptor.continueAll();
+      await login(client, network, auth.layout, options.baseUrl);
+      const result = await evaluate(
+        client,
+        `(async () => {
+          try {
+            const response = await fetch(
+              ${JSON.stringify(`/api/meals/${encodeURIComponent(fixture.id)}`)},
+              { method: "DELETE", credentials: "include" }
+            );
+            return { ok: response.ok, status: response.status };
+          } catch (error) {
+            return { ok: false, status: 0, error: String(error) };
+          }
+        })()`,
+        true,
+      );
+      if (result?.ok) return;
+      lastFailure = result?.status ? `HTTP ${result.status}` : result?.error ?? "unknown error";
+    } catch (error) {
+      lastFailure = String(error);
+    }
+  }
+
+  throw new Error(
+    `Could not delete the meal-show fixture "${fixture.name}" (id ${fixture.id}): ` +
+      `${lastFailure ?? "unknown error"}. Remove it manually.`,
+  );
+}
+
 async function createApiKeyFixture(context) {
   const { client, network, auth, options, interceptor } = context;
   const name = apiKeyFixtureName();
@@ -471,7 +564,7 @@ async function deleteApiKeyFixture(context, fixture) {
   );
 }
 
-async function discoverIds(client) {
+async function discoverIds(client, layoutDate) {
   return evaluate(
     client,
     `(async () => {
@@ -481,12 +574,24 @@ async function discoverIds(client) {
         chickenFoodName: null,
         chickenFoodCategories: null,
         mealId: null,
+        mealName: null,
+        mealNotesLength: null,
+        mealNameLength: null,
+        mealSeedSource: null,
+        logId: null,
+        logName: null,
+        logItemType: null,
+        logBrand: null,
+        logHasBrand: null,
         adminEditUserId: null,
         customFoodReason: null,
         chickenFoodReason: null,
         mealReason: null,
+        logReason: null,
         adminEditUserReason: null
       };
+
+      const logDate = ${JSON.stringify(layoutDate)};
 
       const firstId = (data) =>
         Array.isArray(data.items) && data.items[0] ? data.items[0].id : null;
@@ -502,6 +607,27 @@ async function discoverIds(client) {
             return nameDelta || String(left.name ?? "").localeCompare(String(right.name ?? ""));
           });
         return zeroCategory[0] ?? data.items[0] ?? null;
+      };
+
+      const itemHasBrand = (item) =>
+        Boolean(
+          item &&
+            item.item &&
+            typeof item.item.brand === "string" &&
+            item.item.brand.length > 0,
+        );
+
+      const pickProductLog = (items) => {
+        if (!Array.isArray(items)) return null;
+        return (
+          items.find(
+            (item) =>
+              item && item.item && item.item.type === "product" && itemHasBrand(item),
+          ) ??
+          items.find((item) => item && item.item && item.item.type === "product") ??
+          items[0] ??
+          null
+        );
       };
 
       try {
@@ -547,11 +673,75 @@ async function discoverIds(client) {
           result.mealReason = "GET /api/meals returned HTTP " + response.status;
         } else {
           const data = await response.json();
-          result.mealId = firstId(data);
+          const meals = Array.isArray(data.items) ? data.items : [];
+          const notesRank = (meal) => {
+            const length = meal && typeof meal.notes === "string" ? meal.notes.length : 0;
+            if (length === 0) return 2;
+            return length <= 40 ? 0 : 1;
+          };
+          const chosen =
+            [...meals].sort((left, right) => {
+              const byNotes = notesRank(left) - notesRank(right);
+              if (byNotes !== 0) return byNotes;
+              return (
+                String(left.name ?? "").length - String(right.name ?? "").length ||
+                String(left.name ?? "").localeCompare(String(right.name ?? ""))
+              );
+            })[0] ?? null;
+          result.mealId = chosen ? chosen.id : null;
+          result.mealName = chosen && typeof chosen.name === "string" ? chosen.name : null;
+          result.mealNotesLength =
+            chosen && typeof chosen.notes === "string" ? chosen.notes.length : 0;
+          result.mealNameLength =
+            chosen && typeof chosen.name === "string" ? chosen.name.length : null;
+          result.mealSeedSource = chosen ? "existing" : null;
           if (!result.mealId) result.mealReason = "GET /api/meals returned no items";
         }
       } catch (error) {
         result.mealReason = "GET /api/meals failed: " + String(error);
+      }
+
+      try {
+        let chosen = null;
+        const dated = await fetch(
+          "/api/logs?log_date=" + encodeURIComponent(logDate),
+          { credentials: "include" }
+        );
+        if (dated.ok) {
+          const data = await dated.json();
+          chosen = pickProductLog(data.items);
+        }
+        if (!chosen) {
+          const slots = await fetch(
+            "/api/logs/latest-slots?before=" + encodeURIComponent(logDate) +
+              "&lookback_days=365",
+            { credentials: "include" }
+          );
+          if (slots.ok) {
+            const data = await slots.json();
+            const allItems = Array.isArray(data.slots)
+              ? data.slots.flatMap((slot) =>
+                  Array.isArray(slot.items) ? slot.items : [],
+                )
+              : [];
+            chosen = pickProductLog(allItems);
+          }
+        }
+        if (chosen) {
+          result.logId = chosen.id;
+          result.logName =
+            chosen.item && typeof chosen.item.name === "string" ? chosen.item.name : null;
+          result.logItemType = chosen.item ? (chosen.item.type ?? null) : null;
+          result.logBrand =
+            chosen.item && typeof chosen.item.brand === "string" ? chosen.item.brand : null;
+          result.logHasBrand = itemHasBrand(chosen);
+        } else {
+          result.logReason =
+            "No log found for " + logDate +
+            " and none in the latest-slots lookback.";
+        }
+      } catch (error) {
+        result.logReason = "Log discovery failed: " + String(error);
       }
 
       return result;
@@ -657,6 +847,28 @@ function buildCases(layoutDate, discovered) {
         id: discovered.chickenFoodId,
         name: discovered.chickenFoodName ?? null,
         categories: foodSeedCategories ?? null,
+      }
+    : null;
+  const mealTitleSingleLine =
+    discovered.mealNameLength !== null && discovered.mealNameLength <= 40;
+  const mealRowStable =
+    mealTitleSingleLine && discovered.mealNotesLength === 0;
+  const mealSeed = discovered.mealId
+    ? {
+        id: discovered.mealId,
+        name: discovered.mealName ?? null,
+        nameLength: discovered.mealNameLength ?? null,
+        notesLength: discovered.mealNotesLength ?? null,
+        source: discovered.mealSeedSource ?? null,
+      }
+    : null;
+  const logSeed = discovered.logId
+    ? {
+        id: discovered.logId,
+        name: discovered.logName ?? null,
+        itemType: discovered.logItemType ?? null,
+        brand: discovered.logBrand ?? null,
+        hasBrand: discovered.logHasBrand ?? null,
       }
     : null;
 
@@ -1250,6 +1462,77 @@ function buildCases(layoutDate, discovered) {
               pattern: `*/api/meals/${discovered.mealId}`,
               required: true,
             },
+            {
+              name: "meal-nutrients",
+              pattern: `*/api/meals/${discovered.mealId}/nutrients?*`,
+              required: true,
+            },
+            { name: "units", pattern: "*/api/units", required: true },
+          ]
+        : [],
+      fixed: {
+        topbar: { axes: XYWH },
+        pageRoot: { axes: XYW },
+        panes: true,
+        requirePanes: 1,
+        pageContainer: { axes: XYW },
+        pageContent: { axes: XYW },
+        surfaces: { axes: XYW },
+        surfaceHeaders: mealTitleSingleLine ? { axes: XYWH } : { axes: XYW },
+      },
+      seed: mealSeed,
+      anchors: mealRowStable
+        ? [{ key: "componentRows", label: "first meal component row", axes: XYWH }]
+        : [
+            {
+              key: "componentRows",
+              label: "first meal component row height",
+              axes: ["height"],
+            },
+          ],
+      heightChecks: [
+        { key: "inputs", index: 0, label: "nutrition amount field", expected: 64 },
+        { key: "selectFields", index: 0, label: "nutrition unit select", expected: 61 },
+        { key: "fieldControls", index: 0, label: "nutrition amount inner control", expected: 44 },
+        { key: "bottomActions", label: "first bottom action", expected: 48 },
+      ],
+      nav: "present",
+      loadedSelector: '[data-testid="page-header"]',
+      unimplemented: [
+        ...(mealRowStable
+          ? []
+          : [
+              "No suitable no-notes meal seed was available, so the components-" +
+                "section top is variable. Only the first component row height, " +
+                "header x/y/width and the bottom action height were asserted; seed " +
+                "or allow the harness to create a short-name, no-notes meal for full " +
+                "coverage.",
+            ]),
+        "Component count and nutrition-card top sit below variable content and are " +
+          "not asserted. The skeleton always shows two component rows as an " +
+          "over-approximation.",
+      ],
+    },
+    {
+      name: "food-log",
+      kind: "skeleton",
+      optional: true,
+      authRole: "layout",
+      paneRole: "detail",
+      path: () =>
+        discovered.logId ? `/logs/${encodeURIComponent(discovered.logId)}` : null,
+      skipReason: discovered.logId
+        ? null
+        : `No log id available (${discovered.logReason ?? "discovery failed"}). ` +
+          "Set CALCO_LOG_ID or seed a log.",
+      hold: discovered.logId
+        ? [
+            {
+              name: "log-detail",
+              pattern: `*/api/logs/${discovered.logId}`,
+              required: true,
+            },
+            { name: "units", pattern: "*/api/units", required: true },
           ]
         : [],
       fixed: {
@@ -1258,13 +1541,54 @@ function buildCases(layoutDate, discovered) {
         panes: true,
         requirePanes: 1,
         pageContent: { axes: XYW },
-        pageHeader: { axes: XYW },
+        pageHeader:
+          discovered.logItemType === "product" && discovered.logHasBrand
+            ? { axes: XYWH }
+            : { axes: XYW },
         surfaces: { axes: XYW },
-        surfaceHeaders: { axes: XYWH },
+        surfaceHeaders:
+          discovered.logItemType === "product" && discovered.logHasBrand
+            ? { axes: XYWH }
+            : { axes: XYW },
       },
-      anchors: [{ key: "componentRows", label: "first meal component row" }],
+      seed: logSeed,
+      anchors: [
+        {
+          key: "pageHeader",
+          label: "panel header",
+          axes:
+            discovered.logItemType === "product" && discovered.logHasBrand
+              ? XYWH
+              : XYW,
+        },
+      ],
+      heightChecks: [
+        { key: "selectFields", index: 0, label: "meal-slot select wrapper", expected: 61 },
+        { key: "inputs", index: 1, label: "quantity amount field wrapper", expected: 64 },
+        { key: "selectFields", index: 1, label: "quantity unit select wrapper", expected: 61 },
+        { key: "inputs", index: 3, label: "notes field wrapper", expected: 64 },
+        { key: "bottomActions", index: 0, label: "first footer action", expected: 48 },
+      ],
+      countChecks: [
+        { key: "bottomActions", label: "footer action count", expected: 2 },
+      ],
       nav: "present",
-      loadedSelector: '[data-testid="page-header"]',
+      loadedSelector: '[data-testid="nutrition-card"]',
+      unimplemented: [
+        ...(discovered.logItemType === "product" && discovered.logHasBrand
+          ? []
+          : [
+              "The Phone header reserves two subtitle lines, but this seed is " +
+                `${discovered.logItemType ?? "an unknown item type"} with ` +
+                `${discovered.logHasBrand ? "" : "no "}brand. The loaded subtitle may ` +
+                "collapse to one line, so only the header x/y/width are asserted; " +
+                "seed a branded product log for full header-band coverage.",
+            ]),
+        "Category chips are optional and unknown while loading. A log with " +
+          "categories pushes the portion section and footer down; category, footer " +
+          "position and nutrition-card top sit below variable content and are not " +
+          "asserted.",
+      ],
     },
     {
       name: "calendar",
@@ -1807,8 +2131,26 @@ function assertHeightChecks(caseDef, loading, loaded, assertions, viewportName) 
   }
 }
 
-function assertMinRowHeights(caseDef, loading, loaded, assertions) {
-  const tolerance = 1;
+function assertCountChecks(caseDef, loading, loaded, assertions) {
+  for (const check of caseDef.countChecks ?? []) {
+    for (const [label, capture] of [
+      ["loading", loading],
+      ["loaded", loaded],
+    ]) {
+      const count = allAcrossPanes(capture, check.key).length;
+      record(assertions, {
+        name: `${label} ${check.label}`,
+        passed: count === check.expected,
+        expected: check.expected,
+        actual: count,
+        tolerance: 0,
+        message: `${label} ${check.label} was ${count}`,
+      });
+    }
+  }
+}
+
+function assertMinRowHeights(caseDef, loading, loaded, assertions) {  const tolerance = 1;
   for (const check of caseDef.minRowHeightChecks ?? []) {
     const loadingRows = allAcrossPanes(loading, check.key);
     const loadedRows = allAcrossPanes(loaded, check.key);
@@ -2087,6 +2429,7 @@ function assertCaptures(caseDef, viewportName, loading, loaded, assertions) {
   assertEnvelope(caseDef, loading, loaded, assertions);
   assertAnchors(caseDef, loading, loaded, assertions, viewportName);
   assertHeightChecks(caseDef, loading, loaded, assertions, viewportName);
+  assertCountChecks(caseDef, loading, loaded, assertions);
   assertMinRowHeights(caseDef, loading, loaded, assertions);
   assertChrome(caseDef, viewportName, loading, loaded, assertions);
   assertCalendars("loading", loading, assertions);
@@ -2594,10 +2937,7 @@ function printCaseSummary(result, artifactDir) {
   }
 
   if (result.seed) {
-    console.log(
-      `     seed: id=${result.seed.id} name=${JSON.stringify(result.seed.name)} ` +
-        `categories=${result.seed.categories ?? "unknown"}`,
-    );
+    console.log(`     seed: ${JSON.stringify(result.seed)}`);
   }
 
   if (result.unimplemented?.length) {
@@ -2669,6 +3009,8 @@ async function main() {
 
   const runRoot = path.join(ARTIFACT_ROOT, timestamp());
   const results = [];
+  let runContext = null;
+  let mealFixture = null;
 
   try {
     chromeProfile = await fs.mkdtemp(path.join(os.tmpdir(), "calco-skeleton-stability-"));
@@ -2698,12 +3040,13 @@ async function main() {
       viewport,
       layoutDate,
     };
+    runContext = context;
 
     // Discover optional route ids with the layout session. Each case logs in
     // again after this so no case depends on another case's page state.
     await interceptor.continueAll();
     await login(cdp, network, auth.layout, options.baseUrl);
-    const discovered = await discoverIds(cdp);
+    const discovered = await discoverIds(cdp, layoutDate);
 
     if (process.env.CALCO_CUSTOM_FOOD_ID) {
       discovered.customFoodId = process.env.CALCO_CUSTOM_FOOD_ID;
@@ -2732,7 +3075,34 @@ async function main() {
     if (process.env.CALCO_MEAL_ID) {
       discovered.mealId = process.env.CALCO_MEAL_ID;
       discovered.mealReason = null;
+      discovered.mealName = null;
+      discovered.mealNotesLength = null;
+      discovered.mealNameLength = null;
+      discovered.mealSeedSource = "override";
     }
+    if (process.env.CALCO_LOG_ID) {
+      discovered.logId = process.env.CALCO_LOG_ID;
+      discovered.logName = null;
+      discovered.logItemType = null;
+      discovered.logBrand = null;
+      discovered.logHasBrand = null;
+      discovered.logReason = null;
+    }
+
+    // The Meal Show contract is the no-notes header body. If the database has no
+    // no-notes meal, create a short-name fixture as the layout user and delete it
+    // after the run. An explicit CALCO_MEAL_ID always wins.
+    const mealCaseSelected =
+      options.cases.length === 0 || options.cases.includes("meal-show");
+    if (
+      mealCaseSelected &&
+      !process.env.CALCO_MEAL_ID &&
+      discovered.mealNotesLength !== 0
+    ) {
+      await interceptor.continueAll();
+      mealFixture = await createSkeletonMealFixture(cdp, discovered);
+    }
+
     if (process.env.CALCO_ADMIN_EDIT_USER_ID) {
       discovered.adminEditUserId = process.env.CALCO_ADMIN_EDIT_USER_ID;
       discovered.adminEditUserReason = null;
@@ -2780,6 +3150,7 @@ async function main() {
       ["food-show", discovered.chickenFoodReason],
       ["custom-food-show", discovered.customFoodReason],
       ["meal-show", discovered.mealReason],
+      ["food-log", discovered.logReason],
       ["admin-edit", discovered.adminEditUserReason],
     ];
     for (const [name, reason] of missingOptional) {
@@ -2822,6 +3193,13 @@ async function main() {
       printCaseSummary(result, artifactDir);
     }
   } finally {
+    if (mealFixture && runContext) {
+      try {
+        await deleteSkeletonMealFixture(runContext, mealFixture);
+      } catch (error) {
+        console.warn(`meal-show: fixture cleanup failed: ${error.message}`);
+      }
+    }
     await cleanup();
   }
 

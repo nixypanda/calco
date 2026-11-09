@@ -4,7 +4,6 @@ module Ui.Typography exposing
     , decimalNumber
     , heroStat
     , maybeMutedParagraph
-    , mutedBody
     , mutedBodyParagraph
     , mutedCaption
     , mutedCaptionParagraph
@@ -143,11 +142,6 @@ truncatedHeader theme heading =
         , minWidthZero
         ]
         [ Element.text heading ]
-
-
-mutedBody : Theme -> String -> Element msg
-mutedBody theme text =
-    Element.el [ Font.color theme.textMuted, body ] (Element.text text)
 
 
 mutedBodyParagraph : Theme -> String -> Element msg
