@@ -7,6 +7,8 @@ module Page.Goals.Settings exposing
     , ReadyModel
     , SaveState(..)
     , init
+    , isBusy
+    , skeletonView
     , update
     , view
     )
@@ -21,13 +23,14 @@ import Lib.Date as LocalDate
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Common as UiCommon
+import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
-import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
 
@@ -73,6 +76,18 @@ type OutMsg
 init : ( Model, OutMsg )
 init =
     ( Loading, RequestGoal )
+
+
+{-| Only the initial fetch is busy; `Failed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 
@@ -321,7 +336,10 @@ view env model =
     UiPage.pageContainer
         (case model of
             Loading ->
-                [ goalsSettingsSkeleton env.theme ]
+                [ Skeleton.busy
+                    { label = I18n.t env.language TidCommonLoading }
+                    [ skeletonView env ]
+                ]
 
             Failed message ->
                 [ Feedback.errorRetry env.theme
@@ -400,8 +418,9 @@ view env model =
                         ]
                     , footer = Nothing
                     }
-                , Button.textButton env.device
+                , Button.textButtonWithAttributes env.device
                     env.theme
+                    [ UiCommon.testId "action-primary" ]
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label = I18n.t env.language TidGoalSettingsSave
@@ -445,17 +464,43 @@ isSaving save =
             False
 
 
-goalsSettingsSkeleton : Theme -> Element msg
-goalsSettingsSkeleton theme =
-    Surface.section theme
-        { header =
-            Just (Skeleton.barCustom theme { width = Element.px 160, height = 24 })
-        , body =
-            [ Skeleton.input theme
-            , Skeleton.input theme
-            , Skeleton.input theme
-            , Skeleton.input theme
-            , Skeleton.button theme
-            ]
-        , footer = Nothing
-        }
+{-| The page body below `UiPage.pageContainer`. The caller owns the single
+`Skeleton.busy` wrapper so the page view and `Page.bootstrapView` cannot nest
+status regions.
+
+The status message is data-derived and unknown while loading. One 17px line
+matches the current en-US seed; longer statuses and locales can wrap, so the
+fields and save below it are variable for those variants.
+
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Surface.section env.theme
+            { header =
+                Just
+                    (Surface.sectionHeader
+                        { title =
+                            Skeleton.elLine env.theme
+                                { size = 24, width = Element.px 160 }
+                        , description =
+                            Just
+                                (Skeleton.elLine env.theme
+                                    { size = 17, width = Element.fill }
+                                )
+                        , trailing = Nothing
+                        }
+                    )
+            , body =
+                List.repeat 4
+                    (Skeleton.field env.theme
+                        { labelWidth = Element.px 80, gap = 7 }
+                    )
+            , footer = Nothing
+            }
+        , Skeleton.buttonWithAttributes env.theme
+            [ UiCommon.testId "action-primary" ]
+        ]

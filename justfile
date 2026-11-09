@@ -102,6 +102,12 @@ dev-frontend:
 screenshots:
     node docs/scripts/capture-readme-screenshots.mjs
 
+# Check skeleton layout stability (run `just dev` first; Phone/report-only by
+# default). Set CALCO_* credentials and pass flags through, e.g.
+#   just check-skeleton-layout --viewport desktop
+check-skeleton-layout *ARGS:
+    node docs/scripts/check-skeleton-stability.mjs {{ARGS}}
+
 # Build the frontend.
 [working-directory("frontend-web")]
 build-frontend:

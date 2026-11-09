@@ -1,5 +1,6 @@
 module Page exposing
-    ( DiaryGoalResult
+    ( DesiredPane
+    , DiaryGoalResult
     , DiaryLogsResult
     , DiaryPaneId
     , InitCtx
@@ -9,17 +10,23 @@ module Page exposing
     , NutrientsResult
     , OutMsg(..)
     , Pane(..)
+    , PanePlan
     , PrefsResult
     , UnitsResult
     , barcodeScannerEventReceived
+    , bootPaneKeys
+    , bootShell
+    , bootstrapView
     , clearStore
     , init
     , initPreserving
+    , isBusy
     , isLoading
     , loading
     , localCtxReceived
     , modalView
     , paneKeys
+    , panePlanForRoute
     , photoPreviewUrls
     , reconcile
     , update
@@ -83,7 +90,9 @@ import Store exposing (Store)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Workspace as Workspace
 
 
@@ -133,7 +142,21 @@ type alias DiaryPaneId =
 
 
 type DesiredPane
-    = DesiredPane String (() -> ( Pane, Cmd Msg, OutMsg ))
+    = DesiredPane String (Int -> ( Pane, Cmd Msg, OutMsg ))
+
+
+{-| The route's pane shape: the eventual key, whether the pane needs the local
+date before it can be built, the pane itself when it can be built, its workspace
+role, and the body rendered while it is loading. Both `panesForRoute` and
+`bootstrapView` consume this one plan.
+-}
+type alias PanePlan msg =
+    { key : String
+    , requiresToday : Bool
+    , desired : Maybe DesiredPane
+    , role : Workspace.PaneRole
+    , skeleton : Env -> Element msg
+    }
 
 
 type alias ReconcileResult pane effect =
@@ -157,9 +180,80 @@ type OutMsg
     | SetupSucceeded Auth.LoginSession
 
 
+{-| "Waiting for today's date" only; the shell no longer uses this to decide
+whether to show app chrome.
+-}
 isLoading : Model -> Bool
 isLoading model =
     model.waitingForToday
+
+
+{-| Pane-aware page load state for the DOM marker the layout harness reads.
+`waitingForToday` and panes that are still fetching their initial data are
+busy; settled `Failed` states are not. Create forms and in-place refreshes have
+no page-level pending state, so they report `False`.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    model.waitingForToday || List.any paneIsBusy model.panes
+
+
+paneIsBusy : Pane -> Bool
+paneIsBusy pane =
+    case pane of
+        AdminPane dashboard ->
+            AdminDashboard.isBusy dashboard
+
+        AdminEditUserPane _ edit ->
+            AdminEditUser.isBusy edit
+
+        DiaryPane _ diary ->
+            DiaryDay.isBusy diary
+
+        DiaryCalendarPane _ calendar ->
+            DiaryCalendar.isBusy calendar
+
+        NutritionDetailsPane _ details ->
+            NutritionDetails.isBusy details
+
+        GoalsSettingsPane _ goals ->
+            GoalsSettings.isBusy goals
+
+        DiarySettingsPane settings ->
+            DiarySettings.isBusy settings
+
+        ApiKeysPane _ keys ->
+            SettingsApiKeys.isBusy keys
+
+        FoodSearchPane search ->
+            FoodSearch.isBusy search
+
+        FoodDetailPane _ food ->
+            FoodShow.isBusy food
+
+        FoodLogDetailPane _ entry ->
+            FoodLogEntry.isBusy entry
+
+        CustomFoodListPane foods ->
+            CustomFoodList.isBusy foods
+
+        CustomFoodEditPane _ edit ->
+            CustomFoodEdit.isBusy edit
+
+        CustomFoodShowPane _ food ->
+            CustomFoodShow.isBusy food
+
+        MealListPane meals ->
+            MealList.isBusy meals
+
+        MealEditPane _ edit ->
+            MealEdit.isBusy edit
+
+        MealDetailPane _ meal ->
+            MealShow.isBusy meal
+
+        _ ->
+            False
 
 
 loading : Model
@@ -183,6 +277,16 @@ clearStore model =
 paneKeys : Model -> List String
 paneKeys model =
     List.map paneKey model.panes
+
+
+{-| Keys of the panes the boot body renders while the local date is still
+missing. `Page.Model.panes` is empty then, so consumers that need the rendered
+layout must read the route plan instead.
+-}
+bootPaneKeys : Route -> List String
+bootPaneKeys route =
+    panePlanForRoute { route = route, today = Nothing } []
+        |> List.map .key
 
 
 photoPreviewUrls : Model -> List String
@@ -280,8 +384,8 @@ paneKey pane =
         MealDetailPane mealId _ ->
             "meal-detail:" ++ mealId
 
-        PlaceholderPane message ->
-            "placeholder:" ++ message
+        PlaceholderPane _ ->
+            "placeholder:unmigrated"
 
 
 diaryPaneKey : DiaryPaneId -> String
@@ -316,7 +420,7 @@ initPreserving context current =
         generation =
             current.nextApiKeysGeneration + 1
     in
-    case panesForRoute context generation current.panes of
+    case panesForRoute context current.panes of
         Nothing ->
             ( { current | panes = [], waitingForToday = True, nextApiKeysGeneration = generation }
             , Cmd.none
@@ -327,7 +431,13 @@ initPreserving context current =
             finishReconcile context
                 current.store
                 generation
-                (reconcile paneKey desiredPaneKey initDesiredPane current.panes desiredPanes)
+                (reconcile
+                    paneKey
+                    desiredPaneKey
+                    (initDesiredPane generation)
+                    current.panes
+                    desiredPanes
+                )
 
 
 reconcile :
@@ -370,11 +480,11 @@ desiredPaneKey (DesiredPane key _) =
     key
 
 
-initDesiredPane : DesiredPane -> ( Pane, ( Cmd Msg, OutMsg ) )
-initDesiredPane (DesiredPane _ initialize) =
+initDesiredPane : Int -> DesiredPane -> ( Pane, ( Cmd Msg, OutMsg ) )
+initDesiredPane generation (DesiredPane _ initialize) =
     let
         ( pane, cmd, outMsg ) =
-            initialize ()
+            initialize generation
     in
     ( pane, ( cmd, outMsg ) )
 
@@ -579,7 +689,7 @@ hydratePrefs : PrefsResult -> Pane -> Pane
 hydratePrefs result pane =
     case pane of
         DiaryPane paneId model ->
-            DiaryPane paneId (modelOnly (DiaryDay.update (DiaryDay.PrefsLoaded result) model))
+            DiaryPane paneId (modelOnly (DiaryDay.update (DiaryDay.PrefsReceived result) model))
 
         DiarySettingsPane model ->
             DiarySettingsPane
@@ -880,117 +990,404 @@ retargetSearch dateParam mealSlot panes =
     ( List.map Tuple.first results, results |> List.map Tuple.second |> Cmd.batch )
 
 
-panesForRoute : InitCtx -> Int -> List Pane -> Maybe (List DesiredPane)
-panesForRoute context generation existing =
+{-| The single route table for pane count, order and keys. Every `Route`
+constructor is listed explicitly; there is no catch-all.
+
+Date-gated routes (`DiaryDay`, `DiaryCalendar`, `NutritionDetails`,
+`GoalSettings`) set `requiresToday` and carry `desired = Nothing` until the
+local date arrives. `FoodSearch`/`FoodShow` with an explicit `date` are
+deliberately **not** gated: they render their own usable pane while `today` is
+missing and gain the diary main pane once it arrives. That documented 1→2 pane
+policy lives here so the loaded panes and the boot shell cannot drift.
+
+-}
+panePlanForRoute : InitCtx -> List Pane -> List (PanePlan msg)
+panePlanForRoute context existing =
     case context.route of
+        Root ->
+            placeholderPlans
+
+        NotFound ->
+            placeholderPlans
+
         AuthLogin ->
-            Just [ simpleDesired "login" (LoginPane AuthLogin.init) ]
+            [ readyPlan (simpleDesired "login" (LoginPane AuthLogin.init)) ]
 
         BootstrapSetup ->
-            Just [ simpleDesired "setup" (SetupPane BootstrapSetup.init) ]
+            [ readyPlan (simpleDesired "setup" (SetupPane BootstrapSetup.init)) ]
 
         AdminDashboard ->
-            Just [ adminDesired context ]
+            [ readyPlan (adminDesired context)
+                |> withSkeleton AdminDashboard.skeletonView
+            ]
 
         AdminCreateUser ->
-            Just [ simpleDesired "admin-create-user" (AdminCreateUserPane AdminCreateUser.init) ]
+            [ readyPlan
+                (simpleDesired "admin-create-user"
+                    (AdminCreateUserPane AdminCreateUser.init)
+                )
+            ]
 
         AdminEditUser userId ->
-            Just [ adminEditDesired context userId ]
+            [ readyPlan (adminEditDesired context userId)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ AdminEditUser.skeletonView env ])
+            ]
 
         DiaryDay dateParam calendarMonth ->
-            context.today
-                |> Maybe.map
-                    (\today ->
-                        case calendarMonth of
-                            Just month ->
-                                contextualWorkspace existing
-                                    [ calendarDesired context today (Just month) ]
-                                    (diaryDesired context today dateParam calendarMonth)
-
-                            Nothing ->
-                                [ diaryDesired context today dateParam Nothing ]
-                    )
+            diaryDayPlans context existing dateParam calendarMonth
 
         DiaryCalendar monthParam ->
-            context.today |> Maybe.map (\today -> [ calendarDesired context today monthParam ])
+            [ calendarPlan context monthParam ]
 
         NutritionDetails dateParam ->
-            context.today
-                |> Maybe.map
-                    (\today ->
-                        contextualWorkspace existing
-                            [ diaryDesired context today dateParam Nothing ]
-                            (nutritionDesired context today dateParam)
-                    )
+            contextualPlans existing
+                [ diaryPlan context dateParam Nothing ]
+                (nutritionPlan context dateParam)
 
         GoalSettings ->
-            context.today |> Maybe.map (\today -> [ goalsDesired context today ])
+            [ goalsPlan context
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ GoalsSettings.skeletonView env ])
+            ]
 
         DiarySettings ->
-            Just [ diarySettingsDesired context ]
+            [ readyPlan (diarySettingsDesired context)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ DiarySettings.skeletonView env ])
+            ]
 
         SettingsApiKeys ->
-            Just [ apiKeysDesired context generation ]
+            [ readyPlan (apiKeysDesired context)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ SettingsApiKeys.skeletonView env ])
+            ]
 
         SettingsApiKeyCreate ->
-            Just [ apiKeyCreateDesired context generation ]
+            [ readyPlan (apiKeyCreateDesired context) ]
 
         FoodSearch dateParam mealSlot ->
-            Just (searchWorkspaceDesired context existing dateParam mealSlot)
+            foodSearchPlans context existing dateParam mealSlot
 
         FoodShow productId dateParam mealSlot lookupNote ->
-            Just (foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote)
+            foodShowPlans context existing productId dateParam mealSlot lookupNote
 
         FoodLogEntry logId _ _ ->
-            Just [ foodLogDetailDesired context logId ]
+            [ detailReadyPlan (foodLogDetailDesired context logId)
+                |> withSkeleton (\env -> FoodLogEntry.skeletonView env Nothing)
+            ]
 
         AdHocLogCreate dateParam mealSlot ->
-            Just [ createAdHocLogDesired context dateParam mealSlot ]
+            [ readyPlan (createAdHocLogDesired context dateParam mealSlot) ]
 
         AiLogCreate dateParam mealSlot ->
-            Just [ createWithAiLogDesired context dateParam mealSlot ]
+            [ readyPlan (createWithAiLogDesired context dateParam mealSlot) ]
 
         CustomFoodCreate ->
-            Just [ customFoodCreatePaneDesired context CustomFoodCreate.init ]
+            [ readyPlan (customFoodCreatePaneDesired context CustomFoodCreate.init) ]
 
         CustomFoodCreateWithAi ->
-            Just [ customFoodCreatePaneDesired context CustomFoodCreate.initWithAssistant ]
+            [ readyPlan
+                (customFoodCreatePaneDesired context CustomFoodCreate.initWithAssistant)
+            ]
 
         CustomFoodEdit productId ->
-            Just [ customFoodEditDesired context productId ]
+            [ readyPlan (customFoodEditDesired context productId)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ CustomFoodEdit.skeletonView env ])
+            ]
 
         CustomFoodShow productId ->
-            Just
-                (contextualWorkspace existing
-                    [ customFoodListDesired context ]
-                    (customFoodShowDesired context productId)
-                )
+            customFoodShowPlans context existing productId
 
         CustomFoodList ->
-            Just [ customFoodListDesired context ]
+            [ readyPlan (customFoodListDesired context)
+                |> withSkeleton CustomFoodList.skeletonView
+            ]
 
         MealList ->
-            Just [ mealListDesired context ]
+            [ readyPlan (mealListDesired context)
+                |> withSkeleton MealList.skeletonView
+            ]
 
         MealCreate ->
-            Just [ mealCreateDesired context ]
+            [ readyPlan (mealCreateDesired context) ]
 
         MealEdit mealId ->
-            Just [ mealEditDesired context mealId ]
+            [ readyPlan (mealEditDesired context mealId)
+                |> withSkeleton
+                    (\env -> UiPage.pageContainer [ MealEdit.skeletonView env ])
+            ]
 
         MealShow mealId ->
-            Just
-                (contextualWorkspace existing
-                    [ mealListDesired context ]
-                    (mealDetailDesired context mealId)
-                )
+            mealShowPlans context existing mealId
+
+
+{-| Thin projection from the shared plan. A missing local date only clears the
+workspace when a pane truly cannot be constructed without it.
+-}
+panesForRoute : InitCtx -> List Pane -> Maybe (List DesiredPane)
+panesForRoute context existing =
+    let
+        plans : List (PanePlan msg)
+        plans =
+            panePlanForRoute context existing
+    in
+    case ( List.any .requiresToday plans, context.today ) of
+        ( True, Nothing ) ->
+            Nothing
 
         _ ->
+            Just (List.filterMap .desired plans)
+
+
+{-| The neutral shell used while the route is unknown or a route has no
+page-specific loading body. It is a section surface with a section-title line
+and three body lines inside the normal workspace, so booting and the date gate
+do not paint a bare bar stack. Routes with a real page skeleton override this
+through `withSkeleton`.
+-}
+genericPaneSkeleton : Env -> Element msg
+genericPaneSkeleton env =
+    Surface.section env.theme
+        { header =
             Just
-                [ simpleDesired "placeholder:unmigrated"
-                    (PlaceholderPane (I18n.en TidCommonRouteNotMigrated))
-                ]
+                (Skeleton.elLine env.theme
+                    { size = 24, width = Element.fill }
+                )
+        , body =
+            [ Skeleton.paragraphLine env.theme
+                { size = 16, spacing = 5, width = Element.fill }
+            , Skeleton.paragraphLine env.theme
+                { size = 16, spacing = 5, width = Element.fill }
+            , Skeleton.paragraphLine env.theme
+                { size = 16, spacing = 5, width = Element.fill }
+            ]
+        , footer = Nothing
+        }
+
+
+placeholderPlans : List (PanePlan msg)
+placeholderPlans =
+    [ readyPlan
+        (simpleDesired "placeholder:unmigrated"
+            (PlaceholderPane (I18n.en TidCommonRouteNotMigrated))
+        )
+    ]
+
+
+readyPlan : DesiredPane -> PanePlan msg
+readyPlan desired =
+    { key = desiredPaneKey desired
+    , requiresToday = False
+    , desired = Just desired
+    , role = Workspace.MainPane
+    , skeleton = genericPaneSkeleton
+    }
+
+
+detailReadyPlan : DesiredPane -> PanePlan msg
+detailReadyPlan desired =
+    withRole Workspace.DetailPane (readyPlan desired)
+
+
+withRole : Workspace.PaneRole -> PanePlan msg -> PanePlan msg
+withRole role plan =
+    { plan | role = role }
+
+
+withSkeleton : (Env -> Element msg) -> PanePlan msg -> PanePlan msg
+withSkeleton skeleton plan =
+    { plan | skeleton = skeleton }
+
+
+{-| A date-gated plan. When `today` is missing the pane cannot be built:
+`desired` is `Nothing` and `key` is a stable pending placeholder because the
+eventual key depends on the resolved local date.
+-}
+todayPlan :
+    Workspace.PaneRole
+    -> Maybe LocalDate
+    -> String
+    -> (LocalDate -> DesiredPane)
+    -> PanePlan msg
+todayPlan role today pendingKey build =
+    case today of
+        Just date ->
+            let
+                desired : DesiredPane
+                desired =
+                    build date
+            in
+            { key = desiredPaneKey desired
+            , requiresToday = True
+            , desired = Just desired
+            , role = role
+            , skeleton = genericPaneSkeleton
+            }
+
+        Nothing ->
+            { key = pendingKey
+            , requiresToday = True
+            , desired = Nothing
+            , role = role
+            , skeleton = genericPaneSkeleton
+            }
+
+
+preservedPlan : Pane -> PanePlan msg
+preservedPlan pane =
+    { key = paneKey pane
+    , requiresToday = False
+    , desired = Just (preservePane pane)
+    , role = Workspace.MainPane
+    , skeleton = genericPaneSkeleton
+    }
+
+
+{-| Shared contextual shape: a visible main pane stays in the first slot and
+the detail is appended; otherwise use the route's fallback main plus detail.
+The plan-level form keeps the same count, order and keys as the loaded pane
+list.
+
+A main pane whose key is already the detail key is the route's own pane, not a
+contextual main. Preserving it would append a second copy of itself, so that
+case falls back to the route's main instead.
+
+-}
+contextualPlans : List Pane -> List (PanePlan msg) -> PanePlan msg -> List (PanePlan msg)
+contextualPlans existing fallbackMain detail =
+    case List.head existing of
+        Just pane ->
+            if isMainPane pane && paneKey pane /= detail.key then
+                [ preservedPlan pane, detail ]
+
+            else
+                fallbackMain ++ [ detail ]
+
+        Nothing ->
+            fallbackMain ++ [ detail ]
+
+
+diaryPlan : InitCtx -> Maybe LocalDate -> Maybe String -> PanePlan msg
+diaryPlan context dateParam calendarMonth =
+    todayPlan Workspace.MainPane
+        context.today
+        "diary:pending"
+        (\today -> diaryDesired context today dateParam calendarMonth)
+        |> withSkeleton (\env -> DiaryDay.skeletonView env Nothing)
+
+
+calendarPlan : InitCtx -> Maybe String -> PanePlan msg
+calendarPlan context monthParam =
+    todayPlan Workspace.MainPane
+        context.today
+        ("calendar:" ++ Maybe.withDefault "pending" monthParam)
+        (\today -> calendarDesired context today monthParam)
+        |> withSkeleton
+            (\env ->
+                DiaryCalendar.skeletonView env
+                    (monthParam
+                        |> Maybe.andThen DiaryCalendar.validMonth
+                        |> Maybe.map List.singleton
+                        |> Maybe.withDefault []
+                    )
+            )
+
+
+nutritionPlan : InitCtx -> Maybe LocalDate -> PanePlan msg
+nutritionPlan context dateParam =
+    todayPlan Workspace.DetailPane
+        context.today
+        "nutrition-details:pending"
+        (\today -> nutritionDesired context today dateParam)
+        |> withSkeleton NutritionDetails.bootSkeleton
+
+
+goalsPlan : InitCtx -> PanePlan msg
+goalsPlan context =
+    todayPlan Workspace.MainPane
+        context.today
+        "goals-settings:pending"
+        (\today -> goalsDesired context today)
+
+
+diaryDayPlans : InitCtx -> List Pane -> Maybe LocalDate -> Maybe String -> List (PanePlan msg)
+diaryDayPlans context existing dateParam calendarMonth =
+    let
+        diary : PanePlan msg
+        diary =
+            diaryPlan context dateParam calendarMonth
+    in
+    case calendarMonth of
+        Just _ ->
+            contextualPlans existing
+                [ calendarPlan context calendarMonth ]
+                (withRole Workspace.DetailPane diary)
+
+        Nothing ->
+            [ diary ]
+
+
+foodSearchPlans : InitCtx -> List Pane -> Maybe LocalDate -> Maybe MealSlot -> List (PanePlan msg)
+foodSearchPlans context existing dateParam mealSlot =
+    let
+        detail : PanePlan msg
+        detail =
+            readyPlan (searchDesired context dateParam mealSlot)
+                |> withSkeleton FoodSearch.skeletonView
+    in
+    case ( context.today, dateParam ) of
+        ( Just _, Just _ ) ->
+            contextualPlans existing
+                [ diaryPlan context dateParam Nothing ]
+                (withRole Workspace.DetailPane detail)
+
+        _ ->
+            [ detail ]
+
+
+foodShowPlans :
+    InitCtx
+    -> List Pane
+    -> String
+    -> Maybe LocalDate
+    -> Maybe MealSlot
+    -> Maybe String
+    -> List (PanePlan msg)
+foodShowPlans context existing productId dateParam mealSlot lookupNote =
+    let
+        detail : PanePlan msg
+        detail =
+            detailReadyPlan
+                (foodDetailDesired context productId dateParam mealSlot lookupNote)
+                |> withSkeleton (\env -> FoodShow.skeletonView env lookupNote)
+    in
+    case ( context.today, dateParam ) of
+        ( Just _, Just _ ) ->
+            contextualPlans existing [ diaryPlan context dateParam Nothing ] detail
+
+        _ ->
+            contextualPlans existing [] detail
+
+
+customFoodShowPlans : InitCtx -> List Pane -> String -> List (PanePlan msg)
+customFoodShowPlans context existing productId =
+    contextualPlans existing
+        [ readyPlan (customFoodListDesired context) ]
+        (detailReadyPlan (customFoodShowDesired context productId)
+            |> withSkeleton
+                (\env -> UiPage.pageContainer [ CustomFoodShow.skeletonView env ])
+        )
+
+
+mealShowPlans : InitCtx -> List Pane -> String -> List (PanePlan msg)
+mealShowPlans context existing mealId =
+    contextualPlans existing
+        [ readyPlan (mealListDesired context) ]
+        (detailReadyPlan (mealDetailDesired context mealId)
+            |> withSkeleton (\env -> UiPage.pageContainer [ MealShow.skeletonView env ])
+        )
 
 
 simpleDesired : String -> Pane -> DesiredPane
@@ -1100,10 +1497,10 @@ diarySettingsDesired context =
         (\_ -> DiarySettings.init)
 
 
-apiKeysDesired : InitCtx -> Int -> DesiredPane
-apiKeysDesired context generation =
+apiKeysDesired : InitCtx -> DesiredPane
+apiKeysDesired context =
     DesiredPane "api-keys"
-        (\_ ->
+        (\generation ->
             let
                 ( subModel, subOut ) =
                     SettingsApiKeys.init
@@ -1115,10 +1512,10 @@ apiKeysDesired context generation =
         )
 
 
-apiKeyCreateDesired : InitCtx -> Int -> DesiredPane
-apiKeyCreateDesired context generation =
+apiKeyCreateDesired : InitCtx -> DesiredPane
+apiKeyCreateDesired context =
     DesiredPane "api-key-create"
-        (\_ ->
+        (\generation ->
             let
                 ( subModel, subOut ) =
                     SettingsApiKeyCreate.init
@@ -1139,45 +1536,6 @@ searchDesired _ dateParam mealSlot =
             , NoOutMsg
             )
         )
-
-
-searchWorkspaceDesired :
-    InitCtx
-    -> List Pane
-    -> Maybe LocalDate
-    -> Maybe MealSlot
-    -> List DesiredPane
-searchWorkspaceDesired context existing dateParam mealSlot =
-    case ( context.today, dateParam ) of
-        ( Just today, Just _ ) ->
-            contextualWorkspace existing
-                [ diaryDesired context today dateParam Nothing ]
-                (searchDesired context dateParam mealSlot)
-
-        _ ->
-            [ searchDesired context dateParam mealSlot ]
-
-
-foodWorkspaceDesired :
-    InitCtx
-    -> List Pane
-    -> String
-    -> Maybe LocalDate
-    -> Maybe MealSlot
-    -> Maybe String
-    -> List DesiredPane
-foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote =
-    let
-        detail : DesiredPane
-        detail =
-            foodDetailDesired context productId dateParam mealSlot lookupNote
-    in
-    case ( context.today, dateParam ) of
-        ( Just today, Just _ ) ->
-            contextualWorkspace existing [ diaryDesired context today dateParam Nothing ] detail
-
-        _ ->
-            contextualWorkspace existing [] detail
 
 
 foodDetailDesired :
@@ -1237,20 +1595,6 @@ createWithAiLogDesired context dateParam mealSlot =
 preservePane : Pane -> DesiredPane
 preservePane pane =
     simpleDesired (paneKey pane) pane
-
-
-contextualWorkspace : List Pane -> List DesiredPane -> DesiredPane -> List DesiredPane
-contextualWorkspace existing fallbackMain contextual =
-    case List.head existing of
-        Just pane ->
-            if isMainPane pane then
-                [ preservePane pane, contextual ]
-
-            else
-                fallbackMain ++ [ contextual ]
-
-        Nothing ->
-            fallbackMain ++ [ contextual ]
 
 
 customFoodListDesired : InitCtx -> DesiredPane
@@ -1476,7 +1820,7 @@ isDiaryOperation msg =
                 DiaryDay.GoalLoaded _ _ ->
                     False
 
-                DiaryDay.PrefsLoaded _ ->
+                DiaryDay.PrefsReceived _ ->
                     False
 
                 DiaryDay.LatestSlotsReceived _ _ ->
@@ -3109,14 +3453,64 @@ applyMealDetailOutMsg _ outMsg =
 -- VIEW
 
 
-view : Env -> Model -> Element Msg
-view env model =
+view : Env -> Route -> Model -> Element Msg
+view env route model =
     if model.waitingForToday then
-        Skeleton.loading env.theme
+        bootstrapView env route
 
     else
-        Workspace.view env.device
-            (List.map (paneView env (selectedDiaryDate model.panes)) model.panes)
+        Workspace.view env.device (paneViews env model)
+
+
+{-| The route-known loading body: the same plan that builds the loaded panes,
+rendered as one `Skeleton.busy` status region per pane inside the normal
+workspace. The plan carries each pane's role so a Phone's single contextual
+detail pane is still marked `detail`.
+-}
+bootstrapView : Env -> Route -> Element msg
+bootstrapView env route =
+    let
+        panes : List ( String, Workspace.PaneRole, Element msg )
+        panes =
+            panePlanForRoute { route = route, today = Nothing } []
+                |> List.map
+                    (\plan ->
+                        ( plan.key
+                        , plan.role
+                        , Skeleton.busy
+                            { label = I18n.t env.language TidCommonLoading }
+                            [ plan.skeleton env ]
+                        )
+                    )
+    in
+    Workspace.view env.device
+        (if List.isEmpty panes then
+            [ neutralPane env ]
+
+         else
+            panes
+        )
+
+
+{-| The pre-session shell. The route and session are still unknown, so it does
+not promise a Diary, Admin or Login body; it only keeps the normal workspace and
+gutter while the neutral skeleton loads. The persistent page root's `aria-busy`
+is the primary loading signal; the `Skeleton.busy` label is the secondary
+announcement.
+-}
+bootShell : Env -> Element msg
+bootShell env =
+    Workspace.view env.device [ neutralPane env ]
+
+
+neutralPane : Env -> ( String, Workspace.PaneRole, Element msg )
+neutralPane env =
+    ( "boot"
+    , Workspace.MainPane
+    , Skeleton.busy
+        { label = I18n.t env.language TidCommonLoading }
+        [ genericPaneSkeleton env ]
+    )
 
 
 selectedDiaryDate : List Pane -> Maybe LocalDate
@@ -3134,9 +3528,28 @@ selectedDiaryDate panes =
         |> List.head
 
 
-paneView : Env -> Maybe LocalDate -> Pane -> ( String, Element Msg )
-paneView env selectedDate pane =
+paneViews : Env -> Model -> List ( String, Workspace.PaneRole, Element Msg )
+paneViews env model =
+    let
+        paneCount : Int
+        paneCount =
+            List.length model.panes
+    in
+    List.indexedMap
+        (paneView env (selectedDiaryDate model.panes) paneCount)
+        model.panes
+
+
+paneView :
+    Env
+    -> Maybe LocalDate
+    -> Int
+    -> Int
+    -> Pane
+    -> ( String, Workspace.PaneRole, Element Msg )
+paneView env selectedDate paneCount index pane =
     ( paneKey pane
+    , paneRole paneCount index pane
     , case pane of
         LoginPane sub ->
             Element.map GotLoginMsg (AuthLogin.view env sub)
@@ -3217,6 +3630,47 @@ paneView env selectedDate pane =
         PlaceholderPane message ->
             Element.el [ Element.padding DesignTokens.space24 ] (Element.text message)
     )
+
+
+{-| Loaded-pane role map. A two-pane contextual layout always ends in the
+detail pane; a standalone contextual detail route is a single pane, so its
+constructor supplies the role. The boot path uses the explicit role carried by
+`panePlanForRoute`; this mapping stays until the loaded path can consume the
+plan too.
+-}
+paneRole : Int -> Int -> Pane -> Workspace.PaneRole
+paneRole paneCount index pane =
+    if paneCount > 1 then
+        if index == paneCount - 1 then
+            Workspace.DetailPane
+
+        else
+            Workspace.MainPane
+
+    else
+        singlePaneRole pane
+
+
+singlePaneRole : Pane -> Workspace.PaneRole
+singlePaneRole pane =
+    case pane of
+        FoodDetailPane _ _ ->
+            Workspace.DetailPane
+
+        FoodLogDetailPane _ _ ->
+            Workspace.DetailPane
+
+        MealDetailPane _ _ ->
+            Workspace.DetailPane
+
+        CustomFoodShowPane _ _ ->
+            Workspace.DetailPane
+
+        NutritionDetailsPane _ _ ->
+            Workspace.DetailPane
+
+        _ ->
+            Workspace.MainPane
 
 
 modalView : Env -> Model -> Maybe (Element Msg)

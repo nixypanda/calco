@@ -32,7 +32,7 @@ import I18n
 import Lib.Number as Number
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
-import Ui.Common exposing (hoverEffect, minWidthZero, uiClass)
+import Ui.Common exposing (dataAttribute, hoverEffect, minWidthZero, testId, uiClass)
 import Ui.DesignTokens
     exposing
         ( minimumTargetSize
@@ -131,23 +131,35 @@ inputMode mode =
     Element.htmlAttribute (Html.Attributes.attribute "inputmode" mode)
 
 
+fieldWrapper : Element msg -> Element msg
+fieldWrapper control =
+    Element.el [ Element.width Element.fill, testId "field" ] control
+
+
 textInput : Theme -> List (Element.Attribute msg) -> InputConfig msg -> Element msg
 textInput theme extraAttrs config =
-    Input.text
-        ([ Border.rounded radiusControl
-         , Background.color theme.cardBg
-         , Element.paddingEach
-            { top = fieldVerticalPadding, right = 10, bottom = fieldVerticalPadding, left = 10 }
-         , uiClass "ui-motion"
-         ]
-            ++ inputBorder theme
-            ++ extraAttrs
+    fieldWrapper
+        (Input.text
+            ([ Border.rounded radiusControl
+             , Background.color theme.cardBg
+             , Element.paddingEach
+                { top = fieldVerticalPadding
+                , right = 10
+                , bottom = fieldVerticalPadding
+                , left = 10
+                }
+             , uiClass "ui-motion"
+             , testId "field-control"
+             ]
+                ++ inputBorder theme
+                ++ extraAttrs
+            )
+            { onChange = config.onChange
+            , text = config.value
+            , placeholder = Nothing
+            , label = Input.labelAbove [] (fieldLabel theme config.label)
+            }
         )
-        { onChange = config.onChange
-        , text = config.value
-        , placeholder = Nothing
-        , label = Input.labelAbove [] (fieldLabel theme config.label)
-        }
 
 
 searchInput :
@@ -171,40 +183,54 @@ searchInput theme config =
                     , Just (Input.placeholder [ Font.color theme.textMuted ] (Element.text label))
                     )
     in
-    Input.text
-        ([ Border.rounded radiusControl
-         , Background.color theme.cardBg
-         , Element.paddingEach
-            { top = fieldVerticalPadding, right = 12, bottom = fieldVerticalPadding, left = 12 }
-         , uiClass "ui-motion"
-         ]
-            ++ inputBorder theme
-            ++ config.extraAttrs
+    fieldWrapper
+        (Input.text
+            ([ Border.rounded radiusControl
+             , Background.color theme.cardBg
+             , Element.paddingEach
+                { top = fieldVerticalPadding
+                , right = 12
+                , bottom = fieldVerticalPadding
+                , left = 12
+                }
+             , uiClass "ui-motion"
+             , testId "field-control"
+             ]
+                ++ inputBorder theme
+                ++ config.extraAttrs
+            )
+            { onChange = config.onChange
+            , text = config.text
+            , placeholder = placeholderElement
+            , label = labelElement
+            }
         )
-        { onChange = config.onChange
-        , text = config.text
-        , placeholder = placeholderElement
-        , label = labelElement
-        }
 
 
 passwordInput : Theme -> InputConfig msg -> Element msg
 passwordInput theme config =
-    Input.currentPassword
-        ([ Border.rounded radiusControl
-         , Background.color theme.cardBg
-         , Element.paddingEach
-            { top = fieldVerticalPadding, right = 10, bottom = fieldVerticalPadding, left = 10 }
-         , uiClass "ui-motion"
-         ]
-            ++ inputBorder theme
+    fieldWrapper
+        (Input.currentPassword
+            ([ Border.rounded radiusControl
+             , Background.color theme.cardBg
+             , Element.paddingEach
+                { top = fieldVerticalPadding
+                , right = 10
+                , bottom = fieldVerticalPadding
+                , left = 10
+                }
+             , uiClass "ui-motion"
+             , testId "field-control"
+             ]
+                ++ inputBorder theme
+            )
+            { onChange = config.onChange
+            , text = config.value
+            , placeholder = Nothing
+            , label = Input.labelAbove [] (fieldLabel theme config.label)
+            , show = False
+            }
         )
-        { onChange = config.onChange
-        , text = config.value
-        , placeholder = Nothing
-        , label = Input.labelAbove [] (fieldLabel theme config.label)
-        , show = False
-        }
 
 
 fieldLabel : Theme -> String -> Element msg
@@ -605,7 +631,12 @@ selectDropdownWithState device theme language config =
                     )
                 )
     in
-    Element.column [ Element.width Element.fill, Element.spacing space4 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing space4
+        , testId "field"
+        , dataAttribute "data-field-kind" "select"
+        ]
         [ fieldLabel theme config.label
         , Element.el triggerAnchor
             (Input.button
@@ -630,6 +661,7 @@ selectDropdownWithState device theme language config =
                         (boolString (config.isOpen && not config.disabled))
                     )
                  , uiClass "ui-motion"
+                 , testId "field-control"
                  , hoverEffect device [ Border.color theme.brandBlue ]
                  ]
                     ++ inputBorder theme
@@ -658,6 +690,7 @@ checkbox theme config =
         [ Element.width Element.fill
         , Element.height (Element.px minimumTargetSize)
         , Element.spacing space12
+        , testId "checkbox-row"
         ]
         { onChange = config.onChange
         , icon = checkboxIcon theme
@@ -710,6 +743,7 @@ toggleSwitch theme config =
         , Element.height (Element.px minimumTargetSize)
         , Border.rounded radiusPill
         , uiClass "ui-pressable"
+        , testId "field"
         , Region.description config.label
         , Element.htmlAttribute
             (Html.Attributes.attribute "aria-pressed"

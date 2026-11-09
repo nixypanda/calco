@@ -2,19 +2,19 @@ module Ui.Page exposing
     ( PageHeaderSubtitle(..)
     , pageContainer
     , pageHeader
+    , pageHeaderRaw
     )
 
 import Element exposing (Element)
 import Element.Font as Font
-import Ui.Common exposing (minWidthZero)
+import Ui.Common exposing (minWidthZero, testId)
 import Ui.DesignTokens exposing (space12, space16, space2, space4, space8)
 import Ui.Theme exposing (Theme)
-import Ui.Typography exposing (body, mutedBody)
+import Ui.Typography exposing (body)
 
 
 type PageHeaderSubtitle
-    = SubtitleText String
-    | SubtitleMeta { items : List String, separator : String }
+    = SubtitleMeta { items : List String, separator : String }
     | SubtitleMetaLines { lines : List (List String), separator : String }
 
 
@@ -32,6 +32,7 @@ pageContainer children =
         [ Element.centerX
         , Element.width (Element.fill |> Element.maximum 960)
         , Element.spacing space16
+        , testId "page-container"
         ]
         children
 
@@ -46,6 +47,34 @@ pageHeader :
         }
     -> Element msg
 pageHeader theme config =
+    pageHeaderRaw
+        { leading = config.leading
+        , title = config.title
+        , subtitle =
+            case config.subtitle of
+                Just subtitle ->
+                    [ pageHeaderSubtitle theme subtitle ]
+
+                Nothing ->
+                    []
+        , actions = config.actions
+        }
+
+
+{-| The shared header geometry with concrete subtitle elements. Page skeletons
+pass measured line placeholders so their header cannot drift from the loaded
+header: `pageHeader` maps `PageHeaderSubtitle` to real text and then calls this
+function. The leading and actions slots are always rendered, even when empty, so
+the title's x position stays stable.
+-}
+pageHeaderRaw :
+    { leading : Maybe (Element msg)
+    , title : Element msg
+    , subtitle : List (Element msg)
+    , actions : List (Element msg)
+    }
+    -> Element msg
+pageHeaderRaw config =
     let
         leadingElement : Element msg
         leadingElement =
@@ -59,15 +88,7 @@ pageHeader theme config =
         titleColumn : Element msg
         titleColumn =
             Element.column [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
-                (config.title
-                    :: (case config.subtitle of
-                            Just subtitle ->
-                                [ pageHeaderSubtitle theme subtitle ]
-
-                            Nothing ->
-                                []
-                       )
-                )
+                (config.title :: config.subtitle)
 
         actionsRow : Element msg
         actionsRow =
@@ -77,16 +98,18 @@ pageHeader theme config =
             else
                 Element.row [ Element.spacing space8 ] config.actions
     in
-    Element.wrappedRow [ Element.width Element.fill, Element.spacing space12, minWidthZero ]
+    Element.wrappedRow
+        [ Element.width Element.fill
+        , Element.spacing space12
+        , minWidthZero
+        , testId "page-header"
+        ]
         [ leadingElement, titleColumn, actionsRow ]
 
 
 pageHeaderSubtitle : Theme -> PageHeaderSubtitle -> Element msg
 pageHeaderSubtitle theme subtitle =
     case subtitle of
-        SubtitleText text ->
-            mutedBody theme text
-
         SubtitleMeta meta ->
             Element.paragraph
                 [ Font.color theme.textMuted, body, Element.width Element.fill, minWidthZero ]

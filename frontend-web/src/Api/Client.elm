@@ -4,6 +4,7 @@ module Api.Client exposing
     , displayError
     , failure
     , get
+    , getWithTimeout
     , isUnauthorized
     , post
     , postEmpty
@@ -32,6 +33,14 @@ type ApiError
 get : String -> Decoder value -> (Result ApiError value -> msg) -> Cmd msg
 get path decoder toMsg =
     request "GET" path Http.emptyBody decoder toMsg
+
+
+{-| A GET with a bounded `Http` timeout. Only callers that own a pending UI
+state need this; the default requests keep `timeout = Nothing`.
+-}
+getWithTimeout : Int -> String -> Decoder value -> (Result ApiError value -> msg) -> Cmd msg
+getWithTimeout timeoutMillis path decoder toMsg =
+    requestWithTimeout (Just timeoutMillis) "GET" path Http.emptyBody decoder toMsg
 
 
 post : String -> Encode.Value -> Decoder value -> (Result ApiError value -> msg) -> Cmd msg
@@ -77,13 +86,26 @@ request :
     -> (Result ApiError value -> msg)
     -> Cmd msg
 request method path body decoder toMsg =
+    requestWithTimeout Nothing method path body decoder toMsg
+
+
+requestWithTimeout :
+    Maybe Int
+    -> String
+    -> String
+    -> Http.Body
+    -> Decoder value
+    -> (Result ApiError value -> msg)
+    -> Cmd msg
+requestWithTimeout timeoutMillis method path body decoder toMsg =
     Http.request
         { method = method
         , headers = []
         , url = path
         , body = body
         , expect = expectJson decoder toMsg
-        , timeout = Nothing
+        , -- elm/http measures the timeout in milliseconds.
+          timeout = Maybe.map toFloat timeoutMillis
         , tracker = Nothing
         }
 

@@ -5,8 +5,10 @@ module Page.Meal.Edit exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , isBusy
     , loadId
     , modelId
+    , skeletonView
     , update
     , view
     )
@@ -22,12 +24,12 @@ import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
-import Ui.Theme exposing (Theme)
 import View.Nutrients
     exposing
         ( NutritionState(..)
@@ -69,6 +71,18 @@ init mealId =
         { mealId = mealId, nutrition = NutritionLoading defaultNutritionInput, units = [] }
     , RequestMeal mealId
     )
+
+
+{-| Only the initial fetch is busy; `EditLoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        LoadingEdit _ ->
+            True
+
+        _ ->
+            False
 
 
 
@@ -468,7 +482,11 @@ view : Env -> Model -> Element Msg
 view env model =
     case model of
         LoadingEdit _ ->
-            UiPage.pageContainer [ mealEditSkeleton env.theme ]
+            UiPage.pageContainer
+                [ Skeleton.busy
+                    { label = I18n.t env.language TidCommonLoading }
+                    [ skeletonView env ]
+                ]
 
         EditLoadFailed failed ->
             UiPage.pageContainer
@@ -483,8 +501,9 @@ view env model =
                 [ Common.submitErrorBanner env.theme loaded.fields.submit
                 , Common.viewFormFields env FormMsg loaded.fields
                 , nutritionView env loaded
-                , Button.textButton env.device
+                , Button.textButtonWithAttributes env.device
                     env.theme
+                    [ UiCommon.testId "action-primary" ]
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label = I18n.t env.language TidMealUpdate
@@ -503,13 +522,19 @@ nutritionView env loaded =
         [ View.Nutrients.preview env loaded.nutrition ]
 
 
-mealEditSkeleton : Theme -> Element msg
-mealEditSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.card theme { rows = 3 }
-        , Skeleton.button theme
+{-| The page body below `UiPage.pageContainer`. The caller owns the single
+`Skeleton.busy` wrapper so the page view and `Page.bootstrapView` cannot nest
+status regions.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Common.skeletonView env
+        , Element.column
+            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ View.Nutrients.skeletonCard env ]
+        , Skeleton.buttonWithAttributes env.theme [ UiCommon.testId "action-primary" ]
         ]

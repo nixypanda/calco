@@ -30,6 +30,9 @@ result-*
 # i18n code-generation cache (the generated Elm in frontend-web/generated is committed)
 .cache/
 
+# Layout harness artifacts (local/CI uploads, not committed)
+docs/images/skeleton-stability/
+
 # Import pipeline data
 data/
 data-fixed*/

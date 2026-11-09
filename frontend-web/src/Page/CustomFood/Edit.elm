@@ -5,8 +5,10 @@ module Page.CustomFood.Edit exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , isBusy
     , loadId
     , modelId
+    , skeletonView
     , update
     , view
     )
@@ -28,12 +30,12 @@ import I18n
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
-import Ui.Theme exposing (Theme)
 
 
 
@@ -76,6 +78,18 @@ init productId =
     ( Loading { productId = productId, food = Nothing, nutrients = Nothing, units = Nothing }
     , RequestInitialData productId
     )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 
@@ -400,8 +414,9 @@ bodyView env model =
         Loaded loaded ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Element.map FormMsg (Form.view env loaded.nutrients loaded.units loaded.form)
-                , Button.textButton env.device
+                , Button.textButtonWithAttributes env.device
                     env.theme
+                    [ UiCommon.testId "action-primary" ]
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label = I18n.t env.language TidCustomFoodSave
@@ -420,15 +435,21 @@ bodyView env model =
                 { message = failed.message, onRetry = RetryClicked }
 
         Loading _ ->
-            customFoodFormSkeleton env.theme
+            Skeleton.busy
+                { label = I18n.t env.language TidCommonLoading }
+                [ skeletonView env ]
 
 
-customFoodFormSkeleton : Theme -> Element msg
-customFoodFormSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.button theme
+{-| The page body below `UiPage.pageContainer`. `Page.bootstrapView` wraps this
+same body in the plan's page container; the page's own `view` already supplies
+one, so this function must not add another.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Form.skeletonView env
+        , Skeleton.buttonWithAttributes env.theme [ UiCommon.testId "action-primary" ]
         ]

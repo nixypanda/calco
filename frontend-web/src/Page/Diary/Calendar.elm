@@ -6,7 +6,10 @@ module Page.Diary.Calendar exposing
     , compactCalories
     , contentViewWithSelection
     , init
+    , isBusy
+    , skeletonView
     , update
+    , validMonth
     )
 
 import Api.Client as Client
@@ -26,6 +29,7 @@ import Lib.Number as Number
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -89,6 +93,23 @@ init args =
     ( model, requestForMonths 0 oldestMonth newestMonth args.today )
 
 
+{-| The initial month load is busy; `LoadingEarlier` keeps the loaded calendar
+on screen, and `Failed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model.status of
+        Loading ->
+            True
+
+        _ ->
+            False
+
+
+{-| A route month is only usable when it parses as `YYYY-MM`. The boot
+skeleton uses the same check so an invalid query parameter falls back to the
+generic month shell instead of an empty grid.
+-}
 validMonth : String -> Maybe String
 validMonth period =
     Calendar.monthStart period |> Maybe.map (\_ -> period)
@@ -290,7 +311,10 @@ contentViewWithSelection env selectedDate model =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         (case model.status of
             Loading ->
-                calendarSkeleton env.theme model
+                [ Skeleton.busy
+                    { label = I18n.t env.language TidCommonLoading }
+                    [ calendarSkeleton env model ]
+                ]
 
             Failed message ->
                 [ Feedback.errorRetry env.theme
@@ -328,20 +352,47 @@ monthCellHeight =
     68
 
 
-calendarSkeleton : Theme -> Model -> List (Element msg)
-calendarSkeleton theme model =
-    monthRange model.newestMonth model.oldestMonth
-        |> List.map (monthSkeleton theme)
-        |> (\months -> months ++ [ Skeleton.button theme ])
+calendarSkeleton : Env -> Model -> Element msg
+calendarSkeleton env model =
+    skeletonView env (monthRange model.newestMonth model.oldestMonth)
 
 
-monthSkeleton : Theme -> String -> Element msg
-monthSkeleton theme month =
+{-| The page-shaped loading body. An empty month list is the pre-date boot
+shell: one generic month so the calendar frame is visible without guessing a
+period. The caller owns the single `Skeleton.busy` wrapper.
+-}
+skeletonView : Env -> List String -> Element msg
+skeletonView env months =
+    let
+        monthCards : List (Element msg)
+        monthCards =
+            case months of
+                [] ->
+                    [ monthSkeleton env.theme Nothing ]
+
+                _ ->
+                    List.map (\month -> monthSkeleton env.theme (Just month)) months
+    in
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , UiCommon.skeletonRegion
+        ]
+        (monthCards ++ [ Skeleton.button env.theme ])
+
+
+monthSkeleton : Theme -> Maybe String -> Element msg
+monthSkeleton theme maybeMonth =
     Surface.section theme
         { header =
             Just (Skeleton.barCustom theme { width = Element.px 140, height = 24 })
         , body =
-            [ MonthCalendar.skeleton theme { period = month, cellHeight = monthCellHeight } ]
+            [ MonthCalendar.skeleton theme
+                { period = maybeMonth
+                , rows = 5
+                , cellHeight = monthCellHeight
+                }
+            ]
         , footer = Nothing
         }
 

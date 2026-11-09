@@ -6,8 +6,10 @@ module Page.Food.Show exposing
     , OutMsg(..)
     , contentView
     , init
+    , isBusy
     , loadId
     , modelId
+    , skeletonView
     , update
     )
 
@@ -96,6 +98,18 @@ init productId logDate mealSlot lookupNote =
         }
     , RequestInitialData productId
     )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 
@@ -442,8 +456,10 @@ bodyView env model =
         LoadFailed _ ->
             Element.none
 
-        Loading _ ->
-            foodShowSkeleton env.theme
+        Loading loading ->
+            Skeleton.busy
+                { label = I18n.t env.language TidCommonLoading }
+                [ skeletonView env loading.lookupNote ]
 
 
 loadedView : Env -> LoadedModel -> Element Msg
@@ -516,13 +532,67 @@ foodNutrientsForDisplay food form =
         |> Maybe.withDefault (View.Product.foodNutrientsPer100g food)
 
 
-foodShowSkeleton : Theme -> Element msg
-foodShowSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Skeleton.barCustom theme { width = Element.fill, height = 120 }
-        , Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
-        , Skeleton.barCustom theme { width = Element.fillPortion 3, height = 12 }
-        , Skeleton.input theme
-        , Skeleton.button theme
-        , Skeleton.card theme { rows = 3 }
+{-| The page body below `contentView`'s column. `Page.bootstrapView` calls the
+same function with the route-known `lookup_note`, so the banner is present in
+both the initial skeleton and the page's own loading state.
+
+The skeleton represents the no-category food: the optional category section is
+not invented while loading. A food with categories pushes the portion section
+and everything below it down; that shift is documented as variable content.
+
+-}
+skeletonView : Env -> Maybe String -> Element msg
+skeletonView env lookupNote =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Maybe.withDefault Element.none
+            (Maybe.map (Feedback.infoBanner env.theme) lookupNote)
+        , Surface.panel env.theme
+            { header = Just (foodHeaderSkeleton env.theme)
+            , sections =
+                [ { title =
+                        Just
+                            (Skeleton.elLine env.theme
+                                { size = 20, width = Element.fill }
+                            )
+                  , body =
+                        [ Skeleton.selectField env.theme { labelWidth = Element.px 80 }
+                        , quantitySkeleton env.theme
+                        , Skeleton.field env.theme { labelWidth = Element.px 80, gap = 7 }
+                        ]
+                  }
+                ]
+            , footer = Just (Skeleton.button env.theme)
+            }
+        , View.Nutrients.skeletonCard env
+        ]
+
+
+{-| Mirrors `View.Product.foodHeaderElement`: a 4x24 macro dot, a 25px title
+line (`Typography.truncatedHeader` is a 24px paragraph with elm-ui's 1.05
+line-height, measured at 25px) and a 17px single-line meta subtitle.
+-}
+foodHeaderSkeleton : Theme -> Element msg
+foodHeaderSkeleton theme =
+    Skeleton.pageHeader
+        { leading = Just (Skeleton.dot theme)
+        , title = Skeleton.elLine theme { size = 25, width = Element.fill }
+        , subtitle = [ Skeleton.elLine theme { size = 17, width = Element.fill } ]
+        , actions = []
+        }
+
+
+{-| Mirrors `View.QuantityInput.dropdown`: an amount text field above a unit
+dropdown, separated by the same 12px column spacing.
+-}
+quantitySkeleton : Theme -> Element msg
+quantitySkeleton theme =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        ]
+        [ Skeleton.field theme { labelWidth = Element.px 80, gap = 7 }
+        , Skeleton.selectField theme { labelWidth = Element.px 80 }
         ]

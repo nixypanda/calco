@@ -7,7 +7,9 @@ module Page.Users.EditUser exposing
     , Problem(..)
     , Status(..)
     , init
+    , isBusy
     , modalView
+    , skeletonView
     , update
     , view
     )
@@ -20,6 +22,7 @@ import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -67,6 +70,18 @@ type Problem
 init : String -> ( Model, OutMsg )
 init userId =
     ( { userId = userId, status = Loading }, RequestUser userId )
+
+
+{-| Only the initial user fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model.status of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 
@@ -278,8 +293,20 @@ completePendingAction pendingAction result model successStatus =
 
 view : Env -> Model -> Element Msg
 view env model =
-    UiPage.pageContainer
-        (errorView env model.status ++ userDetailsView env model ++ accountActionView env model)
+    case model.status of
+        Loading ->
+            UiPage.pageContainer
+                [ Skeleton.busy
+                    { label = I18n.t env.language TidCommonLoading }
+                    [ skeletonView env ]
+                ]
+
+        _ ->
+            UiPage.pageContainer
+                (errorView env model.status
+                    ++ userDetailsView env model
+                    ++ accountActionView env model
+                )
 
 
 modalView : Env -> Model -> Maybe (Element Msg)
@@ -312,7 +339,7 @@ userDetailsView : Env -> Model -> List (Element Msg)
 userDetailsView env model =
     case model.status of
         Loading ->
-            [ editUserSkeleton env.theme ]
+            []
 
         LoadFailed error ->
             [ Feedback.errorBanner env.theme
@@ -321,6 +348,74 @@ userDetailsView env model =
 
         Loaded loadedUser _ ->
             [ userCard env model.status loadedUser ]
+
+
+{-| The page body below `UiPage.pageContainer`, mirroring `userCard` plus
+`accountActionView`. The caller owns the single `Skeleton.busy` wrapper so the
+page view and `Page.bootstrapView` cannot nest status regions.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Surface.section env.theme
+            { header =
+                Just
+                    (Element.column
+                        [ Element.width Element.fill
+                        , Element.spacing DesignTokens.space4
+                        ]
+                        [ Skeleton.elLine env.theme
+                            { size = 24, width = Element.fill }
+                        , -- The loaded username is a one-line paragraph; its measured
+                          -- line box is 17px for the 16px body size in this app.
+                          Skeleton.elLine env.theme
+                            { size = 17, width = Element.fill }
+                        ]
+                    )
+            , body =
+                [ detailRowSkeleton env.theme
+                    { labelWidth = Element.px 56
+                    , value =
+                        Skeleton.barCustom env.theme
+                            { width = Element.px 64, height = 21 }
+                    }
+                , detailRowSkeleton env.theme
+                    { labelWidth = Element.px 64
+                    , value =
+                        Skeleton.elLine env.theme
+                            { size = 13, width = Element.px 120 }
+                    }
+                , Surface.hairline env.theme
+                , Element.column
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space8
+                    ]
+                    [ Skeleton.elLine env.theme
+                        { size = 17, width = Element.fill }
+                    , Skeleton.field env.theme
+                        { labelWidth = Element.px 80, gap = 7 }
+                    , Skeleton.button env.theme
+                    ]
+                ]
+            , footer = Nothing
+            }
+        , Skeleton.bottomActions env.theme { count = 1 }
+        ]
+
+
+detailRowSkeleton : Theme -> { labelWidth : Element.Length, value : Element msg } -> Element msg
+detailRowSkeleton theme config =
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space4
+        , UiCommon.testId "detail-row"
+        ]
+        [ Skeleton.elLine theme { size = 13, width = config.labelWidth }
+        , Element.el [ Element.width Element.fill ] config.value
+        ]
 
 
 userCard : Env -> Status -> LoadedUser -> Element Msg
@@ -454,9 +549,3 @@ problemMessage language problem =
     case problem of
         NewPasswordRequired ->
             I18n.t language TidUsersNewPasswordRequired
-
-
-editUserSkeleton : Theme -> Element msg
-editUserSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Skeleton.card theme { rows = 5 }, Skeleton.button theme ]

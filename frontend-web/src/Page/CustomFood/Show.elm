@@ -5,9 +5,11 @@ module Page.CustomFood.Show exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , isBusy
     , loadId
     , modalView
     , modelId
+    , skeletonView
     , update
     , view
     )
@@ -17,17 +19,15 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
-import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients
@@ -65,6 +65,18 @@ init productId =
     ( Loading { productId = productId, food = Nothing, units = Nothing }
     , RequestInitialData productId
     )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 
@@ -322,7 +334,9 @@ bodyView env model =
             Element.none
 
         Loading _ ->
-            customFoodShowSkeleton env.theme
+            Skeleton.busy
+                { label = I18n.t env.language TidCommonLoading }
+                [ skeletonView env ]
 
 
 loadedView : Env -> LoadedModel -> Element Msg
@@ -388,20 +402,37 @@ customFoodEditRoute food =
         Nothing
 
 
-customFoodShowSkeleton : Theme -> Element msg
-customFoodShowSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Element.el
-            [ Element.width Element.fill
-            , Element.height (Element.px 120)
-            , Background.color theme.inputFill
-            , Border.rounded DesignTokens.radiusCard
-            , UiCommon.uiClass "ui-skeleton"
-            ]
-            Element.none
-        , Skeleton.bar theme
-        , Skeleton.barCustom theme { width = Element.fillPortion 2, height = 12 }
-        , Skeleton.card theme { rows = 3 }
-        , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-            [ Skeleton.button theme, Skeleton.button theme ]
+{-| The page body below `UiPage.pageContainer`. The category chip row is an
+over-approximation: custom foods may have no categories, in which case the
+loaded header section has no body region and the blocks below shrink upward.
+The header band itself and the title line stay stable; nutrition and actions
+below the variable category row are not part of the contract.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
         ]
+        [ Surface.section env.theme
+            { header = Just (customFoodHeaderSkeleton env.theme)
+            , body = [ Skeleton.categoryChipRow env.theme { count = 3 } ]
+            , footer = Nothing
+            }
+        , View.Nutrients.skeletonCard env
+        , Skeleton.bottomActions env.theme { count = 2 }
+        ]
+
+
+{-| Mirrors `View.Product.foodHeader`: a 4x24 macro dot, a 25px title line
+(`Typography.truncatedHeader` measures 25px for its 24px paragraph) and a 17px
+single-line meta subtitle.
+-}
+customFoodHeaderSkeleton : Theme -> Element msg
+customFoodHeaderSkeleton theme =
+    Skeleton.pageHeader
+        { leading = Just (Skeleton.dot theme)
+        , title = Skeleton.elLine theme { size = 25, width = Element.fill }
+        , subtitle = [ Skeleton.elLine theme { size = 17, width = Element.fill } ]
+        , actions = []
+        }

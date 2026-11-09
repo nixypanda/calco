@@ -5,9 +5,11 @@ module Page.Meal.Show exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , isBusy
     , loadId
     , modalView
     , modelId
+    , skeletonView
     , update
     , view
     )
@@ -24,6 +26,7 @@ import Element.Font as Font
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
@@ -80,6 +83,18 @@ init mealId =
         }
     , RequestInitialData mealId
     )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 
@@ -568,7 +583,10 @@ view env model =
                 ]
 
             Loading _ ->
-                [ mealShowSkeleton env.theme ]
+                [ Skeleton.busy
+                    { label = I18n.t env.language TidCommonLoading }
+                    [ skeletonView env ]
+                ]
         )
 
 
@@ -643,7 +661,11 @@ componentView env loaded component =
         quantityText =
             component.quantity.amount ++ " " ++ component.quantity.unit ++ summaryText
     in
-    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        , UiCommon.testId "component-row"
+        ]
         [ Element.el
             [ Element.width (Element.px 12)
             , Element.paddingEach { top = DesignTokens.space2, right = 0, bottom = 0, left = 0 }
@@ -712,20 +734,102 @@ deleteModalView env loaded =
         loaded.delete
 
 
-mealShowSkeleton : Theme -> Element msg
-mealShowSkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Skeleton.card theme { rows = 2 }
-        , Surface.section theme
-            { header =
-                Just (Skeleton.barCustom theme { width = Element.fillPortion 1, height = 16 })
-            , body = List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
+{-| The page body below `UiPage.pageContainer`. `Page.bootstrapView` calls the
+same function, so the date-gate and page-local loading frames cannot drift.
+
+The header body is `Element.none`, mirroring the loaded page when the meal has no
+notes. A meal with notes grows the body by paragraph lines, which pushes the
+components section down; notes are variable content, so the components section
+top is only asserted for a no-notes seed.
+
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Surface.section env.theme
+            { header = Just (headerSkeleton env.theme)
+            , body = [ Element.none ]
             , footer = Nothing
             }
-        , Skeleton.card theme { rows = 2 }
-        , Skeleton.card theme { rows = 3 }
-        , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-            [ Element.el [ Element.width Element.fill ] (Skeleton.button theme)
-            , Element.el [ Element.width Element.fill ] (Skeleton.button theme)
+        , Surface.section env.theme
+            { header =
+                Just
+                    (Skeleton.elLine env.theme
+                        { size = 20, width = Element.fill }
+                    )
+            , body =
+                List.intersperse (Surface.hairline env.theme)
+                    [ componentSkeleton env.theme, componentSkeleton env.theme ]
+            , footer = Nothing
+            }
+        , Element.column
+            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ Surface.formSection env.theme
+                (I18n.t env.language TidFoodShowPortion)
+                [ quantitySkeleton env.theme ]
+            , View.Nutrients.skeletonCard env
             ]
+        , Skeleton.bottomActions env.theme { count = 2 }
+        ]
+
+
+{-| Mirrors `headerView`: a 4x24 macro dot and a 25px title line
+(`Typography.truncatedHeader` measures 25px for its 24px paragraph). The loaded
+header has no subtitle or actions. The dot is data-derived in the loaded page
+(only shown when a nutrition summary exists); the skeleton renders the common
+dot-present case as a 4px-wide over-approximation.
+-}
+headerSkeleton : Theme -> Element msg
+headerSkeleton theme =
+    Skeleton.pageHeader
+        { leading = Just (Skeleton.dot theme)
+        , title = Skeleton.elLine theme { size = 25, width = Element.fill }
+        , subtitle = []
+        , actions = []
+        }
+
+
+{-| Mirrors `componentView`: a 12px leading slot with a 4x24 macro dot, then a
+column with the item name and quantity lines. The loaded name and quantity are
+16px el lines, so the skeleton uses `elLine 16` to keep the row height stable.
+-}
+componentSkeleton : Theme -> Element msg
+componentSkeleton theme =
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        , UiCommon.testId "component-row"
+        ]
+        [ Element.el
+            [ Element.width (Element.px 12)
+            , Element.paddingEach
+                { top = DesignTokens.space2, right = 0, bottom = 0, left = 0 }
+            , Element.alignTop
+            ]
+            (Skeleton.dot theme)
+        , Element.column
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space4
+            , Element.alignTop
+            ]
+            [ Skeleton.elLine theme { size = 16, width = Element.fill }
+            , Skeleton.elLine theme { size = 16, width = Element.fill }
+            ]
+        ]
+
+
+{-| Mirrors `View.QuantityInput.dropdown`: an amount text field above a unit
+dropdown, separated by the same 12px column spacing.
+-}
+quantitySkeleton : Theme -> Element msg
+quantitySkeleton theme =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        ]
+        [ Skeleton.field theme { labelWidth = Element.px 80, gap = 7 }
+        , Skeleton.selectField theme { labelWidth = Element.px 80 }
         ]

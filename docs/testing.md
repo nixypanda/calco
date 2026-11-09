@@ -201,6 +201,8 @@ a test fails:
 - change the macro factors in `Data.Nutrition`;
 - change `addDays`/`previousDay` month-end behavior;
 - change `shiftMonth` year-boundary behavior;
+- change `Ui.MonthCalendar.monthRows` to six rows or `List.take 4` (the
+  calendar partition property must fail);
 - remove the generation check in `Store.settle`;
 - change `Store.settle` so an `Err` result is not cached (the failed-settlement
   law must fail);
@@ -275,6 +277,108 @@ Or directly:
 ```bash
 cd frontend-web && elm-test
 ```
+
+## Browser Layout Harness
+
+`elm-test` cannot measure layout. The skeleton-stability contract is checked by
+a Chrome DevTools Protocol harness:
+
+```text
+docs/scripts/check-skeleton-stability.mjs
+docs/scripts/lib/cdp.mjs
+```
+
+It holds route API responses, captures the loading and loaded states, and
+compares the fixed shell/page envelope plus first content anchors. It also
+checks the Phone bottom-nav reservation, calendar geometry, pane status regions,
+focusable skeleton nodes, and the route-transition scroll policy.
+
+Each skeleton case declares its status model through `pageLevelSkeleton`
+(default `true`). Page-level cases must render at least one
+`data-skeleton-page` marker while loading and none after load, and every pane
+with skeleton content must have exactly one page status region. In-place cases
+(`search`, `search-recents`) set `pageLevelSkeleton: false`; they must render
+zero page-level markers and at least one skeleton region while loading. These
+are hard assertions in both report-only and required modes; they are not
+deferred warnings.
+
+### Prerequisites
+
+- PostgreSQL and the backend running (`just dev` or `just dev-backend`).
+- The Vite frontend at `--base-url` (default `http://localhost:1234`).
+- Chrome/Chromium installed; set `CHROME` to override discovery.
+- Test accounts through `CALCO_ADMIN_USER`, `CALCO_ADMIN_PASSWORD`,
+  `CALCO_LAYOUT_USER` and `CALCO_LAYOUT_PASSWORD`.
+- Seed data or fixture-id overrides for the routes that need an existing
+  custom food, meal, log or admin-edit user. `CALCO_CUSTOM_FOOD_ID`,
+  `CALCO_FOOD_ID`, `CALCO_MEAL_ID`, `CALCO_LOG_ID` and
+  `CALCO_ADMIN_EDIT_USER_ID` override discovery.
+
+The harness creates a uniquely named API key and a no-notes meal for cases that
+need them, then removes them. The backend revokes rather than hard-deletes API
+keys, so a revoked row can remain. Never point the harness at a database you are
+not prepared to modify, and never reset the developer database to clean up.
+
+### Running
+
+Report-only Phone run (the default; layout failures do not change the exit code):
+
+```bash
+CALCO_ADMIN_USER=<admin-user> CALCO_ADMIN_PASSWORD=<admin-password> \
+CALCO_LAYOUT_USER=<layout-user> CALCO_LAYOUT_PASSWORD=<layout-password> \
+node docs/scripts/check-skeleton-stability.mjs --report-only --viewport phone
+```
+
+The supported viewports are `phone` (390x844), `tablet` (768x1024) and
+`desktop` (1440x900). Run all three for the full matrix:
+
+```bash
+just check-skeleton-layout
+just check-skeleton-layout --viewport tablet
+just check-skeleton-layout --viewport desktop
+```
+
+`just check-skeleton-layout` uses the default Phone viewport and report-only
+mode, and forwards flags to the script. Add `--case <name>` (repeatable) to
+narrow a run, `--headed` to watch it, `--base-url`/`CALCO_URL` to change the
+server, and `CALCO_LAYOUT_DATE` to move the fixed route date (default
+`2026-10-27`; a future date falls back).
+
+### Report-Only Versus Required
+
+- Report-only is the default, and `--report-only` forces it. Failures are
+  printed and artifacts are written, but the process exits 0.
+- `CALCO_REQUIRE_LAYOUT=1` makes failures exit nonzero; `--report-only` still
+  wins if both are present. Missing optional fixtures are skips in report-only
+  mode and failures in required mode.
+- A required job must always set `CALCO_REQUIRE_LAYOUT=1`, install Chrome, and
+  never silently skip because Chrome is absent. Only local runs may skip.
+- There is no CI layout job today. Start report-only/manual/nightly; promote to
+  blocking only after at least 20 consecutive green runs over at least 14 days
+  with zero flakes, recorded in the job summary.
+
+Artifacts go to `docs/images/skeleton-stability/<timestamp>/<case>/`
+(`loading.png`, `loaded.png`, `result.json`); that directory is gitignored. Never
+commit screenshots from a harness run.
+
+`npm run build` and `npm run dev` run `version:write`, which rewrites the
+tracked `frontend-web/public/version.json`. After a verification build or dev
+start, restore it with
+`git checkout -- frontend-web/public/version.json`; do not commit the generated
+bump as part of an unrelated change.
+
+### What It Cannot Test
+
+- Font fallback and text wrapping across OS/browser combinations.
+- Real network timing, slow-3G perceived behavior, or user data outside the
+  seed (long names, different row counts, optional categories/banners).
+- Shimmer quality and motion feel; reduced-motion only proves static visibility.
+- Screen-reader announcement order/timing, though ARIA structure is asserted.
+- iOS Safari `dvh`, safe-area insets and rubber-band scrolling.
+- Browser zoom/text scaling and native select/dropdown popups.
+- Back/forward cache behavior; the scroll case is a history/scroll test.
+
+Use the manual checklist in [qa-runbook.md](qa-runbook.md) for those gaps.
 
 ## Coverage
 

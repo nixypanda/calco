@@ -10,11 +10,18 @@ module Page.Diary.Day exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , PrefsState(..)
+    , SlotSection
     , asMain
     , contentView
     , currentLogs
     , init
+    , isBusy
+    , prefsForView
+    , skeletonSlots
+    , skeletonView
     , update
+    , visibleSlotSections
     )
 
 import Api.Client as Client
@@ -43,6 +50,7 @@ import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
+import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -80,13 +88,69 @@ type alias Model =
     , latestSlots : LatestSlotsState
     , copyState : CopyState
     , macroMode : MacroMode
-    , prefs : Maybe DiaryPrefs
+    , prefs : PrefsState
     }
+
+
+{-| Prefs are independent of the diary fetch: a failed preference request must
+not turn the page into a diary error or leave the skeleton up forever. Only
+`PrefsLoading` is pending; `PrefsLoaded` supplies the enabled slots and
+`PrefsFailed` falls back to log-only sections.
+-}
+type PrefsState
+    = PrefsLoading
+    | PrefsLoaded DiaryPrefs
+    | PrefsFailed String
+
+
+{-| The view only needs prefs when they resolved successfully.
+-}
+prefsForView : Model -> Maybe DiaryPrefs
+prefsForView model =
+    case model.prefs of
+        PrefsLoaded prefs ->
+            Just prefs
+
+        PrefsLoading ->
+            Nothing
+
+        PrefsFailed _ ->
+            Nothing
 
 
 asMain : Model -> Model
 asMain model =
     { model | calendarMonth = Nothing }
+
+
+{-| The page is busy while the diary is pending, or while loaded content is
+waiting for its preferences.
+
+A diary failure is settled even when a prefs request is still in flight: the
+error card is already visible and `contentView` never hides it behind the
+skeleton. A loaded diary is settled once prefs resolve, including
+`PrefsFailed`.
+
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model.diary of
+        Loading _ ->
+            True
+
+        Failed _ _ ->
+            False
+
+        Loaded _ ->
+            case model.prefs of
+                PrefsLoading ->
+                    True
+
+                PrefsLoaded _ ->
+                    False
+
+                PrefsFailed _ ->
+                    False
 
 
 {-| Only the loaded state carries a date: suggestions must not be rendered
@@ -118,7 +182,7 @@ init args =
       , latestSlots = LatestSlotsLoading
       , copyState = CopyIdle
       , macroMode = Grams
-      , prefs = Nothing
+      , prefs = PrefsLoading
       }
     , RequestDiaryData
     )
@@ -148,7 +212,7 @@ type Msg
     = SlotNoOp
     | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
     | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
-    | PrefsLoaded (Result Client.ApiError DiaryPrefs)
+    | PrefsReceived (Result Client.ApiError DiaryPrefs)
     | LatestSlotsReceived LocalDate (Result Client.ApiError LatestSlotsResponse)
     | CopyLatestClicked LatestSlotSource
     | CopyLatestCompleted LocalDate (Result Client.ApiError BatchLogResponse)
@@ -212,13 +276,21 @@ update msg model =
                     Err error ->
                         failure requestDate error model
 
-        PrefsLoaded result ->
+        PrefsReceived result ->
             case result of
                 Ok prefs ->
-                    ( { model | prefs = Just prefs }, Cmd.none, NoOp )
+                    ( { model | prefs = PrefsLoaded prefs }, Cmd.none, NoOp )
 
                 Err error ->
-                    failure model.currentDate error model
+                    Client.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                { current | prefs = PrefsFailed message }
+                        }
+                        error
+                        model
 
         LatestSlotsReceived requestDate result ->
             if not (LocalDate.equals requestDate model.currentDate) then
@@ -522,24 +594,38 @@ contentView env model =
         fallbackViews : List (Element Msg)
         fallbackViews =
             copyErrorView env.theme model.copyState ++ [ logGroupsView env model logs ]
+
+        prefsWarning : List (Element Msg)
+        prefsWarning =
+            case model.prefs of
+                PrefsFailed message ->
+                    [ Feedback.warningBanner env.theme message ]
+
+                PrefsLoading ->
+                    []
+
+                PrefsLoaded _ ->
+                    []
     in
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        (dateCard env model
-            :: (case model.diary of
-                    Failed date message ->
-                        if LocalDate.equals date model.currentDate then
-                            [ Feedback.errorBanner env.theme message ]
+    case model.diary of
+        Failed date message ->
+            if LocalDate.equals date model.currentDate then
+                Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+                    [ dateCard env model, Feedback.errorBanner env.theme message ]
 
-                        else
-                            fallbackViews
+            else
+                Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+                    (dateCard env model :: fallbackViews)
 
-                    Loading _ ->
-                        fallbackViews
+        _ ->
+            if isBusy model then
+                Skeleton.busy
+                    { label = I18n.t env.language TidCommonLoading }
+                    [ skeletonView env (prefsForView model) ]
 
-                    Loaded _ ->
-                        fallbackViews
-               )
-        )
+            else
+                Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+                    (dateCard env model :: (prefsWarning ++ fallbackViews))
 
 
 dateCard : Env -> Model -> Element Msg
@@ -553,50 +639,249 @@ dateCard env model =
         logs =
             diaryLogs model.currentDate model.diary
     in
-    Surface.section env.theme
-        { header =
-            Just
-                (Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                    [ Button.iconButton env.device
-                        env.theme
-                        { icon = Icon.ChevronLeft
-                        , title = I18n.t env.language TidDiaryPreviousDay
-                        , onPress = Just PreviousDayClicked
-                        , tone = Button.Primary
-                        }
-                    , Element.el [ Element.width Element.fill, Font.center ]
-                        (Typography.sectionTitle env.theme
-                            (LocalDate.display env.language model.currentDate)
-                        )
-                    , if canGoNext then
-                        Button.iconButton env.device
+    Element.el [ Element.width Element.fill, UiCommon.testId "diary-date-card" ]
+        (Surface.section env.theme
+            { header =
+                Just
+                    (Element.row
+                        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                        [ Button.iconButton env.device
                             env.theme
-                            { icon = Icon.ChevronRight
-                            , title = I18n.t env.language TidDiaryNextDay
-                            , onPress = Just NextDayClicked
+                            { icon = Icon.ChevronLeft
+                            , title = I18n.t env.language TidDiaryPreviousDay
+                            , onPress = Just PreviousDayClicked
                             , tone = Button.Primary
                             }
+                        , Element.el [ Element.width Element.fill, Font.center ]
+                            (Typography.sectionTitle env.theme
+                                (LocalDate.display env.language model.currentDate)
+                            )
+                        , if canGoNext then
+                            Button.iconButton env.device
+                                env.theme
+                                { icon = Icon.ChevronRight
+                                , title = I18n.t env.language TidDiaryNextDay
+                                , onPress = Just NextDayClicked
+                                , tone = Button.Primary
+                                }
 
-                      else
-                        Button.iconButton env.device
-                            env.theme
-                            { icon = Icon.ChevronRight
-                            , title = ""
-                            , onPress = Nothing
-                            , tone = Button.Primary
-                            }
-                    ]
+                          else
+                            Button.iconButton env.device
+                                env.theme
+                                { icon = Icon.ChevronRight
+                                , title = ""
+                                , onPress = Nothing
+                                , tone = Button.Primary
+                                }
+                        ]
+                    )
+            , body =
+                [ case loadedGoalTargets model.currentDate model.diary of
+                    Just targets ->
+                        totalsView env targets (Nutrition.totalsFromLogs logs)
+
+                    Nothing ->
+                        totalsView env loadingGoalTargets (Nutrition.totalsFromLogs logs)
+                ]
+            , footer = Nothing
+            }
+        )
+
+
+{-| The page-shaped loading body. The caller owns the single `Skeleton.busy`
+wrapper so `Page.bootstrapView` and the page's own loading branch cannot nest
+status regions.
+-}
+skeletonView : Env -> Maybe DiaryPrefs -> Element msg
+skeletonView env maybePrefs =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ skeletonDateCard env
+        , Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            (List.map (\_ -> skeletonMealSlot env) (skeletonSlots maybePrefs))
+        ]
+
+
+{-| Prefs decide which empty slots exist. Before prefs resolve the slot count is
+unknown, so the skeleton falls back to one neutral card rather than guessing
+five. The order always follows `MealSlot.all`.
+-}
+skeletonSlots : Maybe DiaryPrefs -> List MealSlot
+skeletonSlots maybePrefs =
+    case maybePrefs of
+        Just prefs ->
+            MealSlot.all |> List.filter (\slot -> DiaryPrefs.isEnabled slot prefs)
+
+        Nothing ->
+            [ Breakfast ]
+
+
+skeletonDateCard : Env -> Element msg
+skeletonDateCard env =
+    Element.el [ Element.width Element.fill, UiCommon.testId "diary-date-card" ]
+        (Surface.section env.theme
+            { header = Just (skeletonDateHeader env.theme)
+            , body = [ skeletonTotals env.theme ]
+            , footer = Nothing
+            }
+        )
+
+
+skeletonDateHeader : Theme -> Element msg
+skeletonDateHeader theme =
+    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        [ Skeleton.icon theme
+        , Element.el [ Element.width Element.fill ]
+            (Element.el [ Element.centerX ]
+                (Skeleton.elLine theme { size = 24, width = Element.px 160 })
+            )
+        , Skeleton.icon theme
+        ]
+
+
+skeletonTotals : Theme -> Element msg
+skeletonTotals theme =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ skeletonCalorieHero theme
+            , skeletonProgressBar theme 12
+            , Element.el [ Element.width Element.fill ]
+                (Element.el [ Element.alignRight ]
+                    (Skeleton.elLine theme { size = 16, width = Element.px 120 })
                 )
-        , body =
-            [ case loadedGoalTargets model.currentDate model.diary of
-                Just targets ->
-                    totalsView env targets (Nutrition.totalsFromLogs logs)
-
-                Nothing ->
-                    totalsView env loadingGoalTargets (Nutrition.totalsFromLogs logs)
             ]
-        , footer = Nothing
-        }
+        , Surface.hairline theme
+        , skeletonMacroRow theme
+        , skeletonDetailsAction theme
+        ]
+
+
+{-| The loaded details action measures 52px because its trailing chevron row
+overflows the shared 48px button height. Keep the date-card body height stable
+with a local 52px placeholder rather than changing every `Skeleton.button`.
+-}
+skeletonDetailsAction : Theme -> Element msg
+skeletonDetailsAction theme =
+    Element.el
+        [ Element.width Element.fill
+        , Element.height (Element.px 52)
+        , Background.color theme.inputFill
+        , Border.rounded DesignTokens.radiusPill
+        , UiCommon.uiClass "ui-skeleton"
+        , UiCommon.skeletonRegion
+        ]
+        Element.none
+
+
+{-| Pill-shaped skeleton bar, matching the loaded calorie and macro progress
+bars rather than the generic `barCustom` radius.
+-}
+skeletonProgressBar : Theme -> Int -> Element msg
+skeletonProgressBar theme height =
+    Element.el
+        [ Element.width Element.fill
+        , Element.height (Element.px height)
+        , Background.color theme.inputFill
+        , Border.rounded DesignTokens.radiusPill
+        , UiCommon.uiClass "ui-skeleton"
+        , UiCommon.skeletonRegion
+        ]
+        Element.none
+
+
+skeletonCalorieHero : Theme -> Element msg
+skeletonCalorieHero theme =
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        , Element.centerY
+        ]
+        [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
+            [ Skeleton.elLine theme { size = 13, width = Element.px 80 }
+            , Skeleton.elLine theme { size = 44, width = Element.px 160 }
+            , Skeleton.elLine theme { size = 16, width = Element.px 110 }
+            ]
+        , Element.el
+            [ Element.width (Element.px 96)
+            , Element.height (Element.px 40)
+            , Background.color theme.inputFill
+            , Border.rounded DesignTokens.radiusPill
+            , UiCommon.uiClass "ui-skeleton"
+            , UiCommon.skeletonRegion
+            ]
+            Element.none
+        ]
+
+
+skeletonMacroRow : Theme -> Element msg
+skeletonMacroRow theme =
+    let
+        divider : Element msg
+        divider =
+            Element.el
+                [ Element.width (Element.px 1)
+                , Element.height Element.fill
+                , Background.color theme.divider
+                ]
+                Element.none
+
+        item : Element msg
+        item =
+            Element.column
+                [ Element.width (Element.fillPortion 1)
+                , Element.spacing DesignTokens.space8
+                ]
+                [ Skeleton.elLine theme { size = 16, width = Element.fill }
+                , Skeleton.elLine theme { size = 16, width = Element.fill }
+                , skeletonProgressBar theme 8
+                ]
+    in
+    List.repeat 3 item
+        |> List.intersperse divider
+        |> Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+
+
+skeletonMealSlot : Env -> Element msg
+skeletonMealSlot env =
+    Element.el [ Element.width Element.fill, UiCommon.testId "meal-slot-card" ]
+        (Surface.heroCard env.theme
+            { header = skeletonSlotHeader env.theme
+            , body =
+                [ Surface.hairline env.theme
+                , Element.el
+                    [ Element.width Element.fill, Element.padding DesignTokens.space12 ]
+                    (Skeleton.button env.theme)
+                , Surface.hairline env.theme
+                , Skeleton.button env.theme
+                ]
+            , mediaHeader =
+                Just
+                    { height = DesignTokens.heroHeaderHeight
+                    , backgroundAttrs = [ Background.color env.theme.inputFill ]
+                    , fade = False
+                    , contentPadding =
+                        { top = DesignTokens.heroHeaderPaddingTop
+                        , right = mealSlotHorizontalPadding env.device
+                        , bottom = DesignTokens.heroHeaderPaddingBottom
+                        , left = mealSlotHorizontalPadding env.device
+                        }
+                    }
+            }
+        )
+
+
+skeletonSlotHeader : Theme -> Element msg
+skeletonSlotHeader theme =
+    Element.row
+        [ Element.width Element.fill
+        , Element.padding DesignTokens.space12
+        , Element.spacing DesignTokens.space12
+        ]
+        [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+            [ Skeleton.elLine theme { size = 24, width = Element.px 100 }
+            , Skeleton.elLine theme { size = 13, width = Element.px 120 }
+            ]
+        , Skeleton.elLine theme { size = 13, width = Element.px 40 }
+        ]
 
 
 totalsView : Env -> GoalTargets -> List NutrientAmount -> Element Msg
@@ -955,6 +1240,22 @@ type alias SlotSection =
 
 logGroupsView : Env -> Model -> List FoodLog -> Element Msg
 logGroupsView env model logs =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        (visibleSlotSections model.prefs logs |> List.map (slotView env model))
+
+
+{-| The loaded page's section rules, shared by the view and its property test:
+
+  - `PrefsLoaded`: every enabled slot, plus any disabled slot with logs, in
+    `MealSlot.all` order.
+  - `PrefsLoading`/`PrefsFailed`: only slots with logs.
+  - The unslotted `Nothing` section comes last when it has logs.
+
+Each `MealSlot` appears at most once.
+
+-}
+visibleSlotSections : PrefsState -> List FoodLog -> List SlotSection
+visibleSlotSections prefsState logs =
     let
         section : Maybe MealSlot -> SlotSection
         section slot =
@@ -964,23 +1265,24 @@ logGroupsView env model logs =
         unslotted =
             section Nothing
     in
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        ((MealSlot.all |> List.map (Just >> section) |> List.filter (shouldShowSection model.prefs))
-            ++ (if List.isEmpty unslotted.logs then
-                    []
+    (MealSlot.all |> List.map (Just >> section) |> List.filter (shouldShowSection prefsState))
+        ++ (if List.isEmpty unslotted.logs then
+                []
 
-                else
-                    [ unslotted ]
-               )
-            |> List.map (slotView env model)
-        )
+            else
+                [ unslotted ]
+           )
 
 
-shouldShowSection : Maybe DiaryPrefs -> SlotSection -> Bool
-shouldShowSection maybePrefs section =
+shouldShowSection : PrefsState -> SlotSection -> Bool
+shouldShowSection prefsState section =
     not (List.isEmpty section.logs)
-        || (Maybe.map2 DiaryPrefs.isEnabled section.slot maybePrefs
-                |> Maybe.withDefault False
+        || (case ( section.slot, prefsState ) of
+                ( Just slot, PrefsLoaded prefs ) ->
+                    DiaryPrefs.isEnabled slot prefs
+
+                _ ->
+                    False
            )
 
 
@@ -1118,22 +1420,24 @@ mealSlotCard env maybeSlot header bodyChildren =
                 { header = Just header, body = bodyChildren, footer = Nothing }
 
         Just slot ->
-            Surface.heroCard env.theme
-                { header = header
-                , body = bodyChildren
-                , mediaHeader =
-                    Just
-                        { height = DesignTokens.heroHeaderHeight
-                        , backgroundAttrs = mealSlotBackground slot
-                        , fade = True
-                        , contentPadding =
-                            { top = DesignTokens.heroHeaderPaddingTop
-                            , right = mealSlotHorizontalPadding env.device
-                            , bottom = DesignTokens.heroHeaderPaddingBottom
-                            , left = mealSlotHorizontalPadding env.device
+            Element.el [ Element.width Element.fill, UiCommon.testId "meal-slot-card" ]
+                (Surface.heroCard env.theme
+                    { header = header
+                    , body = bodyChildren
+                    , mediaHeader =
+                        Just
+                            { height = DesignTokens.heroHeaderHeight
+                            , backgroundAttrs = mealSlotBackground slot
+                            , fade = True
+                            , contentPadding =
+                                { top = DesignTokens.heroHeaderPaddingTop
+                                , right = mealSlotHorizontalPadding env.device
+                                , bottom = DesignTokens.heroHeaderPaddingBottom
+                                , left = mealSlotHorizontalPadding env.device
+                                }
                             }
-                        }
-                }
+                    }
+                )
 
 
 mealSlotHorizontalPadding : Device -> Int

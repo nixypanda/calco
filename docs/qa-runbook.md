@@ -202,6 +202,43 @@ There is currently no user-delete flow. A created admin QA user cannot be fully 
 6. With the backend temporarily unavailable, submit login/search once and verify the network error is understandable and recoverable after the backend returns.
 7. Check the browser console for uncaught errors after each major flow.
 
+## Layout Stability Checklist
+
+The automated harness is the primary check; use this short manual pass for the
+gaps it cannot cover (real fonts, iOS Safari, slow network, text scaling). The
+harness uses a modern Phone (390x844), Tablet (768x1024) and Desktop (1440x900);
+the manual viewport table above still uses iPhone SE (375x667) for the broader
+QA flows. Both are Phone-class layouts.
+
+Automated run (report-only; needs the backend, frontend, Chrome and the QA
+accounts). Export `CALCO_ADMIN_USER`, `CALCO_ADMIN_PASSWORD`,
+`CALCO_LAYOUT_USER` and `CALCO_LAYOUT_PASSWORD` from the Environment section
+first:
+
+```bash
+just check-skeleton-layout --viewport phone
+just check-skeleton-layout --viewport desktop
+```
+
+These are report-only by default; set `CALCO_REQUIRE_LAYOUT=1` when a run should
+fail the shell. Artifacts land in `docs/images/skeleton-stability/` (gitignored).
+
+Manual checks:
+
+1. In DevTools, set Network to "Slow 3G" and disable cache.
+2. Hard-reload `/home` (including a date-gated load), `/foods/custom/:id/edit`,
+   `/meals/:id/edit`, `/meals/:id`, `/foods/:id`, `/settings/api-keys` and
+   `/calendar` at 375x667, 768x1024 and 1440x900. Confirm the top bar stays
+   58px, the page/header/first row do not jump, and Tablet has no bottom nav.
+3. Confirm the Phone bottom-nav space stays reserved while a page fetch is
+   pending, and the top bar does not switch identity during ordinary fetches.
+4. Toggle OS "Reduce motion" and reload. Confirm the skeleton is static and
+   still visible.
+5. At 200% browser zoom, check the page header, first field and bottom actions
+   for clipping or overlap.
+6. On iOS Safari, verify bottom-nav clearance, `dvh` with browser chrome shown
+   and hidden, and safe-area top.
+
 ## Cleanup
 
 Clean up in dependency order:

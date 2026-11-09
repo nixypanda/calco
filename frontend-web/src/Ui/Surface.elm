@@ -24,7 +24,7 @@ import Html.Attributes
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
-import Ui.Common exposing (minWidthZero, toCssColor, uiClass)
+import Ui.Common exposing (minWidthZero, testId, toCssColor, uiClass)
 import Ui.DesignTokens
     exposing
         ( radiusCard
@@ -62,6 +62,7 @@ surfaceShellWith extraAttrs theme children =
          , Border.rounded radiusCard
          , cardShadow theme
          , uiClass "ui-surface"
+         , testId "surface"
          ]
             ++ extraAttrs
         )
@@ -129,6 +130,7 @@ heroCard theme config =
                             , bottomRight = 0
                             }
                          , Element.clip
+                         , testId "surface-header"
                          ]
                             ++ (if media.fade then
                                     [ Element.inFront (headerFade theme) ]
@@ -282,6 +284,7 @@ panel theme config =
                         , Border.roundEach headerRounding
                         , Element.padding space20
                         , Element.spacing space12
+                        , testId "surface-header"
                         ]
                         [ el ]
                         :: (if List.isEmpty bodyRegion then
@@ -355,7 +358,7 @@ listRow :
     }
     -> Element msg
 listRow config =
-    Element.wrappedRow listRowAttrs
+    Element.wrappedRow (listRowAttrs ++ [ testId "list-row" ])
         [ Input.button
             [ Element.width Element.fill, uiClass "ui-motion ui-pressable" ]
             { onPress = Just config.onSelect
@@ -380,7 +383,7 @@ staticRow :
     }
     -> Element msg
 staticRow config =
-    Element.wrappedRow listRowAttrs
+    Element.wrappedRow (listRowAttrs ++ [ testId "list-row" ])
         [ Element.row listRowLabelAttrs
             [ listRowLeading config.leading
             , listRowText config.title config.subtitle
@@ -438,7 +441,12 @@ listRowLeading leading =
 
 detailRow : Theme -> Language -> String -> Element msg -> Element msg
 detailRow theme language label value =
-    Element.row [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing space4
+        , minWidthZero
+        , testId "detail-row"
+        ]
         [ Element.el [ Font.color theme.textMedium, caption ]
             (Element.text (I18n.t language (TidUiDetailRowLabelSuffix label)))
         , Element.el [ Element.width Element.fill, minWidthZero ] value

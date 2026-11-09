@@ -10,9 +10,11 @@ module Page.FoodLog.Entry exposing
     , ProductState
     , contentView
     , init
+    , isBusy
     , loadId
     , modalView
     , modelId
+    , skeletonView
     , update
     )
 
@@ -26,7 +28,6 @@ import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
-import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Chip as Chip
@@ -96,6 +97,18 @@ type alias LoadFailedModel =
 init : String -> ( Model, OutMsg )
 init logId =
     ( Loading { logId = logId, log = Nothing, units = Nothing }, RequestInitialData logId )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading _ ->
+            True
+
+        _ ->
+            False
 
 
 
@@ -556,8 +569,10 @@ bodyView env model =
         LoadFailed _ ->
             Element.none
 
-        Loading _ ->
-            foodLogEntrySkeleton env.theme
+        Loading loading ->
+            Skeleton.busy
+                { label = I18n.t env.language TidCommonLoading }
+                [ skeletonView env loading.log ]
 
 
 loadedView : Env -> LoadedModel -> Element Msg
@@ -683,7 +698,7 @@ itemHeaderElement env model =
     UiPage.pageHeader env.theme
         { leading = Just (View.Nutrients.macroDot env model.log.nutrients)
         , title = itemTitle env.theme model.item
-        , subtitle = Just (metaSubtitle env model.item model.log)
+        , subtitle = Just (metaSubtitle env model.log)
         , actions = []
         }
 
@@ -718,14 +733,14 @@ itemTitle theme item =
     case item of
         ProductItem productState ->
             case productState of
-                DetailLoading _ ->
-                    Skeleton.bar theme
+                DetailLoading snapshot ->
+                    Typography.truncatedHeader theme (FoodLog.itemName snapshot)
 
                 DetailLoaded food ->
                     Typography.truncatedHeader theme food.name
 
                 DetailUnavailable fallback ->
-                    Element.text (FoodLog.itemName fallback)
+                    Typography.truncatedHeader theme (FoodLog.itemName fallback)
 
         MealItem meal ->
             Typography.truncatedHeader theme (FoodLog.itemName meal)
@@ -734,54 +749,33 @@ itemTitle theme item =
             Typography.truncatedHeader theme (FoodLog.itemName adHoc)
 
 
-metaSubtitle : Env -> LoadedItem -> FoodLog -> UiPage.PageHeaderSubtitle
-metaSubtitle env item log =
+{-| The subtitle is derived from the log snapshot's brand plus the logged date for
+every item state. The product flavor, the loading snapshot and the unavailable
+fallback all produce the same line count, so the header band cannot collapse
+while `/api/foods/:id` is in flight. On Phone a brand becomes its own line above
+the logged line; without a brand the logged line is the only line.
+-}
+metaSubtitle : Env -> FoodLog -> UiPage.PageHeaderSubtitle
+metaSubtitle env log =
     let
-        fallback : UiPage.PageHeaderSubtitle
-        fallback =
-            UiPage.SubtitleText
-                (Text.dotSeparated
-                    [ FoodLog.itemBrand log.item
-                    , Just
-                        (I18n.t env.language
-                            (TidFoodLogLogged (LocalDate.display env.language log.logDate))
-                        )
-                    ]
-                )
+        loggedMeta : String
+        loggedMeta =
+            I18n.t env.language
+                (TidFoodLogLogged (LocalDate.display env.language log.logDate))
+
+        brandMeta : List String
+        brandMeta =
+            [ FoodLog.itemBrand log.item ] |> List.filterMap identity
     in
-    case item of
-        ProductItem (DetailLoaded food) ->
-            let
-                productMeta : List String
-                productMeta =
-                    [ food.brand ] |> List.filterMap identity
+    if UiCommon.isSmall env.device then
+        UiPage.SubtitleMetaLines
+            { lines =
+                [ brandMeta, [ loggedMeta ] ] |> List.filter (not << List.isEmpty)
+            , separator = " ⋅ "
+            }
 
-                loggedMeta : String
-                loggedMeta =
-                    I18n.t env.language
-                        (TidFoodLogLogged (LocalDate.display env.language log.logDate))
-            in
-            if UiCommon.isSmall env.device then
-                UiPage.SubtitleMetaLines
-                    { lines =
-                        [ productMeta, [ loggedMeta ] ] |> List.filter (not << List.isEmpty)
-                    , separator = " ⋅ "
-                    }
-
-            else
-                UiPage.SubtitleMeta { items = productMeta ++ [ loggedMeta ], separator = " ⋅ " }
-
-        ProductItem (DetailLoading _) ->
-            fallback
-
-        ProductItem (DetailUnavailable _) ->
-            fallback
-
-        MealItem _ ->
-            fallback
-
-        AdHocItem _ ->
-            fallback
+    else
+        UiPage.SubtitleMeta { items = brandMeta ++ [ loggedMeta ], separator = " ⋅ " }
 
 
 unitsForItem : LoadedModel -> List UnitItem
@@ -799,8 +793,9 @@ detailActionsView env model =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.el [ Element.width Element.fill ]
-                (Button.textButton env.device
+                (Button.textButtonWithAttributes env.device
                     env.theme
+                    [ UiCommon.testId "bottom-action" ]
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label = I18n.t env.language TidCommonSave
@@ -836,13 +831,107 @@ deleteModalView env loaded =
         loaded.delete
 
 
-foodLogEntrySkeleton : Theme -> Element Msg
-foodLogEntrySkeleton theme =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Skeleton.card theme { rows = 2 }
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.button theme
-        , Skeleton.card theme { rows = 3 }
+{-| The page body below `contentView`'s column. `Page.bootstrapView` calls the
+same function, so the date-gate and page-local loading frames cannot drift.
+
+The skeleton represents the no-category case: category chips are optional and
+unknown while loading, so a log with categories pushes the portion section and
+the footer down. That shift is documented as variable content; the panel top,
+header band, title line and control heights stay stable.
+
+The subtitle line count comes from the loaded log snapshot when available:
+branded logs reserve two Phone lines, unbranded logs one. The boot path has no log
+snapshot yet and uses the two-line product-with-brand over-approximation; this
+route is not date-gated, so boot normally hands off before a user sees it.
+
+-}
+skeletonView : Env -> Maybe FoodLog -> Element msg
+skeletonView env maybeLog =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Surface.panel env.theme
+            { header = Just (panelHeaderSkeleton env maybeLog)
+            , sections =
+                [ { title =
+                        Just
+                            (Skeleton.elLine env.theme
+                                { size = 20, width = Element.fill }
+                            )
+                  , body =
+                        [ Skeleton.selectField env.theme { labelWidth = Element.px 80 }
+                        , quantitySkeleton env.theme
+                        , Skeleton.field env.theme { labelWidth = Element.px 80, gap = 7 }
+                        ]
+                  }
+                ]
+            , footer = Just (Skeleton.bottomActions env.theme { count = 2 })
+            }
+        , View.Nutrients.skeletonCard env
+        ]
+
+
+{-| Mirrors `itemHeaderElement`: a 4x24 macro dot, a 25px title line
+(`Typography.truncatedHeader` measures 25px for its 24px paragraph) and a muted
+subtitle whose Phone line count follows the log's brand. The title uses the
+snapshot name so the page never collapses to a 16px bar while product detail
+loads.
+-}
+panelHeaderSkeleton : Env -> Maybe FoodLog -> Element msg
+panelHeaderSkeleton env maybeLog =
+    Skeleton.pageHeader
+        { leading = Just (Skeleton.dot env.theme)
+        , title = Skeleton.elLine env.theme { size = 25, width = Element.fill }
+        , subtitle = subtitlePlaceholders env (phoneSubtitleLines maybeLog)
+        , actions = []
+        }
+
+
+{-| A branded log has a brand line and a logged-date line on Phone; an unbranded
+log has only the logged line. The boot path has no snapshot and over-reserves two
+lines.
+-}
+phoneSubtitleLines : Maybe FoodLog -> Int
+phoneSubtitleLines maybeLog =
+    case maybeLog of
+        Just log ->
+            if FoodLog.itemBrand log.item == Nothing then
+                1
+
+            else
+                2
+
+        Nothing ->
+            2
+
+
+subtitlePlaceholders : Env -> Int -> List (Element msg)
+subtitlePlaceholders env lineCount =
+    let
+        line : Element msg
+        line =
+            Skeleton.elLine env.theme { size = 17, width = Element.fill }
+    in
+    if UiCommon.isSmall env.device && lineCount >= 2 then
+        [ Element.column
+            [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
+            [ line, line ]
+        ]
+
+    else
+        [ line ]
+
+
+{-| Mirrors `View.QuantityInput.dropdown`: an amount text field above a unit
+dropdown, separated by the same 12px column spacing.
+-}
+quantitySkeleton : Theme -> Element msg
+quantitySkeleton theme =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        ]
+        [ Skeleton.field theme { labelWidth = Element.px 80, gap = 7 }
+        , Skeleton.selectField theme { labelWidth = Element.px 80 }
         ]

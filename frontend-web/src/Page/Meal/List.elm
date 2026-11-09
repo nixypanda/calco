@@ -4,6 +4,8 @@ module Page.Meal.List exposing
     , OutMsg(..)
     , contentView
     , init
+    , isBusy
+    , skeletonView
     , update
     )
 
@@ -21,7 +23,6 @@ import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
-import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
 
@@ -46,6 +47,18 @@ type OutMsg
 init : ( Model, OutMsg )
 init =
     ( Loading, RequestMeals )
+
+
+{-| Only the initial fetch is busy; `LoadFailed` is a settled error state.
+-}
+isBusy : Model -> Bool
+isBusy model =
+    case model of
+        Loading ->
+            True
+
+        _ ->
+            False
 
 
 
@@ -138,7 +151,9 @@ bodyView env model =
             Element.none
 
         Loading ->
-            mealListSkeleton env.theme
+            Skeleton.busy
+                { label = I18n.t env.language TidCommonLoading }
+                [ skeletonView env ]
 
 
 mealRow : Env -> Meal -> Element Msg
@@ -179,13 +194,29 @@ mealSummaryText meal =
         |> Text.dotSeparated
 
 
-mealListSkeleton : Theme -> Element msg
-mealListSkeleton theme =
-    Surface.section theme
+{-| The page body below `contentView`'s column. The caller owns the single
+`Skeleton.busy` wrapper so the page view and `Page.bootstrapView` cannot nest
+status regions.
+-}
+skeletonView : Env -> Element msg
+skeletonView env =
+    Surface.section env.theme
         { header =
-            Just (Skeleton.button theme)
+            Just (Skeleton.button env.theme)
         , body =
-            List.intersperse (Surface.hairline theme)
-                (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
+            List.intersperse (Surface.hairline env.theme)
+                (List.map (\_ -> mealRowSkeleton env) (List.range 1 3))
         , footer = Nothing
+        }
+
+
+mealRowSkeleton : Env -> Element msg
+mealRowSkeleton env =
+    Skeleton.row
+        { leading = [ Skeleton.dot env.theme ]
+        , -- The loaded title is a single-line 16px paragraph; its measured line
+          -- box is 17px in this app.
+          title = Skeleton.elLine env.theme { size = 17, width = Element.fill }
+        , subtitle = [ Skeleton.elLine env.theme { size = 17, width = Element.fill } ]
+        , trailing = []
         }

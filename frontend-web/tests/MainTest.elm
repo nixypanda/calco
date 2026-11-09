@@ -14,8 +14,13 @@ import Element exposing (DeviceClass(..), Orientation(..))
 import Expect exposing (Expectation)
 import Fuzz exposing (Fuzzer)
 import Main
+import Page
+import Support.Fixtures as Fixtures
 import Support.Fuzz as FuzzSupport
-import Test exposing (Test, describe, fuzz, fuzz2, fuzz3)
+import Test exposing (Test, describe, fuzz, fuzz2, fuzz3, test)
+import Translations.Util exposing (Language(..))
+import Ui.Env exposing (Env)
+import Ui.Theme as Theme
 
 
 tests : Test
@@ -31,6 +36,8 @@ tests =
             [ genericSearchNavigation
             , navigationIsUnchangedOtherwise
             ]
+        , describe "rendersOnePane" [ renderedPaneLayoutDrivesScrollReset ]
+        , describe "logoutStillApplies" [ staleLogoutIsIgnored ]
         ]
 
 
@@ -168,6 +175,79 @@ navigationIsUnchangedOtherwise =
         (\current target ->
             Main.normalizeChromeNavigation current target |> Expect.equal target
         )
+
+
+{-| The scroll-reset decision follows `Ui.Workspace`'s visibility rule, so the
+same two-pane model resets on Phone/Tablet (one rendered pane) but not on a
+desktop (two rendered panes).
+-}
+renderedPaneLayoutDrivesScrollReset : Test
+renderedPaneLayoutDrivesScrollReset =
+    test "scroll resets from the rendered pane layout, not the model pane count" <|
+        \_ ->
+            let
+                twoPaneRoute : Route
+                twoPaneRoute =
+                    DiaryDay (Just Fixtures.today) (Just "2026-07")
+
+                twoPanePage : Page.Model
+                twoPanePage =
+                    pageFor twoPaneRoute
+
+                onePanePage : Page.Model
+                onePanePage =
+                    pageFor MealList
+
+                bootPage : Page.Model
+                bootPage =
+                    Page.init { route = twoPaneRoute, today = Nothing }
+                        |> Fixtures.tupleFirst
+            in
+            Expect.all
+                [ \_ -> scrollOn Phone twoPaneRoute twoPanePage |> Expect.equal True
+                , \_ -> scrollOn Tablet twoPaneRoute twoPanePage |> Expect.equal True
+                , \_ -> scrollOn Desktop twoPaneRoute twoPanePage |> Expect.equal False
+                , \_ -> scrollOn BigDesktop twoPaneRoute twoPanePage |> Expect.equal False
+                , \_ -> scrollOn Desktop MealList onePanePage |> Expect.equal True
+                , \_ -> Page.isLoading bootPage |> Expect.equal True
+                , \_ -> scrollOn Phone twoPaneRoute bootPage |> Expect.equal True
+                , \_ -> scrollOn Desktop twoPaneRoute bootPage |> Expect.equal False
+                ]
+                ()
+
+
+{-| A late completion from an earlier logout, or any completion after the flag
+was cleared by a new login, must not clear the current session.
+-}
+staleLogoutIsIgnored : Test
+staleLogoutIsIgnored =
+    test "only the active logout generation can tear down the session" <|
+        \_ ->
+            Expect.all
+                [ \_ -> Main.logoutStillApplies True 2 2 |> Expect.equal True
+                , \_ -> Main.logoutStillApplies True 1 2 |> Expect.equal False
+                , \_ -> Main.logoutStillApplies False 2 2 |> Expect.equal False
+                ]
+                ()
+
+
+pageFor : Route -> Page.Model
+pageFor route =
+    Page.init { route = route, today = Just Fixtures.today }
+        |> Fixtures.tupleFirst
+
+
+scrollEnv : DeviceClass -> Env
+scrollEnv class =
+    { theme = Theme.forMode Theme.Light
+    , device = { class = class, orientation = Portrait }
+    , language = EN_US
+    }
+
+
+scrollOn : DeviceClass -> Route -> Page.Model -> Bool
+scrollOn class route page =
+    Main.rendersOnePane (scrollEnv class) route page
 
 
 {-| Any target except the generic `FoodSearch Nothing Nothing`, which is the one

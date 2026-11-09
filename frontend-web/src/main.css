@@ -80,6 +80,21 @@ body {
   animation: ui-modal-in 180ms ease-out;
 }
 
+.ui-visually-hidden.ui-visually-hidden {
+  /* Doubled class: elm-ui appends its single-class layout rules after this
+     stylesheet, so a plain `.ui-visually-hidden` loses position/width/height
+     and the loading label would be painted in the page. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .ui-skeleton {
   position: relative;
   overflow: hidden;
@@ -193,6 +208,14 @@ body {
 .ui-chip-selected {
   background-color: var(--ui-chip-selected-bg);
   color: var(--ui-chip-selected-fg);
+}
+
+.ui-skeleton-chip {
+  /* Keeps the 22px category-chip box here instead of duplicating it in a page. */
+  display: inline-block;
+  width: 64px;
+  height: 22px;
+  border-radius: 999px;
 }
 
 @media (hover: hover) and (pointer: fine) {

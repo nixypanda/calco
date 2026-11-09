@@ -1,5 +1,6 @@
 module Page.Diary.DayTest exposing (tests)
 
+import Api.Client as Client
 import Api.Logs
 import Data.DiaryPrefs as DiaryPrefs exposing (DiaryPrefs)
 import Data.FoodLog as FoodLog exposing (FoodLog)
@@ -7,14 +8,23 @@ import Data.Goals exposing (GoalSnapshot, GoalSource(..))
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition exposing (NutrientAmount, Quantity)
 import Data.Route exposing (Route(..))
+import Element
 import Expect
+import Fuzz
 import I18n
-import Lib.Date exposing (LocalDate)
+import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Diary.Day as Day
+import Set
 import Support.Fixtures as Fixtures
+import Support.Fuzz as SupportFuzz
 import Support.Story as Story
-import Test exposing (Test, describe, test)
+import Test exposing (Test, describe, fuzz, fuzz2, test)
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language(..))
+import Ui.Env exposing (Env)
+import Ui.Theme as Theme
 
 
 tests : Test
@@ -61,6 +71,47 @@ tests =
                                         (FoodLogEntry "log-1" (Just today) (Just month))
                                     )
                         )
+        , fuzz (Fuzz.maybe SupportFuzz.mealSlotList)
+            "skeleton slots follow enabled prefs and fall back to one neutral slot"
+            skeletonSlotsProperty
+        , fuzz2 SupportFuzz.mealSlotList
+            SupportFuzz.foodLogList
+            "visible slot sections keep prefs/log order, inclusion, uniqueness and unslotted last"
+            visibleSlotSectionsProperty
+        , test "a user copies yesterday's dinner after prefs fail" <|
+            \_ ->
+                loaded
+                    |> step (Day.PrefsReceived (Err Client.NetworkError))
+                    |> step (Day.CopyLatestClicked dinnerSource)
+                    |> step (Day.CopyLatestCompleted today (Ok { items = [ dinnerLog ] }))
+                    |> finish
+                        (\( model, outMsg ) ->
+                            Expect.all
+                                [ \_ ->
+                                    copyScreen model
+                                        |> Expect.equal
+                                            { items = [ "Chicken", "Chicken" ]
+                                            , sections = [ "Lunch", "Dinner" ]
+                                            , feedback = ( Nothing, False )
+                                            }
+                                , \_ ->
+                                    outMsg
+                                        |> Expect.equal (Day.LogsCopied today Day.DiaryUpdated)
+                                , \_ ->
+                                    Day.contentView env model
+                                        |> Element.layout []
+                                        |> Query.fromHtml
+                                        |> Query.has
+                                            [ Selector.text todayDisplay ]
+                                , \_ ->
+                                    Day.contentView env model
+                                        |> Element.layout []
+                                        |> Query.fromHtml
+                                        |> Query.has
+                                            [ Selector.text Fixtures.networkErrorMessage ]
+                                ]
+                                ()
+                        )
         ]
 
 
@@ -79,7 +130,7 @@ copyScreen model =
             Day.currentLogs model |> Maybe.withDefault []
     in
     { items = List.map (.item >> FoodLog.itemName) logs
-    , sections = visibleSections model.prefs logs
+    , sections = visibleSections (Day.prefsForView model) logs
     , feedback =
         case model.copyState of
             Day.Copying _ ->
@@ -91,6 +142,26 @@ copyScreen model =
             Day.CopyIdle ->
                 ( Nothing, False )
     }
+
+
+{-| The skeleton is the shape of the loaded slot list. Neutral prefs show one
+slot; loaded prefs show enabled slots in `MealSlot.all` order, not prefs order.
+-}
+skeletonSlotsProperty : Maybe (List MealSlot) -> Expect.Expectation
+skeletonSlotsProperty maybeEnabled =
+    let
+        expected : List MealSlot
+        expected =
+            case maybeEnabled of
+                Nothing ->
+                    [ Breakfast ]
+
+                Just enabled ->
+                    MealSlot.all
+                        |> List.filter (\slot -> List.member slot enabled)
+    in
+    Day.skeletonSlots (Maybe.map enabledPrefs maybeEnabled)
+        |> Expect.equal expected
 
 
 visibleSections : Maybe DiaryPrefs -> List FoodLog -> List String
@@ -105,6 +176,110 @@ visibleSections prefs logs =
                        )
             )
         |> List.map (MealSlot.label I18n.defaultLanguage)
+
+
+{-| The loaded section rules as one property: order, inclusion, uniqueness,
+and the unslotted section last. The expected list comes from `MealSlot.all`,
+not from prefs' input order, so a bug that preserved the raw prefs order fails.
+-}
+visibleSlotSectionsProperty : List MealSlot -> List FoodLog -> Expect.Expectation
+visibleSlotSectionsProperty enabled logs =
+    let
+        loadedSections : List Day.SlotSection
+        loadedSections =
+            Day.visibleSlotSections (Day.PrefsLoaded (enabledPrefs enabled)) logs
+
+        pendingSections : List Day.SlotSection
+        pendingSections =
+            Day.visibleSlotSections Day.PrefsLoading logs
+
+        failedSections : List Day.SlotSection
+        failedSections =
+            Day.visibleSlotSections (Day.PrefsFailed "offline") logs
+
+        loggedSlots : List MealSlot
+        loggedSlots =
+            MealSlot.all
+                |> List.filter
+                    (\slot ->
+                        not (List.isEmpty (FoodLog.logsForSlot (Just slot) logs))
+                    )
+
+        expectedLoadedSlots : List MealSlot
+        expectedLoadedSlots =
+            MealSlot.all
+                |> List.filter
+                    (\slot -> List.member slot enabled || List.member slot loggedSlots)
+
+        slotsOf : List Day.SlotSection -> List MealSlot
+        slotsOf sections =
+            List.filterMap .slot sections
+
+        uniqueSections : List Day.SlotSection -> Bool
+        uniqueSections sections =
+            let
+                sectionKeys : List String
+                sectionKeys =
+                    List.map (.slot >> sectionKey) sections
+            in
+            List.length sectionKeys == Set.size (Set.fromList sectionKeys)
+
+        unslottedLast : List Day.SlotSection -> Bool
+        unslottedLast sections =
+            let
+                lastIndex : Int
+                lastIndex =
+                    List.length sections - 1
+            in
+            sections
+                |> List.indexedMap (\index section -> ( index, section.slot ))
+                |> List.all (\( index, slot ) -> slot /= Nothing || index == lastIndex)
+
+        unslottedIncluded : List Day.SlotSection -> Bool
+        unslottedIncluded sections =
+            List.isEmpty (FoodLog.logsForSlot Nothing logs)
+                || List.any (\section -> section.slot == Nothing) sections
+    in
+    Expect.all
+        [ \_ -> slotsOf loadedSections |> Expect.equal expectedLoadedSlots
+        , \_ -> slotsOf pendingSections |> Expect.equal loggedSlots
+        , \_ -> slotsOf failedSections |> Expect.equal loggedSlots
+        , \_ -> uniqueSections loadedSections |> Expect.equal True
+        , \_ -> uniqueSections pendingSections |> Expect.equal True
+        , \_ -> uniqueSections failedSections |> Expect.equal True
+        , \_ -> unslottedLast loadedSections |> Expect.equal True
+        , \_ -> unslottedLast pendingSections |> Expect.equal True
+        , \_ -> unslottedLast failedSections |> Expect.equal True
+        , \_ -> unslottedIncluded loadedSections |> Expect.equal True
+        , \_ -> unslottedIncluded pendingSections |> Expect.equal True
+        , \_ -> unslottedIncluded failedSections |> Expect.equal True
+        ]
+        ()
+
+
+todayDisplay : String
+todayDisplay =
+    LocalDate.display I18n.defaultLanguage today
+
+
+sectionKey : Maybe MealSlot -> String
+sectionKey maybeSlot =
+    maybeSlot
+        |> Maybe.map MealSlot.toString
+        |> Maybe.withDefault "unslotted"
+
+
+enabledPrefs : List MealSlot -> DiaryPrefs
+enabledPrefs enabledMealSlots =
+    { enabledMealSlots = enabledMealSlots }
+
+
+env : Env
+env =
+    { theme = Theme.light
+    , device = { class = Element.Desktop, orientation = Element.Landscape }
+    , language = EN_US
+    }
 
 
 

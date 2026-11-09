@@ -16,7 +16,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
-import Ui.Common exposing (hoverEffect, isSmall, uiClass)
+import Ui.Common exposing (hoverEffect, isSmall, testId, uiClass)
 import Ui.DesignTokens exposing (radiusPill, space12, space4)
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
@@ -301,8 +301,9 @@ bottomActionButtons device theme buttons =
         buttonView : { label : String, onPress : msg, tone : ButtonTone } -> Element msg
         buttonView config =
             Element.el [ Element.width Element.fill ]
-                (textButton device
+                (textButtonWithAttributes device
                     theme
+                    [ testId "bottom-action" ]
                     { tone = config.tone
                     , width = FullWidth
                     , label = config.label

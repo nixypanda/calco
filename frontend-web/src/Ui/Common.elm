@@ -1,7 +1,10 @@
 module Ui.Common exposing
-    ( hoverEffect
+    ( dataAttribute
+    , hoverEffect
     , isSmall
     , minWidthZero
+    , skeletonRegion
+    , testId
     , toCssColor
     , uiClass
     )
@@ -27,6 +30,25 @@ hoverEffect device attrs =
 uiClass : String -> Element.Attribute msg
 uiClass className =
     Element.htmlAttribute (Html.Attributes.class className)
+
+
+{-| Test-only seam: a stable hook for the browser layout harness.
+-}
+testId : String -> Element.Attribute msg
+testId value =
+    dataAttribute "data-testid" value
+
+
+dataAttribute : String -> String -> Element.Attribute msg
+dataAttribute name value =
+    Element.htmlAttribute (Html.Attributes.attribute name value)
+
+
+{-| Marks a skeleton subtree so loading regions are detectable in the DOM.
+-}
+skeletonRegion : Element.Attribute msg
+skeletonRegion =
+    dataAttribute "data-skeleton-region" "true"
 
 
 minWidthZero : Element.Attribute msg

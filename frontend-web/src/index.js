@@ -2,6 +2,15 @@ import "./main.css";
 import { Elm } from "./Main.elm";
 import { createBarcodeScanner } from "./barcodeScanner";
 
+// Elm owns the route-change scroll policy: it resets the document when the new
+// route's rendered workspace has exactly one visible pane (including Phone and
+// Tablet contextual routes with two model panes), and leaves two-pane desktop
+// layouts alone. Browser restoration would otherwise fight that policy on
+// back/forward.
+if ("scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual";
+}
+
 const stored = localStorage.getItem("themeMode") || "light";
 const app = Elm.Main.init({
     node: document.getElementById("root"),
@@ -16,6 +25,14 @@ const app = Elm.Main.init({
 // few browser effects it cannot perform directly.
 let lastSentDate = null;
 
+// The layout harness needs a deterministic date-gate window. In development a
+// `?holdLocalCtx=1` URL suppresses every automatic send until the harness calls
+// the exposed release function. `import.meta.env.DEV` is false in production
+// builds, so the flag is ignored and the immediate send is unchanged.
+const holdLocalCtx =
+    import.meta.env.DEV && new URLSearchParams(location.search).has("holdLocalCtx");
+let localCtxHeld = holdLocalCtx;
+
 function sendLocalCtx() {
     const date = new Date().toLocaleDateString("en-CA");
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -23,17 +40,36 @@ function sendLocalCtx() {
     app.ports.localCtxReceived.send({ date, timezone });
 }
 
-app.ports.requestLocalCtx.subscribe(sendLocalCtx);
+function sendLocalCtxIfAllowed() {
+    if (!localCtxHeld) {
+        sendLocalCtx();
+    }
+}
 
-// Elm blocks its first render until it knows the date, and a command sent from
-// `init` would have been dispatched before the line above subscribed.
-sendLocalCtx();
+app.ports.requestLocalCtx.subscribe(sendLocalCtxIfAllowed);
+
+function releaseLocalCtx() {
+    if (!localCtxHeld) return;
+    localCtxHeld = false;
+    if (window.__calcoSendLocalCtx) {
+        delete window.__calcoSendLocalCtx;
+    }
+    sendLocalCtx();
+}
+
+if (holdLocalCtx) {
+    window.__calcoSendLocalCtx = releaseLocalCtx;
+} else {
+    // Elm blocks its first render until it knows the date, and a command sent
+    // from `init` would have been dispatched before the line above subscribed.
+    sendLocalCtx();
+}
 
 // A tab can outlive the day it booted on, and nothing else tells Elm the date
 // moved. Only push on an actual rollover: an unsolicited context is a no-op for
 // the save paths, but there is no reason to wake every pane once a minute.
 function sendLocalCtxIfDayChanged() {
-    if (new Date().toLocaleDateString("en-CA") !== lastSentDate) {
+    if (!localCtxHeld && new Date().toLocaleDateString("en-CA") !== lastSentDate) {
         sendLocalCtx();
     }
 }

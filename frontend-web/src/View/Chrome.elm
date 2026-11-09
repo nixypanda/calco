@@ -4,6 +4,7 @@ module View.Chrome exposing
     , bottomNavBar
     , drawerOverlay
     , profileMenu
+    , shouldReserveBottomNav
     , showBottomNav
     , showsAppChrome
     , topBarView
@@ -53,10 +54,13 @@ type alias ScreenMeta =
 -- CHROME VISIBILITY
 
 
+{-| The app chrome is hidden only during an auth transition (boot or logout),
+not while a page is fetching data.
+-}
 showsAppChrome : Session -> Bool -> Route -> Bool
-showsAppChrome session isLoadingPage route =
+showsAppChrome session chromeSuppressed route =
     Auth.isAuthenticated session
-        && not isLoadingPage
+        && not chromeSuppressed
         && (case route of
                 AuthLogin ->
                     False
@@ -69,11 +73,25 @@ showsAppChrome session isLoadingPage route =
            )
 
 
-showBottomNav : Env -> Session -> Bool -> Route -> Bool
-showBottomNav env session isLoadingPage route =
+{-| Where the 56px bottom nav can appear at all: authenticated non-admin Phone
+routes outside login and setup. This is the shared placement predicate; the
+page padding is retained while the nav is temporarily hidden by chrome
+suppression or a modal.
+-}
+shouldReserveBottomNav : Env -> Session -> Route -> Bool
+shouldReserveBottomNav env session route =
     UiCommon.isSmall env.device
-        && showsAppChrome session isLoadingPage route
+        && Auth.isAuthenticated session
         && not (Auth.isAdmin session)
+        && route
+        /= AuthLogin
+        && route
+        /= BootstrapSetup
+
+
+showBottomNav : Env -> Session -> Bool -> Route -> Bool
+showBottomNav env session chromeSuppressed route =
+    shouldReserveBottomNav env session route && not chromeSuppressed
 
 
 
@@ -91,11 +109,11 @@ topBarView :
     -> (Route -> msg)
     -> { profileLabel : String, profileMenu : Maybe (Element msg) }
     -> Element msg
-topBarView env session route loading onMenuClick onProfileClick onThemeToggle onNavigate profile =
+topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNavigate profile =
     let
         chromeShown : Bool
         chromeShown =
-            showsAppChrome session loading route
+            showsAppChrome session suppressed route
 
         meta : ScreenMeta
         meta =
@@ -108,6 +126,7 @@ topBarView env session route loading onMenuClick onProfileClick onThemeToggle on
         , Element.spacing DesignTokens.space12
         , Background.color env.theme.cardBg
         , Font.color env.theme.textPrimary
+        , UiCommon.testId "app-topbar"
         ]
         (if chromeShown then
             [ leadingButton env meta.leading onMenuClick onNavigate
@@ -118,7 +137,7 @@ topBarView env session route loading onMenuClick onProfileClick onThemeToggle on
                     { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 }
                 ]
                 (themeToggle env onThemeToggle)
-            , profileButton env onProfileClick profile
+            , profileButton env onProfile profile
             ]
 
          else
@@ -220,6 +239,7 @@ updateBanner env onPress =
         , Background.color env.theme.brandBlueSoft
         , Font.color env.theme.brandBlue
         , Typography.body
+        , UiCommon.testId "update-banner"
         ]
         { onPress = Just onPress
         , label =
@@ -443,6 +463,7 @@ bottomNavContainer theme items =
         , Element.htmlAttribute (Html.Attributes.style "bottom" "0")
         , Element.htmlAttribute (Html.Attributes.style "left" "0")
         , Element.htmlAttribute (Html.Attributes.style "z-index" "10")
+        , UiCommon.testId "app-bottom-nav"
         ]
         items
 
@@ -496,16 +517,12 @@ drawerOverlay :
     -> Session
     -> Route
     -> Bool
+    -> Bool
     -> msg
     -> (Route -> msg)
     -> List (Element.Attribute msg)
-drawerOverlay env session route drawerOpen onClose onNavigate =
-    let
-        isLoadingPage : Bool
-        isLoadingPage =
-            False
-    in
-    if drawerOpen && showsAppChrome session isLoadingPage route then
+drawerOverlay env session route chromeSuppressed drawerOpen onClose onNavigate =
+    if drawerOpen && showsAppChrome session chromeSuppressed route then
         [ Element.inFront
             (Element.row [ Element.width Element.fill, Element.height Element.fill ]
                 [ drawerView env session route onClose onNavigate

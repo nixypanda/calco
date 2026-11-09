@@ -22,7 +22,7 @@ import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
-import Ui.Common exposing (uiClass)
+import Ui.Common exposing (testId, uiClass)
 import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space16, space8)
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Surface as Surface
@@ -37,11 +37,13 @@ loading theme message =
 
 emptyState : Theme -> String -> Element msg
 emptyState theme message =
-    Surface.card theme
-        [ Element.paragraph
-            [ Font.color theme.textMuted, Font.center, Element.padding space8 ]
-            [ Element.text message ]
-        ]
+    Element.el [ Element.width Element.fill, testId "empty-state" ]
+        (Surface.card theme
+            [ Element.paragraph
+                [ Font.color theme.textMuted, Font.center, Element.padding space8 ]
+                [ Element.text message ]
+            ]
+        )
 
 
 {-| Full-area empty state with an icon: fills the height its parent offers and
@@ -50,11 +52,18 @@ search that matched nothing.
 -}
 emptyStateWithIcon : Theme -> { icon : Icon, message : String } -> Element msg
 emptyStateWithIcon theme config =
-    Surface.cardFill theme
-        [ Icon.view { icon = config.icon, size = 40, color = theme.textMuted }
-        , Element.paragraph [ Font.color theme.textMuted, Font.center, Element.width Element.fill ]
-            [ Element.text config.message ]
+    Element.el
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , testId "empty-state"
         ]
+        (Surface.cardFill theme
+            [ Icon.view { icon = config.icon, size = 40, color = theme.textMuted }
+            , Element.paragraph
+                [ Font.color theme.textMuted, Font.center, Element.width Element.fill ]
+                [ Element.text config.message ]
+            ]
+        )
 
 
 maybeErrorBanner : Theme -> Maybe String -> Element msg
@@ -70,6 +79,7 @@ errorBanner theme message =
         , Border.rounded radiusControl
         , Element.padding space12
         , Element.width Element.fill
+        , testId "error-banner"
         ]
         [ Element.text message ]
 

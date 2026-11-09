@@ -5,15 +5,18 @@ port module Main exposing
     , Msg
     , PageModel
     , classifyDevice
+    , logoutStillApplies
     , main
     , normalizeChromeNavigation
     , reclassifyDevice
+    , rendersOnePane
     )
 
 import Access
 import Api.Auth
 import Api.Client as Client
 import Browser
+import Browser.Dom
 import Browser.Events
 import Browser.Navigation as Nav
 import Chrome
@@ -28,12 +31,14 @@ import Html
 import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page
+import Process
+import Task
 import Translations.Util exposing (Language(..))
 import Ui.Common as UiCommon exposing (uiClass)
 import Ui.Css as Css
 import Ui.Env as Env exposing (Env)
-import Ui.Skeleton as Skeleton
 import Ui.Theme as Theme exposing (Theme)
+import Ui.Workspace as Workspace
 import Url exposing (Url)
 import Version
 import View.Chrome
@@ -54,6 +59,8 @@ type alias Model =
     , today : Maybe LocalDate
     , page : PageModel
     , chrome : Chrome.Model
+    , loggingOut : Bool
+    , logoutGeneration : Int
     , env : Env
     , version : Version.Model
     }
@@ -99,6 +106,8 @@ init flags url key =
       , today = Nothing
       , page = Page.loading
       , chrome = Chrome.init
+      , loggingOut = False
+      , logoutGeneration = 0
       , env =
             { theme = Theme.forMode (Theme.modeFromString flags.themeMode)
             , device = classifyDevice flags.windowWidth flags.windowHeight
@@ -123,7 +132,9 @@ type Msg
     | UrlChanged Url
     | GotSession (Result Client.ApiError Auth.LoginSession)
     | GotBootstrapStatus (Result Client.ApiError Auth.BootstrapStatus)
-    | LogoutCompleted
+    | LogoutCompleted Int
+    | LogoutTimedOut Int
+    | ScrollToTopCompleted
     | WindowResized Int Int
     | GotPageMsg Page.Msg
     | GotLocalCtx RawLocalCtx
@@ -160,14 +171,25 @@ update msg model =
         GotBootstrapStatus result ->
             updateBootstrapProgress (\progress -> { progress | status = Just result }) model
 
-        LogoutCompleted ->
-            ( { model
-                | bootstrap =
-                    setSession (Auth.clearSession (currentSession model)) model.bootstrap
-                , page = Page.clearStore model.page
-              }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
+        LogoutCompleted generation ->
+            if logoutStillApplies model.loggingOut generation model.logoutGeneration then
+                clearLogoutState model
+
+            else
+                ( model, Cmd.none )
+
+        LogoutTimedOut generation ->
+            -- A hung logout must not suppress chrome or leave the local session
+            -- authenticated. Generation matching makes a stale timer harmless
+            -- after a newer logout or a fresh sign-in.
+            if logoutStillApplies model.loggingOut generation model.logoutGeneration then
+                clearLogoutState model
+
+            else
+                ( model, Cmd.none )
+
+        ScrollToTopCompleted ->
+            ( model, Cmd.none )
 
         WindowResized width height ->
             case reclassifyDevice width height model.env.device of
@@ -225,6 +247,28 @@ update msg model =
 
         GotChromeMsg chromeMsg ->
             stepChromeUpdate (Chrome.update chromeMsg model.chrome) model
+
+
+{-| A completion or timer may only tear down the logout that started it:
+`loggingOut` must still be set and its generation must still be current.
+-}
+logoutStillApplies : Bool -> Int -> Int -> Bool
+logoutStillApplies loggingOut generation currentGeneration =
+    loggingOut && generation == currentGeneration
+
+
+{-| Shared local teardown for both a completed and a timed-out logout.
+-}
+clearLogoutState : Model -> ( Model, Cmd Msg )
+clearLogoutState model =
+    ( { model
+        | bootstrap =
+            setSession (Auth.clearSession (currentSession model)) model.bootstrap
+        , page = Page.clearStore model.page
+        , loggingOut = False
+      }
+    , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+    )
 
 
 {-| A drag emits resize events continuously, but the app only renders from the
@@ -290,10 +334,20 @@ applyChromeOutMsg outMsg model =
             )
 
         Chrome.Logout ->
-            ( { model | page = Page.clearStore model.page }
+            let
+                generation : Int
+                generation =
+                    model.logoutGeneration + 1
+            in
+            ( { model
+                | page = Page.clearStore model.page
+                , loggingOut = True
+                , logoutGeneration = generation
+              }
             , Cmd.batch
-                [ Api.Auth.logout (\_ -> LogoutCompleted)
+                [ Api.Auth.logout (\_ -> LogoutCompleted generation)
                 , revokePhotoPreviewUrls (Page.photoPreviewUrls model.page)
+                , Process.sleep 5000 |> Task.perform (\_ -> LogoutTimedOut generation)
                 ]
             )
 
@@ -375,24 +429,77 @@ resolveBootstrapResults model maybeSessionResult maybeStatusResult =
 
 changeRouteTo : Route -> Model -> ( Model, Cmd Msg )
 changeRouteTo route model =
+    changeRouteToWithScroll True route model
+
+
+{-| The local-date rollover re-renders the current route, so it must not pull
+the user to the top of a pane they are already reading.
+-}
+changeRouteToKeepingScroll : Route -> Model -> ( Model, Cmd Msg )
+changeRouteToKeepingScroll route model =
+    changeRouteToWithScroll False route model
+
+
+changeRouteToWithScroll : Bool -> Route -> Model -> ( Model, Cmd Msg )
+changeRouteToWithScroll resetScroll route model =
     case Access.resolveRoute (currentSession model) (currentAdminExists model) route of
         Access.Hold ->
             ( model, Cmd.none )
 
         Access.Render renderRoute ->
-            loadPage renderRoute model
+            loadPage resetScroll renderRoute model
 
         Access.Navigate target ->
             ( model, Nav.replaceUrl model.key (Data.Route.routeToPath target) )
 
 
-loadPage : Route -> Model -> ( Model, Cmd Msg )
-loadPage route model =
+{-| A rendered layout with exactly one visible pane scrolls the document, so a
+route change starts it at the top. Phone and Tablet contextual routes build two
+model panes but show only the detail pane; desktop two-pane layouts keep each
+pane's own scroll. This runs on popstate too, so back/forward follows the same
+top-reset policy as browser restoration is disabled in `index.js`.
+-}
+loadPage : Bool -> Route -> Model -> ( Model, Cmd Msg )
+loadPage resetScroll route model =
     let
         ( page, pageCmd, outMsg ) =
             Page.initPreserving { route = route, today = model.today } model.page
+
+        scrollCmd : Cmd Msg
+        scrollCmd =
+            if resetScroll && rendersOnePane model.env route page then
+                Task.attempt (\_ -> ScrollToTopCompleted) (Browser.Dom.setViewport 0 0)
+
+            else
+                Cmd.none
+
+        ( finalModel, pageEffects ) =
+            stepPageResult ( page, pageCmd, outMsg ) model
     in
-    stepPageResult ( page, pageCmd, outMsg ) model
+    ( finalModel, Cmd.batch [ pageEffects, scrollCmd ] )
+
+
+{-| The scroll decision uses the pane visibility rule the workspace actually
+renders, not the model pane count. A Phone/Tablet contextual route can hold two
+model panes while showing only one of them. While the local date is still
+missing, the boot body renders route-plan panes even though the model pane list
+is empty, so use the boot keys then.
+-}
+rendersOnePane : Env -> Route -> Page.Model -> Bool
+rendersOnePane env route page =
+    let
+        paneKeys : List String
+        paneKeys =
+            if Page.isLoading page then
+                Page.bootPaneKeys route
+
+            else
+                Page.paneKeys page
+    in
+    Workspace.paneVisibility env.device paneKeys
+        |> List.filter Tuple.second
+        |> List.length
+        |> (==) 1
 
 
 stepPageUpdate : Maybe ( Page.Model, Cmd Page.Msg, Page.OutMsg ) -> Model -> ( Model, Cmd Msg )
@@ -438,10 +545,10 @@ adoptToday context model =
                 ( model, Cmd.none )
 
             else
-                changeRouteTo model.route { model | today = Just context.date }
+                changeRouteToKeepingScroll model.route { model | today = Just context.date }
 
         Nothing ->
-            changeRouteTo model.route { model | today = Just context.date }
+            changeRouteToKeepingScroll model.route { model | today = Just context.date }
 
 
 pageCtx : Model -> Page.InitCtx
@@ -463,6 +570,7 @@ applyPageOutMsg outMsg model =
                 | bootstrap =
                     setSession (Auth.clearSession (currentSession model)) model.bootstrap
                 , page = Page.clearStore model.page
+                , loggingOut = False
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
@@ -493,6 +601,7 @@ applyPageOutMsg outMsg model =
             ( { model
                 | bootstrap = setSession nextSession model.bootstrap
                 , page = Page.clearStore model.page
+                , loggingOut = False
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath Root)
             )
@@ -507,6 +616,7 @@ applyPageOutMsg outMsg model =
                 | bootstrap =
                     Bootstrapped { session = nextSession, adminExists = True }
                 , page = Page.clearStore model.page
+                , loggingOut = False
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AdminDashboard)
             )
@@ -523,9 +633,13 @@ view model =
         session =
             currentSession model
 
-        isLoadingPage : Bool
-        isLoadingPage =
-            Page.isLoading model.page
+        chromeSuppressed : Bool
+        chromeSuppressed =
+            not (isBootstrapped model.bootstrap) || model.loggingOut
+
+        pageBusy : Bool
+        pageBusy =
+            not (isBootstrapped model.bootstrap) || Page.isBusy model.page
 
         modal : Maybe (Element Msg)
         modal =
@@ -560,7 +674,7 @@ view model =
                     { borderColor = Nothing, backgroundColor = Nothing, shadow = Nothing }
                 ]
             }
-            (modalLayoutAttrs modal ++ bottomNavAttrs modal model session isLoadingPage)
+            (modalLayoutAttrs modal ++ bottomNavAttrs modal model session chromeSuppressed)
           <|
             uiLayout model.env.theme
                 (modalContentAttrs modal)
@@ -568,7 +682,8 @@ view model =
                     model.chrome
                     session
                     model.route
-                    isLoadingPage
+                    chromeSuppressed
+                    pageBusy
                     updateBanner
                     (pageView model)
                     GotChromeMsg
@@ -593,8 +708,9 @@ modalContentAttrs modal =
 
 
 {-| The bottom nav is part of the shell, so it is omitted while a dialog is
-open. `Chrome.viewFrame` still reserves the page's bottom padding from the same
-nav visibility rule, so the page does not shift when the nav is hidden.
+open. The page's 56px reservation comes from the separate "where the nav can
+appear" predicate in `Chrome.viewFrame`, so hiding the nav for a dialog does
+not shift the page.
 -}
 bottomNavAttrs :
     Maybe (Element Msg)
@@ -602,13 +718,13 @@ bottomNavAttrs :
     -> Session
     -> Bool
     -> List (Element.Attribute Msg)
-bottomNavAttrs modal model session isLoadingPage =
+bottomNavAttrs modal model session chromeSuppressed =
     case modal of
         Just _ ->
             []
 
         Nothing ->
-            Chrome.bottomNavLayoutAttrs model.env session model.route isLoadingPage GotChromeMsg
+            Chrome.bottomNavLayoutAttrs model.env session model.route chromeSuppressed GotChromeMsg
 
 
 uiLayout : Theme -> List (Element.Attribute msg) -> Element msg -> Element msg
@@ -640,10 +756,10 @@ modalLayoutAttrs modal =
 pageView : Model -> Element Msg
 pageView model =
     if not (isBootstrapped model.bootstrap) then
-        Skeleton.loading model.env.theme
+        Page.bootShell model.env
 
     else
-        Element.map GotPageMsg (Page.view model.env model.page)
+        Element.map GotPageMsg (Page.view model.env model.route model.page)
 
 
 currentSession : Model -> Session
