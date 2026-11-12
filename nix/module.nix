@@ -8,6 +8,10 @@
 
 let
   cfg = config.services.calco;
+  # The standard CLI enables SQLite but does not include its library in nixpkgs.
+  sqlxCli = pkgs.sqlx-cli.overrideAttrs (old: {
+    buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.sqlite ];
+  });
   tomlFormat = pkgs.formats.toml { };
   generatedConfig = tomlFormat.generate "calco-config.toml" {
     assistant = {
@@ -177,7 +181,7 @@ in
       # is friendlier to future refactors.
       restartTriggers = [ cfg.backendPackage ];
 
-      path = [ pkgs.sqlx-cli ];
+      path = [ sqlxCli ];
       environment.DATABASE_URL = "postgres://${cfg.databaseUser}@localhost/${cfg.databaseName}?host=/run/postgresql";
 
       serviceConfig = {
@@ -185,7 +189,7 @@ in
         RemainAfterExit = true;
         User = cfg.databaseUser;
         Group = cfg.databaseUser;
-        ExecStart = "${pkgs.sqlx-cli}/bin/sqlx migrate run --source ${cfg.backendPackage}/share/calco/migrations";
+        ExecStart = "${sqlxCli}/bin/sqlx migrate run --source ${cfg.backendPackage}/share/calco/migrations";
       };
     };
 

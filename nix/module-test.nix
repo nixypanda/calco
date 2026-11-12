@@ -26,6 +26,7 @@ let
     };
 
   disabled = evalCalco { };
+  migrationCli = builtins.head disabled.config.systemd.services.calco-migrate.path;
   bearerWithMissingSecret = evalCalco {
     enable = true;
     endpoint = "https://provider.example/v1/chat/completions";
@@ -50,13 +51,17 @@ let
     };
   };
 in
+assert builtins.any (input: (input.pname or "") == "sqlite") migrationCli.buildInputs;
 pkgs.runCommand "calco-nixos-module-evaluation"
   {
+    nativeBuildInputs = [ migrationCli ];
     disabledConfig = disabled.config.systemd.services.calco-backend.environment.CALCO_CONFIG_FILE;
     bearerConfig =
       bearerWithMissingSecret.config.systemd.services.calco-backend.environment.CALCO_CONFIG_FILE;
     headerConfig = header.config.systemd.services.calco-backend.environment.CALCO_CONFIG_FILE;
   }
   ''
+    sqlx --version
+    sqlx completions bash > /dev/null
     touch "$out"
   ''
