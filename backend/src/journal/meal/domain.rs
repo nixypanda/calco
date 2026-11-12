@@ -332,9 +332,9 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(128))]
 
-        // High-value: exposes that the non-mass total path can never succeed because
-        // declared_grams requires a mass unit while quantity_to_grams only reaches
-        // that branch for a unit already absent from the converter.
+        // Property: Serving quantities fail gram conversion even when the meal declares
+        // a matching positive serving total, because that total supplies no mass conversion.
+        // Why: A serving count alone must not be mistaken for a known weight in grams.
         #[test]
         fn meal_quantity_to_grams_non_mass_matching_total_errors(
             amount in 1i64..=1_000_000i64,
@@ -348,7 +348,9 @@ mod tests {
             prop_assert!(meal.quantity_to_grams(&quantity, &uc).is_err());
         }
 
-        // High-value: declared_grams error contract (missing/non-positive/non-mass total).
+        // Property: Declared grams rejects missing totals, zero-gram totals, and positive
+        // totals expressed in servings.
+        // Why: Weight-dependent calculations require a known, positive mass total.
         #[test]
         fn meal_declared_grams_rejects_non_mass_or_missing_total(
             total_amount in 0i64..=1_000_000i64,

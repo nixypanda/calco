@@ -295,6 +295,9 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(64))]
 
+        // Property: Generated MIME/byte inputs never panic; successful sanitization satisfies
+        // the output format, size, and dimension invariants.
+        // Why: Malformed uploads must not crash requests or produce unusable assistant photos.
         #[test]
         fn arbitrary_input_never_panics_and_successes_satisfy_invariants(
             (declared_mime_type, bytes) in arbitrary_photo_input(),
@@ -324,6 +327,9 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(32))]
 
+        // Property: Generated supported images sanitize within output bounds, preserving
+        // small dimensions and proportionally downscaling oversized images within rounding tolerance.
+        // Why: Photo resizing must meet assistant limits without stretching or enlarging images.
         #[test]
         fn structured_images_are_downscaled_within_bounds(
             format in supported_formats(),

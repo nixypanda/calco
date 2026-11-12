@@ -824,6 +824,9 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(96))]
 
+        // Property: Recent products sort by descending score, then descending log date,
+        // then ascending name.
+        // Why: Frequently used foods should lead, with predictable tie-breaking for quick reuse.
         #[test]
         fn recent_items_rank_by_score_then_recency_then_name(specs in generated_log_specs()) {
             let logs = build_generated_logs(&specs);
@@ -849,6 +852,9 @@ mod tests {
             }
         }
 
+        // Property: Recent products have positive scores and a capped, score-descending list
+        // of quantities with positive counts/scores and units present in their source logs.
+        // Why: Quick-log suggestions must stay bounded and use supported historical units.
         #[test]
         fn recent_items_keep_top_quantity_invariants(specs in generated_log_specs()) {
             let logs = build_generated_logs(&specs);
@@ -884,6 +890,9 @@ mod tests {
             }
         }
 
+        // Property: Each recent product's item, quantity, date, meal slot, and nutrient
+        // snapshots all come from its latest log.
+        // Why: Reusing a food must not combine stale portion details with newer nutrition.
         #[test]
         fn recent_items_report_fields_from_the_latest_log(specs in generated_log_specs()) {
             let logs = build_generated_logs(&specs);
@@ -909,6 +918,9 @@ mod tests {
             }
         }
 
+        // Property: Shuffling the same product logs leaves recent-item ordering, selected
+        // snapshots, scores, and top quantities unchanged.
+        // Why: Repository row order must not change quick-log suggestions or their nutrition.
         #[test]
         fn recent_items_ignore_input_order(specs in generated_log_specs()) {
             let logs = build_generated_logs(&specs);
@@ -942,6 +954,9 @@ mod tests {
             }
         }
 
+        // Property: Adding ad-hoc logs to a non-empty product history yields exactly one
+        // recent entry per product identity and no ad-hoc entries.
+        // Why: One-off entries must not appear as reusable products or displace product identities.
         #[test]
         fn recent_items_exclude_ad_hoc_logs(
             specs in non_empty_generated_log_specs(),

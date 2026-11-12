@@ -1622,6 +1622,9 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(128))]
 
+        // Property: Search normalization is idempotent, lowercase, trimmed, and collapses
+        // whitespace to single spaces.
+        // Why: Case and spacing variations must not produce inconsistent matching inputs.
         #[test]
         fn normalize_is_idempotent_lowercase_trimmed_and_collapsed(
             raw in prop_oneof![bounded_string(), whitespace_heavy_string()],
@@ -1652,6 +1655,8 @@ mod tests {
             prop_assert!(!normalized.ends_with(' '));
         }
 
+        // Property: Fuzzy thresholds accept exactly finite values in [0, 1], preserving their bits.
+        // Why: NaN, infinities, or out-of-range cutoffs would make similarity gates unreliable.
         #[test]
         fn fuzzy_threshold_accepts_exactly_finite_unit_interval(value in any::<f64>()) {
             let threshold = FuzzyThreshold::new(value);
@@ -1672,6 +1677,9 @@ mod tests {
             }
         }
 
+        // Property: A non-literal near miss matches at its exact similarity threshold but
+        // fails at the next representable higher threshold.
+        // Why: Product matching must retain its inclusive cutoff at floating-point boundaries.
         #[test]
         fn near_miss_similarity_is_inclusive_for_product_matches(
             (query, candidate) in near_miss_case(),
@@ -1700,6 +1708,9 @@ mod tests {
             prop_assert!(above.match_value(&query, candidate.as_str()).is_none());
         }
 
+        // Property: A non-literal near miss is excluded at its exact similarity threshold
+        // and suggested at the next representable lower threshold.
+        // Why: Category suggestions must retain their stricter, exclusive similarity cutoff.
         #[test]
         fn near_miss_similarity_is_exclusive_for_category_suggestions(
             (query, candidate) in near_miss_case(),
@@ -1740,6 +1751,10 @@ mod tests {
             );
         }
 
+        // Property: Catalog results contain unique input IDs, ignore candidate order, and
+        // respect limits by taking a prefix of the full ranking; derived queries find matches.
+        // Why: Search must not duplicate or invent foods, shuffle with repository order, or
+        // change its leading results when the requested limit changes.
         #[test]
         fn catalog_ranking_is_unique_bounded_permutation_invariant_and_limit_prefix(
             (products, query_index, query_variant, arbitrary_query, limit_seed, order_keys) in
@@ -1786,6 +1801,9 @@ mod tests {
             );
         }
 
+        // Property: Category suggestions ignore input order and respect limits by taking a
+        // prefix of the full ranking; queries derived from categories find suggestions.
+        // Why: Suggestions must remain stable across repository order and result-limit changes.
         #[test]
         fn category_suggestions_are_bounded_permutation_invariant_and_limit_prefix(
             (categories, query_index, query_variant, arbitrary_query, limit_seed, order_keys) in
@@ -1823,6 +1841,9 @@ mod tests {
             );
         }
 
+        // Property: Normalized identifiers match only by exact, prefix, or substring rules;
+        // identifier matches are never fuzzy and carry zero similarity.
+        // Why: Similar-looking identifiers must not be treated as typo-tolerant food names.
         #[test]
         fn identifier_matching_is_literal_never_fuzzy_and_has_zero_similarity(
             (identifier, query_variant, arbitrary_query) in identifier_case(),

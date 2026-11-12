@@ -976,6 +976,9 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(128))]
 
+        // Property: Parsing arbitrary byte inputs up to 8 KiB never panics, and generated
+        // valid responses return their original content.
+        // Why: Malformed provider responses must not crash assistant requests or break valid ones.
         #[test]
         fn parse_response_never_panics_and_parses_generated_valid_bytes(
             input in prop_oneof![
@@ -995,6 +998,9 @@ mod tests {
             }
         }
 
+        // Property: Generated valid responses preserve content and map optional usage fields
+        // to the expected token counts.
+        // Why: Provider response variations must not corrupt assistant output or usage accounting.
         #[test]
         fn generated_valid_response_preserves_content_and_usage(
             response in generated_valid_response(),
@@ -1006,6 +1012,9 @@ mod tests {
             prop_assert_eq!(parsed.usage, expected_usage);
         }
 
+        // Property: Missing, empty, or mistyped response structure/content and non-null
+        // refusals are rejected, including refusals accompanied by content.
+        // Why: Invalid or refused provider responses must not be presented as successful output.
         #[test]
         fn generated_invalid_response_shapes_are_rejected(
             shape in generated_invalid_response_shape(),

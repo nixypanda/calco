@@ -1471,6 +1471,9 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(128))]
 
+        // Property: Category normalization trims, lowercases, removes blanks and duplicates,
+        // preserves first-seen order, and is unchanged when repeated.
+        // Why: Case and spacing variations must not fragment category filters or reorder them.
         #[test]
         fn category_normalize_list_is_idempotent_and_normalized(
             generated_values in proptest::collection::vec(bounded_arbitrary_string(), 0..=12),
@@ -1519,6 +1522,9 @@ mod tests {
             }
         }
 
+        // Property: Non-negative nutrient amounts are rounded to at most six decimal places;
+        // negative amounts are rejected, and values already within that precision are unchanged.
+        // Why: Catalog amounts need consistent precision without admitting negative nutrition.
         #[test]
         fn amount_per_100g_accepts_exactly_non_negative_values_at_six_places(
             amount in decimal_amount(),
@@ -1543,6 +1549,9 @@ mod tests {
             }
         }
 
+        // Property: A batch rejects repeated source/source-ID identities even when their
+        // source IDs differ only in surrounding whitespace.
+        // Why: Whitespace must not let duplicate import identities reach persistence.
         #[test]
         fn external_product_batch_rejects_identities_colliding_after_trimming(
             source in external_source(),
@@ -1588,6 +1597,9 @@ mod tests {
             }
         }
 
+        // Property: A batch rejects a product containing repeated nutrient codes, even with
+        // different amounts and regardless of the product's position in the batch.
+        // Why: Mutated aggregates must not bypass validation and persist conflicting nutrients.
         #[test]
         fn external_product_batch_rejects_duplicate_nutrient_codes(
             source in external_source(),
@@ -1652,6 +1664,9 @@ mod tests {
             }
         }
 
+        // Property: A batch rejects a product containing repeated serving units, even with
+        // different weights and regardless of the product's position in the batch.
+        // Why: Mutated aggregates must not persist ambiguous serving-to-gram conversions.
         #[test]
         fn external_product_batch_rejects_duplicate_serving_units(
             source in external_source(),
@@ -1708,6 +1723,9 @@ mod tests {
             }
         }
 
+        // Property: Valid batches, including empty ones, retain product identities and names
+        // in their supplied order.
+        // Why: Batch validation must not silently drop or reorder imported products.
         #[test]
         fn external_product_batch_accepts_valid_products_and_preserves_order(
             product_count in 0usize..=5,
@@ -1747,6 +1765,9 @@ mod tests {
             prop_assert_eq!(actual, expected);
         }
 
+        // Property: Every product is viewable, but only the owner may mutate a custom product;
+        // foreign custom products and external products return their specific forbidden errors.
+        // Why: Shared catalog visibility must not grant write access to other users' foods.
         #[test]
         fn catalog_policy_allows_every_view_and_only_owner_custom_mutations(
             case in policy_product_case(),
@@ -1818,7 +1839,9 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(128))]
 
-        // High-value: branch selection across mass, configured serving, and unknown units.
+        // Property: Mass quantities use the converter factor, servings use the product's
+        // grams-per-serving factor, and unknown units fail.
+        // Why: Choosing the wrong conversion path would produce incorrect portion nutrition.
         #[test]
         fn product_quantity_to_grams_branch_selection(
             amount in 1i64..=1000i64,

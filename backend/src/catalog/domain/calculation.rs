@@ -124,6 +124,8 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(128))]
 
+        // Property: Quantities accept positive amounts unchanged and reject zero or negatives.
+        // Why: Invalid portion sizes must be rejected before they affect nutrient calculations.
         #[test]
         fn quantity_new_accepts_exactly_positive_amounts(amount in quantity_amounts()) {
             let unit = UnitCode("g".into());
@@ -138,6 +140,8 @@ mod tests {
             }
         }
 
+        // Property: Zero grams yields zero for every nutrient, preserving its code and unit.
+        // Why: An empty portion must not contribute nutrients or lose the nutrient mapping.
         #[test]
         fn calculate_with_zero_grams_yields_zero_amounts(nutrients in nutrient_entries()) {
             let calculated = NutritionCalculator::calculate(Decimal::ZERO, &nutrients);
@@ -150,6 +154,8 @@ mod tests {
             }
         }
 
+        // Property: An empty nutrient list yields no calculated nutrients for positive weights.
+        // Why: Missing catalog data must not become fabricated nutrient values in food logs.
         #[test]
         fn calculate_with_empty_nutrients_yields_empty_output(grams in bounded_grams()) {
             let calculated = NutritionCalculator::calculate(grams, &[]);
@@ -157,6 +163,9 @@ mod tests {
             prop_assert!(calculated.amounts.is_empty());
         }
 
+        // Property: Each nutrient keeps its position, code, and unit while its per-100g amount
+        // is scaled to the portion weight.
+        // Why: Scaling must not drop nutrients or attach a calculated value to the wrong nutrient.
         #[test]
         fn calculate_preserves_order_code_and_unit(
             grams in bounded_grams(),
@@ -175,6 +184,9 @@ mod tests {
             }
         }
 
+        // Property: Multiplying the portion weight by a positive integer multiplies every
+        // nutrient amount by the same factor.
+        // Why: Fixed offsets, caps, or premature rounding would distort food-log totals.
         #[test]
         fn calculate_is_linear_in_grams(
             grams in bounded_grams(),

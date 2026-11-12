@@ -924,6 +924,9 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(128))]
 
+        // Property: Valid ad-hoc entries retain their positive serving quantity and nutrient
+        // snapshots, trim the name, and contain each required nutrient exactly once.
+        // Why: Creating a one-off food must not lose or alter nutrition supplied for the log.
         #[test]
         fn new_ad_hoc_accepts_valid_required_nutrients(
             name in valid_ad_hoc_name(),
@@ -963,6 +966,9 @@ mod tests {
             }
         }
 
+        // Property: Required nutrients are accepted in any generated order, with their
+        // ordering, amounts, and units preserved and each required code present exactly once.
+        // Why: Valid ad-hoc nutrition must not depend on the caller's nutrient ordering.
         #[test]
         fn new_ad_hoc_accepts_required_nutrients_in_shuffled_order(
             name in valid_ad_hoc_name(),
@@ -989,6 +995,9 @@ mod tests {
             }
         }
 
+        // Property: A positive same-unit quantity update retains the item and nutrient
+        // codes/units while scaling snapshot amounts by the new-to-old quantity ratio.
+        // Why: Editing portion size must adjust logged nutrition without replacing its history.
         #[test]
         fn update_ad_hoc_log_preserves_snapshots_and_scales_by_quantity_ratio(
             name in valid_ad_hoc_name(),
