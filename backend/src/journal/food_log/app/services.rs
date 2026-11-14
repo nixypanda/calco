@@ -16,6 +16,7 @@ pub struct LogFoodInput {
     pub item: FoodLogItemRef,
     pub quantity: Quantity,
     pub notes: Option<String>,
+    pub idempotency_key: Option<IdempotencyKey>,
 }
 
 pub struct LogAdHocFoodInput {
@@ -71,9 +72,38 @@ impl FoodLogService {
         actor_id: Uuid,
         input: LogFoodInput,
     ) -> Result<FoodLog, JournalError> {
+        let idempotency_key = input.idempotency_key.clone();
+
+        if let Some(key) = idempotency_key.as_ref()
+            && let Some(existing) = self
+                .food_log_repo
+                .find_by_user_and_idempotency_key(actor_id, key)
+                .await?
+        {
+            return Ok(existing);
+        }
+
         let log = self.build_log(actor_id, input).await?;
-        self.food_log_repo.create(&log).await?;
-        Ok(log)
+
+        match self.food_log_repo.create(&log).await {
+            Ok(()) => Ok(log),
+            Err(JournalError::Conflict(_)) => {
+                let Some(key) = idempotency_key.as_ref() else {
+                    return Err(JournalError::Conflict("food log write conflict".into()));
+                };
+
+                self.food_log_repo
+                    .find_by_user_and_idempotency_key(actor_id, key)
+                    .await?
+                    .ok_or_else(|| {
+                        JournalError::Internal(
+                            "idempotent food log was not found after a duplicate key conflict"
+                                .into(),
+                        )
+                    })
+            }
+            Err(error) => Err(error),
+        }
     }
 
     pub async fn log_ad_hoc_food(
@@ -154,6 +184,7 @@ impl FoodLogService {
                 .meal_slot(input.meal_slot)
                 .device_timezone(input.device_timezone)
                 .notes(input.notes)
+                .idempotency_key(input.idempotency_key)
                 .build()
             }
             FoodLogItemRef::Meal(meal_id) => {
@@ -172,6 +203,7 @@ impl FoodLogService {
                 .meal_slot(input.meal_slot)
                 .device_timezone(input.device_timezone)
                 .notes(input.notes)
+                .idempotency_key(input.idempotency_key)
                 .build()
             }
         };
@@ -391,6 +423,7 @@ mod tests {
                     quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
                         .unwrap(),
                     notes: None,
+                    idempotency_key: None,
                 },
             )
             .await;
@@ -418,6 +451,7 @@ mod tests {
                     quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
                         .unwrap(),
                     notes: None,
+                    idempotency_key: None,
                 },
             )
             .await
@@ -446,6 +480,7 @@ mod tests {
                     quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
                         .unwrap(),
                     notes: Some("clear me".to_string()),
+                    idempotency_key: None,
                 },
             )
             .await
@@ -509,6 +544,7 @@ mod tests {
                     quantity: Quantity::new(Decimal::from(amount), UnitCode(unit.to_string()))
                         .unwrap(),
                     notes: None,
+                    idempotency_key: None,
                 },
             )
             .await;
@@ -548,6 +584,7 @@ mod tests {
                     quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
                         .unwrap(),
                     notes: None,
+                    idempotency_key: None,
                 },
             )
             .await

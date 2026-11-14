@@ -31,6 +31,7 @@ enum FoodLogs {
     Quantity,
     Unit,
     Notes,
+    IdempotencyKey,
     CreatedAt,
     UpdatedAt,
 }
@@ -51,7 +52,7 @@ enum Nutrients {
     Code,
 }
 
-fn food_log_columns() -> [FoodLogs; 14] {
+fn food_log_columns() -> [FoodLogs; 15] {
     [
         FoodLogs::Id,
         FoodLogs::UserId,
@@ -65,6 +66,7 @@ fn food_log_columns() -> [FoodLogs; 14] {
         FoodLogs::Quantity,
         FoodLogs::Unit,
         FoodLogs::Notes,
+        FoodLogs::IdempotencyKey,
         FoodLogs::CreatedAt,
         FoodLogs::UpdatedAt,
     ]
@@ -110,6 +112,18 @@ fn food_log_find_by_id_statement(id: Uuid) -> SelectStatement {
         .columns(food_log_columns())
         .from(FoodLogs::Table)
         .and_where(Expr::col(FoodLogs::Id).eq(id))
+        .to_owned()
+}
+
+fn food_log_find_by_user_and_idempotency_key_statement(
+    user_id: Uuid,
+    idempotency_key: &str,
+) -> SelectStatement {
+    Query::select()
+        .columns(food_log_columns())
+        .from(FoodLogs::Table)
+        .and_where(Expr::col(FoodLogs::UserId).eq(user_id))
+        .and_where(Expr::col(FoodLogs::IdempotencyKey).eq(idempotency_key))
         .to_owned()
 }
 
@@ -166,6 +180,7 @@ fn food_log_insert_statement(log: &FoodLog) -> InsertStatement {
             log.quantity_amount().into(),
             log.quantity_unit().0.as_str().into(),
             log.notes().into(),
+            log.idempotency_key().map(IdempotencyKey::as_str).into(),
             log.created_at().into(),
             log.updated_at().into(),
         ])
@@ -200,6 +215,17 @@ fn food_log_delete_statement(id: Uuid) -> DeleteStatement {
         .from_table(FoodLogs::Table)
         .and_where(Expr::col(FoodLogs::Id).eq(id))
         .to_owned()
+}
+
+fn map_create_error(error: sqlx::Error) -> JournalError {
+    if let sqlx::Error::Database(database_error) = &error
+        && database_error.code().as_deref() == Some("23505")
+        && database_error.constraint() == Some("food_logs_user_idempotency_key_idx")
+    {
+        return JournalError::Conflict("food log idempotency key already exists".into());
+    }
+
+    JournalError::Database(error)
 }
 
 fn food_log_nutrient_delete_by_food_log_id_statement(food_log_id: Uuid) -> DeleteStatement {
@@ -316,6 +342,7 @@ fn food_log_list_by_filter_statement(filter: FoodLogListFilter) -> SelectStateme
             FoodLogs::Quantity,
             FoodLogs::Unit,
             FoodLogs::Notes,
+            FoodLogs::IdempotencyKey,
             FoodLogs::CreatedAt,
             FoodLogs::UpdatedAt,
         ])
@@ -409,6 +436,7 @@ fn food_log_row_to_food_log(
         UnitCode(row.unit),
         snapshots,
         row.notes,
+        row.idempotency_key.map(IdempotencyKey::new).transpose()?,
         row.created_at,
         row.updated_at,
     ))
@@ -427,7 +455,8 @@ impl FoodLogRepo for PgFoodLogRepo {
             let (sql, values) = food_log_insert_statement(log).build_sqlx(PostgresQueryBuilder);
             sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .execute(&mut *tx)
-                .await?;
+                .await
+                .map_err(map_create_error)?;
 
             insert_food_log_nutrients(&mut tx, log.id().0, log.nutrient_snapshots()).await?;
         }
@@ -438,6 +467,28 @@ impl FoodLogRepo for PgFoodLogRepo {
 
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, JournalError> {
         let (sql, values) = food_log_find_by_id_statement(id.0).build_sqlx(PostgresQueryBuilder);
+        let row =
+            sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        match row {
+            Some(r) => {
+                let snapshots = self.load_snapshots(r.id).await?;
+                Ok(Some(food_log_row_to_food_log(r, snapshots)?))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn find_by_user_and_idempotency_key(
+        &self,
+        user_id: Uuid,
+        idempotency_key: &IdempotencyKey,
+    ) -> Result<Option<FoodLog>, JournalError> {
+        let (sql, values) =
+            food_log_find_by_user_and_idempotency_key_statement(user_id, idempotency_key.as_str())
+                .build_sqlx(PostgresQueryBuilder);
         let row =
             sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .fetch_optional(&self.pool)
@@ -523,6 +574,7 @@ struct FoodLogRow {
     quantity: Decimal,
     unit: String,
     notes: Option<String>,
+    idempotency_key: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -704,6 +756,7 @@ mod tests {
             Decimal::from(100),
             UnitCode("g".to_owned()),
             Vec::new(),
+            None,
             None,
             created_at,
             created_at,

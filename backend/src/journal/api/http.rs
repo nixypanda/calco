@@ -14,6 +14,16 @@ impl IntoResponse for JournalError {
             JournalError::NotFound(msg) => error_response("not_found", msg).into_response(),
             JournalError::Forbidden(msg) => error_response("forbidden", msg).into_response(),
             JournalError::Validation(msg) => error_response("validation", msg).into_response(),
+            JournalError::Conflict(msg) => (
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "conflict".into(),
+                        message: msg,
+                    },
+                }),
+            )
+                .into_response(),
             JournalError::ExternalUnavailable => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(ErrorResponse {

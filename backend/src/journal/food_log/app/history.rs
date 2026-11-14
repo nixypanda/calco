@@ -1167,6 +1167,7 @@ mod tests {
             UnitCode(unit.to_string()),
             nutrient_snapshots,
             None,
+            None,
             created_at,
             created_at,
         )
@@ -1197,6 +1198,7 @@ mod tests {
             built.quantity_amount(),
             built.quantity_unit().clone(),
             built.nutrient_snapshots().to_vec(),
+            None,
             None,
             created_at,
             created_at,
@@ -1269,6 +1271,7 @@ mod tests {
             UnitCode("g".to_string()),
             Vec::new(),
             None,
+            None,
             created_at,
             created_at,
         )
@@ -1292,6 +1295,7 @@ mod tests {
             Decimal::from_str(amount).unwrap(),
             UnitCode("g".to_string()),
             Vec::new(),
+            None,
             None,
             created_at,
             created_at,
@@ -1334,6 +1338,7 @@ mod tests {
                     quantity: Quantity::new(Decimal::new(amount_g, 0), UnitCode("g".to_string()))
                         .unwrap(),
                     notes: None,
+                    idempotency_key: None,
                 },
             )
             .await

@@ -498,6 +498,7 @@ fn food_log_create_request_to_input(req: CreateLogRequest) -> Result<LogFoodInpu
         item,
         quantity,
         notes: req.notes,
+        idempotency_key: None,
     })
 }
 
