@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Json},
     routing::{get, post},
 };
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -18,7 +18,11 @@ use crate::auth::api::http::{ReadUser, WriteUser};
 use crate::catalog::domain::calculation::Quantity;
 use crate::catalog::domain::{ProductId, UnitCode};
 use crate::journal::error::JournalError;
-use crate::journal::food_log::api::dto::food_log_day_summaries_to_response;
+use crate::journal::food_log::api::dto::{
+    ItemDto, LogResponse, MealSlotDto, QuantityDto, food_log_day_summaries_to_response,
+    food_log_to_response, food_logs_to_list_response, item_to_dto, normalize_device_timezone,
+    quantity_to_dto,
+};
 use crate::journal::food_log::app::*;
 use crate::journal::food_log::domain::*;
 use crate::journal::meal::domain::MealId;
@@ -81,79 +85,6 @@ pub struct ItemRefDto {
     #[serde(rename = "type")]
     pub item_type: String,
     pub id: Uuid,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct QuantityDto {
-    pub amount: Decimal,
-    pub unit: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MealSlotDto {
-    Breakfast,
-    Lunch,
-    Dinner,
-    Snack,
-    LateNightSnack,
-}
-
-impl From<MealSlot> for MealSlotDto {
-    fn from(slot: MealSlot) -> Self {
-        match slot {
-            MealSlot::Breakfast => MealSlotDto::Breakfast,
-            MealSlot::Lunch => MealSlotDto::Lunch,
-            MealSlot::Dinner => MealSlotDto::Dinner,
-            MealSlot::Snack => MealSlotDto::Snack,
-            MealSlot::LateNightSnack => MealSlotDto::LateNightSnack,
-        }
-    }
-}
-
-#[derive(Serialize)]
-pub struct LogResponse {
-    pub id: Uuid,
-    pub log_date: NaiveDate,
-    pub meal_slot: Option<MealSlotDto>,
-    pub device_timezone: Option<String>,
-    pub item: ItemDto,
-    pub quantity: QuantityDto,
-    pub nutrients: Vec<NutrientSnapshotDto>,
-    pub notes: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ItemDto {
-    Product {
-        id: Uuid,
-        name: String,
-        brand: Option<String>,
-    },
-    Meal {
-        id: Uuid,
-        name: String,
-    },
-    AdHoc {
-        name: String,
-        brand: Option<String>,
-    },
-}
-
-#[derive(Serialize)]
-pub struct NutrientSnapshotDto {
-    pub code: String,
-    pub amount: Decimal,
-    pub unit: String,
-}
-
-#[derive(Serialize)]
-pub struct LogListResponse {
-    pub log_date: NaiveDate,
-    pub items: Vec<LogResponse>,
 }
 
 #[derive(Serialize)]
@@ -240,7 +171,7 @@ pub struct UpdateLogRequest {
 }
 
 use crate::journal::api::http::{
-    ErrorResponse, NutrientSummaryDto, error_response, internal_error, is_summary_nutrient_code,
+    ErrorResponse, NutrientSummaryDto, error_response, internal_error,
     nutrient_summary_from_entries,
 };
 
@@ -539,26 +470,6 @@ fn parse_recent_item_scope(
     Ok((from_date, to_date, meal_slot))
 }
 
-fn normalize_device_timezone(tz: Option<String>) -> Result<Option<String>, JournalError> {
-    match tz {
-        Some(value) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                return Ok(None);
-            }
-            if trimmed.len() > 64
-                || !trimmed
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '.' | '+'))
-            {
-                return Err(JournalError::Validation("invalid device_timezone".into()));
-            }
-            Ok(Some(trimmed.to_string()))
-        }
-        None => Ok(None),
-    }
-}
-
 fn parse_clearable_string(value: Value, field_name: &str) -> Result<Option<String>, JournalError> {
     match value {
         Value::Null => Ok(None),
@@ -651,33 +562,6 @@ fn food_log_query_to_date(query: LogQuery) -> Result<NaiveDate, (StatusCode, Jso
         .map_err(|_| error_response("validation", "invalid log_date".into()))
 }
 
-fn food_logs_to_list_response(log_date: NaiveDate, logs: Vec<FoodLog>) -> LogListResponse {
-    LogListResponse {
-        log_date,
-        items: logs.iter().map(food_log_to_response).collect(),
-    }
-}
-
-fn food_log_to_response(log: &FoodLog) -> LogResponse {
-    LogResponse {
-        id: log.id().0,
-        log_date: log.log_date(),
-        meal_slot: log.meal_slot().map(Into::into),
-        device_timezone: log.device_timezone().map(str::to_owned),
-        item: item_to_dto(log.item()),
-        quantity: quantity_to_dto(log.quantity_amount(), log.quantity_unit().0.clone()),
-        nutrients: log
-            .nutrient_snapshots()
-            .iter()
-            .filter(|snapshot| is_summary_nutrient_code(&snapshot.nutrient_code.0))
-            .map(nutrient_snapshot_to_dto)
-            .collect(),
-        notes: log.notes().map(str::to_owned),
-        created_at: log.created_at(),
-        updated_at: log.updated_at(),
-    }
-}
-
 fn latest_slot_to_response(slot: &LatestSlotLogs) -> LatestSlotResponse {
     LatestSlotResponse {
         source_date: slot.source_date,
@@ -709,35 +593,5 @@ fn quantity_usage_to_dto(usage: &QuantityUsage) -> QuantityUsageDto {
     QuantityUsageDto {
         quantity: quantity_to_dto(usage.amount, usage.unit.0.clone()),
         log_count: usage.log_count,
-    }
-}
-
-fn item_to_dto(item: &FoodLogItemSnapshot) -> ItemDto {
-    match item {
-        FoodLogItemSnapshot::Product { id, name, brand } => ItemDto::Product {
-            id: id.0,
-            name: name.clone(),
-            brand: brand.clone(),
-        },
-        FoodLogItemSnapshot::Meal { id, name } => ItemDto::Meal {
-            id: id.0,
-            name: name.clone(),
-        },
-        FoodLogItemSnapshot::AdHoc { name, brand } => ItemDto::AdHoc {
-            name: name.clone(),
-            brand: brand.clone(),
-        },
-    }
-}
-
-fn quantity_to_dto(amount: Decimal, unit: String) -> QuantityDto {
-    QuantityDto { amount, unit }
-}
-
-fn nutrient_snapshot_to_dto(snapshot: &FoodLogNutrientSnapshot) -> NutrientSnapshotDto {
-    NutrientSnapshotDto {
-        code: snapshot.nutrient_code.0.clone(),
-        amount: snapshot.amount,
-        unit: snapshot.unit.0.clone(),
     }
 }
