@@ -1,10 +1,12 @@
 use axum::Router;
 use axum::body::{Body, Bytes};
 use axum::http::{HeaderMap, Method, Request, StatusCode, header};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
+use rust_decimal::Decimal;
 use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use super::{assert_status, post_json, send};
 
@@ -267,6 +269,10 @@ pub fn assert_tool_error(body: &Value, expected_fragment: &str) -> String {
         body.get("error").is_none(),
         "tool errors must not use the REST or JSON-RPC error envelope: {body}"
     );
+    assert!(
+        body["result"].get("structuredContent").is_none(),
+        "tool errors must not carry structuredContent: {body}"
+    );
     let text = body["result"]["content"][0]["text"]
         .as_str()
         .unwrap_or_else(|| panic!("missing tool error text: {body}"));
@@ -275,6 +281,267 @@ pub fn assert_tool_error(body: &Value, expected_fragment: &str) -> String {
         "tool error {text:?} does not contain {expected_fragment:?}"
     );
     text.to_owned()
+}
+
+/// Sends one `tools/call` request and returns the JSON-RPC response body.
+pub async fn send_tool_call(
+    router: &Router,
+    token: &str,
+    id: i64,
+    name: &str,
+    arguments: Value,
+) -> Value {
+    let (status, headers, bytes) = send_mcp(
+        router,
+        McpRequest::post(tool_call_body(id, name, arguments)).token(token),
+    )
+    .await;
+    assert_json_response(status, &headers, &bytes, StatusCode::OK)
+}
+
+/// Calls a tool and returns its structured success payload.
+pub async fn tool_call_ok(
+    router: &Router,
+    token: &str,
+    id: i64,
+    name: &str,
+    arguments: Value,
+) -> Value {
+    let body = send_tool_call(router, token, id, name, arguments).await;
+    structured_result(&body)
+}
+
+/// Calls a tool, asserts the MCP tool-error contract, and returns its text.
+pub async fn tool_call_err(
+    router: &Router,
+    token: &str,
+    id: i64,
+    name: &str,
+    arguments: Value,
+    expected_fragment: &str,
+) -> String {
+    let body = send_tool_call(router, token, id, name, arguments).await;
+    assert_tool_error(&body, expected_fragment)
+}
+
+/// Sends `tools/list` and returns the raw response body.
+///
+/// `protocol_version` overrides the `MCP-Protocol-Version` header when set.
+pub async fn list_tools_response(
+    router: &Router,
+    token: &str,
+    id: i64,
+    protocol_version: Option<&str>,
+) -> Value {
+    let mut request = McpRequest::post(tools_list_body(id)).token(token);
+    if let Some(version) = protocol_version {
+        request = request.protocol_version(Some(version));
+    }
+    let (status, headers, bytes) = send_mcp(router, request).await;
+    assert_json_response(status, &headers, &bytes, StatusCode::OK)
+}
+
+pub async fn list_tools(router: &Router, token: &str, id: i64) -> Vec<Value> {
+    let body = list_tools_response(router, token, id, None).await;
+    body["result"]["tools"]
+        .as_array()
+        .unwrap_or_else(|| panic!("missing tools array: {body}"))
+        .clone()
+}
+
+pub fn sorted_tool_names(tools: &[Value]) -> Vec<String> {
+    let mut names: Vec<String> = tools
+        .iter()
+        .map(|tool| {
+            tool["name"]
+                .as_str()
+                .unwrap_or_else(|| panic!("missing tool name: {tool}"))
+                .to_owned()
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+pub fn tool_named<'a>(tools: &'a [Value], name: &str) -> &'a Value {
+    tools
+        .iter()
+        .find(|tool| tool["name"] == name)
+        .unwrap_or_else(|| panic!("missing {name} in tools/list: {tools:?}"))
+}
+
+pub fn required_names(tool: &Value) -> Vec<String> {
+    let mut names: Vec<String> = tool["inputSchema"]["required"]
+        .as_array()
+        .unwrap_or_else(|| panic!("missing required schema: {tool}"))
+        .iter()
+        .map(|value| value.as_str().expect("required string").to_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// Sorted property names declared directly on a tool's root input schema.
+pub fn tool_property_names(tool: &Value) -> Vec<String> {
+    let mut names: Vec<String> = tool["inputSchema"]["properties"]
+        .as_object()
+        .unwrap_or_else(|| panic!("missing inputSchema properties: {tool}"))
+        .keys()
+        .cloned()
+        .collect();
+    names.sort();
+    names
+}
+
+/// Collects every `properties` key anywhere in a JSON schema.
+fn schema_property_names(schema: &Value, names: &mut Vec<String>) {
+    match schema {
+        Value::Object(object) => {
+            if let Some(properties) = object.get("properties").and_then(Value::as_object) {
+                names.extend(properties.keys().cloned());
+            }
+            for value in object.values() {
+                schema_property_names(value, names);
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                schema_property_names(value, names);
+            }
+        }
+        _ => {}
+    }
+}
+
+pub fn assert_no_ownership_properties(tools: &[Value]) {
+    const FORBIDDEN: [&str; 4] = ["user_id", "profile_id", "owner_id", "identity_id"];
+    for tool in tools {
+        let mut names = Vec::new();
+        schema_property_names(&tool["inputSchema"], &mut names);
+        for forbidden in FORBIDDEN {
+            assert!(
+                !names.iter().any(|name| name == forbidden),
+                "tool {} exposed ownership argument {forbidden}: {tool}",
+                tool["name"]
+            );
+        }
+    }
+}
+
+pub fn assert_safe_tool_error_text(text: &str) {
+    let lower = text.to_ascii_lowercase();
+    for forbidden in [
+        "postgres",
+        "sqlx",
+        "database",
+        "food_log_nutrients",
+        "food_logs",
+        "syntax error",
+        "stack backtrace",
+        "calco_pat_",
+    ] {
+        assert!(
+            !lower.contains(forbidden),
+            "tool error leaked internals ({forbidden}): {text:?}"
+        );
+    }
+}
+
+pub fn nutrient_amount(nutrients: &Value, code: &str) -> String {
+    nutrients
+        .as_array()
+        .unwrap_or_else(|| panic!("nutrients must be an array: {nutrients}"))
+        .iter()
+        .find(|nutrient| nutrient["code"] == code)
+        .unwrap_or_else(|| panic!("{code} snapshot missing: {nutrients}"))["amount"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{code} amount is not a string: {nutrients}"))
+        .to_owned()
+}
+
+pub fn amount_value(amount: &Value) -> Decimal {
+    amount
+        .as_str()
+        .unwrap_or_else(|| panic!("decimal amount is not a string: {amount}"))
+        .parse()
+        .unwrap_or_else(|error| panic!("invalid decimal amount {amount}: {error}"))
+}
+
+pub fn nutrient_amount_value(nutrients: &Value, code: &str) -> Decimal {
+    let amount = nutrients
+        .as_array()
+        .unwrap_or_else(|| panic!("nutrients must be an array: {nutrients}"))
+        .iter()
+        .find(|nutrient| nutrient["code"] == code)
+        .unwrap_or_else(|| panic!("{code} snapshot missing: {nutrients}"))["amount"]
+        .clone();
+    amount_value(&amount)
+}
+
+/// Canonicalizes decimal `amount` strings so a value produced in memory (which
+/// may keep scale, for example `"7.50"`) compares with the same value read from
+/// PostgreSQL (for example `"7.5"`).
+pub fn normalize_decimal_amounts(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            for (key, inner) in object.iter_mut() {
+                if key == "amount"
+                    && let Some(text) = inner.as_str()
+                    && let Ok(decimal) = text.parse::<Decimal>()
+                {
+                    *inner = Value::String(decimal.normalize().to_string());
+                    continue;
+                }
+                normalize_decimal_amounts(inner);
+            }
+        }
+        Value::Array(values) => {
+            for inner in values {
+                normalize_decimal_amounts(inner);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn round_timestamp_to_micros(text: &str) -> Option<String> {
+    let parsed = DateTime::parse_from_rfc3339(text).ok()?;
+    let mut seconds = parsed.timestamp();
+    let nanos = parsed.timestamp_subsec_nanos();
+    let mut micros = (i64::from(nanos) + 500) / 1_000;
+    if micros >= 1_000_000 {
+        seconds += 1;
+        micros -= 1_000_000;
+    }
+    let normalized = DateTime::<Utc>::from_timestamp(seconds, (micros as u32) * 1_000)?;
+    Some(normalized.to_rfc3339_opts(SecondsFormat::Micros, true))
+}
+
+/// Rounds `created_at`/`updated_at` timestamps to microseconds so responses
+/// built in memory compare with values read back from PostgreSQL, which stores
+/// timestamps at microsecond precision.
+pub fn normalize_timestamps(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            for (key, inner) in object.iter_mut() {
+                if (key == "created_at" || key == "updated_at")
+                    && let Some(text) = inner.as_str()
+                {
+                    if let Some(normalized) = round_timestamp_to_micros(text) {
+                        *inner = Value::String(normalized);
+                    }
+                    continue;
+                }
+                normalize_timestamps(inner);
+            }
+        }
+        Value::Array(values) => {
+            for inner in values {
+                normalize_timestamps(inner);
+            }
+        }
+        _ => {}
+    }
 }
 
 pub fn assert_www_authenticate(headers: &HeaderMap) {
@@ -371,8 +638,8 @@ pub async fn seed_log(
     product_id: &str,
     log_date: &str,
     amount: i64,
-) {
-    let _: Value = post_json(
+) -> String {
+    let created: Value = post_json(
         router,
         "/api/logs",
         cookie,
@@ -385,6 +652,99 @@ pub async fn seed_log(
         StatusCode::CREATED,
     )
     .await;
+    created["id"].as_str().expect("created log id").to_owned()
+}
+
+/// Creates a meal whose total and single component quantity are `amount` grams
+/// of `product_id`, so the meal has exactly the product's nutrition at `amount`.
+pub async fn seed_meal(
+    router: &Router,
+    cookie: &str,
+    name: &str,
+    product_id: &str,
+    amount: i64,
+) -> String {
+    let created: Value = post_json(
+        router,
+        "/api/meals",
+        cookie,
+        &json!({
+            "name": name,
+            "total_quantity": {"amount": amount, "unit": "g"},
+            "components": [{
+                "item": {"type": "product", "id": product_id},
+                "quantity": {"amount": amount, "unit": "g"}
+            }]
+        }),
+        StatusCode::CREATED,
+    )
+    .await;
+    created["id"].as_str().expect("meal id").to_owned()
+}
+
+fn parse_uuid(value: &str) -> Uuid {
+    Uuid::parse_str(value).expect("valid UUID")
+}
+
+fn parse_date(value: &str) -> NaiveDate {
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").expect("valid YYYY-MM-DD date")
+}
+
+pub async fn count_logs_for_user(pool: &PgPool, profile_id: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM food_logs WHERE user_id = $1")
+        .bind(parse_uuid(profile_id))
+        .fetch_one(pool)
+        .await
+        .expect("count food logs for user")
+}
+
+pub async fn count_logs_for_user_date(pool: &PgPool, profile_id: &str, log_date: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM food_logs WHERE user_id = $1 AND log_date = $2")
+        .bind(parse_uuid(profile_id))
+        .bind(parse_date(log_date))
+        .fetch_one(pool)
+        .await
+        .expect("count food logs for user and date")
+}
+
+pub async fn log_owner(pool: &PgPool, log_id: &str) -> String {
+    sqlx::query_scalar("SELECT user_id::text FROM food_logs WHERE id = $1")
+        .bind(parse_uuid(log_id))
+        .fetch_one(pool)
+        .await
+        .expect("read food log owner")
+}
+
+pub async fn count_log_nutrients(pool: &PgPool, log_id: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM food_log_nutrients WHERE food_log_id = $1")
+        .bind(parse_uuid(log_id))
+        .fetch_one(pool)
+        .await
+        .expect("count food log nutrients")
+}
+
+pub async fn log_nutrient_amount(pool: &PgPool, log_id: &str, code: &str) -> Decimal {
+    sqlx::query_scalar(
+        r#"
+        SELECT fln.amount
+        FROM food_log_nutrients fln
+        JOIN nutrients n ON n.id = fln.nutrient_id
+        WHERE fln.food_log_id = $1 AND n.code = $2
+        "#,
+    )
+    .bind(parse_uuid(log_id))
+    .bind(code)
+    .fetch_one(pool)
+    .await
+    .expect("read food log nutrient amount")
+}
+
+pub async fn log_item_ids(pool: &PgPool, log_id: &str) -> (Option<Uuid>, Option<Uuid>) {
+    sqlx::query_as("SELECT item_product_id, item_meal_id FROM food_logs WHERE id = $1")
+        .bind(parse_uuid(log_id))
+        .fetch_one(pool)
+        .await
+        .expect("read food log item ids")
 }
 
 pub async fn profile_id(router: &Router, cookie: &str) -> String {

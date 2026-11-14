@@ -32,24 +32,6 @@ async fn summary_energy(router: Router, token: String, date: &'static str) -> St
         .to_owned()
 }
 
-fn required_names(tool: &Value) -> Vec<String> {
-    let mut names: Vec<String> = tool["inputSchema"]["required"]
-        .as_array()
-        .unwrap_or_else(|| panic!("missing required schema: {tool}"))
-        .iter()
-        .map(|value| value.as_str().expect("required string").to_owned())
-        .collect();
-    names.sort();
-    names
-}
-
-fn tool_named<'a>(tools: &'a [Value], name: &str) -> &'a Value {
-    tools
-        .iter()
-        .find(|tool| tool["name"] == name)
-        .unwrap_or_else(|| panic!("missing {name} in tools/list: {tools:?}"))
-}
-
 #[sqlx::test]
 async fn initialize_and_tools_list_are_stateless(pool: PgPool) {
     let router = app(pool).await;
@@ -91,7 +73,10 @@ async fn initialize_and_tools_list_are_stateless(pool: PgPool) {
         .iter()
         .map(|tool| tool["name"].as_str().expect("tool name"))
         .collect();
-    assert_eq!(names, vec!["get_daily_summary", "get_food", "search_foods"]);
+    assert_eq!(
+        names,
+        vec!["get_daily_summary", "get_food", "list_logs", "search_foods"]
+    );
 
     for tool in tools {
         assert_eq!(
@@ -108,6 +93,7 @@ async fn initialize_and_tools_list_are_stateless(pool: PgPool) {
 
     assert_eq!(required_names(tool_named(tools, "search_foods")), ["query"]);
     assert_eq!(required_names(tool_named(tools, "get_food")), ["food_id"]);
+    assert_eq!(required_names(tool_named(tools, "list_logs")), ["log_date"]);
     assert_eq!(
         required_names(tool_named(tools, "get_daily_summary")),
         ["from_date", "to_date"]
@@ -139,7 +125,7 @@ async fn direct_tools_list_and_tools_call_work_without_initialize(pool: PgPool) 
     )
     .await;
     let body = assert_json_response(status, &headers, &bytes, StatusCode::OK);
-    assert_eq!(body["result"]["tools"].as_array().unwrap().len(), 3);
+    assert_eq!(body["result"]["tools"].as_array().unwrap().len(), 4);
 
     let (status, headers, bytes) = send_mcp(
         &router,
