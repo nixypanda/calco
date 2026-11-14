@@ -32,6 +32,8 @@ url = "2"
 zeroize = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+rmcp = { version = "=3.10.0", features = ["transport-streamable-http-server"] }
+schemars = { version = "1", features = ["chrono04", "rust_decimal1", "uuid1"] }
 # Scores are contractual; recalibrate the fuzzy threshold before upgrading.
 rust-fuzzy-search = "=0.1.1"
 
