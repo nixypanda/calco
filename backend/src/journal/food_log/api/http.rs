@@ -18,6 +18,7 @@ use crate::auth::api::http::{ReadUser, WriteUser};
 use crate::catalog::domain::calculation::Quantity;
 use crate::catalog::domain::{ProductId, UnitCode};
 use crate::journal::error::JournalError;
+use crate::journal::food_log::api::dto::food_log_day_summaries_to_response;
 use crate::journal::food_log::app::*;
 use crate::journal::food_log::domain::*;
 use crate::journal::meal::domain::MealId;
@@ -170,20 +171,6 @@ pub struct LatestSlotsResponse {
 #[derive(Serialize)]
 pub struct RecentItemsResponse {
     pub items: Vec<RecentItemResponse>,
-}
-
-#[derive(Serialize)]
-pub struct LogSummaryResponse {
-    pub days: Vec<LogDaySummaryResponse>,
-}
-
-#[derive(Serialize)]
-pub struct LogDaySummaryResponse {
-    pub date: NaiveDate,
-    pub energy_kcal: Decimal,
-    pub protein_g: Decimal,
-    pub carbs_g: Decimal,
-    pub fat_g: Decimal,
 }
 
 #[derive(Serialize)]
@@ -405,19 +392,7 @@ async fn summary_handler(
         .summarize_by_date(auth.0.id, from_date, to_date)
         .await
     {
-        Ok(days) => Json(LogSummaryResponse {
-            days: days
-                .into_iter()
-                .map(|summary| LogDaySummaryResponse {
-                    date: summary.log_date,
-                    energy_kcal: summary.energy_kcal,
-                    protein_g: summary.protein_g,
-                    carbs_g: summary.carbs_g,
-                    fat_g: summary.fat_g,
-                })
-                .collect(),
-        })
-        .into_response(),
+        Ok(days) => Json(food_log_day_summaries_to_response(days)).into_response(),
         Err(err) => err.into_response(),
     }
 }
