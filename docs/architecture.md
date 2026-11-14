@@ -65,9 +65,9 @@ organized feature-first (see below): one folder per sub-context, each nesting th
 four layers inside.
 
 `mcp` is not a bounded context. It is an inbound transport adapter that mounts the
-Streamable HTTP MCP endpoint and translates reads into the existing catalog and
-journal application services. It owns no domain rules, repositories, or business
-state, and no other module may depend on it.
+Streamable HTTP MCP endpoint and translates tool calls into the existing catalog
+and journal application services. It owns no domain rules, repositories, or
+business state, and no other module may depend on it.
 
 Dependency direction between contexts:
 
@@ -75,10 +75,10 @@ Dependency direction between contexts:
 import -> catalog
 assistant -> catalog (read-only catalog vocabulary)
 journal -> catalog, auth
-mcp -> catalog (read models), journal (food-log summary), auth (API-key authentication)
+mcp -> catalog (read models), journal (food-log read/write application services), auth (API-key authentication)
 ```
 
-`auth` depends on nothing. `catalog` depends on nothing. `journal` depends on `catalog` and on `auth` only at the API edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or app. `import` depends on `catalog`. `assistant` depends on `catalog` for read-only vocabulary. The `mcp` adapter depends on application services, not repositories, and exposes only read dependencies in its first version. Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
+`auth` depends on nothing. `catalog` depends on nothing. `journal` depends on `catalog` and on `auth` only at the API edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or app. `import` depends on `catalog`. `assistant` depends on `catalog` for read-only vocabulary. The `mcp` adapter depends on application services, not repositories: catalog reads, food-log summary/list reads, and narrow food-log create/delete operations. It does not own idempotency state; the food-log domain owns the key value object and the application service owns duplicate handling, with PostgreSQL providing the unique constraint. Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
 
 ### Auth
 
