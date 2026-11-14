@@ -124,6 +124,53 @@ export CALCO_BASE_URL="https://calco.example.com"
 export CALCO_API_KEY="calco_pat_<random secret>"
 ```
 
+## MCP Access
+
+CalCo also exposes a Streamable HTTP MCP endpoint at `/api/mcp` for trusted
+local tools and server-side clients. Send a bearer `Authorization` header with
+the `calco_pat_<random secret>` key on **every** MCP request, including
+initialization and tool discovery. Browser session cookies do not authenticate
+this endpoint; missing or invalid API keys receive HTTP 401. Do not put a key in
+browser JavaScript or a configuration file committed to source control.
+
+The initial tool set is read-only:
+
+| Tool | Arguments | Result |
+| --- | --- | --- |
+| `search_foods` | `query`, optional `scope` | Search the shared food catalog using the same scope rules as `/api/foods/search`. |
+| `get_food` | `food_id` | Read a food's details and allowed units. |
+| `get_daily_summary` | `from_date`, `to_date` (`YYYY-MM-DD`) | Read the caller's daily calorie and macro totals. |
+
+Both `read` and `read_write` keys can call these tools. No MCP write tools are
+available yet. Food catalog results follow the existing shared-visibility
+rules; summaries belong only to the key's owner. Invalid tool arguments and
+service errors are returned as MCP tool errors rather than the ordinary REST
+error envelope. The summary date range follows the same limits as the REST
+endpoint.
+
+MCP clients must POST JSON to the exact `/api/mcp` path with an `Accept` header
+that includes both `application/json` and `text/event-stream`. The server is
+stateless: it does not issue a session ID, and GET/DELETE requests are
+rejected. MCP request bodies are limited to 64 KiB, and search queries are
+limited to 256 characters. Missing or invalid keys return HTTP `401
+invalid_api_key` with a `WWW-Authenticate: Bearer` challenge; internal
+authentication failures return `500`.
+
+Browser-based MCP clients need an explicit `CORS_ALLOWED_ORIGINS` entry. List
+only complete `http` or `https` origins, such as
+`https://calco.example.com`; wildcards, `null`, credentials, paths, queries,
+and fragments are rejected at startup. Non-browser clients that omit the
+`Origin` header do not need a CORS entry.
+
+For an MCP client that accepts an HTTP URL and request headers, configure the
+URL as `https://calco.example.com/api/mcp` and set its `Authorization` header
+to a bearer key using the client's environment-variable or secret substitution
+mechanism. The key must reach every HTTP request the client makes to that URL;
+some clients require explicit header configuration rather than inheriting a
+shell variable. Only connect trusted clients to a key with the minimum
+necessary scope. MCP clients running in a browser also require an explicitly
+trusted origin; see the CORS warning below.
+
 ## Read Examples
 
 List the owner's logs for a date:
