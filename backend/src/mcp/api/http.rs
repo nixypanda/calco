@@ -28,8 +28,17 @@ struct McpAuthState {
 pub fn mcp_routes(module: &McpModule, auth: AuthModule) -> Router {
     let catalog = module.catalog.clone();
     let summary = module.summary.clone();
+    let food_log_read = module.food_log_read.clone();
+    let food_log_write = module.food_log_write.clone();
     let service = StreamableHttpService::new(
-        move || Ok::<_, std::io::Error>(McpServer::new(catalog.clone(), summary.clone())),
+        move || {
+            Ok::<_, std::io::Error>(McpServer::new(
+                catalog.clone(),
+                summary.clone(),
+                food_log_read.clone(),
+                food_log_write.clone(),
+            ))
+        },
         Arc::new(NeverSessionManager::default()),
         streamable_http_config(&module.config),
     );

@@ -62,6 +62,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let mcp = McpModule::build(
         catalog.services.clone(),
         journal.food_log.food_log_history_services.clone(),
+        journal.food_log.food_log_services.clone(),
         McpConfig::from_server(&config.server),
     );
 

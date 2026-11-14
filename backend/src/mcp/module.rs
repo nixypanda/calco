@@ -9,12 +9,15 @@ use crate::catalog::domain::{Product, ProductId, ProductSearchScope, ProductSear
 use crate::catalog::error::CatalogError;
 use crate::config::ServerConfig;
 use crate::journal::error::JournalError;
-use crate::journal::food_log::app::{FoodLogDaySummary, FoodLogHistoryService};
+use crate::journal::food_log::app::{
+    FoodLogDaySummary, FoodLogHistoryService, FoodLogService, LogFoodInput,
+};
+use crate::journal::food_log::domain::{FoodLog, FoodLogId};
 
 /// Narrow, read-only catalog dependency for MCP tools.
 ///
 /// MCP must not receive the full catalog module or service surface; write
-/// dependencies stay out of this boundary until a later phase introduces them.
+/// dependencies stay out of this boundary.
 #[async_trait]
 pub trait McpCatalogRead: Send + Sync {
     async fn search(
@@ -78,6 +81,46 @@ impl McpSummaryRead for FoodLogHistoryService {
     }
 }
 
+/// Narrow day-log read dependency for MCP tools.
+#[async_trait]
+pub trait McpFoodLogRead: Send + Sync {
+    async fn list_food_logs(
+        &self,
+        actor_id: Uuid,
+        log_date: NaiveDate,
+    ) -> Result<Vec<FoodLog>, JournalError>;
+}
+
+#[async_trait]
+impl McpFoodLogRead for FoodLogService {
+    async fn list_food_logs(
+        &self,
+        actor_id: Uuid,
+        log_date: NaiveDate,
+    ) -> Result<Vec<FoodLog>, JournalError> {
+        FoodLogService::list_food_logs(self, actor_id, log_date).await
+    }
+}
+
+/// Narrow food-log write dependency for MCP tools.
+#[async_trait]
+pub trait McpFoodLogWrite: Send + Sync {
+    async fn log_item(&self, actor_id: Uuid, input: LogFoodInput) -> Result<FoodLog, JournalError>;
+
+    async fn delete_food_log(&self, id: FoodLogId, actor_id: Uuid) -> Result<(), JournalError>;
+}
+
+#[async_trait]
+impl McpFoodLogWrite for FoodLogService {
+    async fn log_item(&self, actor_id: Uuid, input: LogFoodInput) -> Result<FoodLog, JournalError> {
+        FoodLogService::log_item(self, actor_id, input).await
+    }
+
+    async fn delete_food_log(&self, id: FoodLogId, actor_id: Uuid) -> Result<(), JournalError> {
+        FoodLogService::delete_food_log(self, id, actor_id).await
+    }
+}
+
 /// HTTP-facing MCP settings, narrowed from the general server config.
 #[derive(Debug, Clone)]
 pub struct McpConfig {
@@ -101,11 +144,13 @@ impl McpConfig {
     }
 }
 
-/// Composition root for the read-only MCP surface.
+/// Composition root for the MCP surface.
 #[derive(Clone)]
 pub struct McpModule {
     pub(crate) catalog: Arc<dyn McpCatalogRead>,
     pub(crate) summary: Arc<dyn McpSummaryRead>,
+    pub(crate) food_log_read: Arc<dyn McpFoodLogRead>,
+    pub(crate) food_log_write: Arc<dyn McpFoodLogWrite>,
     pub(crate) config: McpConfig,
 }
 
@@ -113,11 +158,14 @@ impl McpModule {
     pub fn build(
         catalog: Arc<CatalogService>,
         summary: Arc<FoodLogHistoryService>,
+        food_log: Arc<FoodLogService>,
         config: McpConfig,
     ) -> Self {
         Self {
             catalog: catalog as Arc<dyn McpCatalogRead>,
             summary: summary as Arc<dyn McpSummaryRead>,
+            food_log_read: food_log.clone() as Arc<dyn McpFoodLogRead>,
+            food_log_write: food_log as Arc<dyn McpFoodLogWrite>,
             config,
         }
     }
