@@ -22,6 +22,7 @@ pub fn test_config() -> AppConfig {
         server: ServerConfig {
             bind_addr: SocketAddr::from(([127, 0, 0, 1], 0)),
             cors_allowed_origins: Vec::new(),
+            mcp_allowed_hosts: vec!["localhost".into(), "127.0.0.1".into(), "[::1]".into()],
         },
         session: SessionConfig {
             cookie_name: COOKIE_NAME.into(),

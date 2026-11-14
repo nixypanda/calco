@@ -20,6 +20,28 @@ pub struct AppConfig {
 pub struct ServerConfig {
     pub bind_addr: SocketAddr,
     pub cors_allowed_origins: Vec<HeaderValue>,
+    /// Authorities accepted by the MCP transport's Host validation. Keep this
+    /// narrow; reverse proxies must list their public authority explicitly.
+    pub mcp_allowed_hosts: Vec<String>,
+}
+
+impl ServerConfig {
+    /// Returns the configured MCP host allowlist, falling back to loopback-only
+    /// hosts when a caller constructed a config without an allowlist.
+    pub fn effective_mcp_allowed_hosts(&self) -> Vec<String> {
+        if self.mcp_allowed_hosts.is_empty() {
+            default_mcp_allowed_hosts()
+        } else {
+            self.mcp_allowed_hosts.clone()
+        }
+    }
+}
+
+pub(crate) fn default_mcp_allowed_hosts() -> Vec<String> {
+    ["localhost", "127.0.0.1", "[::1]"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

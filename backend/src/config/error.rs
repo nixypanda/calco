@@ -14,6 +14,10 @@ pub enum ConfigError {
     InvalidSessionTtl,
     #[error("CORS_ALLOWED_ORIGINS contains an invalid header value")]
     InvalidCorsAllowedOrigins,
+    #[error(
+        "MCP_ALLOWED_HOSTS must contain unique host or host:port authorities and must not be empty or use wildcards"
+    )]
+    InvalidMcpAllowedHosts,
     #[error("CALCO_CONFIG_FILE could not be read")]
     ConfigFileUnreadable,
     #[error("CALCO_CONFIG_FILE contains invalid TOML")]
