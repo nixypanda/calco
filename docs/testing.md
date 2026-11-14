@@ -29,6 +29,10 @@ tests/suites/goal_lifecycle.rs      goal defaults + save/overwrite flow
 tests/suites/meal_lifecycle.rs      meal CRUD + /meals/{id}/nutrients
 tests/suites/cross_entity.rs        product -> meal -> log -> summary wiring
 tests/suites/import_lifecycle.rs    admin import flow + error path
+tests/suites/mcp_lifecycle.rs       stateless MCP transport, bearer auth and
+                                    challenges, read tools, query limits, REST
+                                    parity, user isolation, host/origin/CORS,
+                                    and startup config
 ```
 
 ## What We Test

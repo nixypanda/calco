@@ -7,6 +7,7 @@ mod diary_lifecycle;
 mod diary_prefs_lifecycle;
 mod goal_lifecycle;
 mod import_lifecycle;
+mod mcp_lifecycle;
 mod meal_lifecycle;
 mod nutrition_details_lifecycle;
 mod product_lifecycle;
