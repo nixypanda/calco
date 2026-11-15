@@ -29,18 +29,56 @@ impl MockFoodLogRepo {
 #[async_trait]
 impl FoodLogRepo for MockFoodLogRepo {
     async fn create(&self, log: &FoodLog) -> Result<(), JournalError> {
-        self.logs.lock().unwrap().push(log.clone());
+        let mut logs = self.logs.lock().unwrap();
+        if let Some(key) = log.idempotency_key()
+            && logs.iter().any(|existing| {
+                existing.user_id() == log.user_id() && existing.idempotency_key() == Some(key)
+            })
+        {
+            return Err(JournalError::Conflict(
+                "food log idempotency key already exists".into(),
+            ));
+        }
+        logs.push(log.clone());
         Ok(())
     }
 
-    async fn create_many(&self, logs: &[FoodLog]) -> Result<(), JournalError> {
-        self.logs.lock().unwrap().extend_from_slice(logs);
+    async fn create_many(&self, logs_to_create: &[FoodLog]) -> Result<(), JournalError> {
+        let mut logs = self.logs.lock().unwrap();
+        for (index, log) in logs_to_create.iter().enumerate() {
+            if let Some(key) = log.idempotency_key()
+                && logs
+                    .iter()
+                    .chain(logs_to_create[..index].iter())
+                    .any(|existing| {
+                        existing.user_id() == log.user_id()
+                            && existing.idempotency_key() == Some(key)
+                    })
+            {
+                return Err(JournalError::Conflict(
+                    "food log idempotency key already exists".into(),
+                ));
+            }
+        }
+        logs.extend_from_slice(logs_to_create);
         Ok(())
     }
 
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, JournalError> {
         let logs = self.logs.lock().unwrap();
         Ok(logs.iter().find(|l| l.id() == id).cloned())
+    }
+
+    async fn find_by_user_and_idempotency_key(
+        &self,
+        user_id: Uuid,
+        idempotency_key: &IdempotencyKey,
+    ) -> Result<Option<FoodLog>, JournalError> {
+        let logs = self.logs.lock().unwrap();
+        Ok(logs
+            .iter()
+            .find(|log| log.user_id() == user_id && log.idempotency_key() == Some(idempotency_key))
+            .cloned())
     }
 
     async fn list_by_user_and_date(

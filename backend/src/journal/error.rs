@@ -8,6 +8,8 @@ pub enum JournalError {
     Forbidden(String),
     #[error("validation: {0}")]
     Validation(String),
+    #[error("conflict: {0}")]
+    Conflict(String),
     #[error("database: {0}")]
     Database(#[from] sqlx::Error),
     #[error("external food catalog unavailable")]

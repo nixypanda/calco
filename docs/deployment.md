@@ -185,6 +185,7 @@ Plaintext `KEY=VALUE` lines passed via systemd `EnvironmentFile`:
 
 ```text
 CORS_ALLOWED_ORIGINS=https://calco.example.com
+MCP_ALLOWED_HOSTS=calco.example.com
 SESSION_COOKIE_NAME=calco_session
 SESSION_COOKIE_SECURE=true
 SESSION_TTL_SECONDS=604800
@@ -193,11 +194,32 @@ SESSION_TTL_SECONDS=604800
 `DATABASE_URL`, `APP_HOST`, `APP_PORT` are set by the module itself — do
 not put them in this file.
 
+`MCP_ALLOWED_HOSTS` is a comma-separated list of `host` or `host:port`
+authorities, not URLs. It controls the Streamable HTTP MCP endpoint's `Host`
+validation and defaults to loopback (`localhost`, `127.0.0.1`, `[::1]`). An
+entry without a port matches any port; include `:port` to restrict to that
+exact authority. A public deployment reached through a reverse proxy must list
+its public hostname here; otherwise `/api/mcp` returns `403 Forbidden: Host
+header is not allowed`. The proxy must preserve the public `Host` header rather
+than rewriting it to the backend's loopback address. Empty values, wildcards,
+and malformed entries fail startup instead of disabling host validation.
+
+`CORS_ALLOWED_ORIGINS` entries are validated and normalized at startup.
+Entries must be complete `http`/`https` origins: no wildcard, `null`, userinfo,
+path, query, or fragment. Uppercase host/scheme and default ports are
+normalized; non-default ports are preserved. Invalid entries fail startup
+instead of panicking in the CORS layer.
+
 > **Warning:** `CORS_ALLOWED_ORIGINS` is a credential-minting trust boundary.
 > When it is non-empty, the backend enables credentialed CORS for those origins.
 > Any listed origin can use a signed-in user's session cookie to call the
 > API-key management route and read the raw token from the create response. List
 > only first-party origins you control.
+
+The same origin list gates browser-originated MCP requests. Requests without an
+`Origin` header (server-side MCP clients) still pass; requests with an untrusted
+`Origin` are rejected even when they carry a valid API key. Do not use CORS as a
+substitute for key secrecy.
 
 The module reads only the environment variables in `backend/src/config/`; everything there
 has a sane default except `DATABASE_URL` (set by the module).

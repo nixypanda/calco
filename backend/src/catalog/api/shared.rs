@@ -1,6 +1,7 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use rust_decimal::Decimal;
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::catalog::error::CatalogError;
@@ -8,7 +9,7 @@ use crate::catalog::error::CatalogError;
 pub const SUMMARY_NUTRIENT_CODES: [&str; 5] =
     ["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G"];
 
-#[derive(Serialize, Clone, Default)]
+#[derive(Serialize, Clone, Default, JsonSchema)]
 pub struct NutrientSummaryDto {
     pub energy_kcal: Option<Decimal>,
     pub protein_g: Option<Decimal>,

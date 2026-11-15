@@ -4,7 +4,8 @@ pub mod catalog;
 pub mod config;
 pub mod import;
 pub mod journal;
-use axum::http::{HeaderValue, Method, header};
+pub mod mcp;
+use axum::http::{HeaderName, HeaderValue, Method, header};
 use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -26,9 +27,12 @@ use crate::journal::goals::api::http::goal_target_routes;
 use crate::journal::guidance::api::http::nutrition_details_routes;
 use crate::journal::meal::api::http::meal_routes;
 use crate::journal::module::JournalModule;
+use crate::mcp::api::http::mcp_routes;
+use crate::mcp::module::{McpConfig, McpModule};
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-/// The composition root: one bounded-context module per top-level domain.
+/// The composition root: one bounded-context module per top-level domain,
+/// plus the inbound MCP transport adapter.
 ///
 /// Handlers extract the module they need via [`FromRef`], so each context stays
 /// decoupled from the others while sharing a single router state.
@@ -39,6 +43,7 @@ pub struct AppState {
     pub journal: JournalModule,
     pub import: ImportModule,
     pub assistant: AssistantComponents,
+    pub mcp: McpModule,
 }
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
@@ -54,6 +59,12 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let journal = JournalModule::build(&pool, &catalog).await?;
     let import = ImportModule::build(&pool, catalog.services.clone(), catalog.services.clone());
     let assistant = AssistantComponents::from_config(&config.assistant, &catalog)?;
+    let mcp = McpModule::build(
+        catalog.services.clone(),
+        journal.food_log.food_log_history_services.clone(),
+        journal.food_log.food_log_services.clone(),
+        McpConfig::from_server(&config.server),
+    );
 
     Ok(AppState {
         auth,
@@ -61,6 +72,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         journal,
         import,
         assistant,
+        mcp,
     })
 }
 
@@ -86,6 +98,7 @@ pub fn build_router_from_state(auth_state: AppState) -> Router {
         .merge(meal_routes(auth_state.clone()))
         .merge(goal_target_routes(auth_state.clone()))
         .merge(import_routes(auth_state.clone()))
+        .merge(mcp_routes(&auth_state.mcp, auth_state.auth.clone()))
         .merge(assistant_routes(auth_state));
 
     Router::new().nest("/api", api)
@@ -100,7 +113,16 @@ fn build_cors_layer(config: &ServerConfig) -> CorsLayer {
         Method::PATCH,
         Method::OPTIONS,
     ];
-    let headers = [header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION];
+    let headers = [
+        header::CONTENT_TYPE,
+        header::ACCEPT,
+        header::AUTHORIZATION,
+        HeaderName::from_static("last-event-id"),
+        HeaderName::from_static("mcp-protocol-version"),
+        HeaderName::from_static("mcp-session-id"),
+        HeaderName::from_static("mcp-method"),
+        HeaderName::from_static("mcp-name"),
+    ];
 
     if config.cors_allowed_origins.is_empty() {
         return CorsLayer::new()

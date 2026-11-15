@@ -64,15 +64,21 @@ nest the four layers (`domain`, `app`, `infra`, `api`) directly. `journal` is
 organized feature-first (see below): one folder per sub-context, each nesting the
 four layers inside.
 
+`mcp` is not a bounded context. It is an inbound transport adapter that mounts the
+Streamable HTTP MCP endpoint and translates tool calls into the existing catalog
+and journal application services. It owns no domain rules, repositories, or
+business state, and no other module may depend on it.
+
 Dependency direction between contexts:
 
 ```text
 import -> catalog
 assistant -> catalog (read-only catalog vocabulary)
 journal -> catalog, auth
+mcp -> catalog (read models), journal (food-log read/write application services), auth (API-key authentication)
 ```
 
-`auth` depends on nothing. `catalog` depends on nothing. `journal` depends on `catalog` and on `auth` only at the API edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or app. `import` depends on `catalog`. `assistant` depends on `catalog` for read-only vocabulary. Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
+`auth` depends on nothing. `catalog` depends on nothing. `journal` depends on `catalog` and on `auth` only at the API edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or app. `import` depends on `catalog`. `assistant` depends on `catalog` for read-only vocabulary. The `mcp` adapter depends on application services, not repositories: catalog reads, food-log summary/list reads, and narrow food-log create/delete operations. It does not own idempotency state; the food-log domain owns the key value object and the application service owns duplicate handling, with PostgreSQL providing the unique constraint. Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
 
 ### Auth
 
@@ -259,7 +265,9 @@ All app routes are mounted under `/api`.
 Normal user-data routes accept either the browser session cookie or a personal
 API key through `Authorization: Bearer`. Key-management routes
 (`/auth/api-keys`), the assistant, and admin/import routes require a browser
-session cookie. Admin and import routes also require an admin session.
+session cookie. Admin and import routes also require an admin session. `/mcp`
+accepts only a personal API key on every request; it never falls back to a
+browser session cookie.
 
 Major route groups:
 
@@ -277,5 +285,6 @@ Major route groups:
 - `/imports`
 - `/ai/food-assistant/status`
 - `/ai/custom-food/draft`
+- `/mcp` (Streamable HTTP MCP; API-key bearer only, no session cookie)
 
 See [backend.md](backend.md) for route details.

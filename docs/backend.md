@@ -135,9 +135,17 @@ backend/src/
       api/
         mod.rs
         http.rs
+  mcp/                     # inbound transport adapter, not a bounded context
+    mod.rs
+    module.rs              # narrow read/write composition
+    api/
+      mod.rs               # MCP server, tools, argument schemas
+      http.rs              # Streamable HTTP mount + bearer gate
 
 All current contexts use the single-file shape. Catalog's shared HTTP glue
 lives at `catalog/api/shared.rs`; journal's HTTP glue lives at `journal/api/http.rs`.
+Read-model structs and mapping shared by REST and MCP live in their respective
+API layers, not in domain or app code.
 
 ### Repository Ports
 
@@ -329,6 +337,78 @@ truth.
 
 See [api-access.md](api-access.md) for the user-facing workflow and examples.
 
+### MCP Transport
+
+`/api/mcp` mounts the in-process `rmcp` Streamable HTTP service inside the
+existing `/api` router. It uses `NeverSessionManager`, disables the legacy
+stateful session mode, and prefers JSON responses for simple requests. No
+`Mcp-Session-Id` is issued. HTTP bearer authentication runs before MCP
+dispatch on every matched request, including initialization and tool
+discovery; a browser session cookie cannot authenticate MCP. Missing or
+invalid keys return `401 invalid_api_key`, while internal authentication
+failures return `500`. The authenticated normal-user profile ID and key scope
+are passed through request extensions; a missing context is a tool error, never
+a default user. The transport exposes six tools: the read tools `search_foods`,
+`get_food`, `list_logs`, and `get_daily_summary`, plus the write tools
+`create_log` and `delete_log`. Log and summary output use the shared REST DTOs;
+`delete_log` returns the small MCP-specific `{"deleted": true}` result. MCP
+protocol and tool errors are not REST errors.
+
+`tools/list` is filtered per request: a `read` key sees only the four read
+tools, while a `read_write` key sees all six. `list_logs` is a read tool and is
+visible to both scopes. The handlers for `create_log` and `delete_log` call a
+`require_write_scope` check and return an MCP tool error with `isError: true`
+(`read_write API key scope required`) for a `read` key. Authorization stays a
+tool error after dispatch; the transport does not return HTTP 403 for an
+authenticated key with the wrong scope. Because the discovered list depends on
+the caller, cache hints use private scope.
+
+`create_log` maps the MCP arguments to `LogFoodInput` and calls
+`FoodLogService::log_item`. It returns the shared `LogResponse` and sets
+`read_only_hint = false` and `destructive_hint = false`. `list_logs` calls
+`FoodLogService::list_food_logs` and returns the shared `LogListResponse`, with
+the same ordering as REST. `delete_log` calls
+`FoodLogService::delete_food_log`, preserving the existing owner check, returns
+`{"deleted": true}`, and sets `read_only_hint = false` and
+`destructive_hint = true`. MCP does not accept ownership overrides.
+
+MCP `create_log` accepts an optional `idempotency_key` (1 to 128 characters;
+empty or whitespace-only keys and keys containing control characters are
+rejected). The `IdempotencyKey` value object lives
+in the food-log domain; `FoodLogService::log_item` owns the duplicate decision;
+the repository only stores/looks up the key. A partial unique index on
+`(user_id, idempotency_key)` enforces per-user uniqueness, and a duplicate
+insert is mapped to a conflict so the application can re-read and return the
+existing log. The key is stored on the log row, so deleting the log frees it; a
+later retry can recreate the log. `delete_log` retries return a safe `resource
+not found` tool error. REST `POST /api/logs` passes `idempotency_key: None`, so REST
+remains non-idempotent and its JSON shape is unchanged.
+
+Streamable HTTP clients must POST with `Content-Type: application/json` and an
+`Accept` header containing both `application/json` and
+`text/event-stream`. The MCP request body limit is 64 KiB, and
+`search_foods.query` is limited to 256 characters. Non-POST MCP transport
+requests are rejected; CORS preflight `OPTIONS` is handled by the outer CORS
+layer before authentication. Only the exact `/api/mcp` path is mounted;
+trailing-slash and deeper subpaths return 404 without MCP dispatch. Multiple
+`Authorization` headers are rejected. Tool failures are returned as MCP tool
+errors with `isError: true`; JSON-RPC protocol errors remain JSON-RPC errors.
+Validation failures return bounded messages, missing or foreign resources
+return safe `not found` text, and unexpected internal errors are logged
+server-side while the caller receives generic `internal service error` text.
+Tool text must not contain SQL, table names, tokens, profile IDs, or stack
+traces. MCP 401 responses carry `WWW-Authenticate: Bearer`.
+
+Host and Origin validation are separate from axum CORS. Hosts come from
+`MCP_ALLOWED_HOSTS`; browser Origins come from `CORS_ALLOWED_ORIGINS`, and any
+present Origin is rejected when that list is empty. Startup rejects wildcard,
+`null`, credential-bearing, path-bearing, query-bearing, and fragment-bearing
+CORS origins instead of letting them reach tower-http. Keep the public host and
+trusted origins aligned with deployment settings; do not disable host
+validation on internet-facing deployments. Protect personal keys as described
+in [api-access.md](api-access.md), and do not assume CORS protects a secret
+embedded in an untrusted client.
+
 ### Token Model
 
 - Token format is `calco_pat_` followed by 32 random bytes encoded as
@@ -350,6 +430,7 @@ See [api-access.md](api-access.md) for the user-facing workflow and examples.
 | `WriteUser` | Bearer key or browser session | `read_write` for keys | Mutating user-data routes |
 | `AuthAdmin` | Admin session cookie only | Not applicable | Admin and import routes |
 | `RawSessionToken` | Session cookie only | Not applicable | Session and logout routes |
+| MCP bearer gate | Bearer key only | `read` or `read_write`; write tools require `read_write` | All `/mcp` transport requests |
 
 `ReadUser` and `WriteUser` resolve authentication in this order:
 
@@ -392,8 +473,15 @@ Write routes use `WriteUser`:
 - Diary preferences: `PUT /diary-preferences`.
 
 `POST /logs/last-used` is read-scoped even though it uses POST because it only
-returns prefill data. Assistant routes remain `SessionUser` in v1. Admin and
-import routes remain `AuthAdmin`, so no API key can use them.
+returns prefill data.
+
+`/mcp` is a separate API-key-only boundary: every HTTP request, including
+`initialize` and `tools/list`, must carry a valid bearer key. It does not use
+the `ReadUser`/`WriteUser` extractors, so a browser session cookie never
+authenticates it. Both key scopes can call the read tools; `read_write` is
+required for `create_log` and `delete_log`, enforced per tool. `read` keys see
+only the read tools in `tools/list`. Assistant routes remain `SessionUser` in
+v1. Admin and import routes remain `AuthAdmin`, so no API key can use them.
 
 `GET /foods/barcode/{barcode}` can persist an Open Food Facts product on a cache
 miss. This existing read-path side effect is allowed for `read` keys.

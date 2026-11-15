@@ -29,6 +29,15 @@ tests/suites/goal_lifecycle.rs      goal defaults + save/overwrite flow
 tests/suites/meal_lifecycle.rs      meal CRUD + /meals/{id}/nutrients
 tests/suites/cross_entity.rs        product -> meal -> log -> summary wiring
 tests/suites/import_lifecycle.rs    admin import flow + error path
+tests/suites/mcp_lifecycle.rs       stateless MCP transport, bearer auth and
+                                    challenges, read tools, query limits, REST
+                                    parity, user isolation, host/origin/CORS,
+                                    and startup config
+tests/suites/mcp_write_lifecycle.rs MCP write tools: scope-gated create/list/
+                                    delete loop, write schemas and discovery,
+                                    idempotency (per user, durable, concurrent),
+                                    nutrient snapshots, cross-user isolation,
+                                    invalid input, safe errors, auth and CORS
 ```
 
 ## What We Test

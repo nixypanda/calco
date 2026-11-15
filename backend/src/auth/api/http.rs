@@ -552,7 +552,7 @@ async fn admin_enable_user_handler(
 
 // ─── Conversions ───────────────────────────────────────────────
 
-fn auth_error_to_response(err: &AuthError) -> AuthErrorResponse {
+pub(crate) fn auth_error_to_response(err: &AuthError) -> AuthErrorResponse {
     let (status, code) = auth_error_to_status_and_code(err);
     AuthErrorResponse {
         status,
@@ -770,7 +770,7 @@ where
     Ok(resolve_session_user(parts, state).await?.profile)
 }
 
-fn parse_bearer_token(value: &header::HeaderValue) -> Result<&str, AuthErrorResponse> {
+pub(crate) fn parse_bearer_token(value: &header::HeaderValue) -> Result<&str, AuthErrorResponse> {
     let value = value
         .to_str()
         .map_err(|_| auth_error_to_response(&AuthError::InvalidApiKey))?;

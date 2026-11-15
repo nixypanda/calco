@@ -213,6 +213,7 @@ mod tests {
                 })
                 .collect(),
             None,
+            None,
             now,
             now,
         )

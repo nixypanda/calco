@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 
+pub mod mcp;
+
 use std::net::SocketAddr;
 
 use axum::Router;
 use axum::body::{Body, Bytes};
-use axum::http::{HeaderMap, Method, Request, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode, header};
 use calco_backend::build_router;
 use calco_backend::config::{AppConfig, AssistantConfig, ServerConfig, SessionConfig};
 use http_body_util::BodyExt;
@@ -22,6 +24,7 @@ pub fn test_config() -> AppConfig {
         server: ServerConfig {
             bind_addr: SocketAddr::from(([127, 0, 0, 1], 0)),
             cors_allowed_origins: Vec::new(),
+            mcp_allowed_hosts: vec!["localhost".into(), "127.0.0.1".into(), "[::1]".into()],
         },
         session: SessionConfig {
             cookie_name: COOKIE_NAME.into(),
@@ -32,11 +35,28 @@ pub fn test_config() -> AppConfig {
     }
 }
 
-pub async fn app(pool: PgPool) -> Router {
+pub fn test_config_with_mcp(cors_origins: &[&str], allowed_hosts: &[&str]) -> AppConfig {
+    let mut config = test_config();
+    config.server.cors_allowed_origins = cors_origins
+        .iter()
+        .map(|origin| origin.parse::<HeaderValue>().expect("valid CORS origin"))
+        .collect();
+    config.server.mcp_allowed_hosts = allowed_hosts
+        .iter()
+        .map(|host| (*host).to_owned())
+        .collect();
+    config
+}
+
+pub async fn app_with_config(pool: PgPool, config: AppConfig) -> Router {
     init_tracing();
-    build_router(pool, test_config())
+    build_router(pool, config)
         .await
         .expect("build_router failed in test harness")
+}
+
+pub async fn app(pool: PgPool) -> Router {
+    app_with_config(pool, test_config()).await
 }
 
 fn init_tracing() {

@@ -58,9 +58,13 @@ SESSION_COOKIE_NAME=calco_session
 SESSION_COOKIE_SECURE=false
 SESSION_TTL_SECONDS=604800
 CORS_ALLOWED_ORIGINS=http://localhost:1234
+MCP_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
 ```
 
-The backend parses these variables through `load_env` into `EnvSourceConfig`
+`MCP_ALLOWED_HOSTS` defaults to those loopback authorities; set it explicitly
+when connecting to `/api/mcp` through a non-loopback hostname or proxy. It
+accepts comma-separated `host` or `host:port` values, not URLs. The backend
+parses these variables through `load_env` into `EnvSourceConfig`
 (`backend/src/config/source/env.rs`).
 
 Barcode misses require outbound HTTPS access to

@@ -124,6 +124,136 @@ export CALCO_BASE_URL="https://calco.example.com"
 export CALCO_API_KEY="calco_pat_<random secret>"
 ```
 
+## MCP Access
+
+CalCo also exposes a Streamable HTTP MCP endpoint at `/api/mcp` for trusted
+local tools and server-side clients. Send a bearer `Authorization` header with
+the `calco_pat_<random secret>` key on **every** MCP request, including
+initialization and tool discovery. Browser session cookies do not authenticate
+this endpoint; missing or invalid API keys receive HTTP 401. Do not put a key in
+browser JavaScript or a configuration file committed to source control.
+
+Available tools:
+
+| Tool | Arguments | Key scope | Result |
+| --- | --- | --- | --- |
+| `search_foods` | `query`, optional `scope` | `read` or `read_write` | Search the shared food catalog using the same scope rules as `/api/foods/search`. |
+| `get_food` | `food_id` | `read` or `read_write` | Read a food's details and allowed units. |
+| `list_logs` | `log_date` (`YYYY-MM-DD`) | `read` or `read_write` | List the caller's food logs for one day, ordered like `GET /api/logs`. |
+| `get_daily_summary` | `from_date`, `to_date` (`YYYY-MM-DD`) | `read` or `read_write` | Read the caller's daily calorie and macro totals. |
+| `create_log` | `log_date`, optional `meal_slot`, optional `device_timezone`, `item`, `quantity`, optional `notes`, optional `idempotency_key` | `read_write` only | Create one food log and return the shared REST log shape. |
+| `delete_log` | `log_id` | `read_write` only | Permanently delete one of the caller's food logs; returns `{"deleted": true}`. |
+
+`create_log.item` is `{"type": "product", "id": "<uuid>"}` or
+`{"type": "meal", "id": "<uuid>"}`. `create_log.quantity` is
+`{"amount": 150, "unit": "g"}`. It does not accept `user_id`, `profile_id`, or
+any other ownership override; the log always belongs to the key's owner.
+
+A `read` key discovers only the four read tools. A `read_write` key discovers
+all six. A `read` key that calls `create_log` or `delete_log` with valid
+arguments receives an MCP tool error with `isError: true` and `read_write API
+key scope required`; it does not receive an HTTP 403 after dispatch.
+`list_logs` is a read tool and is available to both scopes.
+
+### MCP Idempotency
+
+MCP clients retry tool calls. `create_log` accepts an optional
+`idempotency_key` of 1 to 128 characters; empty or whitespace-only keys, and
+keys containing control characters, are rejected. The key is scoped to one
+user. Repeating the same key for the same
+user returns the existing log instead of creating another, including when the
+retry body differs. A different key creates a different log. Use a new key for
+each intended write, and reuse the same key only when retrying that write.
+
+The key is stored on the log row, so deleting a log frees its key. A delayed
+retry of the original create after a delete can therefore create the log again.
+`delete_log` itself is not idempotent: a second delete returns a `resource not
+found` tool error. REST `POST /api/logs` remains non-idempotent; `idempotency_key` is
+an MCP-only argument and is not part of the REST request or response shape.
+
+Food catalog results follow the existing shared-visibility rules; logs and
+summaries belong only to the key's owner. Invalid tool arguments and service
+errors are returned as MCP tool errors rather than the ordinary REST error
+envelope. The summary date range follows the same limits as the REST endpoint.
+MCP and REST share the log response DTOs, so list and summary shapes stay in
+sync.
+
+MCP clients must POST JSON to the exact `/api/mcp` path with an `Accept` header
+that includes both `application/json` and `text/event-stream`. The server is
+stateless: it does not issue a session ID, and GET/DELETE requests are
+rejected. MCP request bodies are limited to 64 KiB, and search queries are
+limited to 256 characters. Missing or invalid keys return HTTP `401
+invalid_api_key` with a `WWW-Authenticate: Bearer` challenge; internal
+authentication failures return `500`.
+
+Browser-based MCP clients need an explicit `CORS_ALLOWED_ORIGINS` entry. List
+only complete `http` or `https` origins, such as
+`https://calco.example.com`; wildcards, `null`, credentials, paths, queries,
+and fragments are rejected at startup. Non-browser clients that omit the
+`Origin` header do not need a CORS entry.
+
+For an MCP client that accepts an HTTP URL and request headers, configure the
+URL as `https://calco.example.com/api/mcp` and set its `Authorization` header
+to a bearer key using the client's environment-variable or secret substitution
+mechanism. The key must reach every HTTP request the client makes to that URL;
+some clients require explicit header configuration rather than inheriting a
+shell variable. Only connect trusted clients to a key with the minimum
+necessary scope. MCP clients running in a browser also require an explicitly
+trusted origin; see the CORS warning below.
+
+### MCP Write Example
+
+Create a lunch log with a `read_write` key. Use a stable key per intended
+write, and reuse it only for retries:
+
+```bash
+curl -sS -X POST "$CALCO_BASE_URL/api/mcp" \
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "create_log",
+      "arguments": {
+        "log_date": "2026-10-26",
+        "meal_slot": "lunch",
+        "item": { "type": "product", "id": "<product-id>" },
+        "quantity": { "amount": 150, "unit": "g" },
+        "idempotency_key": "diary-2026-10-26-lunch-1"
+      }
+    }
+  }'
+```
+
+Correct a bad log with `delete_log`:
+
+```bash
+curl -sS -X POST "$CALCO_BASE_URL/api/mcp" \
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "delete_log",
+      "arguments": { "log_id": "<log-id>" }
+    }
+  }'
+```
+
+`delete_log` is destructive and cannot be undone. Review the returned log
+before treating a create as successful, and do not retry deletes
+automatically.
+
+Not yet available over MCP: `update_log`, ad-hoc foods, batch logging, meal
+management, custom-food management, goal editing, diary preferences, resources,
+and prompts.
+
 ## Read Examples
 
 List the owner's logs for a date:
