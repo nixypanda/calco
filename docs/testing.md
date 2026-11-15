@@ -9,6 +9,9 @@ backend/src/**/*.rs        inline #[cfg(test)] unit tests (domain + app, mocked 
 backend/tests/all.rs       integration test entry point
 backend/tests/suites/*.rs  integration tests (real HTTP router, real Postgres)
 backend/tests/common/      shared harness (see below)
+frontend-cli/src/**/*.rs inline #[cfg(test)] unit tests (injected fakes)
+frontend-cli/src/test_support.rs cfg(test) shared fakes and loopback mock
+frontend-cli/tests/cli_integration.rs executable process-boundary tests
 frontend-web/tests/**/*.elm Elm frontend unit tests
 ```
 
@@ -221,6 +224,24 @@ a test fails:
 - remove a required field from an encoder covered by a branch property.
 
 If a mutation passes, the property or story is not testing what it claims.
+
+## CLI Test Shape
+
+`frontend-cli/` has two layers:
+
+- Inline `#[cfg(test)]` unit tests under `src/` call command entry points with
+  the injected `Runtime` fakes from `src/test_support.rs` (environment, local
+  stores, prompt, confirmation, and a local loopback HTTP mock). They cover
+  validation, rendering, auth save ordering, and request shape without a
+  subprocess. `test_support.rs` is declared only under `#[cfg(test)]`.
+- `tests/cli_integration.rs` runs the built `calco` executable with an isolated
+  HOME/XDG root, a fake token, closed stdin, and a finite loopback mock. It
+  asserts clap output, stdout/stderr and exit codes, local-storage isolation,
+  and request method/headers/body across the process boundary. Its harness is
+  intentionally inline because it is executable-level, not shared unit support.
+
+Neither layer requires PostgreSQL, a real OS keyring, or external network
+access. Run `just test-cli`; `just check-cli` adds format and clippy.
 
 ## How Integration Tests Work
 
