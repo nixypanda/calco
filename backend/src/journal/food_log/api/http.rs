@@ -5,9 +5,9 @@ use axum::{
     response::{IntoResponse, Json},
     routing::{get, post},
 };
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -18,6 +18,11 @@ use crate::auth::api::http::{ReadUser, WriteUser};
 use crate::catalog::domain::calculation::Quantity;
 use crate::catalog::domain::{ProductId, UnitCode};
 use crate::journal::error::JournalError;
+use crate::journal::food_log::api::dto::{
+    BatchLogResponse, LatestSlotsResponse, QuantityDto, RecentItemsResponse,
+    food_log_day_summaries_to_response, food_log_to_response, food_logs_to_list_response,
+    latest_slot_to_response, recent_item_to_response,
+};
 use crate::journal::food_log::app::*;
 use crate::journal::food_log::domain::*;
 use crate::journal::meal::domain::MealId;
@@ -82,137 +87,12 @@ pub struct ItemRefDto {
     pub id: Uuid,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct QuantityDto {
-    pub amount: Decimal,
-    pub unit: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MealSlotDto {
-    Breakfast,
-    Lunch,
-    Dinner,
-    Snack,
-    LateNightSnack,
-}
-
-impl From<MealSlot> for MealSlotDto {
-    fn from(slot: MealSlot) -> Self {
-        match slot {
-            MealSlot::Breakfast => MealSlotDto::Breakfast,
-            MealSlot::Lunch => MealSlotDto::Lunch,
-            MealSlot::Dinner => MealSlotDto::Dinner,
-            MealSlot::Snack => MealSlotDto::Snack,
-            MealSlot::LateNightSnack => MealSlotDto::LateNightSnack,
-        }
-    }
-}
-
-#[derive(Serialize)]
-pub struct LogResponse {
-    pub id: Uuid,
-    pub log_date: NaiveDate,
-    pub meal_slot: Option<MealSlotDto>,
-    pub device_timezone: Option<String>,
-    pub item: ItemDto,
-    pub quantity: QuantityDto,
-    pub nutrients: Vec<NutrientSnapshotDto>,
-    pub notes: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ItemDto {
-    Product {
-        id: Uuid,
-        name: String,
-        brand: Option<String>,
-    },
-    Meal {
-        id: Uuid,
-        name: String,
-    },
-    AdHoc {
-        name: String,
-        brand: Option<String>,
-    },
-}
-
-#[derive(Serialize)]
-pub struct NutrientSnapshotDto {
-    pub code: String,
-    pub amount: Decimal,
-    pub unit: String,
-}
-
-#[derive(Serialize)]
-pub struct LogListResponse {
-    pub log_date: NaiveDate,
-    pub items: Vec<LogResponse>,
-}
-
-#[derive(Serialize)]
-pub struct LatestSlotResponse {
-    pub source_date: NaiveDate,
-    pub meal_slot: MealSlotDto,
-    pub items: Vec<LogResponse>,
-}
-
-#[derive(Serialize)]
-pub struct LatestSlotsResponse {
-    pub slots: Vec<LatestSlotResponse>,
-}
-
-#[derive(Serialize)]
-pub struct RecentItemsResponse {
-    pub items: Vec<RecentItemResponse>,
-}
-
-#[derive(Serialize)]
-pub struct LogSummaryResponse {
-    pub days: Vec<LogDaySummaryResponse>,
-}
-
-#[derive(Serialize)]
-pub struct LogDaySummaryResponse {
-    pub date: NaiveDate,
-    pub energy_kcal: Decimal,
-    pub protein_g: Decimal,
-    pub carbs_g: Decimal,
-    pub fat_g: Decimal,
-}
-
-#[derive(Serialize)]
-pub struct RecentItemResponse {
-    pub item: ItemDto,
-    pub last_used_date: NaiveDate,
-    pub meal_slot: Option<MealSlotDto>,
-    pub quantity: QuantityDto,
-    pub nutrition_summary: NutrientSummaryDto,
-    pub top_quantities: Vec<QuantityUsageDto>,
-}
-
-#[derive(Serialize)]
-pub struct QuantityUsageDto {
-    pub quantity: QuantityDto,
-    pub log_count: u32,
-}
-
 #[derive(Deserialize)]
 pub struct LastUsedItemsRequest {
     pub from_date: String,
     pub to_date: String,
     pub meal_slot: Option<String>,
     pub items: Vec<ItemRefDto>,
-}
-
-#[derive(Serialize)]
-pub struct BatchLogResponse {
-    pub items: Vec<LogResponse>,
 }
 
 #[derive(Deserialize)]
@@ -252,10 +132,7 @@ pub struct UpdateLogRequest {
     pub notes: Option<Value>,
 }
 
-use crate::journal::api::http::{
-    ErrorResponse, NutrientSummaryDto, error_response, internal_error, is_summary_nutrient_code,
-    nutrient_summary_from_entries,
-};
+use crate::journal::api::http::{ErrorResponse, error_response, internal_error};
 
 async fn create_log_handler(
     auth: WriteUser,
@@ -405,19 +282,7 @@ async fn summary_handler(
         .summarize_by_date(auth.0.id, from_date, to_date)
         .await
     {
-        Ok(days) => Json(LogSummaryResponse {
-            days: days
-                .into_iter()
-                .map(|summary| LogDaySummaryResponse {
-                    date: summary.log_date,
-                    energy_kcal: summary.energy_kcal,
-                    protein_g: summary.protein_g,
-                    carbs_g: summary.carbs_g,
-                    fat_g: summary.fat_g,
-                })
-                .collect(),
-        })
-        .into_response(),
+        Ok(days) => Json(food_log_day_summaries_to_response(days)).into_response(),
         Err(err) => err.into_response(),
     }
 }
@@ -600,17 +465,12 @@ where
 }
 
 fn food_log_create_request_to_input(req: CreateLogRequest) -> Result<LogFoodInput, JournalError> {
-    let log_date = parse_log_date(&req.log_date)?;
-    let meal_slot = req.meal_slot.as_deref().map(parse_meal_slot).transpose()?;
-    let device_timezone = normalize_device_timezone(req.device_timezone)?;
-    let item = parse_food_log_item_ref(&req.item)?;
-    let quantity = parse_quantity(&req.quantity)?;
     Ok(LogFoodInput {
-        log_date,
-        meal_slot,
-        device_timezone,
-        item,
-        quantity,
+        log_date: parse_log_date(&req.log_date)?,
+        meal_slot: req.meal_slot.as_deref().map(parse_meal_slot).transpose()?,
+        device_timezone: normalize_device_timezone(req.device_timezone)?,
+        item: parse_food_log_item_ref(&req.item)?,
+        quantity: parse_quantity(&req.quantity)?,
         notes: req.notes,
     })
 }
@@ -674,95 +534,4 @@ fn food_log_update_request_to_input(
 fn food_log_query_to_date(query: LogQuery) -> Result<NaiveDate, (StatusCode, Json<ErrorResponse>)> {
     parse_log_date(&query.log_date)
         .map_err(|_| error_response("validation", "invalid log_date".into()))
-}
-
-fn food_logs_to_list_response(log_date: NaiveDate, logs: Vec<FoodLog>) -> LogListResponse {
-    LogListResponse {
-        log_date,
-        items: logs.iter().map(food_log_to_response).collect(),
-    }
-}
-
-fn food_log_to_response(log: &FoodLog) -> LogResponse {
-    LogResponse {
-        id: log.id().0,
-        log_date: log.log_date(),
-        meal_slot: log.meal_slot().map(Into::into),
-        device_timezone: log.device_timezone().map(str::to_owned),
-        item: item_to_dto(log.item()),
-        quantity: quantity_to_dto(log.quantity_amount(), log.quantity_unit().0.clone()),
-        nutrients: log
-            .nutrient_snapshots()
-            .iter()
-            .filter(|snapshot| is_summary_nutrient_code(&snapshot.nutrient_code.0))
-            .map(nutrient_snapshot_to_dto)
-            .collect(),
-        notes: log.notes().map(str::to_owned),
-        created_at: log.created_at(),
-        updated_at: log.updated_at(),
-    }
-}
-
-fn latest_slot_to_response(slot: &LatestSlotLogs) -> LatestSlotResponse {
-    LatestSlotResponse {
-        source_date: slot.source_date,
-        meal_slot: slot.meal_slot.into(),
-        items: slot.logs.iter().map(food_log_to_response).collect(),
-    }
-}
-
-fn recent_item_to_response(item: &RecentFoodLogItem) -> RecentItemResponse {
-    RecentItemResponse {
-        item: item_to_dto(&item.item),
-        last_used_date: item.log_date,
-        meal_slot: item.meal_slot.map(Into::into),
-        quantity: quantity_to_dto(item.quantity_amount, item.quantity_unit.0.clone()),
-        nutrition_summary: nutrient_summary_from_entries(
-            item.nutrient_snapshots
-                .iter()
-                .map(|snapshot| (snapshot.nutrient_code.0.clone(), snapshot.amount)),
-        ),
-        top_quantities: item
-            .top_quantities
-            .iter()
-            .map(quantity_usage_to_dto)
-            .collect(),
-    }
-}
-
-fn quantity_usage_to_dto(usage: &QuantityUsage) -> QuantityUsageDto {
-    QuantityUsageDto {
-        quantity: quantity_to_dto(usage.amount, usage.unit.0.clone()),
-        log_count: usage.log_count,
-    }
-}
-
-fn item_to_dto(item: &FoodLogItemSnapshot) -> ItemDto {
-    match item {
-        FoodLogItemSnapshot::Product { id, name, brand } => ItemDto::Product {
-            id: id.0,
-            name: name.clone(),
-            brand: brand.clone(),
-        },
-        FoodLogItemSnapshot::Meal { id, name } => ItemDto::Meal {
-            id: id.0,
-            name: name.clone(),
-        },
-        FoodLogItemSnapshot::AdHoc { name, brand } => ItemDto::AdHoc {
-            name: name.clone(),
-            brand: brand.clone(),
-        },
-    }
-}
-
-fn quantity_to_dto(amount: Decimal, unit: String) -> QuantityDto {
-    QuantityDto { amount, unit }
-}
-
-fn nutrient_snapshot_to_dto(snapshot: &FoodLogNutrientSnapshot) -> NutrientSnapshotDto {
-    NutrientSnapshotDto {
-        code: snapshot.nutrient_code.0.clone(),
-        amount: snapshot.amount,
-        unit: snapshot.unit.0.clone(),
-    }
 }
