@@ -31,6 +31,38 @@ impl From<Uuid> for FoodLogId {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IdempotencyKey(String);
+
+impl IdempotencyKey {
+    pub const MAX_LEN: usize = 128;
+
+    pub fn new(raw: impl Into<String>) -> Result<Self, JournalError> {
+        let value = raw.into();
+        if value.trim().is_empty() {
+            return Err(JournalError::Validation(
+                "idempotency_key must not be blank".into(),
+            ));
+        }
+        if value.chars().count() > Self::MAX_LEN {
+            return Err(JournalError::Validation(format!(
+                "idempotency_key must be at most {} characters",
+                Self::MAX_LEN
+            )));
+        }
+        if value.chars().any(char::is_control) {
+            return Err(JournalError::Validation(
+                "idempotency_key must not contain control characters".into(),
+            ));
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MealSlot {
     Breakfast,
@@ -159,6 +191,8 @@ pub struct FoodLog {
     quantity_unit: UnitCode,
     nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
     notes: Option<String>,
+    idempotency_key: Option<String>,
+    request_fingerprint: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -173,6 +207,8 @@ pub struct FoodLogBuilder {
     meal_slot: Option<MealSlot>,
     device_timezone: Option<String>,
     notes: Option<String>,
+    idempotency_key: Option<String>,
+    request_fingerprint: Option<String>,
 }
 
 impl FoodLogBuilder {
@@ -192,6 +228,8 @@ impl FoodLogBuilder {
             meal_slot: None,
             device_timezone: None,
             notes: None,
+            idempotency_key: None,
+            request_fingerprint: None,
         }
     }
 
@@ -229,6 +267,8 @@ impl FoodLogBuilder {
             meal_slot: None,
             device_timezone: None,
             notes: None,
+            idempotency_key: None,
+            request_fingerprint: None,
         })
     }
 
@@ -247,6 +287,12 @@ impl FoodLogBuilder {
         self
     }
 
+    pub fn idempotency(mut self, key: IdempotencyKey, request_fingerprint: String) -> Self {
+        self.idempotency_key = Some(key.as_str().to_owned());
+        self.request_fingerprint = Some(request_fingerprint);
+        self
+    }
+
     pub fn build(self) -> FoodLog {
         let now = Utc::now();
         let (quantity_amount, quantity_unit) = self.quantity.into_parts();
@@ -262,6 +308,8 @@ impl FoodLogBuilder {
             quantity_unit,
             nutrient_snapshots: snapshots_from_calculated(self.nutrition),
             notes: self.notes,
+            idempotency_key: self.idempotency_key,
+            request_fingerprint: self.request_fingerprint,
             created_at: now,
             updated_at: now,
         }
@@ -373,6 +421,14 @@ impl FoodLog {
         self.notes.as_deref()
     }
 
+    pub fn idempotency_key(&self) -> Option<&str> {
+        self.idempotency_key.as_deref()
+    }
+
+    pub fn request_fingerprint(&self) -> Option<&str> {
+        self.request_fingerprint.as_deref()
+    }
+
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
@@ -473,6 +529,8 @@ impl FoodLog {
                 })
                 .collect(),
             notes,
+            idempotency_key: self.idempotency_key.clone(),
+            request_fingerprint: self.request_fingerprint.clone(),
             created_at: self.created_at,
             updated_at: Utc::now(),
         })
@@ -494,6 +552,8 @@ impl FoodLog {
         quantity_unit: UnitCode,
         nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
         notes: Option<String>,
+        idempotency_key: Option<String>,
+        request_fingerprint: Option<String>,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
     ) -> Self {
@@ -508,6 +568,8 @@ impl FoodLog {
             quantity_unit,
             nutrient_snapshots,
             notes,
+            idempotency_key,
+            request_fingerprint,
             created_at,
             updated_at,
         }
@@ -536,6 +598,8 @@ impl FoodLog {
             quantity_unit,
             nutrient_snapshots: snapshots_from_calculated(nutrition),
             notes,
+            idempotency_key: self.idempotency_key.clone(),
+            request_fingerprint: self.request_fingerprint.clone(),
             created_at: self.created_at,
             updated_at: Utc::now(),
         }
@@ -627,6 +691,11 @@ pub trait FoodLogRepo: Send + Sync {
     async fn create(&self, log: &FoodLog) -> Result<(), JournalError>;
     async fn create_many(&self, logs: &[FoodLog]) -> Result<(), JournalError>;
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, JournalError>;
+    async fn find_by_user_and_key(
+        &self,
+        user_id: Uuid,
+        idempotency_key: &IdempotencyKey,
+    ) -> Result<Option<FoodLog>, JournalError>;
     async fn list_by_user_and_date(
         &self,
         user_id: Uuid,

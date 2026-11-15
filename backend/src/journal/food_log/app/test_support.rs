@@ -43,6 +43,20 @@ impl FoodLogRepo for MockFoodLogRepo {
         Ok(logs.iter().find(|l| l.id() == id).cloned())
     }
 
+    async fn find_by_user_and_key(
+        &self,
+        user_id: Uuid,
+        idempotency_key: &IdempotencyKey,
+    ) -> Result<Option<FoodLog>, JournalError> {
+        let logs = self.logs.lock().unwrap();
+        Ok(logs
+            .iter()
+            .find(|log| {
+                log.user_id() == user_id && log.idempotency_key() == Some(idempotency_key.as_str())
+            })
+            .cloned())
+    }
+
     async fn list_by_user_and_date(
         &self,
         user_id: Uuid,

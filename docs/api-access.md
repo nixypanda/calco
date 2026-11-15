@@ -22,6 +22,7 @@ Personal API keys provide:
 - Immediate revocation from the web app.
 - Access only to the owner's user-owned data, through the existing authorization
   and owner checks.
+- Optional idempotency keys on `POST /api/logs` for safe create retries.
 
 Current limitations:
 
@@ -190,6 +191,40 @@ A `read` key calling one of these routes receives `403 insufficient_scope`; the
 request is rejected before any user data is changed. Key metadata such as
 `last_used_at` may still be updated during authentication.
 
+### Safe Log Create Retries
+
+Scripts can make `POST /api/logs` retry-safe by supplying an optional
+`idempotency_key`:
+
+```bash
+curl -sS -X POST "$CALCO_BASE_URL/api/logs" \
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "log_date": "2026-10-26",
+    "meal_slot": "lunch",
+    "item": { "type": "product", "id": "<product-id>" },
+    "quantity": { "amount": 150, "unit": "g" },
+    "idempotency_key": "lunch-2026-10-26-product-id-1"
+  }'
+```
+
+Keys are 1 to 128 characters, must not be blank, and reject control characters.
+They are scoped to your profile, may be reused by another user, and are never
+included in responses. The server stores a SHA-256 fingerprint of the validated
+request on the log. The first create returns `201 Created`. Retrying the same
+validated input with the same key returns `200 OK` and the existing log, even if
+that log was edited later or its catalog item changed. Reusing the key with a
+different input returns `409 conflict`.
+
+Deleting the log also deletes its key. A delayed retry with the same key and
+input after a successful delete creates a new log with `201 Created`, so do not
+rely on a key to detect a delete that happened between retries.
+
+`POST /api/logs/batch` does not accept idempotency keys. Supplying
+`idempotency_key` in a batch item, including an explicit `null`, is a validation
+error; it is not silently ignored.
+
 ## Revocation
 
 Revoke a key from **API keys** in the profile menu. Revocation takes effect
@@ -260,6 +295,7 @@ product change. Do not rely on API-key scopes to provide that isolation.
 | `401` | `unauthorized` (or session error) | A bearer token was sent to a browser-session-only route (key management, assistant, admin, or import) without a valid session cookie. These routes ignore `Authorization`. |
 | `403` | `insufficient_scope` | The key is valid but its scope does not permit the route. |
 | `404` | `api_key_not_found` | A key-management route referenced a key that does not exist for this user. |
+| `409` | `conflict` | A log `idempotency_key` was reused with a different request. |
 | `409` | `api_key_limit_reached` | The account is at its soft limit of 10 active keys; revoke an unused key and retry. |
 | `400` | `invalid_api_key_name` | The key name is empty, whitespace-only/invisible-only, too long, or contains a forbidden control/invisible formatting character. |
 | `400` | `invalid_api_key_scope` | The scope is not `read` or `read_write`. |
