@@ -49,6 +49,11 @@
             inherit frontendVersion;
           };
 
+          packages.cli = pkgs.callPackage ./nix/cli.nix {
+            inherit rustPlatform;
+            rustToolchain = toolchain;
+          };
+
           packages.default = self.packages.${system}.backend;
 
           checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {

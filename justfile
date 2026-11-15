@@ -22,16 +22,16 @@ dev: db-up db-wait
     wait
 
 # Build all projects.
-build: build-backend build-frontend
+build: build-backend build-frontend build-cli
 
 # Run all tests.
-test: test-backend test-frontend
+test: test-backend test-frontend test-cli
 
 # Format all source files in place.
-format: format-backend format-frontend
+format: format-backend format-frontend format-cli
 
-# Check the backend and frontend.
-check: check-backend check-frontend
+# Check the backend, frontend, and CLI.
+check: check-backend check-frontend check-cli
 
 # Run all coverage reports.
 coverage: coverage-backend coverage-frontend
@@ -168,6 +168,27 @@ check-frontend-review:
 [working-directory("frontend-web")]
 coverage-frontend:
     npx --no-install elm-coverage src --tests tests --silent --elm-test "$(command -v elm-test)"
+
+# Build the CLI.
+build-cli:
+    cargo build --manifest-path frontend-cli/Cargo.toml
+
+# Run CLI tests.
+test-cli:
+    cargo test --manifest-path frontend-cli/Cargo.toml
+
+# Format CLI Rust sources.
+format-cli:
+    cargo fmt --manifest-path frontend-cli/Cargo.toml --all
+
+# Run all CLI checks.
+check-cli: check-cli-format check-cli-clippy test-cli
+
+check-cli-format:
+    cargo fmt --manifest-path frontend-cli/Cargo.toml --all --check
+
+check-cli-clippy:
+    cargo clippy --manifest-path frontend-cli/Cargo.toml --all-targets -- -D warnings
 
 # Lint and type-check data-source import tools.
 [working-directory("tools/importers/data-sources")]
