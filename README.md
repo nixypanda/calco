@@ -36,6 +36,7 @@ food keeps the diary in view.
 
 - Backend: Rust, axum, sqlx, PostgreSQL
 - Frontend: Elm 0.19.2, elm-ui
+- CLI: Rust, clap, reqwest
 - Database: PostgreSQL via Docker Compose
 - Tooling: Nix flake, just, Python import scripts
 
@@ -49,6 +50,7 @@ Implemented:
   latest-slot repeat
 - Meal/recipe CRUD and meal logging
 - Responsive web frontend with configurable diary meal slots
+- `calco` CLI for authenticated food search, meals, logs, and summaries
 - CLI import pipeline for USDA SR Legacy, Open Food Facts India, IFCT 2017, and INDB 2024 data
 
 Not the goal right now:
@@ -58,12 +60,42 @@ Not the goal right now:
 - Offline/service-worker behavior
 - Native mobile app
 
+## CLI
+
+The separate `calco` client uses a personal API key to search foods, inspect
+meals, manage food logs, and read summaries through the documented `/api`
+routes. It never connects to PostgreSQL directly.
+
+Build and test it inside the development shell:
+
+```bash
+nix develop
+just build-cli
+just test-cli
+./frontend-cli/target/debug/calco --help
+```
+
+To install it into your Nix profile, or build the package locally:
+
+```bash
+nix profile install .#cli
+calco --help
+
+# or
+nix build .#cli
+./result/bin/calco --help
+```
+
+See [CLI](docs/cli.md) for the command contract, authentication, JSON output,
+and examples.
+
 ## Documentation
 
 - [Features](docs/features.md): product checklist and current scope
 - [Architecture](docs/architecture.md): system structure and DDD decisions
 - [Backend](docs/backend.md): backend domains, APIs, persistence, and invariants
 - [Frontend](docs/frontend.md): frontend routes, UI structure, and design rules
+- [CLI](docs/cli.md): `calco` commands, output, authentication, and exit codes
 - [Button System](docs/buttons.md): unified button API and documented exceptions
 - [Local Development](docs/local-development.md): dev shell, services, env vars, tests, i18n
 - [Deployment](docs/deployment.md): NixOS module, reverse proxy, and production setup

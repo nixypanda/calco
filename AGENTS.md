@@ -4,6 +4,8 @@
 
 - Backend: Rust 2024, axum, sqlx, PostgreSQL migrations run with `sqlx-cli`.
 - Frontend: Elm 0.19.2, elm-ui, elm-test.
+- CLI: Rust 2024, clap, reqwest in `frontend-cli/`; package `calco-cli`,
+  binary `calco`.
 - Database: PostgreSQL via `docker-compose.yml`.
 - Test runner commands are defined in `justfile`. Enter `nix develop` once and
   run `just ...` inside that persistent development shell.
@@ -76,13 +78,34 @@ Or run the package commands directly:
 ```bash
 cd backend && cargo test
 cd frontend-web && elm-test
+cd frontend-cli && cargo test
 ```
+
+## CLI Tests And Quality
+
+`frontend-cli/` is the Rust `calco-cli` package producing the `calco` binary.
+
+```bash
+just test-cli
+just check-cli
+```
+
+### Notes
+
+- CLI unit tests are inline in `frontend-cli/src/` and use the injected fakes
+  plus loopback mock from `src/test_support.rs`; executable integration tests
+  are in `frontend-cli/tests/` and run the built binary with process-isolated
+  HOME/XDG, environment, stdin, and a finite loopback mock.
+- Default tests must not require PostgreSQL, a real OS keyring, or external
+  network access.
+- `just check-cli` runs the format check, clippy with `-D warnings`, and tests.
 
 ## Build Commands
 
 ```bash
 just build-backend
 just build-frontend
+just build-cli
 just build
 ```
 
