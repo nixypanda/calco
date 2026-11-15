@@ -31,6 +31,8 @@ enum FoodLogs {
     Quantity,
     Unit,
     Notes,
+    IdempotencyKey,
+    RequestFingerprint,
     CreatedAt,
     UpdatedAt,
 }
@@ -51,7 +53,7 @@ enum Nutrients {
     Code,
 }
 
-fn food_log_columns() -> [FoodLogs; 14] {
+fn food_log_columns() -> [FoodLogs; 16] {
     [
         FoodLogs::Id,
         FoodLogs::UserId,
@@ -65,6 +67,8 @@ fn food_log_columns() -> [FoodLogs; 14] {
         FoodLogs::Quantity,
         FoodLogs::Unit,
         FoodLogs::Notes,
+        FoodLogs::IdempotencyKey,
+        FoodLogs::RequestFingerprint,
         FoodLogs::CreatedAt,
         FoodLogs::UpdatedAt,
     ]
@@ -166,6 +170,8 @@ fn food_log_insert_statement(log: &FoodLog) -> InsertStatement {
             log.quantity_amount().into(),
             log.quantity_unit().0.as_str().into(),
             log.notes().into(),
+            log.idempotency_key().into(),
+            log.request_fingerprint().into(),
             log.created_at().into(),
             log.updated_at().into(),
         ])
@@ -202,11 +208,34 @@ fn food_log_delete_statement(id: Uuid) -> DeleteStatement {
         .to_owned()
 }
 
+fn food_log_find_by_user_and_key_statement(
+    user_id: Uuid,
+    idempotency_key: &str,
+) -> SelectStatement {
+    Query::select()
+        .columns(food_log_columns())
+        .from(FoodLogs::Table)
+        .and_where(Expr::col(FoodLogs::UserId).eq(user_id))
+        .and_where(Expr::col(FoodLogs::IdempotencyKey).eq(idempotency_key))
+        .to_owned()
+}
+
 fn food_log_nutrient_delete_by_food_log_id_statement(food_log_id: Uuid) -> DeleteStatement {
     Query::delete()
         .from_table(FoodLogNutrients::Table)
         .and_where(Expr::col(FoodLogNutrients::FoodLogId).eq(food_log_id))
         .to_owned()
+}
+
+fn map_food_log_insert_error(error: sqlx::Error) -> JournalError {
+    if let sqlx::Error::Database(database_error) = &error
+        && database_error.code().as_deref() == Some("23505")
+        && database_error.constraint() == Some("food_logs_user_idempotency_key_idx")
+    {
+        return JournalError::DuplicateIdempotencyKey;
+    }
+
+    JournalError::Database(error)
 }
 
 #[derive(Clone)]
@@ -219,63 +248,92 @@ impl PgFoodLogRepo {
         Self { pool }
     }
 
-    async fn load_snapshots(
-        &self,
-        food_log_id: Uuid,
-    ) -> Result<Vec<FoodLogNutrientSnapshot>, JournalError> {
-        let (sql, values) =
-            food_log_load_snapshots_statement(food_log_id).build_sqlx(PostgresQueryBuilder);
-        let rows = sqlx::query_as_with::<_, NutrientSnapshotRow, _>(
-            sqlx::AssertSqlSafe(sql.as_str()),
-            values,
-        )
-        .fetch_all(&self.pool)
-        .await?;
+    async fn find_one(&self, statement: SelectStatement) -> Result<Option<FoodLog>, JournalError> {
+        let mut tx = begin_read_snapshot(&self.pool).await?;
+        let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
+        let row =
+            sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let result = match row {
+            Some(row) => {
+                let snapshots = load_snapshots(&mut tx, row.id).await?;
+                Some(food_log_row_to_food_log(row, snapshots)?)
+            }
+            None => None,
+        };
+        tx.commit().await?;
+        Ok(result)
+    }
+}
 
-        Ok(rows
-            .into_iter()
-            .map(|r| FoodLogNutrientSnapshot {
-                nutrient_code: NutrientCode(r.code),
-                amount: r.amount.normalize(),
-                unit: UnitCode(r.unit),
-            })
-            .collect())
+async fn begin_read_snapshot(
+    pool: &PgPool,
+) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, JournalError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    Ok(tx)
+}
+
+async fn load_snapshots(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    food_log_id: Uuid,
+) -> Result<Vec<FoodLogNutrientSnapshot>, JournalError> {
+    let (sql, values) =
+        food_log_load_snapshots_statement(food_log_id).build_sqlx(PostgresQueryBuilder);
+    let rows =
+        sqlx::query_as_with::<_, NutrientSnapshotRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .fetch_all(&mut **tx)
+            .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| FoodLogNutrientSnapshot {
+            nutrient_code: NutrientCode(r.code),
+            amount: r.amount.normalize(),
+            unit: UnitCode(r.unit),
+        })
+        .collect())
+}
+
+async fn rows_to_food_logs(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    rows: Vec<FoodLogRow>,
+) -> Result<Vec<FoodLog>, JournalError> {
+    if rows.is_empty() {
+        return Ok(Vec::new());
     }
 
-    async fn rows_to_food_logs(&self, rows: Vec<FoodLogRow>) -> Result<Vec<FoodLog>, JournalError> {
-        if rows.is_empty() {
-            return Ok(Vec::new());
-        }
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let (sql, values) = food_log_join_snapshots_statement(ids).build_sqlx(PostgresQueryBuilder);
+    let snapshot_rows = sqlx::query_as_with::<_, FoodLogSnapshotJoinRow, _>(
+        sqlx::AssertSqlSafe(sql.as_str()),
+        values,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
 
-        let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-        let (sql, values) = food_log_join_snapshots_statement(ids).build_sqlx(PostgresQueryBuilder);
-        let snapshot_rows = sqlx::query_as_with::<_, FoodLogSnapshotJoinRow, _>(
-            sqlx::AssertSqlSafe(sql.as_str()),
-            values,
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut snapshots_by_log: std::collections::HashMap<Uuid, Vec<FoodLogNutrientSnapshot>> =
-            std::collections::HashMap::new();
-        for s in snapshot_rows {
-            snapshots_by_log
-                .entry(s.food_log_id)
-                .or_default()
-                .push(FoodLogNutrientSnapshot {
-                    nutrient_code: NutrientCode(s.code),
-                    amount: s.amount.normalize(),
-                    unit: UnitCode(s.unit),
-                });
-        }
-
-        let mut results = Vec::with_capacity(rows.len());
-        for r in rows {
-            let snapshots = snapshots_by_log.remove(&r.id).unwrap_or_default();
-            results.push(food_log_row_to_food_log(r, snapshots)?);
-        }
-        Ok(results)
+    let mut snapshots_by_log: std::collections::HashMap<Uuid, Vec<FoodLogNutrientSnapshot>> =
+        std::collections::HashMap::new();
+    for s in snapshot_rows {
+        snapshots_by_log
+            .entry(s.food_log_id)
+            .or_default()
+            .push(FoodLogNutrientSnapshot {
+                nutrient_code: NutrientCode(s.code),
+                amount: s.amount.normalize(),
+                unit: UnitCode(s.unit),
+            });
     }
+
+    let mut results = Vec::with_capacity(rows.len());
+    for r in rows {
+        let snapshots = snapshots_by_log.remove(&r.id).unwrap_or_default();
+        results.push(food_log_row_to_food_log(r, snapshots)?);
+    }
+    Ok(results)
 }
 
 fn food_log_list_by_filter_statement(filter: FoodLogListFilter) -> SelectStatement {
@@ -316,6 +374,8 @@ fn food_log_list_by_filter_statement(filter: FoodLogListFilter) -> SelectStateme
             FoodLogs::Quantity,
             FoodLogs::Unit,
             FoodLogs::Notes,
+            FoodLogs::IdempotencyKey,
+            FoodLogs::RequestFingerprint,
             FoodLogs::CreatedAt,
             FoodLogs::UpdatedAt,
         ])
@@ -409,6 +469,8 @@ fn food_log_row_to_food_log(
         UnitCode(row.unit),
         snapshots,
         row.notes,
+        row.idempotency_key,
+        row.request_fingerprint,
         row.created_at,
         row.updated_at,
     ))
@@ -424,12 +486,7 @@ impl FoodLogRepo for PgFoodLogRepo {
         let mut tx = self.pool.begin().await?;
 
         for log in logs {
-            let (sql, values) = food_log_insert_statement(log).build_sqlx(PostgresQueryBuilder);
-            sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-                .execute(&mut *tx)
-                .await?;
-
-            insert_food_log_nutrients(&mut tx, log.id().0, log.nutrient_snapshots()).await?;
+            insert_food_log(&mut tx, log).await?;
         }
 
         tx.commit().await?;
@@ -437,19 +494,19 @@ impl FoodLogRepo for PgFoodLogRepo {
     }
 
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, JournalError> {
-        let (sql, values) = food_log_find_by_id_statement(id.0).build_sqlx(PostgresQueryBuilder);
-        let row =
-            sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-                .fetch_optional(&self.pool)
-                .await?;
+        self.find_one(food_log_find_by_id_statement(id.0)).await
+    }
 
-        match row {
-            Some(r) => {
-                let snapshots = self.load_snapshots(r.id).await?;
-                Ok(Some(food_log_row_to_food_log(r, snapshots)?))
-            }
-            None => Ok(None),
-        }
+    async fn find_by_user_and_key(
+        &self,
+        user_id: Uuid,
+        idempotency_key: &IdempotencyKey,
+    ) -> Result<Option<FoodLog>, JournalError> {
+        self.find_one(food_log_find_by_user_and_key_statement(
+            user_id,
+            idempotency_key.as_str(),
+        ))
+        .await
     }
 
     async fn list_by_user_and_date(
@@ -457,36 +514,45 @@ impl FoodLogRepo for PgFoodLogRepo {
         user_id: Uuid,
         log_date: NaiveDate,
     ) -> Result<Vec<FoodLog>, JournalError> {
+        let mut tx = begin_read_snapshot(&self.pool).await?;
         let (sql, values) = food_log_list_by_user_and_date_statement(user_id, log_date)
             .build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-                .fetch_all(&self.pool)
+                .fetch_all(&mut *tx)
                 .await?;
 
-        self.rows_to_food_logs(rows).await
+        let result = rows_to_food_logs(&mut tx, rows).await?;
+        tx.commit().await?;
+        Ok(result)
     }
 
     async fn list_by_filter(
         &self,
         filter: FoodLogListFilter,
     ) -> Result<Vec<FoodLog>, JournalError> {
+        let mut tx = begin_read_snapshot(&self.pool).await?;
         let statement = food_log_list_by_filter_statement(filter);
         let (sql, values) = statement.build_sqlx(PostgresQueryBuilder);
         let rows =
             sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
-                .fetch_all(&self.pool)
+                .fetch_all(&mut *tx)
                 .await?;
-        self.rows_to_food_logs(rows).await
+        let result = rows_to_food_logs(&mut tx, rows).await?;
+        tx.commit().await?;
+        Ok(result)
     }
 
     async fn update(&self, log: &FoodLog) -> Result<(), JournalError> {
         let mut tx = self.pool.begin().await?;
 
         let (sql, values) = food_log_update_statement(log).build_sqlx(PostgresQueryBuilder);
-        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+        let updated = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&mut *tx)
             .await?;
+        if updated.rows_affected() != 1 {
+            return Err(JournalError::NotFound("food log not found".into()));
+        }
 
         let (sql, values) = food_log_nutrient_delete_by_food_log_id_statement(log.id().0)
             .build_sqlx(PostgresQueryBuilder);
@@ -502,9 +568,12 @@ impl FoodLogRepo for PgFoodLogRepo {
 
     async fn delete(&self, id: FoodLogId) -> Result<(), JournalError> {
         let (sql, values) = food_log_delete_statement(id.0).build_sqlx(PostgresQueryBuilder);
-        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+        let deleted = sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&self.pool)
             .await?;
+        if deleted.rows_affected() != 1 {
+            return Err(JournalError::NotFound("food log not found".into()));
+        }
         Ok(())
     }
 }
@@ -523,6 +592,8 @@ struct FoodLogRow {
     quantity: Decimal,
     unit: String,
     notes: Option<String>,
+    idempotency_key: Option<String>,
+    request_fingerprint: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -550,6 +621,19 @@ fn item_to_columns(item: &FoodLogItemSnapshot) -> (Option<Uuid>, Option<Uuid>, &
         FoodLogItemSnapshot::Meal { id, name } => (None, Some(id.0), name.as_str(), None),
         FoodLogItemSnapshot::AdHoc { name, brand } => (None, None, name.as_str(), brand.as_deref()),
     }
+}
+
+async fn insert_food_log(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    log: &FoodLog,
+) -> Result<(), JournalError> {
+    let (sql, values) = food_log_insert_statement(log).build_sqlx(PostgresQueryBuilder);
+    sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_food_log_insert_error)?;
+
+    insert_food_log_nutrients(tx, log.id().0, log.nutrient_snapshots()).await
 }
 
 async fn insert_food_log_nutrients(
@@ -704,6 +788,8 @@ mod tests {
             Decimal::from(100),
             UnitCode("g".to_owned()),
             Vec::new(),
+            None,
+            None,
             None,
             created_at,
             created_at,

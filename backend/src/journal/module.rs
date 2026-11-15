@@ -161,4 +161,3 @@ impl FromRef<AppState> for JournalModule {
         app.journal.clone()
     }
 }
-

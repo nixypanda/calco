@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 use chrono::NaiveDate;
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -38,6 +40,11 @@ pub struct UpdateFoodInput {
     pub notes: Option<Option<String>>,
 }
 
+pub struct FoodLogCreateOutcome {
+    pub log: FoodLog,
+    pub replayed: bool,
+}
+
 #[derive(Clone)]
 pub struct FoodLogService {
     food_log_repo: Arc<dyn FoodLogRepo>,
@@ -71,9 +78,61 @@ impl FoodLogService {
         actor_id: Uuid,
         input: LogFoodInput,
     ) -> Result<FoodLog, JournalError> {
-        let log = self.build_log(actor_id, input).await?;
+        let log = self.build_log(actor_id, input, None).await?;
         self.food_log_repo.create(&log).await?;
         Ok(log)
+    }
+
+    pub async fn log_item_idempotent(
+        &self,
+        actor_id: Uuid,
+        input: LogFoodInput,
+        idempotency_key: Option<IdempotencyKey>,
+    ) -> Result<FoodLogCreateOutcome, JournalError> {
+        let Some(idempotency_key) = idempotency_key else {
+            let log = self.log_item(actor_id, input).await?;
+            return Ok(FoodLogCreateOutcome {
+                log,
+                replayed: false,
+            });
+        };
+
+        let fingerprint = food_log_create_fingerprint(&input);
+
+        if let Some(log) = self
+            .food_log_repo
+            .find_by_user_and_key(actor_id, &idempotency_key)
+            .await?
+        {
+            return replay_existing_log(log, &fingerprint);
+        }
+
+        let log = self
+            .build_log(
+                actor_id,
+                input,
+                Some((idempotency_key.clone(), fingerprint.clone())),
+            )
+            .await?;
+        match self.food_log_repo.create(&log).await {
+            Ok(()) => Ok(FoodLogCreateOutcome {
+                log,
+                replayed: false,
+            }),
+            Err(JournalError::DuplicateIdempotencyKey) => {
+                let log = self
+                    .food_log_repo
+                    .find_by_user_and_key(actor_id, &idempotency_key)
+                    .await?
+                    .ok_or_else(|| {
+                        JournalError::Conflict(
+                            "idempotency key changed during a concurrent request; retry".into(),
+                        )
+                    })?;
+                replay_existing_log(log, &fingerprint)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     pub async fn log_ad_hoc_food(
@@ -121,7 +180,7 @@ impl FoodLogService {
     ) -> Result<Vec<FoodLog>, JournalError> {
         let mut logs = Vec::with_capacity(inputs.len());
         for input in inputs {
-            logs.push(self.build_log(actor_id, input).await?);
+            logs.push(self.build_log(actor_id, input, None).await?);
         }
         self.food_log_repo.create_many(&logs).await?;
         Ok(logs)
@@ -131,8 +190,9 @@ impl FoodLogService {
         &self,
         actor_id: Uuid,
         input: LogFoodInput,
+        idempotency: Option<(IdempotencyKey, String)>,
     ) -> Result<FoodLog, JournalError> {
-        let log = match input.item {
+        let builder = match input.item {
             FoodLogItemRef::Product(product_id) => {
                 let product = self
                     .catalog
@@ -154,7 +214,6 @@ impl FoodLogService {
                 .meal_slot(input.meal_slot)
                 .device_timezone(input.device_timezone)
                 .notes(input.notes)
-                .build()
             }
             FoodLogItemRef::Meal(meal_id) => {
                 let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
@@ -172,10 +231,13 @@ impl FoodLogService {
                 .meal_slot(input.meal_slot)
                 .device_timezone(input.device_timezone)
                 .notes(input.notes)
-                .build()
             }
         };
-        Ok(log)
+        let builder = match idempotency {
+            Some((key, fingerprint)) => builder.idempotency(key, fingerprint),
+            None => builder,
+        };
+        Ok(builder.build())
     }
 
     pub async fn update_food_log(
@@ -281,6 +343,54 @@ impl FoodLogService {
             .list_by_user_and_date(actor_id, log_date)
             .await
     }
+}
+
+#[derive(Serialize)]
+struct CanonicalFoodLogCreateRequest<'a> {
+    log_date: NaiveDate,
+    meal_slot: Option<&'a str>,
+    device_timezone: Option<&'a str>,
+    item_type: &'static str,
+    item_id: Uuid,
+    quantity_amount: &'a str,
+    quantity_unit: &'a str,
+    notes: Option<&'a str>,
+}
+
+fn food_log_create_fingerprint(input: &LogFoodInput) -> String {
+    let (item_type, item_id) = match &input.item {
+        FoodLogItemRef::Product(id) => ("product", id.0),
+        FoodLogItemRef::Meal(id) => ("meal", id.0),
+    };
+    let quantity_amount = input.quantity.amount().normalize().to_string();
+    let canonical = CanonicalFoodLogCreateRequest {
+        log_date: input.log_date,
+        meal_slot: input.meal_slot.map(|slot| slot.as_str()),
+        device_timezone: input.device_timezone.as_deref(),
+        item_type,
+        item_id,
+        quantity_amount: &quantity_amount,
+        quantity_unit: input.quantity.unit().0.as_str(),
+        notes: input.notes.as_deref(),
+    };
+    let bytes =
+        serde_json::to_vec(&canonical).expect("canonical food-log create request must serialize");
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn replay_existing_log(
+    log: FoodLog,
+    fingerprint: &str,
+) -> Result<FoodLogCreateOutcome, JournalError> {
+    if log.request_fingerprint() != Some(fingerprint) {
+        return Err(JournalError::Conflict(
+            "idempotency_key was already used with a different request".into(),
+        ));
+    }
+    Ok(FoodLogCreateOutcome {
+        log,
+        replayed: true,
+    })
 }
 
 #[async_trait]

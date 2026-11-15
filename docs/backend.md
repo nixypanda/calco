@@ -107,6 +107,7 @@ backend/src/
         pg.rs
       api/
         mod.rs
+        dto.rs
         http.rs
     goals/
       domain.rs
@@ -642,6 +643,51 @@ item.type = product
 item.type = meal
 ```
 
+#### Idempotent Log Creation
+
+Apply `20261115000001_food_log_idempotency.sql` before starting the updated
+backend; it adds two nullable columns to `food_logs`. The NixOS deployment runs
+migrations before the backend, while local development uses
+`just migrate-backend`.
+The migration also accepts an `idempotency_key` column from an earlier local
+trial; those rows have no original-request fingerprint and return `409` if the
+key is retried. Do not infer an original fingerprint from an edited log.
+
+`POST /logs` accepts an optional `idempotency_key`. Omitting it, or sending
+`null`, preserves the existing non-idempotent behavior. A supplied key must be 1
+to 128 characters, must not be blank, and must not contain control characters.
+Keys are scoped to the authenticated user profile and are never returned in log
+responses.
+
+- The first successful create returns `201 Created`.
+- A retry with the same key and the same normalized create input returns
+  `200 OK` with the existing log.
+- Reusing the key with a different create input returns `409 conflict`.
+- Deleting the log deletes its key, so a delayed retry with the same key and
+  input can create a new log with `201 Created`.
+
+`food_logs.idempotency_key` and `food_logs.request_fingerprint` store the
+original key and a SHA-256 fingerprint of the validated create request: log
+date, meal slot, normalized device timezone, item type and ID, normalized
+quantity amount, exact quantity unit code, and notes. Notes and keys are
+compared byte-for-byte rather than Unicode-normalized. The database constrains
+the key to 1 to 128 characters and the fingerprint to 64 lowercase hex
+characters.
+
+The fingerprint does not store resolved catalog names or nutrient snapshots, so
+later log edits and catalog changes do not change it. Updates preserve the
+stored key and fingerprint. The key, fingerprint, food log, and nutrient
+snapshots are written atomically by the existing `FoodLogRepo::create`
+transaction. Reads of a food log and its nutrient snapshots use one
+repeatable-read transaction, so a replay cannot combine a row from before an
+update or delete with snapshots from after it.
+
+Concurrent retries rely on the partial unique index on
+`(user_id, idempotency_key)`. When a retry loses the insert race, it reads the
+winning log and replays it or returns a conflict. `POST /logs/batch` does not
+support idempotency keys; supplying one, including an explicit `null`, is a
+validation error rather than a silently ignored field.
+
 ### Nutrition Details
 
 ```text
@@ -769,6 +815,10 @@ Important tables:
 - Goals: `goal_target_versions`
 - Diary preferences: `diary_preferences`
 - Imports: `imports`, `staging_products`, `staging_product_nutrients`, `staging_product_servings`, `import_errors`
+
+`food_logs` stores an optional idempotency key and request fingerprint directly
+on the log. A partial unique index on `(user_id, idempotency_key)` enforces
+per-profile key uniqueness for keyed logs, and deleting the log frees the key.
 
 Catalog search fetches storage-filtered candidate rows (scope and category
 filters) from the repository. Matching and ranking are pure Rust in

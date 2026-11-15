@@ -1,7 +1,8 @@
 use crate::common::*;
-use axum::http::StatusCode;
+use axum::http::{Method, StatusCode};
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use std::collections::HashSet;
 
 async fn seed_product(router: &axum::Router, user: &str) -> String {
     seed_named_product(router, user, "Diary Test Apple").await
@@ -62,6 +63,11 @@ fn nutrient_amount<'a>(nutrients: &'a Value, code: &str) -> &'a str {
         .unwrap_or_else(|| panic!("{code} snapshot missing"))["amount"]
         .as_str()
         .unwrap()
+}
+
+async fn logs_on(router: &axum::Router, user: &str, log_date: &str) -> Vec<Value> {
+    let listed: Value = get_json(router, &format!("/api/logs?log_date={log_date}"), user).await;
+    listed["items"].as_array().unwrap().clone()
 }
 
 #[sqlx::test]
@@ -325,4 +331,326 @@ async fn recent_latest_and_last_used_wire_shape(pool: PgPool) {
     let slot_items = slots[0]["items"].as_array().unwrap();
     assert_eq!(slot_items.len(), 1);
     assert_eq!(slot_items[0]["id"], log_id);
+}
+
+#[sqlx::test]
+async fn keyed_log_replay_normalizes_and_keeps_the_original_fingerprint(pool: PgPool) {
+    let router = app(pool.clone()).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+    let product_id = seed_product(&router, &user).await;
+
+    let original = json!({
+        "log_date": "2026-06-03",
+        "meal_slot": "breakfast",
+        "device_timezone": "Asia/Kolkata",
+        "item": { "type": "product", "id": product_id },
+        "quantity": { "amount": 150, "unit": "g" },
+        "notes": "replay me",
+        "idempotency_key": "diary-single-key"
+    });
+    let created: Value =
+        post_json(&router, "/api/logs", &user, &original, StatusCode::CREATED).await;
+    let log_id = created["id"].as_str().unwrap().to_string();
+
+    // A fresh router has no in-memory replay state, and decimal spelling and
+    // timezone whitespace must normalize to the same request.
+    let replay_router = app(pool).await;
+    let equivalent = json!({
+        "log_date": "2026-06-03",
+        "meal_slot": "breakfast",
+        "device_timezone": "  Asia/Kolkata  ",
+        "item": { "type": "product", "id": product_id },
+        "quantity": { "amount": 150.00, "unit": "g" },
+        "notes": "replay me",
+        "idempotency_key": "diary-single-key"
+    });
+    let replay: Value = post_json(
+        &replay_router,
+        "/api/logs",
+        &user,
+        &equivalent,
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(replay["id"], log_id);
+
+    let listed = logs_on(&replay_router, &user, "2026-06-03").await;
+    assert_eq!(listed.len(), 1, "replay must not create a second log");
+    assert_eq!(listed[0]["id"], log_id);
+
+    // Editing the log must not replace the create fingerprint. Replaying the
+    // original request returns the edited current row, not a stale copy.
+    let edited: Value = put_json(
+        &replay_router,
+        &format!("/api/logs/{log_id}"),
+        &user,
+        &json!({
+            "quantity": { "amount": 220, "unit": "g" },
+            "notes": "edited"
+        }),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(edited["quantity"]["amount"], "220");
+
+    let replay_after_edit: Value = post_json(
+        &replay_router,
+        "/api/logs",
+        &user,
+        &original,
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(replay_after_edit["id"], log_id);
+    assert_eq!(replay_after_edit["quantity"]["amount"], "220");
+    assert_eq!(replay_after_edit["notes"], "edited");
+
+    let mut conflicting = original.clone();
+    conflicting["quantity"]["amount"] = json!(151);
+    let conflict: Value = post_json(
+        &replay_router,
+        "/api/logs",
+        &user,
+        &conflicting,
+        StatusCode::CONFLICT,
+    )
+    .await;
+    assert_eq!(conflict["error"]["code"], "conflict");
+
+    let listed = logs_on(&replay_router, &user, "2026-06-03").await;
+    assert_eq!(listed.len(), 1, "a conflict must not append a second log");
+    assert_eq!(listed[0]["id"], log_id);
+    assert_eq!(listed[0]["quantity"]["amount"], "220");
+}
+
+#[sqlx::test]
+async fn deleted_keyed_log_frees_the_idempotency_key(pool: PgPool) {
+    let router = app(pool).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+    let product_id = seed_product(&router, &user).await;
+
+    let payload = json!({
+        "log_date": "2026-06-04",
+        "meal_slot": "lunch",
+        "item": { "type": "product", "id": product_id },
+        "quantity": { "amount": 120, "unit": "g" },
+        "idempotency_key": "diary-deleted-key"
+    });
+    let created: Value =
+        post_json(&router, "/api/logs", &user, &payload, StatusCode::CREATED).await;
+    let log_id = created["id"].as_str().unwrap().to_string();
+
+    delete_no_content(&router, &format!("/api/logs/{log_id}"), &user).await;
+    let (status, _) = get_status(&router, &format!("/api/logs/{log_id}"), &user).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Deleting the log also deletes its key. A delayed retry can therefore
+    // create a fresh log, but it must not resurrect the deleted one.
+    let recreated: Value =
+        post_json(&router, "/api/logs", &user, &payload, StatusCode::CREATED).await;
+    let recreated_id = recreated["id"].as_str().unwrap();
+    assert_ne!(recreated_id, log_id.as_str());
+
+    let listed = logs_on(&router, &user, "2026-06-04").await;
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0]["id"], recreated_id);
+}
+
+#[sqlx::test]
+async fn idempotency_keys_are_scoped_per_profile(pool: PgPool) {
+    let router = app(pool).await;
+    let (admin, user) = bootstrap_and_user(&router).await;
+    let other_user = create_user_session(&router, &admin, "other", "otherpassword").await;
+    let product_id = seed_product(&router, &user).await;
+    let other_product_id = seed_product(&router, &other_user).await;
+
+    let first_payload = json!({
+        "log_date": "2026-06-05",
+        "meal_slot": "dinner",
+        "item": { "type": "product", "id": product_id },
+        "quantity": { "amount": 130, "unit": "g" },
+        "notes": "same key",
+        "idempotency_key": "shared-profile-key"
+    });
+    let other_payload = json!({
+        "log_date": "2026-06-05",
+        "meal_slot": "dinner",
+        "item": { "type": "product", "id": other_product_id },
+        "quantity": { "amount": 130, "unit": "g" },
+        "notes": "same key",
+        "idempotency_key": "shared-profile-key"
+    });
+
+    let first: Value = post_json(
+        &router,
+        "/api/logs",
+        &user,
+        &first_payload,
+        StatusCode::CREATED,
+    )
+    .await;
+    let other: Value = post_json(
+        &router,
+        "/api/logs",
+        &other_user,
+        &other_payload,
+        StatusCode::CREATED,
+    )
+    .await;
+    let first_id = first["id"].as_str().unwrap().to_string();
+    let other_id = other["id"].as_str().unwrap().to_string();
+    assert_ne!(first_id, other_id);
+
+    let first_replay: Value =
+        post_json(&router, "/api/logs", &user, &first_payload, StatusCode::OK).await;
+    let other_replay: Value = post_json(
+        &router,
+        "/api/logs",
+        &other_user,
+        &other_payload,
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(first_replay["id"], first_id);
+    assert_eq!(other_replay["id"], other_id);
+}
+
+#[sqlx::test]
+async fn concurrent_keyed_creates_yield_one_log(pool: PgPool) {
+    const REQUESTS: usize = 6;
+
+    let router = app(pool).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+    let product_id = seed_product(&router, &user).await;
+    let payload = json!({
+        "log_date": "2026-06-06",
+        "meal_slot": "snack",
+        "item": { "type": "product", "id": product_id },
+        "quantity": { "amount": 90, "unit": "g" },
+        "idempotency_key": "diary-concurrent-key"
+    });
+
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(REQUESTS));
+    let mut tasks = tokio::task::JoinSet::new();
+    for _ in 0..REQUESTS {
+        let router = router.clone();
+        let user = user.clone();
+        let payload = payload.clone();
+        let barrier = barrier.clone();
+        tasks.spawn(async move {
+            barrier.wait().await;
+            let request = json_request(Method::POST, "/api/logs", Some(&user), &payload);
+            let (status, _headers, bytes) = send(&router, request).await;
+            (status, parse_json::<Value>(&bytes))
+        });
+    }
+
+    let mut created = 0;
+    let mut replayed = 0;
+    let mut ids = HashSet::new();
+    while let Some(result) = tasks.join_next().await {
+        let (status, body) = result.expect("concurrent request task panicked");
+        match status {
+            StatusCode::CREATED => created += 1,
+            StatusCode::OK => replayed += 1,
+            unexpected => panic!("unexpected status {unexpected}: {body}"),
+        }
+        ids.insert(body["id"].as_str().unwrap().to_string());
+    }
+
+    assert_eq!(created, 1);
+    assert_eq!(replayed, REQUESTS - 1);
+    assert_eq!(ids.len(), 1);
+
+    let log_id = ids.into_iter().next().unwrap();
+    let listed = logs_on(&router, &user, "2026-06-06").await;
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0]["id"], log_id);
+
+    // A different payload racing for the same new key must not be mistaken
+    // for a replay of whichever request wins the insert.
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+    let mut contenders = tokio::task::JoinSet::new();
+    for amount in [90, 91] {
+        let router = router.clone();
+        let user = user.clone();
+        let barrier = barrier.clone();
+        let mut payload = payload.clone();
+        payload["idempotency_key"] = json!("diary-concurrent-conflict");
+        payload["quantity"]["amount"] = json!(amount);
+        contenders.spawn(async move {
+            barrier.wait().await;
+            let request = json_request(Method::POST, "/api/logs", Some(&user), &payload);
+            let (status, _headers, bytes) = send(&router, request).await;
+            (status, parse_json::<Value>(&bytes))
+        });
+    }
+    let mut statuses = Vec::new();
+    while let Some(result) = contenders.join_next().await {
+        let (status, body) = result.expect("concurrent request task panicked");
+        if status == StatusCode::CONFLICT {
+            assert_eq!(body["error"]["code"], "conflict");
+        }
+        statuses.push(status);
+    }
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::CREATED, StatusCode::CONFLICT]);
+    assert_eq!(logs_on(&router, &user, "2026-06-06").await.len(), 2);
+}
+
+#[sqlx::test]
+async fn batch_log_creation_rejects_item_idempotency_keys(pool: PgPool) {
+    let router = app(pool).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+    let product_id = seed_product(&router, &user).await;
+
+    let item = |meal_slot: &str, amount: i64| {
+        json!({
+            "log_date": "2026-06-07",
+            "meal_slot": meal_slot,
+            "item": { "type": "product", "id": product_id },
+            "quantity": { "amount": amount, "unit": "g" }
+        })
+    };
+    let breakfast_item = item("breakfast", 70);
+    let lunch_item = item("lunch", 80);
+    let mut keyed_item = lunch_item.clone();
+    keyed_item["idempotency_key"] = json!("batch-item-key");
+    let keyed_batch = json!({ "items": [breakfast_item.clone(), keyed_item] });
+
+    let _: Value = post_json(
+        &router,
+        "/api/logs/batch",
+        &user,
+        &keyed_batch,
+        StatusCode::BAD_REQUEST,
+    )
+    .await;
+    assert!(
+        logs_on(&router, &user, "2026-06-07").await.is_empty(),
+        "a rejected keyed batch must not partially create logs"
+    );
+
+    let mut null_key_item = lunch_item.clone();
+    null_key_item["idempotency_key"] = Value::Null;
+    let _: Value = post_json(
+        &router,
+        "/api/logs/batch",
+        &user,
+        &json!({ "items": [null_key_item] }),
+        StatusCode::BAD_REQUEST,
+    )
+    .await;
+
+    let batch = json!({ "items": [breakfast_item, lunch_item] });
+    let created: Value = post_json(
+        &router,
+        "/api/logs/batch",
+        &user,
+        &batch,
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_eq!(created["items"].as_array().unwrap().len(), 2);
+    assert_eq!(logs_on(&router, &user, "2026-06-07").await.len(), 2);
 }

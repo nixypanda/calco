@@ -54,11 +54,24 @@ pub struct CreateLogRequest {
     pub item: ItemRefDto,
     pub quantity: QuantityDto,
     pub notes: Option<String>,
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct CreateLogsBatchRequest {
-    pub items: Vec<CreateLogRequest>,
+    pub items: Vec<CreateLogsBatchItemRequest>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateLogsBatchItemRequest {
+    pub log_date: String,
+    pub meal_slot: Option<String>,
+    pub device_timezone: Option<String>,
+    pub item: ItemRefDto,
+    pub quantity: QuantityDto,
+    pub notes: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_value")]
+    pub idempotency_key: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -141,15 +154,22 @@ async fn create_log_handler(
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
 
-    let input = match food_log_create_request_to_input(req) {
+    let (input, idempotency_key) = match food_log_create_request_to_input(req) {
         Ok(input) => input,
         Err(err) => return err.into_response(),
     };
 
-    match services.log_item(auth.0.id, input).await {
-        Ok(log) => {
-            let resp = food_log_to_response(&log);
-            (StatusCode::CREATED, Json(resp)).into_response()
+    match services
+        .log_item_idempotent(auth.0.id, input, idempotency_key)
+        .await
+    {
+        Ok(created) => {
+            let status = if created.replayed {
+                StatusCode::OK
+            } else {
+                StatusCode::CREATED
+            };
+            (status, Json(food_log_to_response(&created.log))).into_response()
         }
         Err(e) => e.into_response(),
     }
@@ -195,7 +215,7 @@ async fn create_logs_batch_handler(
     let inputs = match req
         .items
         .into_iter()
-        .map(food_log_create_request_to_input)
+        .map(batch_item_request_to_input)
         .collect::<Result<Vec<_>, _>>()
     {
         Ok(inputs) => inputs,
@@ -464,14 +484,54 @@ where
     Value::deserialize(deserializer).map(Some)
 }
 
-fn food_log_create_request_to_input(req: CreateLogRequest) -> Result<LogFoodInput, JournalError> {
+fn food_log_create_request_to_input(
+    req: CreateLogRequest,
+) -> Result<(LogFoodInput, Option<IdempotencyKey>), JournalError> {
+    let idempotency_key = req.idempotency_key.map(IdempotencyKey::new).transpose()?;
+    let input = create_log_input(
+        req.log_date,
+        req.meal_slot,
+        req.device_timezone,
+        req.item,
+        req.quantity,
+        req.notes,
+    )?;
+    Ok((input, idempotency_key))
+}
+
+fn batch_item_request_to_input(
+    req: CreateLogsBatchItemRequest,
+) -> Result<LogFoodInput, JournalError> {
+    if req.idempotency_key.is_some() {
+        return Err(JournalError::Validation(
+            "idempotency_key is not supported for batch log creation".into(),
+        ));
+    }
+    create_log_input(
+        req.log_date,
+        req.meal_slot,
+        req.device_timezone,
+        req.item,
+        req.quantity,
+        req.notes,
+    )
+}
+
+fn create_log_input(
+    log_date: String,
+    meal_slot: Option<String>,
+    device_timezone: Option<String>,
+    item: ItemRefDto,
+    quantity: QuantityDto,
+    notes: Option<String>,
+) -> Result<LogFoodInput, JournalError> {
     Ok(LogFoodInput {
-        log_date: parse_log_date(&req.log_date)?,
-        meal_slot: req.meal_slot.as_deref().map(parse_meal_slot).transpose()?,
-        device_timezone: normalize_device_timezone(req.device_timezone)?,
-        item: parse_food_log_item_ref(&req.item)?,
-        quantity: parse_quantity(&req.quantity)?,
-        notes: req.notes,
+        log_date: parse_log_date(&log_date)?,
+        meal_slot: meal_slot.as_deref().map(parse_meal_slot).transpose()?,
+        device_timezone: normalize_device_timezone(device_timezone)?,
+        item: parse_food_log_item_ref(&item)?,
+        quantity: parse_quantity(&quantity)?,
+        notes,
     })
 }
 
