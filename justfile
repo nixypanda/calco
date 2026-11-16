@@ -15,7 +15,9 @@ shell:
     nix develop
 
 # Start the database, backend, and frontend development servers.
-dev: db-up db-wait
+dev:
+    (just db-up) &
+    db-wait
     @echo "Starting backend and frontend..."
     (just dev-backend) &
     (just dev-frontend) &
@@ -38,7 +40,7 @@ coverage: coverage-backend coverage-frontend
 
 # Start PostgreSQL.
 db-up:
-    docker compose up -d
+    docker compose up
 
 # Stop PostgreSQL.
 db-down:
