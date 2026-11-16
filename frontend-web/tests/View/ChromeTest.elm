@@ -522,7 +522,15 @@ expectActiveTab route expected =
         nav =
             bottomNavFor route
     in
-    activeDestination nav expected
+    Expect.all
+        [ \_ -> activeDestination nav expected
+        , \_ -> navButton expected nav |> Query.has [ bottomNavFocusId ]
+        , \_ ->
+            nav
+                |> Query.findAll [ bottomNavFocusId ]
+                |> Query.count (Expect.equal 1)
+        ]
+        ()
 
 
 expectActiveDrawerItem : Route -> TranslationId -> Expect.Expectation
@@ -745,6 +753,11 @@ menuTriggerSelector =
 ariaCurrentPage : Selector
 ariaCurrentPage =
     Selector.attribute (Attr.attribute "aria-current" "page")
+
+
+bottomNavFocusId : Selector
+bottomNavFocusId =
+    Selector.attribute (Attr.attribute "id" "app-bottom-nav-current")
 
 
 ariaPressed : Bool -> Selector

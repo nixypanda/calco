@@ -429,11 +429,25 @@ drawerFocusTarget previous next =
 drawerFocusCmd : Chrome.Model -> Chrome.Model -> Cmd Msg
 drawerFocusCmd previous next =
     case drawerFocusTarget previous next of
+        Just "app-menu-trigger" ->
+            focusDrawerTrigger
+
         Just id ->
             focusElement id
 
         Nothing ->
             Cmd.none
+
+
+{-| Phone layouts replace the drawer trigger with the bottom navigation. If a
+layout change closes the drawer there, focus the current destination instead of
+dropping it on the document body.
+-}
+focusDrawerTrigger : Cmd Msg
+focusDrawerTrigger =
+    Browser.Dom.focus "app-menu-trigger"
+        |> Task.onError (\_ -> Browser.Dom.focus "app-bottom-nav-current")
+        |> Task.attempt (\_ -> FocusCompleted)
 
 
 focusElement : String -> Cmd Msg

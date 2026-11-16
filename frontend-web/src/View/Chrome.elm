@@ -654,7 +654,9 @@ bottomNavTab theme config =
          , UiCommon.dataAttribute "data-nav-target" config.navTarget
          ]
             ++ (if config.active then
-                    [ Element.htmlAttribute (Html.Attributes.attribute "aria-current" "page") ]
+                    [ Element.htmlAttribute (Html.Attributes.id "app-bottom-nav-current")
+                    , Element.htmlAttribute (Html.Attributes.attribute "aria-current" "page")
+                    ]
 
                 else
                     []
