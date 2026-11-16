@@ -28,6 +28,7 @@ module Page exposing
     , modalView
     , paneKeys
     , panePlanForRoute
+    , paneSubscriptions
     , photoPreviewUrls
     , reconcile
     , update
@@ -299,6 +300,30 @@ dismissPaneTransient pane =
 
         _ ->
             pane
+
+
+{-| Subscriptions owned by the mounted panes. Only an open settings language
+menu subscribes to scroll and resize so it can be re-measured; every other route
+returns `Sub.none`.
+-}
+paneSubscriptions : Model -> Sub Msg
+paneSubscriptions model =
+    model.panes
+        |> List.filterMap paneSubscriptionsFor
+        |> Sub.batch
+
+
+paneSubscriptionsFor : Pane -> Maybe (Sub Msg)
+paneSubscriptionsFor pane =
+    case pane of
+        SettingsLandingPane settings ->
+            Just
+                (Sub.map GotSettingsLandingMsg
+                    (SettingsLanding.subscriptions settings)
+                )
+
+        _ ->
+            Nothing
 
 
 paneKeys : Model -> List String

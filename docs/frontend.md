@@ -653,7 +653,9 @@ were removed; their actions now live here:
   an outside click, or a second trigger press closes it, arrow/Home/End keys move
   the active option, Enter/Space chooses it, and focus returns to the trigger
   after a choice. The menu opens below the trigger, or above it when the trigger
-  is too close to the Phone bottom nav, so the options stay uncovered.
+  is too close to the Phone bottom nav, so the options stay uncovered. Placement
+  uses viewport coordinates and is re-measured on resize and scroll while the
+  menu is open.
 - **Account** provides the logout action.
 
 The normal-user top bar therefore has no theme switch, language control, or

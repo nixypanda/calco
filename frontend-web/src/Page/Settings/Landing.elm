@@ -5,15 +5,18 @@ module Page.Settings.Landing exposing
     , dismissTransient
     , init
     , menuPlacementFor
+    , subscriptions
     , update
     , view
     )
 
 import Browser.Dom
+import Browser.Events
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import I18n
 import Task
+import Time
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
 import Ui.Button as Button
@@ -67,6 +70,7 @@ type Msg
     | LanguageActiveChanged (Maybe Language)
     | LanguageClicked Language
     | LanguageFocusCompleted
+    | LanguageMenuGeometryChanged
     | LanguageMenuMeasured UiInput.SelectMenuPlacement
     | LogoutClicked
 
@@ -112,13 +116,22 @@ update msg model =
 
         LanguageClicked language ->
             ( dismissTransient model
-            , Browser.Dom.focus (UiInput.selectDropdownTriggerId languageDropdownId)
-                |> Task.attempt (\_ -> LanguageFocusCompleted)
+            , focusLanguageTrigger
             , SetLanguage language
             )
 
         LanguageFocusCompleted ->
             ( model, Cmd.none, NoOp )
+
+        LanguageMenuGeometryChanged ->
+            ( model
+            , if model.languageOpen then
+                measureLanguageMenu
+
+              else
+                Cmd.none
+            , NoOp
+            )
 
         LanguageMenuMeasured placement ->
             ( { model | languageMenuPlacement = placement }, Cmd.none, NoOp )
@@ -140,28 +153,57 @@ bottomChromeClearance =
     56
 
 
-{-| Pure placement decision from the open trigger's viewport geometry, so the
-phone bottom-nav clearance is testable without a browser.
+{-| Pure placement decision from the open trigger's document geometry and the
+current scroll offset. `Browser.Dom.getElement` reports document-relative
+coordinates, so the trigger's top must be converted into viewport space before
+it is compared with the viewport height.
+
+Opening below is preferred whenever that keeps the menu clear of the Phone
+bottom nav. If only opening above can show the whole menu, use above. When
+neither side can show it, use the side with more room so as much as possible
+stays visible.
+
 -}
 menuPlacementFor :
-    { viewportHeight : Float, triggerTop : Float, triggerHeight : Float }
+    { viewportHeight : Float
+    , viewportScrollY : Float
+    , triggerTop : Float
+    , triggerHeight : Float
+    }
     -> UiInput.SelectMenuPlacement
 menuPlacementFor bounds =
     let
+        triggerTop : Float
+        triggerTop =
+            max 0 (bounds.triggerTop - bounds.viewportScrollY)
+
         spaceAbove : Float
         spaceAbove =
-            bounds.triggerTop
+            triggerTop
 
         spaceBelow : Float
         spaceBelow =
-            bounds.viewportHeight - (bounds.triggerTop + bounds.triggerHeight)
+            max 0 (bounds.viewportHeight - (triggerTop + bounds.triggerHeight))
+
+        menuHeight : Float
+        menuHeight =
+            toFloat languageMenuEstimatedHeight
+
+        clearsBottomNav : Bool
+        clearsBottomNav =
+            spaceBelow >= menuHeight + toFloat bottomChromeClearance
+
+        fitsAbove : Bool
+        fitsAbove =
+            spaceAbove >= menuHeight
     in
-    if
-        spaceBelow
-            < toFloat (languageMenuEstimatedHeight + bottomChromeClearance)
-            && spaceAbove
-            > spaceBelow
-    then
+    if clearsBottomNav then
+        UiInput.MenuBelow
+
+    else if fitsAbove then
+        UiInput.MenuAbove
+
+    else if spaceAbove > spaceBelow then
         UiInput.MenuAbove
 
     else
@@ -174,6 +216,7 @@ measureLanguageMenu =
         (\viewport trigger ->
             menuPlacementFor
                 { viewportHeight = viewport.viewport.height
+                , viewportScrollY = viewport.viewport.y
                 , triggerTop = trigger.element.y
                 , triggerHeight = trigger.element.height
                 }
@@ -181,6 +224,29 @@ measureLanguageMenu =
         Browser.Dom.getViewport
         (Browser.Dom.getElement (UiInput.selectDropdownTriggerId languageDropdownId))
         |> Task.attempt (Result.withDefault UiInput.MenuBelow >> LanguageMenuMeasured)
+
+
+focusLanguageTrigger : Cmd Msg
+focusLanguageTrigger =
+    Browser.Dom.focus (UiInput.selectDropdownTriggerId languageDropdownId)
+        |> Task.attempt (\_ -> LanguageFocusCompleted)
+
+
+{-| Re-measure the open menu when the viewport resizes and while it may be
+scrolling. Elm's `Browser.Events` has no scroll subscription, and a global
+scroll port would run for every route; a short-lived timer is scoped to the
+open menu instead.
+-}
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    if model.languageOpen then
+        Sub.batch
+            [ Browser.Events.onResize (\_ _ -> LanguageMenuGeometryChanged)
+            , Time.every 200 (\_ -> LanguageMenuGeometryChanged)
+            ]
+
+    else
+        Sub.none
 
 
 

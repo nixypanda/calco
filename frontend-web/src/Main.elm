@@ -967,7 +967,7 @@ isBootstrapped bootstrap =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
+subscriptions model =
     Sub.batch
         [ localCtxReceived GotLocalCtx
         , barcodeScannerEvent GotBarcodeScannerEvent
@@ -975,6 +975,7 @@ subscriptions _ =
         , Browser.Events.onResize WindowResized
         , Browser.Events.onKeyDown (Decode.map KeyPressed (Decode.field "key" Decode.string))
         , Sub.map GotVersionMsg Version.subscriptions
+        , Sub.map GotPageMsg (Page.paneSubscriptions model.page)
         ]
 
 

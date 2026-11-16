@@ -3,19 +3,20 @@ module Page.Settings.LandingTest exposing (tests)
 {-| Settings landing route: the preference and account controls cross
 `Page.update` into app effects, the language menu opens, closes, changes
 language, exposes listbox ARIA state for pointer and keyboard users, and picks
-above/below placement from phone viewport geometry.
+above/below placement from the trigger's viewport geometry.
 -}
 
 import Data.Route exposing (Route(..))
 import Element
 import Expect
+import Fuzz
 import Html.Attributes as Attr
 import I18n
 import Json.Encode as Encode
 import Page
 import Page.Settings.Landing as SettingsLanding
 import Support.Fixtures as Fixtures
-import Test exposing (Test, describe, test)
+import Test exposing (Test, describe, fuzz2, fuzz3, test)
 import Test.Html.Event as Event
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector exposing (Selector)
@@ -282,14 +283,14 @@ tests =
                     , \_ ->
                         movedView
                             |> Query.find
-                                [ languageOption (I18n.languageName HI_IN)
-                                , activeOption
+                                [ Selector.id
+                                    (UiInput.selectOptionId "settings-language" 1)
                                 ]
                             |> Query.has [ selectedChoice False ]
                     , \_ ->
                         movedView
                             |> Query.find [ languageOption (I18n.languageName EN_US) ]
-                            |> Query.hasNot [ activeOption ]
+                            |> Query.has [ selectedChoice True ]
                     , \_ -> escaped.failure |> Expect.equal Nothing
                     , \_ -> escaped.outMsg |> Expect.equal Page.NoOutMsg
                     , \_ ->
@@ -371,32 +372,56 @@ tests =
                                 ]
                     ]
                     ()
-        , test "the phone language menu opens upward only when the bottom edge is too close" <|
+        , fuzz2 (Fuzz.intRange 320 1400)
+            (Fuzz.intRange 400 5000)
+            "scrolling the document does not change which side the menu opens on"
+          <|
+            \viewportHeight scrollY ->
+                let
+                    triggerTopInViewport : Float
+                    triggerTopInViewport =
+                        120
+
+                    placementFor : Float -> Float -> UiInput.SelectMenuPlacement
+                    placementFor scrollOffset triggerTop =
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = toFloat viewportHeight
+                            , viewportScrollY = scrollOffset
+                            , triggerTop = triggerTop
+                            , triggerHeight = 44
+                            }
+
+                    scrollTop : Float
+                    scrollTop =
+                        toFloat scrollY
+                in
+                placementFor 0 triggerTopInViewport
+                    |> Expect.equal
+                        (placementFor scrollTop (triggerTopInViewport + scrollTop))
+        , fuzz3
+            (Fuzz.intRange 100 800)
+            (Fuzz.intRange 0 155)
+            (Fuzz.intRange 24 80)
+            "a menu that cannot clear the bottom nav opens above when it fits"
+          <|
+            \spaceAbove spaceBelow triggerHeight ->
+                SettingsLanding.menuPlacementFor
+                    { viewportHeight =
+                        toFloat (spaceAbove + spaceBelow + triggerHeight)
+                    , viewportScrollY = 0
+                    , triggerTop = toFloat spaceAbove
+                    , triggerHeight = toFloat triggerHeight
+                    }
+                    |> Expect.equal UiInput.MenuAbove
+        , test "a trigger just inside a scrolled phone viewport keeps the menu downward" <|
             \_ ->
-                Expect.all
-                    [ \_ ->
-                        SettingsLanding.menuPlacementFor
-                            { viewportHeight = 600
-                            , triggerTop = 480
-                            , triggerHeight = 44
-                            }
-                            |> Expect.equal UiInput.MenuAbove
-                    , \_ ->
-                        SettingsLanding.menuPlacementFor
-                            { viewportHeight = 600
-                            , triggerTop = 200
-                            , triggerHeight = 44
-                            }
-                            |> Expect.equal UiInput.MenuBelow
-                    , \_ ->
-                        SettingsLanding.menuPlacementFor
-                            { viewportHeight = 300
-                            , triggerTop = 120
-                            , triggerHeight = 44
-                            }
-                            |> Expect.equal UiInput.MenuBelow
-                    ]
-                    ()
+                SettingsLanding.menuPlacementFor
+                    { viewportHeight = 300
+                    , viewportScrollY = 514
+                    , triggerTop = 534
+                    , triggerHeight = 44
+                    }
+                    |> Expect.equal UiInput.MenuBelow
         ]
 
 
@@ -546,11 +571,6 @@ selectedChoice selected =
 activeDescendant : String -> Selector
 activeDescendant id =
     Selector.attribute (Attr.attribute "aria-activedescendant" id)
-
-
-activeOption : Selector
-activeOption =
-    Selector.class "ui-option-active"
 
 
 pressedChoice : Bool -> Selector
