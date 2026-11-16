@@ -172,15 +172,15 @@ languageOptions env =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space4
         ]
-        [ languageOption env EN_US "English"
-        , languageOption env HI_IN "हिन्दी"
+        [ languageOption env EN_US
+        , languageOption env HI_IN
         ]
 
 
-languageOption : Env -> Language -> String -> Element Msg
-languageOption env language label =
+languageOption : Env -> Language -> Element Msg
+languageOption env language =
     UiInput.optionRowWithState env.theme
-        { label = label
+        { label = I18n.languageName language
         , selected = env.language == language
         , onPress = LanguageClicked language
         , disabled = False
@@ -201,7 +201,7 @@ accountSection env =
                 (I18n.t env.language TidSettingsAccountDescription)
             , Button.textButton env.device
                 env.theme
-                { tone = Button.Danger
+                { tone = Button.DangerOutline
                 , width = Button.FullWidth
                 , label = I18n.t env.language TidNavLogout
                 , onPress = LogoutClicked

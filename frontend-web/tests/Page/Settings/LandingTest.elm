@@ -61,6 +61,29 @@ tests =
                 html
                     |> Query.find [ themeToggleButton ]
                     |> Query.has [ Selector.attribute (Attr.attribute "aria-pressed" "true") ]
+        , test "the selected language is exposed as a pressed choice" <|
+            \_ ->
+                let
+                    html : Query.Single Landing.Msg
+                    html =
+                        pageView env
+                in
+                Expect.all
+                    [ \_ ->
+                        html
+                            |> Query.find [ buttonContaining "English" ]
+                            |> Query.has [ pressedChoice True ]
+                    , \_ ->
+                        html
+                            |> Query.find [ buttonContaining "हिन्दी" ]
+                            |> Query.has [ pressedChoice False ]
+                    ]
+                    ()
+        , test "the API keys row chevron sits inside its press target" <|
+            \_ ->
+                pageView env
+                    |> Query.find [ buttonContaining (I18n.t EN_US TidTitleApiKeys) ]
+                    |> Query.has [ Selector.tag "svg" ]
         , test "the API keys entry navigates to API key management" <|
             \_ ->
                 Story.start ( Landing.init, Landing.NoOp )
@@ -110,6 +133,19 @@ buttonContaining label =
         [ Selector.attribute (Attr.attribute "role" "button")
         , Selector.containing [ Selector.text label ]
         ]
+
+
+pressedChoice : Bool -> Selector
+pressedChoice selected =
+    Selector.attribute
+        (Attr.attribute "aria-pressed"
+            (if selected then
+                "true"
+
+             else
+                "false"
+            )
+        )
 
 
 outMsgAfterClick : Query.Single Landing.Msg -> Selector -> Landing.OutMsg

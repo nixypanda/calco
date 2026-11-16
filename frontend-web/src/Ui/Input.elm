@@ -435,7 +435,7 @@ optionRowView theme config =
                 theme.textMuted
 
             else if config.selected then
-                theme.solidControlFg
+                theme.chipSelectedFg
 
             else
                 theme.textPrimary
@@ -444,9 +444,12 @@ optionRowView theme config =
         ([ Element.width Element.fill
          , Element.paddingXY space12 10
          , Border.rounded radiusControl
+
+         -- The chip selection palette keeps the selected foreground at 4.5:1
+         -- or better in both themes; white on the solid brand fill does not.
          , Background.color
             (if config.selected then
-                theme.brandBlue
+                theme.chipSelectedBg
 
              else
                 theme.cardBg

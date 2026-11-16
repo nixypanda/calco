@@ -363,7 +363,7 @@ tests =
                             |> Query.hasNot [ Selector.text (I18n.en TidNavDiary) ]
                     ]
                     ()
-        , test "normal app chrome has no topbar theme switch or profile button" <|
+        , test "normal app chrome has no topbar theme, language, or profile controls" <|
             \_ ->
                 let
                     topbar : Query.Single ()
@@ -372,19 +372,43 @@ tests =
                 in
                 Expect.all
                     [ \_ -> topbar |> Query.hasNot [ themeSwitchSelector ]
+                    , \_ -> topbar |> Query.hasNot [ languageToggleSelector EN_US HI_IN ]
                     , \_ -> topbar |> Query.hasNot [ profileButtonSelector ]
                     ]
                     ()
-        , test "signed-out auth keeps an accessible topbar theme switch" <|
+        , test "signed-out login and setup offer theme and language controls but no profile" <|
             \_ ->
-                let
-                    topbar : Query.Single ()
-                    topbar =
-                        topbarFor anonymous AuthLogin
-                in
                 Expect.all
-                    [ \_ -> topbar |> Query.has [ themeSwitchSelector ]
-                    , \_ -> topbar |> Query.hasNot [ profileButtonSelector ]
+                    [ \_ -> topbarFor anonymous AuthLogin |> Query.has [ themeSwitchSelector ]
+                    , \_ -> topbarFor anonymous BootstrapSetup |> Query.has [ themeSwitchSelector ]
+                    , \_ ->
+                        topbarFor anonymous AuthLogin
+                            |> Query.has [ languageToggleSelector EN_US HI_IN ]
+                    , \_ ->
+                        topbarFor anonymous BootstrapSetup
+                            |> Query.has [ languageToggleSelector EN_US HI_IN ]
+                    , \_ ->
+                        topbarFor anonymous AuthLogin
+                            |> Query.hasNot [ profileButtonSelector ]
+                    ]
+                    ()
+        , test "signed-out language control switches to the other language" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        topbarMessages (envForLanguage EN_US)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ languageToggleSelector EN_US HI_IN ]
+                            |> Event.simulate Event.click
+                            |> Event.expect (ChromeState.LanguageClicked HI_IN)
+                    , \_ ->
+                        topbarMessages (envForLanguage HI_IN)
+                            anonymous
+                            BootstrapSetup
+                            |> Query.find [ languageToggleSelector HI_IN EN_US ]
+                            |> Event.simulate Event.click
+                            |> Event.expect (ChromeState.LanguageClicked EN_US)
                     ]
                     ()
         , test "admins keep the theme switch and profile control" <|
@@ -397,18 +421,21 @@ tests =
                 Expect.all
                     [ \_ -> topbar |> Query.has [ themeSwitchSelector ]
                     , \_ -> topbar |> Query.has [ profileButtonSelector ]
+                    , \_ ->
+                        topbar
+                            |> Query.hasNot [ languageToggleSelector EN_US HI_IN ]
                     ]
                     ()
-        , test "the admin profile menu only offers account-level actions" <|
+        , test "the admin profile menu offers accessible language choices and logout" <|
             \_ ->
                 let
-                    menu : Query.Single ()
+                    menu : Query.Single Language
                     menu =
                         Chrome.profileMenu
-                            (envFor { class = Element.Phone, orientation = Element.Portrait })
+                            (envForLanguage EN_US)
                             admin
-                            ()
-                            (always ())
+                            EN_US
+                            identity
                             |> Element.layout []
                             |> Query.fromHtml
                 in
@@ -417,8 +444,21 @@ tests =
                         menu
                             |> Query.has
                                 [ Selector.text (I18n.en (TidCommonSignedInAs "admin")) ]
-                    , \_ -> menu |> Query.has [ Selector.text "English" ]
-                    , \_ -> menu |> Query.has [ Selector.text "हिन्दी" ]
+                    , \_ ->
+                        menu
+                            |> Query.find [ buttonContaining "English" ]
+                            |> Query.has
+                                [ Selector.attribute (Attr.attribute "aria-pressed" "true") ]
+                    , \_ ->
+                        menu
+                            |> Query.find [ buttonContaining "हिन्दी" ]
+                            |> Query.has
+                                [ Selector.attribute (Attr.attribute "aria-pressed" "false") ]
+                    , \_ ->
+                        menu
+                            |> Query.find [ buttonContaining "हिन्दी" ]
+                            |> Event.simulate Event.click
+                            |> Event.expect HI_IN
                     , \_ ->
                         menu
                             |> Query.has [ Selector.exactText (I18n.en TidNavLogout) ]
@@ -570,6 +610,7 @@ topbarForWith options session route =
         ()
         ()
         (\_ -> ())
+        (\_ -> ())
         { profileLabel = "U", profileMenu = Nothing }
         |> Element.layout []
         |> Query.fromHtml
@@ -590,7 +631,26 @@ topbarRoutes options session route =
         (DiaryDay Nothing Nothing)
         (DiaryDay Nothing Nothing)
         (DiaryDay Nothing Nothing)
+        (always (DiaryDay Nothing Nothing))
         identity
+        { profileLabel = "U", profileMenu = Nothing }
+        |> Element.layout []
+        |> Query.fromHtml
+
+
+topbarMessages : Env -> Session -> Route -> Query.Single ChromeState.Msg
+topbarMessages currentEnv session route =
+    Chrome.topBarView
+        currentEnv
+        session
+        route
+        False
+        False
+        ChromeState.MenuClicked
+        ChromeState.ProfileClicked
+        ChromeState.ThemeToggleClicked
+        ChromeState.LanguageClicked
+        ChromeState.NavigateClicked
         { profileLabel = "U", profileMenu = Nothing }
         |> Element.layout []
         |> Query.fromHtml
@@ -599,6 +659,14 @@ topbarRoutes options session route =
 menuTrigger : Query.Single msg -> Query.Single msg
 menuTrigger root =
     Query.find [ menuTriggerSelector ] root
+
+
+buttonContaining : String -> Selector
+buttonContaining label =
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.containing [ Selector.text label ]
+        ]
 
 
 phoneDevice : Device
@@ -635,6 +703,20 @@ themeSwitchSelector =
         ]
 
 
+languageToggleSelector : Language -> Language -> Selector
+languageToggleSelector currentLanguage targetLanguage =
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.attribute
+            (Attr.attribute "aria-label"
+                (I18n.t currentLanguage TidSettingsLanguageTitle
+                    ++ ": "
+                    ++ I18n.languageName targetLanguage
+                )
+            )
+        ]
+
+
 profileButtonSelector : Selector
 profileButtonSelector =
     Selector.all
@@ -665,6 +747,16 @@ envFor device =
     , viewport = RegularViewport
     , language = EN_US
     }
+
+
+envForLanguage : Language -> Env
+envForLanguage language =
+    let
+        base : Env
+        base =
+            envFor phoneDevice
+    in
+    { base | language = language }
 
 
 user : Session

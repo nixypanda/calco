@@ -51,7 +51,7 @@ state (muted colors, no interaction).
 | `Primary` | brandBlue | white | none | Primary actions (Submit, Save, Create) |
 | `PrimaryOutline` | cardBg | brandBlue | 1px brandBlue | Secondary actions (Cancel, Choose photos) |
 | `Danger` | dangerSolid | white | none | Destructive actions (Delete, Confirm) |
-| `DangerOutline` | cardBg | dangerFg | 1px dangerFg | Destructive secondary (Remove photo) |
+| `DangerOutline` | cardBg | dangerFg | 1px dangerFg | Destructive secondary (Remove photo, Logout) |
 | `Ghost` | transparent | brandBlue (muted when disabled) | none | Text links ("+ Add Food", "+ Create Meal") |
 | `GhostFilled` | brandBlueSoft | brandBlue | none | Filled links ("Details", "Load earlier") |
 

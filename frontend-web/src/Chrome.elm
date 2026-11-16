@@ -204,6 +204,7 @@ viewFrame env model session route chromeSuppressed pageBusy updateBanner page to
             (toMsg MenuClicked)
             (toMsg ProfileClicked)
             (toMsg ThemeToggleClicked)
+            (toMsg << LanguageClicked)
             (toMsg << NavigateClicked)
             { profileLabel = profileLetter session, profileMenu = profileMenuEl }
             :: updateBannerItems

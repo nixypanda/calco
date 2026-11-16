@@ -553,7 +553,11 @@ owns the JavaScript ports for:
 
 Theme and language are loaded from `localStorage` through Elm flags and written
 back through the `persistThemeMode` and `persistLanguage` ports, so both
-preferences survive a reload.
+preferences survive a reload. Storage access is best-effort: reads and writes
+are guarded, and unavailable storage falls back to the light theme and
+`en_US` instead of blocking startup. Boot and language changes also set the
+document `lang` attribute to `en-US` or `hi-IN` so assistive technology and
+browser language features follow the selected locale.
 
 The scanner uses ZXing for EAN/UPC detection and stops camera tracks when the
 scan completes or is cancelled.
@@ -642,13 +646,15 @@ were removed; their actions now live here:
   language choice.
 - **Account** provides the logout action.
 
-The normal-user top bar therefore has no theme switch or profile button.
-Signed-out auth screens keep an accessible theme switch, and admins keep the
-top-bar switch plus their account menu because they cannot open the normal-user
-Settings page. The admin account menu offers language and logout only; it has no
-API keys entry. API key list and create screens group under the Settings
-destination; admins continue to see only the admin drawer because normal-user
-routes redirect them to the admin dashboard.
+The normal-user top bar therefore has no theme switch, language control, or
+profile button. Signed-out login and setup screens keep accessible theme and
+language controls, and admins keep the theme switch plus their account menu
+because they cannot open the normal-user Settings page. The admin account menu
+offers pressed-state language choices and logout only; it has no API keys entry.
+Selected language choices use the accessible chip-selection palette, and logout
+uses the outline danger tone. API key list and create screens group under the
+Settings destination; admins continue to see only the admin drawer because
+normal-user routes redirect them to the admin dashboard.
 
 ### API Keys
 

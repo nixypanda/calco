@@ -159,9 +159,12 @@ textButtonWithAttributes device theme extraAttrs config =
                     { bg = theme.cardBg
                     , fg = theme.dangerFg
                     , border = theme.dangerFg
-                    , hoverBg = theme.dangerBg
-                    , hoverFg = theme.dangerFg
-                    , hoverBorder = theme.dangerFg
+
+                    -- The light danger tint drops the hover label below 4.5:1;
+                    -- the pressed solid keeps the foreground accessible.
+                    , hoverBg = theme.dangerSolidPressed
+                    , hoverFg = theme.solidControlFg
+                    , hoverBorder = theme.dangerSolidPressed
                     }
 
                 Ghost ->

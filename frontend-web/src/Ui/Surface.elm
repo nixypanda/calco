@@ -349,6 +349,10 @@ formSection theme title content =
     section theme { header = Just (subsectionTitle theme title), body = content, footer = Nothing }
 
 
+{-| A selectable row. The trailing slot stays inside the same press target, so
+a decorative chevron or badge cannot create a dead click area. Use `staticRow`
+when the trailing slot contains its own interactive control.
+-}
 listRow :
     { onSelect : msg
     , leading : List (Element msg)
@@ -358,18 +362,21 @@ listRow :
     }
     -> Element msg
 listRow config =
-    Element.wrappedRow (listRowAttrs ++ [ testId "list-row" ])
-        [ Input.button
-            [ Element.width Element.fill, uiClass "ui-motion ui-pressable" ]
-            { onPress = Just config.onSelect
-            , label =
-                Element.row listRowLabelAttrs
+    Input.button
+        [ Element.width Element.fill
+        , testId "list-row"
+        , uiClass "ui-motion ui-pressable"
+        ]
+        { onPress = Just config.onSelect
+        , label =
+            Element.wrappedRow listRowAttrs
+                [ Element.row listRowLabelAttrs
                     [ listRowLeading config.leading
                     , listRowText config.title config.subtitle
                     ]
-            }
-        , listRowTrailing config.trailing
-        ]
+                , listRowTrailing config.trailing
+                ]
+        }
 
 
 {-| A non-selectable companion to `listRow` for rows whose own actions live in

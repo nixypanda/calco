@@ -11,8 +11,44 @@ if ("scrollRestoration" in window.history) {
     window.history.scrollRestoration = "manual";
 }
 
-const storedThemeMode = localStorage.getItem("themeMode") || "light";
-const storedLanguage = localStorage.getItem("language") || "en_US";
+const preferenceDefaults = {
+    themeMode: "light",
+    language: "en_US",
+};
+
+const documentLanguages = {
+    en_US: "en-US",
+    hi_IN: "hi-IN",
+};
+
+// Preferences are best-effort. Storage can be disabled by privacy settings,
+// throw SecurityError for an opaque origin, or reject writes when full, and
+// none of that may block app startup or a preference change.
+function readPreference(key) {
+    try {
+        return localStorage.getItem(key) || preferenceDefaults[key];
+    } catch (_) {
+        return preferenceDefaults[key];
+    }
+}
+
+function writePreference(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch (_) {
+        // The in-memory preference still applies for this page session.
+    }
+}
+
+function applyDocumentLanguage(language) {
+    document.documentElement.lang =
+        documentLanguages[language] || documentLanguages[preferenceDefaults.language];
+}
+
+const storedThemeMode = readPreference("themeMode");
+const storedLanguage = readPreference("language");
+applyDocumentLanguage(storedLanguage);
+
 const app = Elm.Main.init({
     node: document.getElementById("root"),
     flags: {
@@ -85,11 +121,12 @@ document.addEventListener("visibilitychange", () => {
 });
 
 app.ports.persistThemeMode.subscribe((mode) => {
-    localStorage.setItem("themeMode", mode);
+    writePreference("themeMode", mode);
 });
 
 app.ports.persistLanguage.subscribe((language) => {
-    localStorage.setItem("language", language);
+    applyDocumentLanguage(language);
+    writePreference("language", language);
 });
 
 app.ports.reloadPage.subscribe(() => {

@@ -79,16 +79,19 @@ Before starting each numbered section below:
 ### 1. Authentication and route protection
 
 1. Open `/login` and submit an invalid password. Verify the error is visible and no authenticated page is shown.
-2. Log in as `me`. Verify `/home` loads and the normal-user navigation is
+2. On `/login` (or `/setup` on a fresh install), switch the top-bar language
+   control between English and Hindi. Verify the visible copy and the document
+   `lang` attribute change, then leave the preferred language selected.
+3. Log in as `me`. Verify `/home` loads and the normal-user navigation is
    available: bottom tabs on Phone and a drawer from the top bar on larger
    screens. Verify the normal-user top bar has no profile menu; account actions
    live on Settings.
-3. Reload `/home` and verify the session survives.
-4. Open `/admin` as `me`. Verify the admin page is denied or the user is redirected.
-5. Open `/library` and `/settings` as `me`. Verify both load, then log out from
+4. Reload `/home` and verify the session survives.
+5. Open `/admin` as `me`. Verify the admin page is denied or the user is redirected.
+6. Open `/library` and `/settings` as `me`. Verify both load, then log out from
    Settings > Account.
-6. Verify `/home`, `/library`, and `/settings` return to `/login`.
-7. Log in as `admin`. Verify `/admin` loads. Verify `/settings` and `/library`
+7. Verify `/home`, `/library`, and `/settings` return to `/login`.
+8. Log in as `admin`. Verify `/admin` loads. Verify `/settings` and `/library`
    redirect to `/admin`, and the admin drawer offers only Admin.
 
 ### 2. Diary and date navigation

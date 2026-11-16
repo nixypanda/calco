@@ -107,10 +107,11 @@ topBarView :
     -> msg
     -> msg
     -> msg
+    -> (Language -> msg)
     -> (Route -> msg)
     -> { profileLabel : String, profileMenu : Maybe (Element msg) }
     -> Element msg
-topBarView env session route hidden menuOpen onMenu onProfile onTheme onNavigate profile =
+topBarView env session route hidden menuOpen onMenu onProfile onTheme onSetLang onNavigate profile =
     let
         chromeShown : Bool
         chromeShown =
@@ -129,6 +130,14 @@ topBarView env session route hidden menuOpen onMenu onProfile onTheme onNavigate
                     ]
                     (themeToggle env onTheme)
                 ]
+
+            else
+                []
+
+        languageControl : List (Element msg)
+        languageControl =
+            if offersLanguageSwitch session then
+                [ languageToggle env onSetLang ]
 
             else
                 []
@@ -167,6 +176,7 @@ topBarView env session route hidden menuOpen onMenu onProfile onTheme onNavigate
                 ]
             , Element.el [ Element.width Element.fill ] Element.none
             ]
+                ++ languageControl
                 ++ themeControl
         )
 
@@ -178,6 +188,14 @@ lives.
 offersThemeSwitch : Session -> Bool
 offersThemeSwitch session =
     not (Auth.isAuthenticated session) || Auth.isAdmin session
+
+
+{-| Login and setup are the only signed-out screens, and they have no account
+menu or Settings page to hold a language choice.
+-}
+offersLanguageSwitch : Session -> Bool
+offersLanguageSwitch session =
+    not (Auth.isAuthenticated session)
 
 
 boolString : Bool -> String
@@ -195,6 +213,49 @@ themeToggle env onToggle =
         { label = I18n.t env.language TidCommonUseDarkTheme
         , isActive = env.theme.mode == Theme.Dark
         , onToggle = onToggle
+        }
+
+
+{-| A compact auth-screen control that names the language it switches to. The
+neutral fill and primary text keep the control legible in both themes without
+reintroducing the normal-user profile menu.
+-}
+languageToggle : Env -> (Language -> msg) -> Element msg
+languageToggle env onSetLanguage =
+    let
+        target : Language
+        target =
+            case env.language of
+                EN_US ->
+                    HI_IN
+
+                HI_IN ->
+                    EN_US
+
+        targetName : String
+        targetName =
+            I18n.languageName target
+
+        description : String
+        description =
+            I18n.t env.language TidSettingsLanguageTitle ++ ": " ++ targetName
+    in
+    Input.button
+        [ Element.height (Element.px 44)
+        , Element.paddingXY DesignTokens.space12 0
+        , Border.rounded DesignTokens.radiusPill
+        , Border.width 1
+        , Border.color env.theme.divider
+        , Background.color env.theme.cardBg
+        , Font.color env.theme.textPrimary
+        , Font.medium
+        , Font.size 14
+        , Region.description description
+        , Element.htmlAttribute (Html.Attributes.title description)
+        , UiCommon.testId "language-toggle"
+        ]
+        { onPress = Just (onSetLanguage target)
+        , label = Element.text targetName
         }
 
 
@@ -861,41 +922,13 @@ profileMenuContent env session onLogout onSetLanguage =
             _ ->
                 I18n.t env.language TidCommonSignedIn
         )
-    , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Button.textButton env.device
-            env.theme
-            { tone =
-                if env.language == EN_US then
-                    Button.Primary
-
-                else
-                    Button.Ghost
-            , width = Button.FullWidth
-            , label = "English"
-            , onPress = onSetLanguage EN_US
-            , submitState = Nothing
-            , submittingLabel = Nothing
-            , trailing = Nothing
-            }
-        , Button.textButton env.device
-            env.theme
-            { tone =
-                if env.language == HI_IN then
-                    Button.Primary
-
-                else
-                    Button.Ghost
-            , width = Button.FullWidth
-            , label = "हिन्दी"
-            , onPress = onSetLanguage HI_IN
-            , submitState = Nothing
-            , submittingLabel = Nothing
-            , trailing = Nothing
-            }
+    , Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+        [ languageOption env onSetLanguage EN_US
+        , languageOption env onSetLanguage HI_IN
         ]
     , Button.textButton env.device
         env.theme
-        { tone = Button.Danger
+        { tone = Button.DangerOutline
         , width = Button.FullWidth
         , label = I18n.t env.language TidNavLogout
         , onPress = onLogout
@@ -904,3 +937,14 @@ profileMenuContent env session onLogout onSetLanguage =
         , trailing = Nothing
         }
     ]
+
+
+languageOption : Env -> (Language -> msg) -> Language -> Element msg
+languageOption env onSetLanguage language =
+    UiInput.optionRowWithState env.theme
+        { label = I18n.languageName language
+        , selected = env.language == language
+        , onPress = onSetLanguage language
+        , disabled = False
+        , trailing = Nothing
+        }

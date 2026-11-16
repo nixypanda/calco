@@ -1,4 +1,4 @@
-module I18n exposing (defaultLanguage, en, languageCode, t)
+module I18n exposing (defaultLanguage, en, languageCode, languageName, t)
 
 import Translations.Ids exposing (TranslationId)
 import Translations.Util exposing (Language(..), translate)
@@ -30,6 +30,19 @@ languageCode language =
 
         HI_IN ->
             "hi_IN"
+
+
+{-| Native name for a language choice. Both names stay in their own script so a
+reader can recognize the language they are switching to.
+-}
+languageName : Language -> String
+languageName language =
+    case language of
+        EN_US ->
+            "English"
+
+        HI_IN ->
+            "हिन्दी"
 
 
 {-| Escape hatch for strings produced outside the render path (for example,

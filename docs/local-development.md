@@ -206,11 +206,14 @@ Frontend copy is translated at compile time via
   `I18n.en` only for strings produced outside the render path, such as messages
   computed during `update`.
 
-The default language is `en_US`. The Settings page switches between English and
-Hindi, and the selected locale is persisted in `localStorage` as `en_US` or
-`hi_IN`; an unknown persisted value falls back to `en_US`. `generated/` is a
-second Elm source directory and is excluded from `elm-format` and `elm-review`;
-`src`/`tests` stay formatted normal Elm. Assistant output language is handled
+The default language is `en_US`. The Settings page and the signed-out auth
+chrome switch between English and Hindi, and the selected locale is persisted in
+`localStorage` as `en_US` or `hi_IN`; an unknown persisted value falls back to
+`en_US`. The document `lang` attribute follows the selected locale as `en-US` or
+`hi-IN`, and unavailable storage falls back to `en_US` without blocking boot.
+The `generated/` directory is a second Elm source directory and is excluded from
+`elm-format` and `elm-review`; `src`/`tests` stay formatted normal Elm.
+Assistant output language is handled
 separately in the backend system prompt
 (`backend/src/assistant/infra/food_draft/prompt.rs`), not by this pipeline.
 
