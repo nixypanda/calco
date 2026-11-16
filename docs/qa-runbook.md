@@ -79,11 +79,17 @@ Before starting each numbered section below:
 ### 1. Authentication and route protection
 
 1. Open `/login` and submit an invalid password. Verify the error is visible and no authenticated page is shown.
-2. Log in as `me`. Verify `/home` loads and the profile menu says the user is signed in as `me`.
+2. Log in as `me`. Verify `/home` loads and the normal-user navigation is
+   available: bottom tabs on Phone and a drawer from the top bar on larger
+   screens. Verify the normal-user top bar has no profile menu; account actions
+   live on Settings.
 3. Reload `/home` and verify the session survives.
 4. Open `/admin` as `me`. Verify the admin page is denied or the user is redirected.
-5. Log out. Verify protected routes return to `/login`.
-6. Log in as `admin`. Verify `/admin` loads.
+5. Open `/library` and `/settings` as `me`. Verify both load, then log out from
+   Settings > Account.
+6. Verify `/home`, `/library`, and `/settings` return to `/login`.
+7. Log in as `admin`. Verify `/admin` loads. Verify `/settings` and `/library`
+   redirect to `/admin`, and the admin drawer offers only Admin.
 
 ### 2. Diary and date navigation
 
@@ -182,7 +188,9 @@ Before starting each numbered section below:
 
 ### 10. Admin flows
 
-1. Log in as `admin` and verify the admin user list loads.
+1. Log in as `admin` and verify the admin user list loads. Verify the admin top
+   bar keeps the theme switch and profile menu, and that the menu offers
+   language and logout but no API keys entry.
 2. Open the existing `me` user and verify username, display name, status, creation time, reset-password form, and disable action are present.
 3. Open Create User and verify empty and partial submissions show required-field errors.
 4. For a full destructive regression, create the optional tagged user and verify it can log in.
@@ -195,7 +203,8 @@ There is currently no user-delete flow. A created admin QA user cannot be fully 
 
 1. Review the run notes and verify iPhone SE, iPad, and Desktop were each
    selected at least once by the randomized flow assignments.
-2. Repeat login, diary, search, food form, meal form, and confirmation-modal checks at any preset they did not already run against.
+2. Repeat login, diary, search, food form, meal form, library, settings, and
+   confirmation-modal checks at any preset they did not already run against.
 3. Run diary, search, food logging, and destructive confirmation dialogs at all three viewport presets before release sign-off.
 4. Verify controls do not overlap, text does not clip, modals remain reachable, and dropdowns remain usable.
 5. Verify changing to a new randomized viewport between flows does not leave navigation, menus, or overlays in a broken state.
@@ -227,9 +236,10 @@ Manual checks:
 
 1. In DevTools, set Network to "Slow 3G" and disable cache.
 2. Hard-reload `/home` (including a date-gated load), `/foods/custom/:id/edit`,
-   `/meals/:id/edit`, `/meals/:id`, `/foods/:id`, `/settings/api-keys` and
-   `/calendar` at 375x667, 768x1024 and 1440x900. Confirm the top bar stays
-   58px, the page/header/first row do not jump, and Tablet has no bottom nav.
+   `/meals/:id/edit`, `/meals/:id`, `/foods/:id`, `/library`, `/settings`,
+   `/settings/api-keys` and `/calendar` at 375x667, 768x1024 and 1440x900.
+   Confirm the top bar stays 58px, the page/header/first row do not jump, and
+   Tablet has no bottom nav.
 3. Confirm the Phone bottom-nav space stays reserved while a page fetch is
    pending, and the top bar does not switch identity during ordinary fetches.
 4. Toggle OS "Reduce motion" and reload. Confirm the skeleton is static and

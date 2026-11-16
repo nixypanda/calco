@@ -392,13 +392,21 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /admin/users/:id/edit
 /home
 /home?date=YYYY-MM-DD
+/calendar
+/calendar?month=YYYY-MM
+/details
+/details?date=YYYY-MM-DD
 /settings/goals
 /settings/goals?date=YYYY-MM-DD&calendar_month=YYYY-MM
 /settings/diary
-/settings/api-keys
-/settings/api-keys/new
 /library
 /settings
+/settings/api-keys
+/settings/api-keys/new
+/logs/new/ad-hoc
+/logs/new/ad-hoc?date=YYYY-MM-DD&meal_slot=:slot
+/logs/new/ai
+/logs/new/ai?date=YYYY-MM-DD&meal_slot=:slot
 /logs/:id
 /search
 /search?date=YYYY-MM-DD
@@ -408,6 +416,7 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /foods/:id?meal_slot=:slot
 /foods/custom
 /foods/custom/new
+/foods/custom/new/ai
 /foods/custom/:id
 /foods/custom/:id/edit
 /meals
@@ -417,6 +426,25 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /
 *
 ```
+
+### Navigation Destinations
+
+Phones use a bottom navigation and larger screens use a drawer, both with the
+same four normal-user destinations. The selected destination comes from
+`Data.Route.primaryRoute`, not from a URL prefix:
+
+| Destination | Routes that select it |
+| --- | --- |
+| Diary | `/home`, `/calendar`, `/details`, `/logs/:id`, `/settings/goals`, `/settings/diary` |
+| Search | `/search`, `/foods/:id`, `/logs/new/ad-hoc`, `/logs/new/ai` |
+| Library | `/library`, `/foods/custom` and its create/show/edit/AI routes, `/meals` and its create/show/edit routes |
+| Settings | `/settings`, `/settings/api-keys`, `/settings/api-keys/new` |
+
+Goals and diary preferences stay under Diary even though their paths start with
+`/settings`. The saved-food and saved-meal screens stay under Library, while the
+`/foods/:id` catalog detail and `/logs/new/...` entry routes stay under Search.
+Admin sessions see only the Admin drawer destination because normal-user routes
+redirect them to the admin dashboard.
 
 Rules:
 
@@ -605,14 +633,22 @@ landing page. The navigation shows Library for those food and meal routes.
 
 ### Settings
 
-`Page.Settings.Landing` renders `/settings`, the account and preferences
-landing page. It links to API keys, owns the persisted dark-theme and language
-controls, and provides the logout action. The normal-user top bar therefore has
-no theme switch or profile menu; signed-out auth screens keep an accessible
-theme switch, and admins keep the top-bar switch plus their account menu because
-they cannot open the normal-user Settings page. API key list and create screens
-group under the Settings destination; admins continue to see only the admin
-drawer because normal-user routes redirect them to the admin dashboard.
+`Page.Settings.Landing` renders `/settings`, the normal-user account and
+preferences landing page. The normal-user top-bar theme switch and profile menu
+were removed; their actions now live here:
+
+- **Access** links to API keys.
+- **Preferences** owns the persisted dark-theme switch and the English/Hindi
+  language choice.
+- **Account** provides the logout action.
+
+The normal-user top bar therefore has no theme switch or profile button.
+Signed-out auth screens keep an accessible theme switch, and admins keep the
+top-bar switch plus their account menu because they cannot open the normal-user
+Settings page. The admin account menu offers language and logout only; it has no
+API keys entry. API key list and create screens group under the Settings
+destination; admins continue to see only the admin drawer because normal-user
+routes redirect them to the admin dashboard.
 
 ### API Keys
 
