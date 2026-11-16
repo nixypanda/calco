@@ -65,6 +65,8 @@ tests =
                         , AuthLogin
                         , BootstrapSetup
                         , DiarySettings
+                        , Library
+                        , Settings
                         , SettingsApiKeys
                         , SettingsApiKeyCreate
                         , CustomFoodList

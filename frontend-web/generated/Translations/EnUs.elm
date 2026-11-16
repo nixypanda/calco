@@ -981,6 +981,18 @@ enUsTranslations tid =
         TidGoalSettingsStatusSavedFrom hole0 ->
             "Saved goals effective from " ++ hole0 ++ "."
 
+        TidLibraryBrowseTitle ->
+            "Browse"
+
+        TidLibraryDescription ->
+            "Your saved foods and meals, ready to reuse."
+
+        TidLibraryFoodsDescription ->
+            "Custom foods you've saved."
+
+        TidLibraryMealsDescription ->
+            "Meals you've built from your foods."
+
         TidLoginPasswordRequired ->
             "Password is required"
 
@@ -1074,6 +1086,9 @@ enUsTranslations tid =
         TidNavFoods ->
             "Foods"
 
+        TidNavLibrary ->
+            "Library"
+
         TidNavLogout ->
             "Logout"
 
@@ -1094,6 +1109,9 @@ enUsTranslations tid =
 
         TidNavSearchFoods ->
             "Search Foods"
+
+        TidNavSettings ->
+            "Settings"
 
         TidNutrientAddedSugars ->
             "Added Sugars"
@@ -1338,6 +1356,21 @@ enUsTranslations tid =
         TidSearchKcalPer100g hole0 ->
             hole0 ++ " kcal per 100 g"
 
+        TidSettingsAccessTitle ->
+            "Access"
+
+        TidSettingsApiKeysSummary ->
+            "Create and revoke keys for scripts and tools."
+
+        TidSettingsDescription ->
+            "Manage your account, access, and app preferences."
+
+        TidSettingsPreferencesComingSoon ->
+            "Theme and language options will be available here soon."
+
+        TidSettingsPreferencesTitle ->
+            "Preferences"
+
         TidSetupDescription ->
             "Create the admin account to get started."
 
@@ -1401,6 +1434,9 @@ enUsTranslations tid =
         TidTitleGoals ->
             "Goals"
 
+        TidTitleLibrary ->
+            "Library"
+
         TidTitleLogFood ->
             "Log Food"
 
@@ -1427,6 +1463,9 @@ enUsTranslations tid =
 
         TidTitleSearchFoods ->
             "Search Foods"
+
+        TidTitleSettings ->
+            "Settings"
 
         TidTitleSetup ->
             "Setup"

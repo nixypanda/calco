@@ -318,9 +318,29 @@ screenMeta env session route =
             , leading = GoBack (DiaryDay Nothing Nothing)
             }
 
+        Library ->
+            { title = I18n.t env.language TidTitleLibrary
+            , leading =
+                if phoneNonAdmin then
+                    ShowAppIcon
+
+                else
+                    OpenMenu
+            }
+
+        Settings ->
+            { title = I18n.t env.language TidTitleSettings
+            , leading =
+                if phoneNonAdmin then
+                    ShowAppIcon
+
+                else
+                    OpenMenu
+            }
+
         SettingsApiKeys ->
             { title = I18n.t env.language TidTitleApiKeys
-            , leading = GoBack (DiaryDay Nothing Nothing)
+            , leading = GoBack Settings
             }
 
         SettingsApiKeyCreate ->
@@ -374,22 +394,12 @@ screenMeta env session route =
 
         CustomFoodList ->
             { title = I18n.t env.language TidTitleMyFoods
-            , leading =
-                if phoneNonAdmin then
-                    NoLeadingAction
-
-                else
-                    GoBack (DiaryDay Nothing Nothing)
+            , leading = GoBack Library
             }
 
         MealList ->
             { title = I18n.t env.language TidTitleMyMeals
-            , leading =
-                if phoneNonAdmin then
-                    NoLeadingAction
-
-                else
-                    GoBack (DiaryDay Nothing Nothing)
+            , leading = GoBack Library
             }
 
         MealCreate ->

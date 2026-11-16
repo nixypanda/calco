@@ -24,6 +24,8 @@ type Route
     | NutritionDetails (Maybe LocalDate)
     | GoalSettings (Maybe LocalDate) (Maybe String)
     | DiarySettings
+    | Library
+    | Settings
     | SettingsApiKeys
     | SettingsApiKeyCreate
     | FoodLogEntry String (Maybe LocalDate) (Maybe String)
@@ -63,6 +65,8 @@ routeParser =
         , Parser.map GoalSettings
             (s "settings" </> s "goals" <?> dateQuery <?> Query.string "calendar_month")
         , Parser.map DiarySettings (s "settings" </> s "diary")
+        , Parser.map Library (s "library")
+        , Parser.map Settings (s "settings")
         , Parser.map SettingsApiKeys (s "settings" </> s "api-keys")
         , Parser.map SettingsApiKeyCreate (s "settings" </> s "api-keys" </> s "new")
         , Parser.map AdHocLogCreate
@@ -116,17 +120,20 @@ primaryRoute route =
         FoodShow _ maybeDate maybeSlot _ ->
             FoodSearch maybeDate maybeSlot
 
+        CustomFoodList ->
+            Library
+
         CustomFoodCreate ->
-            CustomFoodList
+            Library
 
         CustomFoodCreateWithAi ->
-            CustomFoodList
+            Library
 
         CustomFoodEdit _ ->
-            CustomFoodList
+            Library
 
         CustomFoodShow _ ->
-            CustomFoodList
+            Library
 
         AdminCreateUser ->
             AdminDashboard
@@ -134,17 +141,23 @@ primaryRoute route =
         AdminEditUser _ ->
             AdminDashboard
 
+        MealList ->
+            Library
+
         MealCreate ->
-            MealList
+            Library
+
+        SettingsApiKeys ->
+            Settings
 
         SettingsApiKeyCreate ->
-            SettingsApiKeys
+            Settings
 
         MealShow _ ->
-            MealList
+            Library
 
         MealEdit _ ->
-            MealList
+            Library
 
         FoodLogEntry _ _ _ ->
             DiaryDay Nothing Nothing
@@ -162,6 +175,12 @@ primaryRoute route =
             DiaryDay Nothing Nothing
 
         NutritionDetails _ ->
+            DiaryDay Nothing Nothing
+
+        GoalSettings _ _ ->
+            DiaryDay Nothing Nothing
+
+        DiarySettings ->
             DiaryDay Nothing Nothing
 
         FoodSearch maybeDate maybeSlot ->
@@ -223,6 +242,12 @@ routeToPath route =
 
         DiarySettings ->
             "/settings/diary"
+
+        Library ->
+            "/library"
+
+        Settings ->
+            "/settings"
 
         SettingsApiKeys ->
             "/settings/api-keys"

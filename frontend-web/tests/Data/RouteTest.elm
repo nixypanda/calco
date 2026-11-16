@@ -28,6 +28,38 @@ tests =
                             |> Expect.equal (Route.primaryRoute route)
                     ]
                     ()
+        , test "nav destinations group diary, library, and settings routes" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        Route.primaryRoute (DiaryCalendar (Just "2026-07"))
+                            |> Expect.equal (DiaryDay Nothing Nothing)
+                    , \_ ->
+                        Route.primaryRoute (GoalSettings Nothing Nothing)
+                            |> Expect.equal (DiaryDay Nothing Nothing)
+                    , \_ ->
+                        Route.primaryRoute DiarySettings
+                            |> Expect.equal (DiaryDay Nothing Nothing)
+                    , \_ ->
+                        Route.primaryRoute CustomFoodList
+                            |> Expect.equal Library
+                    , \_ ->
+                        Route.primaryRoute (CustomFoodShow "food-1")
+                            |> Expect.equal Library
+                    , \_ ->
+                        Route.primaryRoute MealList
+                            |> Expect.equal Library
+                    , \_ ->
+                        Route.primaryRoute (MealShow "meal-1")
+                            |> Expect.equal Library
+                    , \_ ->
+                        Route.primaryRoute SettingsApiKeys
+                            |> Expect.equal Settings
+                    , \_ ->
+                        Route.primaryRoute SettingsApiKeyCreate
+                            |> Expect.equal Settings
+                    ]
+                    ()
         , {- Plain goals settings stays context-free; the fuzzer covers the
              optional date/month roundtrip, while this pins the old URL.
           -}

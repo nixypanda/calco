@@ -25,6 +25,10 @@ tests =
                 Expect.all
                     [ exact Util.EN_US TidNavDiary "Diary"
                     , exact Util.HI_IN TidNavDiary "डायरी"
+                    , exact Util.EN_US TidNavLibrary "Library"
+                    , exact Util.HI_IN TidNavLibrary "लाइब्रेरी"
+                    , exact Util.EN_US TidNavSettings "Settings"
+                    , exact Util.HI_IN TidNavSettings "सेटिंग्स"
                     , exact Util.EN_US TidCommonSave "Save"
                     , exact Util.HI_IN TidCommonSave "सहेजें"
                     , exact Util.EN_US
@@ -64,6 +68,8 @@ blankIds language =
 sampleIds : List TranslationId
 sampleIds =
     [ TidNavDiary
+    , TidNavLibrary
+    , TidNavSettings
     , TidCommonSave
     , TidDiarySettingsSelectAtLeastOne
     , TidApiErrorNetwork
@@ -75,4 +81,6 @@ sampleIds =
     , TidDiaryOpenCalendar
     , TidDiaryEditGoals
     , TidDiaryManageMealSlots
+    , TidLibraryDescription
+    , TidSettingsDescription
     ]

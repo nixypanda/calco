@@ -90,6 +90,12 @@ resolveKnownSession session adminExists route =
             DiarySettings ->
                 Render route
 
+            Library ->
+                Render route
+
+            Settings ->
+                Render route
+
             SettingsApiKeys ->
                 Render route
 

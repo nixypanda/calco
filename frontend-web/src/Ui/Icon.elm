@@ -12,6 +12,9 @@ type Icon
     | Search
     | Box
     | Utensils
+    | Library
+    | Settings
+    | Key
     | Menu
     | ChevronLeft
     | ChevronRight
@@ -80,6 +83,28 @@ shapes icon =
             [ path [ SvgA.d "M3 2v7a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V2" ] []
             , path [ SvgA.d "M7 2v20" ] []
             , path [ SvgA.d "M21 15V2a5 5 0 0 0-5 5v6a2 2 0 0 0 2 2h3Zm0 0v7" ] []
+            ]
+
+        Library ->
+            [ path [ SvgA.d "M4 4h5v16H4Z" ] []
+            , path [ SvgA.d "M10 4h5v16h-5Z" ] []
+            , path [ SvgA.d "M16 5l4-1v15l-4 1Z" ] []
+            ]
+
+        Settings ->
+            [ line [ SvgA.x1 "4", SvgA.y1 "7", SvgA.x2 "20", SvgA.y2 "7" ] []
+            , line [ SvgA.x1 "4", SvgA.y1 "12", SvgA.x2 "20", SvgA.y2 "12" ] []
+            , line [ SvgA.x1 "4", SvgA.y1 "17", SvgA.x2 "20", SvgA.y2 "17" ] []
+            , circle [ SvgA.cx "9", SvgA.cy "7", SvgA.r "2" ] []
+            , circle [ SvgA.cx "15", SvgA.cy "12", SvgA.r "2" ] []
+            , circle [ SvgA.cx "8", SvgA.cy "17", SvgA.r "2" ] []
+            ]
+
+        Key ->
+            [ circle [ SvgA.cx "8", SvgA.cy "8", SvgA.r "4" ] []
+            , path [ SvgA.d "M11 11 20 20" ] []
+            , path [ SvgA.d "M16 16l3-3" ] []
+            , path [ SvgA.d "M13 13l2-2" ] []
             ]
 
         Menu ->
