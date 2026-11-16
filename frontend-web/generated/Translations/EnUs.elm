@@ -555,6 +555,9 @@ enUsTranslations tid =
         TidDiaryDetails ->
             "Details"
 
+        TidDiaryEditGoals ->
+            "Edit today's goals"
+
         TidDiaryGoalMet ->
             "Goal met"
 
@@ -588,6 +591,9 @@ enUsTranslations tid =
         TidDiaryMacroSummaryPercent hole0 hole1 hole2 ->
             "carbs " ++ hole0 ++ "% ⋅ protein " ++ hole1 ++ "% ⋅ fat " ++ hole2 ++ "%"
 
+        TidDiaryManageMealSlots ->
+            "Manage meal slots"
+
         TidDiaryNextDay ->
             "Next Day"
 
@@ -596,6 +602,12 @@ enUsTranslations tid =
 
         TidDiaryOfKcal hole0 ->
             "of " ++ hole0 ++ " kcal"
+
+        TidDiaryOpenCalendar ->
+            "Open calendar"
+
+        TidDiaryOpenCalendarFor hole0 ->
+            "Open calendar for " ++ hole0
 
         TidDiaryOther ->
             "Other"

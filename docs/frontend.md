@@ -393,6 +393,7 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /home
 /home?date=YYYY-MM-DD
 /settings/goals
+/settings/goals?date=YYYY-MM-DD&calendar_month=YYYY-MM
 /settings/diary
 /settings/api-keys
 /settings/api-keys/new
@@ -566,15 +567,25 @@ It provides:
 - recent-item quick add and latest-slot repeat actions.
 - bottom navigation on phones and a drawer on larger screens.
 
-Users can inspect previous days with the diary date selector. A separate
-history/trends screen is out of scope.
+Users can inspect previous days with the diary date selector. The selected
+date is a ghost button with a calendar icon that opens the calendar at that
+date's month; its accessible name includes both the action and the displayed
+date. The calorie balance pill is read-only; a separate **Edit today's goals**
+icon button opens goals settings with the selected diary date as Back context.
+The diary summary uses the selected date's effective goal targets, while goals
+settings edits today's targets. A single **Manage meal slots** action sits
+above the meal sections and opens diary settings. A separate history/trends
+screen is out of scope.
 
 `Page.Diary.Settings` lets users select which meal slots appear in their diary.
 
 ### Goals
 
 `Page.Goals.Settings` lets an authenticated user view and save calorie and
-macro targets for the current local day.
+macro targets for the current local day. It can carry optional diary date and
+calendar context in its URL solely so Back returns to the diary day the user
+came from; goal data is always scoped to today. Plain `/settings/goals` still
+works.
 
 ### API Keys
 

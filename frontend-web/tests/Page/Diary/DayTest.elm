@@ -11,6 +11,7 @@ import Data.Route exposing (Route(..))
 import Element
 import Expect
 import Fuzz
+import Html.Attributes as Attr
 import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Diary.Day as Day
@@ -19,8 +20,9 @@ import Support.Fixtures as Fixtures
 import Support.Fuzz as SupportFuzz
 import Support.Story as Story
 import Test exposing (Test, describe, fuzz, fuzz2, test)
+import Test.Html.Event as Event
 import Test.Html.Query as Query
-import Test.Html.Selector as Selector
+import Test.Html.Selector as Selector exposing (Selector)
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
 import Ui.Env exposing (Env)
@@ -112,6 +114,102 @@ tests =
                                 ]
                                 ()
                         )
+        , test "loaded historical diary actions carry the selected date" <|
+            \_ ->
+                let
+                    html : Query.Single Day.Msg
+                    html =
+                        Day.contentView env historicalLoaded
+                            |> Element.layout []
+                            |> Query.fromHtml
+
+                    expectAction :
+                        List Selector
+                        -> Day.Msg
+                        -> Day.OutMsg
+                        -> Expect.Expectation
+                    expectAction selectors expectedMsg expectedOut =
+                        Expect.all
+                            [ \_ ->
+                                html
+                                    |> Query.find selectors
+                                    |> Event.simulate Event.click
+                                    |> Event.expect expectedMsg
+                            , \_ ->
+                                outOf historicalLoaded expectedMsg
+                                    |> Expect.equal expectedOut
+                            ]
+                            ()
+                in
+                Expect.all
+                    [ \_ ->
+                        expectAction
+                            [ Selector.attribute
+                                (Attr.attribute "data-testid" "open-calendar")
+                            ]
+                            Day.CalendarClicked
+                            (Day.Navigate (DiaryCalendar (Just selectedMonth)))
+                    , \_ ->
+                        expectAction
+                            [ Selector.attribute (Attr.attribute "role" "button")
+                            , Selector.attribute
+                                (Attr.attribute "aria-label" (I18n.en TidDiaryEditGoals))
+                            ]
+                            Day.GoalsClicked
+                            (Day.Navigate
+                                (GoalSettings (Just selectedDate) (Just selectedMonth))
+                            )
+                    , \_ ->
+                        expectAction
+                            [ Selector.attribute
+                                (Attr.attribute "data-testid" "manage-meal-slots")
+                            ]
+                            Day.MealSlotsClicked
+                            (Day.Navigate DiarySettings)
+                    ]
+                    ()
+        , {- The controls are the same at every breakpoint; breakpoint-specific
+             spacing, hover, and arrangement are browser-only.
+          -}
+          test "loaded diary exposes named calendar, today's goals, and meal-slot controls" <|
+            \_ ->
+                controlsVisible
+        , test "failed current-date diary still exposes one manage meal slots action" <|
+            \_ ->
+                let
+                    html : Query.Single Day.Msg
+                    html =
+                        Day.contentView env failedModel
+                            |> Element.layout []
+                            |> Query.fromHtml
+
+                    manageButton : List Selector
+                    manageButton =
+                        [ Selector.attribute
+                            (Attr.attribute "data-testid" "manage-meal-slots")
+                        , Selector.attribute (Attr.attribute "role" "button")
+                        ]
+                in
+                Expect.all
+                    [ \_ ->
+                        html
+                            |> Query.findAll manageButton
+                            |> Query.count (Expect.equal 1)
+                    , \_ ->
+                        html
+                            |> Query.find manageButton
+                            |> Query.has
+                                [ Selector.text (I18n.en TidDiaryManageMealSlots) ]
+                    , \_ ->
+                        html
+                            |> Query.find manageButton
+                            |> Event.simulate Event.click
+                            |> Event.expect Day.MealSlotsClicked
+                    , \_ ->
+                        outOf failedModel Day.MealSlotsClicked
+                            |> Expect.equal (Day.Navigate DiarySettings)
+                    ]
+                    ()
         ]
 
 
@@ -120,6 +218,92 @@ type alias CopyScreen =
     , sections : List String
     , feedback : ( Maybe String, Bool )
     }
+
+
+outOf : Day.Model -> Day.Msg -> Day.OutMsg
+outOf model msg =
+    Day.update msg model
+        |> (\( _, _, outMsg ) -> outMsg)
+
+
+{-| A genuinely historical loaded diary: today is 2026-08-30 and the selected
+date is 2026-07-20, so date-derived actions cannot accidentally use today.
+-}
+historicalLoaded : Day.Model
+historicalLoaded =
+    Day.init { date = selectedDate, calendarMonth = Just selectedMonth, today = today }
+        |> Tuple.first
+        |> Story.runSteps (Story.modelFromUpdate Day.update)
+            [ Day.LogsLoaded selectedDate (Ok [ { lunchLog | logDate = selectedDate } ])
+            , Day.GoalLoaded selectedDate (Ok { goal | requestedDate = selectedDate })
+            , Day.PrefsReceived (Ok (enabledPrefs MealSlot.all))
+            ]
+
+
+failedModel : Day.Model
+failedModel =
+    Day.init { date = today, calendarMonth = Just month, today = today }
+        |> Tuple.first
+        |> Story.runSteps (Story.modelFromUpdate Day.update)
+            [ Day.LogsLoaded today (Err Client.NetworkError) ]
+
+
+controlsVisible : Expect.Expectation
+controlsVisible =
+    let
+        html : Query.Single Day.Msg
+        html =
+            Day.contentView env historicalLoaded
+                |> Element.layout []
+                |> Query.fromHtml
+
+        openCalendar : String
+        openCalendar =
+            I18n.en TidDiaryOpenCalendar
+
+        openCalendarForDate : String
+        openCalendarForDate =
+            I18n.en (TidDiaryOpenCalendarFor selectedDisplay)
+
+        editGoals : String
+        editGoals =
+            I18n.en TidDiaryEditGoals
+
+        manageMealSlots : String
+        manageMealSlots =
+            I18n.en TidDiaryManageMealSlots
+    in
+    Expect.all
+        [ \_ ->
+            html
+                |> Query.find
+                    [ Selector.attribute (Attr.attribute "data-testid" "open-calendar")
+                    , Selector.attribute (Attr.attribute "role" "button")
+                    ]
+                |> Query.has
+                    [ Selector.attribute (Attr.attribute "title" openCalendar)
+                    , Selector.attribute (Attr.attribute "aria-label" openCalendarForDate)
+                    , Selector.attribute (Attr.attribute "tabIndex" "0")
+                    ]
+        , \_ ->
+            html
+                |> Query.find
+                    [ Selector.attribute (Attr.attribute "role" "button")
+                    , Selector.attribute (Attr.attribute "aria-label" editGoals)
+                    ]
+                |> Query.has
+                    [ Selector.attribute (Attr.attribute "title" editGoals)
+                    , Selector.attribute (Attr.attribute "tabIndex" "0")
+                    ]
+        , \_ ->
+            html
+                |> Query.findAll
+                    [ Selector.attribute (Attr.attribute "role" "button")
+                    , Selector.containing [ Selector.text manageMealSlots ]
+                    ]
+                |> Query.count (Expect.equal 1)
+        ]
+        ()
 
 
 copyScreen : Day.Model -> CopyScreen
@@ -305,12 +489,17 @@ finish =
 
 loaded : Journey
 loaded =
+    Story.start ( loadedModel, Day.RequestDiaryData )
+
+
+loadedModel : Day.Model
+loadedModel =
     Day.init { date = today, calendarMonth = Just month, today = today }
-        |> Story.start
-        |> step (Day.LogsLoaded today (Ok [ lunchLog ]))
-        |> step (Day.GoalLoaded today (Ok goal))
-        |> step
-            (Day.LatestSlotsReceived today
+        |> Tuple.first
+        |> Story.runSteps (Story.modelFromUpdate Day.update)
+            [ Day.LogsLoaded today (Ok [ lunchLog ])
+            , Day.GoalLoaded today (Ok goal)
+            , Day.LatestSlotsReceived today
                 (Ok
                     { slots =
                         [ slotOn yesterday Dinner [ yesterdayDinnerLog ]
@@ -318,7 +507,7 @@ loaded =
                         ]
                     }
                 )
-            )
+            ]
 
 
 goal : GoalSnapshot
@@ -337,17 +526,32 @@ goal =
 
 today : LocalDate
 today =
-    Fixtures.date "2026-05-30"
+    Fixtures.date "2026-08-30"
+
+
+selectedDate : LocalDate
+selectedDate =
+    Fixtures.date "2026-07-20"
+
+
+selectedMonth : String
+selectedMonth =
+    "2026-07"
+
+
+selectedDisplay : String
+selectedDisplay =
+    LocalDate.display I18n.defaultLanguage selectedDate
 
 
 yesterday : LocalDate
 yesterday =
-    Fixtures.date "2026-05-29"
+    Fixtures.date "2026-08-29"
 
 
 month : String
 month =
-    "2026-05"
+    "2026-08"
 
 
 loggingLabel : String

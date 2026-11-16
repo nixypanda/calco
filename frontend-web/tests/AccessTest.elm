@@ -179,7 +179,7 @@ allRoutes =
     , DiaryDay (Just Fixtures.today) (Just "2026-08")
     , DiaryCalendar (Just "2026-08")
     , NutritionDetails (Just Fixtures.today)
-    , GoalSettings
+    , GoalSettings (Just Fixtures.today) (Just "2026-08")
     , DiarySettings
     , SettingsApiKeys
     , SettingsApiKeyCreate
@@ -210,6 +210,7 @@ routeVariants =
     [ DiaryDay Nothing Nothing
     , DiaryCalendar Nothing
     , NutritionDetails Nothing
+    , GoalSettings Nothing Nothing
     , AdHocLogCreate Nothing Nothing
     , FoodSearch Nothing Nothing
     ]

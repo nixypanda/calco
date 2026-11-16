@@ -1,11 +1,8 @@
 module View.ChromeTest exposing (tests)
 
-{-| Pure laws for the shell's chrome and bottom-nav visibility.
-
-The bottom nav is Phone-only and its reservation must use the same predicate
-as rendering, so the two cannot drift. Chrome suppression is a shell state
-(boot/logout), not a page-loading state.
-
+{-| Shell chrome laws: bottom-nav visibility, chrome suppression, and the Back
+destination carried by screen metadata. The Back case drives the rendered
+control so the route context reaches the user action, not just a helper.
 -}
 
 import Data.Auth as Auth exposing (Session(..))
@@ -13,8 +10,16 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device)
 import Expect
 import Fuzz
+import Html.Attributes as Attr
+import I18n
+import Lib.Date exposing (LocalDate)
+import Support.Fixtures as Fixtures
 import Support.Fuzz as SupportFuzz
-import Test exposing (Test, describe, fuzz2, fuzz3)
+import Test exposing (Test, describe, fuzz2, fuzz3, test)
+import Test.Html.Event as Event
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
+import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
 import Ui.Env exposing (Env)
 import Ui.Theme as Theme
@@ -73,12 +78,58 @@ tests =
                         |> Expect.equal False
                 )
             ]
+        , test "goals Back keeps the diary date and calendar context" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        expectBackTarget (DiaryDay (Just date) (Just month))
+                            (GoalSettings (Just date) (Just month))
+                    , \_ ->
+                        expectBackTarget (DiaryDay Nothing Nothing)
+                            (GoalSettings Nothing Nothing)
+                    ]
+                    ()
         ]
 
 
 reservesOnPhone : Device -> Route -> Bool
 reservesOnPhone device route =
     device.class == Element.Phone && isAppRoute route
+
+
+expectBackTarget : Route -> Route -> Expect.Expectation
+expectBackTarget target route =
+    Chrome.topBarView
+        { theme = Theme.forMode Theme.Light
+        , device = { class = Element.Phone, orientation = Element.Portrait }
+        , language = EN_US
+        }
+        user
+        route
+        False
+        (DiaryDay Nothing Nothing)
+        (DiaryDay Nothing Nothing)
+        (DiaryDay Nothing Nothing)
+        identity
+        { profileLabel = "U", profileMenu = Nothing }
+        |> Element.layout []
+        |> Query.fromHtml
+        |> Query.find
+            [ Selector.attribute (Attr.attribute "role" "button")
+            , Selector.attribute (Attr.attribute "aria-label" (I18n.en TidNavBack))
+            ]
+        |> Event.simulate Event.click
+        |> Event.expect target
+
+
+date : LocalDate
+date =
+    Fixtures.date "2026-07-20"
+
+
+month : String
+month =
+    "2026-07"
 
 
 isAppRoute : Route -> Bool

@@ -308,9 +308,9 @@ screenMeta env session route =
         AdminEditUser _ ->
             { title = I18n.t env.language TidTitleEditUser, leading = GoBack AdminDashboard }
 
-        GoalSettings ->
+        GoalSettings maybeDate maybeCalendarMonth ->
             { title = I18n.t env.language TidTitleGoals
-            , leading = GoBack (DiaryDay Nothing Nothing)
+            , leading = GoBack (DiaryDay maybeDate maybeCalendarMonth)
             }
 
         DiarySettings ->

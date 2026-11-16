@@ -103,6 +103,39 @@ tests =
                         , finalOut = Page.Navigate (MealShow "meal-1")
                         , failure = Nothing
                         }
+        , test "goals from a calendar-origin diary keeps the diary context, not the date scope" <|
+            \_ ->
+                let
+                    afterGoals : Journey
+                    afterGoals =
+                        start
+                            (Page.init
+                                { route = DiaryDay (Just date) (Just month)
+                                , today = Just today
+                                }
+                                |> Fixtures.tupleFirst
+                            )
+                            |> send (Page.GotDiaryMsg DiaryDay.GoalsClicked)
+
+                    goalsWorkspace : Journey
+                    goalsWorkspace =
+                        apply (GoalSettings (Just date) (Just month)) afterGoals
+
+                    afterBack : Journey
+                    afterBack =
+                        apply (DiaryDay (Just date) (Just month)) goalsWorkspace
+                in
+                { goalsOut = afterGoals.lastOut
+                , goalsPanes = Page.paneKeys goalsWorkspace.model
+                , backPanes = Page.paneKeys afterBack.model
+                , failure = afterBack.failure
+                }
+                    |> Expect.equal
+                        { goalsOut = Page.Navigate (GoalSettings (Just date) (Just month))
+                        , goalsPanes = [ "goals-settings:" ++ LocalDate.format today ]
+                        , backPanes = [ "calendar:2026-07", "diary:2026-07-20:2026-07" ]
+                        , failure = Nothing
+                        }
         , test "today gating waits, then standalone routes replace the workspace" <|
             \_ ->
                 let

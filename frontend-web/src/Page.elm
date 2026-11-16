@@ -1045,7 +1045,7 @@ panePlanForRoute context existing =
                 [ diaryPlan context dateParam Nothing ]
                 (nutritionPlan context dateParam)
 
-        GoalSettings ->
+        GoalSettings _ _ ->
             [ goalsPlan context
                 |> withSkeleton
                     (\env -> UiPage.pageContainer [ GoalsSettings.skeletonView env ])
@@ -1827,6 +1827,15 @@ isDiaryOperation msg =
                     False
 
                 DiaryDay.CopyLatestCompleted _ _ ->
+                    False
+
+                DiaryDay.GoalsClicked ->
+                    False
+
+                DiaryDay.CalendarClicked ->
+                    False
+
+                DiaryDay.MealSlotsClicked ->
                     False
 
                 DiaryDay.TodayChanged _ ->

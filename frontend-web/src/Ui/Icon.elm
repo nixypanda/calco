@@ -21,6 +21,8 @@ type Icon
     | Close
     | Check
     | SearchX
+    | Calendar
+    | Pencil
 
 
 view : { icon : Icon, size : Int, color : Element.Color } -> Element msg
@@ -110,3 +112,19 @@ shapes icon =
 
         Check ->
             [ polyline [ SvgA.points "5 13 10 18 19 7" ] [] ]
+
+        Calendar ->
+            [ path [ SvgA.d "M8 2v4M16 2v4M3 10h18" ] []
+            , path
+                [ SvgA.d
+                    ("M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2"
+                        ++ "H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
+                    )
+                ]
+                []
+            ]
+
+        Pencil ->
+            [ path [ SvgA.d "M12 20h9" ] []
+            , path [ SvgA.d "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" ] []
+            ]
