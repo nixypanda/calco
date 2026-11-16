@@ -11,8 +11,9 @@ Hindi translations so a blank or missing entry in each shape is caught.
 -}
 
 import Expect
+import Fuzz
 import I18n
-import Test exposing (Test, describe, test)
+import Test exposing (Test, describe, fuzz, test)
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util as Util
 
@@ -52,16 +53,35 @@ tests =
                     , \_ -> blankIds Util.HI_IN |> Expect.equal []
                     ]
                     ()
-        , test "persisted language codes are stable and parse back" <|
+        , fuzz languageFuzzer "every language code parses back to its language" <|
+            \language ->
+                Util.parseLanguage (I18n.languageCode language)
+                    |> Expect.equal (Ok language)
+        , test "persisted language codes keep their stored spelling" <|
             \_ ->
+                List.map I18n.languageCode [ Util.EN_US, Util.HI_IN ]
+                    |> Expect.equal [ "en_US", "hi_IN" ]
+        , fuzz Fuzz.string "an unknown stored code is rejected and falls back" <|
+            \candidate ->
+                let
+                    unknownCode : String
+                    unknownCode =
+                        "invalid:" ++ candidate
+                in
                 Expect.all
-                    [ \_ -> I18n.languageCode Util.EN_US |> Expect.equal "en_US"
-                    , \_ -> I18n.languageCode Util.HI_IN |> Expect.equal "hi_IN"
-                    , \_ -> Util.parseLanguage "en_US" |> Expect.equal (Ok Util.EN_US)
-                    , \_ -> Util.parseLanguage "hi_IN" |> Expect.equal (Ok Util.HI_IN)
+                    [ \_ -> Util.parseLanguage unknownCode |> Expect.err
+                    , \_ ->
+                        Util.parseLanguage unknownCode
+                            |> Result.withDefault I18n.defaultLanguage
+                            |> Expect.equal I18n.defaultLanguage
                     ]
                     ()
         ]
+
+
+languageFuzzer : Fuzz.Fuzzer Util.Language
+languageFuzzer =
+    Fuzz.oneOfValues [ Util.EN_US, Util.HI_IN ]
 
 
 exact : Util.Language -> TranslationId -> String -> () -> Expect.Expectation

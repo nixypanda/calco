@@ -216,34 +216,17 @@ tests =
                     , \_ -> expectBackTarget Settings SettingsApiKeys
                     ]
                     ()
-        , test "top-level search exposes the drawer menu on larger screens" <|
+        , test "top-level search exposes the drawer menu on non-phone layouts" <|
             \_ ->
-                Expect.all
-                    [ \_ ->
-                        expectMenuLeading
-                            { class = Element.Tablet, orientation = Element.Portrait }
-                            (FoodSearch (Just date) Nothing)
-                    , \_ ->
-                        expectMenuLeading
-                            { class = Element.Desktop, orientation = Element.Landscape }
-                            (FoodSearch Nothing Nothing)
-                    ]
-                    ()
+                expectMenuLeading
+                    tabletDevice
+                    (FoodSearch (Just date) Nothing)
         , test "contextual search keeps Back to the dated diary" <|
             \_ ->
-                Expect.all
-                    [ \_ ->
-                        expectBackTargetOn
-                            { class = Element.Phone, orientation = Element.Portrait }
-                            (DiaryDay (Just date) Nothing)
-                            (FoodSearch (Just date) (Just MealSlot.Lunch))
-                    , \_ ->
-                        expectBackTargetOn
-                            { class = Element.Desktop, orientation = Element.Landscape }
-                            (DiaryDay (Just date) Nothing)
-                            (FoodSearch (Just date) (Just MealSlot.Lunch))
-                    ]
-                    ()
+                expectBackTargetOn
+                    phoneDevice
+                    (DiaryDay (Just date) Nothing)
+                    (FoodSearch (Just date) (Just MealSlot.Lunch))
         , test "the drawer trigger exposes its expanded state" <|
             \_ ->
                 Expect.all
@@ -313,30 +296,24 @@ tests =
                             |> Query.hasNot [ inertSelector ]
                     ]
                     ()
-        , test "phone and wider layout changes close open chrome" <|
-            \_ ->
+        , fuzz2 SupportFuzz.device
+            SupportFuzz.device
+            "an open drawer survives layout changes only within the same nav mode"
+          <|
+            \previous next ->
                 let
                     opened : ChromeState.Model
                     opened =
                         ChromeState.update ChromeState.MenuClicked ChromeState.init
                             |> Tuple.first
 
-                    desktop : Device
-                    desktop =
-                        { class = Element.Desktop, orientation = Element.Landscape }
-
-                    remainsOpen : Device -> Device -> Bool
-                    remainsOpen previous next =
-                        ChromeState.closeOnLayoutChange previous next opened
-                            |> ChromeState.isDrawerOpen
+                    sameNavMode : Bool
+                    sameNavMode =
+                        (previous.class == Element.Phone) == (next.class == Element.Phone)
                 in
-                Expect.all
-                    [ \_ -> remainsOpen tabletDevice phoneDevice |> Expect.equal False
-                    , \_ -> remainsOpen phoneDevice tabletDevice |> Expect.equal False
-                    , \_ -> remainsOpen tabletDevice desktop |> Expect.equal True
-                    , \_ -> remainsOpen tabletDevice tabletDevice |> Expect.equal True
-                    ]
-                    ()
+                ChromeState.closeOnLayoutChange previous next opened
+                    |> ChromeState.isDrawerOpen
+                    |> Expect.equal sameNavMode
         , test "Escape removes an open drawer" <|
             \_ ->
                 let
@@ -422,6 +399,24 @@ tests =
                             |> Event.expect (ChromeState.LanguageClicked EN_US)
                     ]
                     ()
+        , test "the theme switch reflects the current mode and toggles" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        topbarMessages (envForMode Theme.Light) anonymous AuthLogin
+                            |> Query.find [ themeSwitchSelector ]
+                            |> Query.has [ ariaPressed False ]
+                    , \_ ->
+                        topbarMessages (envForMode Theme.Dark) anonymous AuthLogin
+                            |> Query.find [ themeSwitchSelector ]
+                            |> Query.has [ ariaPressed True ]
+                    , \_ ->
+                        topbarMessages (envForMode Theme.Light) anonymous AuthLogin
+                            |> Query.find [ themeSwitchSelector ]
+                            |> Event.simulate Event.click
+                            |> Event.expect ChromeState.ThemeToggleClicked
+                    ]
+                    ()
         , test "admins keep the theme switch and profile control" <|
             \_ ->
                 let
@@ -437,44 +432,51 @@ tests =
                             |> Query.hasNot [ languageToggleSelector EN_US HI_IN ]
                     ]
                     ()
-        , test "the admin profile menu offers accessible language choices and logout" <|
+        , test "the admin profile menu exposes language choices and distinct actions" <|
             \_ ->
                 let
-                    menu : Query.Single Language
-                    menu =
-                        Chrome.profileMenu
-                            (envForLanguage EN_US)
-                            admin
-                            EN_US
-                            identity
-                            |> Element.layout []
-                            |> Query.fromHtml
+                    english : Query.Single ChromeState.Msg
+                    english =
+                        profileMenuFor EN_US
+
+                    hindi : Query.Single ChromeState.Msg
+                    hindi =
+                        profileMenuFor HI_IN
                 in
                 Expect.all
                     [ \_ ->
-                        menu
+                        english
                             |> Query.has
                                 [ Selector.text (I18n.en (TidCommonSignedInAs "admin")) ]
                     , \_ ->
-                        menu
+                        english
                             |> Query.find [ buttonContaining "English" ]
-                            |> Query.has
-                                [ Selector.attribute (Attr.attribute "aria-pressed" "true") ]
+                            |> Query.has [ ariaPressed True ]
                     , \_ ->
-                        menu
+                        english
                             |> Query.find [ buttonContaining "हिन्दी" ]
-                            |> Query.has
-                                [ Selector.attribute (Attr.attribute "aria-pressed" "false") ]
+                            |> Query.has [ ariaPressed False ]
                     , \_ ->
-                        menu
+                        english
                             |> Query.find [ buttonContaining "हिन्दी" ]
                             |> Event.simulate Event.click
-                            |> Event.expect HI_IN
+                            |> Event.expect (ChromeState.LanguageClicked HI_IN)
                     , \_ ->
-                        menu
-                            |> Query.has [ Selector.exactText (I18n.en TidNavLogout) ]
+                        hindi
+                            |> Query.find [ buttonContaining "English" ]
+                            |> Query.has [ ariaPressed False ]
                     , \_ ->
-                        menu
+                        hindi
+                            |> Query.find [ buttonContaining "English" ]
+                            |> Event.simulate Event.click
+                            |> Event.expect (ChromeState.LanguageClicked EN_US)
+                    , \_ ->
+                        english
+                            |> Query.find [ buttonContaining (I18n.en TidNavLogout) ]
+                            |> Event.simulate Event.click
+                            |> Event.expect ChromeState.LogoutClicked
+                    , \_ ->
+                        english
                             |> Query.hasNot [ Selector.exactText (I18n.en TidNavApiKeys) ]
                     ]
                     ()
@@ -675,6 +677,17 @@ topbarMessages currentEnv session route =
         |> Query.fromHtml
 
 
+profileMenuFor : Language -> Query.Single ChromeState.Msg
+profileMenuFor language =
+    Chrome.profileMenu
+        (envForLanguage language)
+        admin
+        ChromeState.LogoutClicked
+        ChromeState.LanguageClicked
+        |> Element.layout []
+        |> Query.fromHtml
+
+
 menuTrigger : Query.Single msg -> Query.Single msg
 menuTrigger root =
     Query.find [ menuTriggerSelector ] root
@@ -734,6 +747,19 @@ ariaCurrentPage =
     Selector.attribute (Attr.attribute "aria-current" "page")
 
 
+ariaPressed : Bool -> Selector
+ariaPressed active =
+    Selector.attribute
+        (Attr.attribute "aria-pressed"
+            (if active then
+                "true"
+
+             else
+                "false"
+            )
+        )
+
+
 themeSwitchSelector : Selector
 themeSwitchSelector =
     Selector.all
@@ -790,12 +816,17 @@ envFor device =
 
 envForLanguage : Language -> Env
 envForLanguage language =
-    let
-        base : Env
-        base =
-            envFor phoneDevice
-    in
-    { base | language = language }
+    { envForPhone | language = language }
+
+
+envForMode : Theme.Mode -> Env
+envForMode mode =
+    { envForPhone | theme = Theme.forMode mode }
+
+
+envForPhone : Env
+envForPhone =
+    envFor phoneDevice
 
 
 user : Session

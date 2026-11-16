@@ -21,64 +21,36 @@ tests =
         [ fuzz Support.route "routeToPath then fromUrl is the identity" <|
             \route ->
                 route |> Route.routeToPath |> parsePath |> Expect.equal (Just route)
-        , fuzz Support.route
-            "primaryRoute is idempotent and never maps a known route to NotFound"
-          <|
+        , fuzz Support.route "primaryRoute is idempotent" <|
             \route ->
-                Expect.all
-                    [ \_ ->
-                        Route.primaryRoute (Route.primaryRoute route)
-                            |> Expect.equal (Route.primaryRoute route)
-                    ]
-                    ()
-        , test "nav destinations group contextual and nested routes" <|
+                Route.primaryRoute (Route.primaryRoute route)
+                    |> Expect.equal (Route.primaryRoute route)
+        , test "every nested route selects its shell destination" <|
             \_ ->
-                Expect.all
-                    [ \_ ->
-                        Route.primaryRoute (DiaryCalendar (Just "2026-07"))
-                            |> Expect.equal (DiaryDay Nothing Nothing)
-                    , \_ ->
-                        Route.primaryRoute (GoalSettings Nothing Nothing)
-                            |> Expect.equal (DiaryDay Nothing Nothing)
-                    , \_ ->
-                        Route.primaryRoute DiarySettings
-                            |> Expect.equal (DiaryDay Nothing Nothing)
-                    , \_ ->
-                        Route.primaryRoute (FoodLogEntry "log-1" (Just date) Nothing)
-                            |> Expect.equal (DiaryDay Nothing Nothing)
-                    , \_ ->
-                        Route.primaryRoute (FoodSearch (Just date) (Just MealSlot.Lunch))
-                            |> Expect.equal (FoodSearch Nothing Nothing)
-                    , \_ ->
-                        Route.primaryRoute
-                            (FoodShow "food-1" (Just date) (Just MealSlot.Lunch) Nothing)
-                            |> Expect.equal (FoodSearch Nothing Nothing)
-                    , \_ ->
-                        Route.primaryRoute (AdHocLogCreate (Just date) (Just MealSlot.Lunch))
-                            |> Expect.equal (FoodSearch Nothing Nothing)
-                    , \_ ->
-                        Route.primaryRoute (AiLogCreate (Just date) (Just MealSlot.Lunch))
-                            |> Expect.equal (FoodSearch Nothing Nothing)
-                    , \_ ->
-                        Route.primaryRoute CustomFoodList
-                            |> Expect.equal Library
-                    , \_ ->
-                        Route.primaryRoute (CustomFoodShow "food-1")
-                            |> Expect.equal Library
-                    , \_ ->
-                        Route.primaryRoute MealList
-                            |> Expect.equal Library
-                    , \_ ->
-                        Route.primaryRoute (MealShow "meal-1")
-                            |> Expect.equal Library
-                    , \_ ->
-                        Route.primaryRoute SettingsApiKeys
-                            |> Expect.equal Settings
-                    , \_ ->
-                        Route.primaryRoute SettingsApiKeyCreate
-                            |> Expect.equal Settings
-                    ]
-                    ()
+                destinationGroups
+                    |> List.concatMap
+                        (\( destination, routes ) ->
+                            List.map
+                                (\route ->
+                                    Route.primaryRoute route |> Expect.equal destination
+                                )
+                                routes
+                        )
+                    |> expectAll
+        , test "landing and non-app routes are their own destination" <|
+            \_ ->
+                [ Root
+                , BootstrapSetup
+                , AuthLogin
+                , AdminDashboard
+                , Library
+                , Settings
+                , FoodSearch Nothing Nothing
+                , DiaryDay Nothing Nothing
+                , NotFound
+                ]
+                    |> List.map (\route -> Route.primaryRoute route |> Expect.equal route)
+                    |> expectAll
         , {- Plain goals settings stays context-free; the fuzzer covers the
              optional date/month roundtrip, while this pins the old URL.
           -}
@@ -103,6 +75,50 @@ tests =
                     |> Maybe.map Route.fromUrl
                     |> Expect.equal (Just NotFound)
         ]
+
+
+{-| Contextual and nested routes grouped by the bottom-nav or drawer item they
+select. Every constructor that collapses to a destination is represented once,
+so a new child route cannot silently fall outside navigation.
+-}
+destinationGroups : List ( Route, List Route )
+destinationGroups =
+    [ ( DiaryDay Nothing Nothing
+      , [ DiaryDay (Just date) (Just "2026-07")
+        , DiaryCalendar (Just "2026-07")
+        , NutritionDetails (Just date)
+        , GoalSettings (Just date) (Just "2026-07")
+        , DiarySettings
+        , FoodLogEntry "log-1" (Just date) Nothing
+        ]
+      )
+    , ( FoodSearch Nothing Nothing
+      , [ FoodSearch (Just date) (Just MealSlot.Lunch)
+        , FoodShow "food-1" (Just date) (Just MealSlot.Lunch) Nothing
+        , AdHocLogCreate (Just date) (Just MealSlot.Lunch)
+        , AiLogCreate (Just date) (Just MealSlot.Lunch)
+        ]
+      )
+    , ( Library
+      , [ CustomFoodList
+        , CustomFoodCreate
+        , CustomFoodCreateWithAi
+        , CustomFoodEdit "food-1"
+        , CustomFoodShow "food-1"
+        , MealList
+        , MealCreate
+        , MealShow "meal-1"
+        , MealEdit "meal-1"
+        ]
+      )
+    , ( Settings, [ SettingsApiKeys, SettingsApiKeyCreate ] )
+    , ( AdminDashboard, [ AdminCreateUser, AdminEditUser "user-1" ] )
+    ]
+
+
+expectAll : List Expect.Expectation -> Expect.Expectation
+expectAll expectations =
+    Expect.all (List.map (\expectation _ -> expectation) expectations) ()
 
 
 parsePath : String -> Maybe Route

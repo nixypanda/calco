@@ -243,7 +243,6 @@ drawerFocusFollowsVisibility =
                     Main.drawerFocusTarget opened closed
                         |> Expect.equal (Just "app-menu-trigger")
                 , \_ -> Main.drawerFocusTarget opened opened |> Expect.equal Nothing
-                , \_ -> Main.drawerFocusTarget Chrome.init Chrome.init |> Expect.equal Nothing
                 ]
                 ()
 

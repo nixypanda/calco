@@ -36,11 +36,19 @@ tests =
                     afterLanguage =
                         pageClick Settings (buttonContaining "हिन्दी") afterTheme.model
 
+                    afterEnglish : Click
+                    afterEnglish =
+                        pageClickWith
+                            { env | language = HI_IN }
+                            Settings
+                            (buttonContaining "English")
+                            afterLanguage.model
+
                     afterLogout : Click
                     afterLogout =
                         pageClick Settings
                             (buttonContaining (I18n.t EN_US TidNavLogout))
-                            afterLanguage.model
+                            afterEnglish.model
 
                     afterApiKeys : Click
                     afterApiKeys =
@@ -54,12 +62,14 @@ tests =
                 in
                 { theme = afterTheme.outMsg
                 , language = afterLanguage.outMsg
+                , english = afterEnglish.outMsg
                 , logout = afterLogout.outMsg
                 , apiKeys = afterApiKeys.outMsg
                 , panes = Page.paneKeys apiKeys
                 , failures =
                     [ afterTheme.failure
                     , afterLanguage.failure
+                    , afterEnglish.failure
                     , afterLogout.failure
                     , afterApiKeys.failure
                     ]
@@ -68,6 +78,7 @@ tests =
                     |> Expect.equal
                         { theme = Page.ToggleTheme
                         , language = Page.SetLanguage HI_IN
+                        , english = Page.SetLanguage EN_US
                         , logout = Page.Logout
                         , apiKeys = Page.Navigate SettingsApiKeys
                         , panes = [ "api-keys" ]
@@ -76,6 +87,10 @@ tests =
         , test "preferences reflect the active theme and language" <|
             \_ ->
                 let
+                    lightEnglish : Query.Single Page.Msg
+                    lightEnglish =
+                        pageView env Settings (pageFor Settings)
+
                     darkEnglish : Query.Single Page.Msg
                     darkEnglish =
                         pageView
@@ -89,6 +104,10 @@ tests =
                 in
                 Expect.all
                     [ \_ ->
+                        lightEnglish
+                            |> Query.find [ themeToggle EN_US ]
+                            |> Query.has [ pressedChoice False ]
+                    , \_ ->
                         darkEnglish
                             |> Query.find [ themeToggle EN_US ]
                             |> Query.has [ pressedChoice True ]
@@ -117,9 +136,14 @@ type alias Click =
 
 
 pageClick : Route -> Selector -> Page.Model -> Click
-pageClick route selector model =
+pageClick =
+    pageClickWith env
+
+
+pageClickWith : Env -> Route -> Selector -> Page.Model -> Click
+pageClickWith currentEnv route selector model =
     case
-        pageView env route model
+        pageView currentEnv route model
             |> Query.find [ selector ]
             |> Event.simulate Event.click
             |> Event.toResult
