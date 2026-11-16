@@ -7,12 +7,16 @@ module Page.Settings.Landing exposing
     , view
     )
 
+import Browser.Dom
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import I18n
+import Task
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
 import Ui.Button as Button
+import Ui.Common as UiCommon
+import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Icon as Icon
 import Ui.Input as UiInput
@@ -27,12 +31,16 @@ import Ui.Typography as Typography
 
 
 type alias Model =
-    { languageOpen : Bool }
+    { languageOpen : Bool
+    , languageActive : Maybe Language
+    }
 
 
 init : Model
 init =
-    { languageOpen = False }
+    { languageOpen = False
+    , languageActive = Nothing
+    }
 
 
 
@@ -42,8 +50,11 @@ init =
 type Msg
     = ApiKeysClicked
     | ThemeToggleClicked
-    | LanguageDropdownToggled
+    | LanguageDropdownToggled Language
+    | LanguageDropdownClosed
+    | LanguageActiveChanged (Maybe Language)
     | LanguageClicked Language
+    | LanguageFocusCompleted
     | LogoutClicked
 
 
@@ -64,11 +75,37 @@ update msg model =
         ThemeToggleClicked ->
             ( model, Cmd.none, ToggleTheme )
 
-        LanguageDropdownToggled ->
-            ( { model | languageOpen = not model.languageOpen }, Cmd.none, NoOp )
+        LanguageDropdownToggled currentLanguage ->
+            if model.languageOpen then
+                ( { model | languageOpen = False, languageActive = Nothing }
+                , Cmd.none
+                , NoOp
+                )
+
+            else
+                ( { model | languageOpen = True, languageActive = Just currentLanguage }
+                , Cmd.none
+                , NoOp
+                )
+
+        LanguageDropdownClosed ->
+            ( { model | languageOpen = False, languageActive = Nothing }
+            , Cmd.none
+            , NoOp
+            )
+
+        LanguageActiveChanged language ->
+            ( { model | languageActive = language }, Cmd.none, NoOp )
 
         LanguageClicked language ->
-            ( { model | languageOpen = False }, Cmd.none, SetLanguage language )
+            ( { model | languageOpen = False, languageActive = Nothing }
+            , Browser.Dom.focus (UiInput.selectDropdownTriggerId languageDropdownId)
+                |> Task.attempt (\_ -> LanguageFocusCompleted)
+            , SetLanguage language
+            )
+
+        LanguageFocusCompleted ->
+            ( model, Cmd.none, NoOp )
 
         LogoutClicked ->
             ( model, Cmd.none, Logout )
@@ -160,34 +197,63 @@ preferencesSection env model =
         }
 
 
+languageDropdownId : String
+languageDropdownId =
+    "settings-language"
+
+
 languageRow : Env -> Model -> Element Msg
 languageRow env model =
-    Surface.staticRow
-        { leading = []
-        , title =
-            Typography.wrappedListItemTitle env.theme
+    if UiCommon.isSmall env.device then
+        Element.column
+            [ Element.width Element.fill
+            , Element.padding DesignTokens.space16
+            , Element.spacing DesignTokens.space8
+            , UiCommon.testId "list-row"
+            ]
+            [ Typography.wrappedListItemTitle env.theme
                 (I18n.t env.language TidSettingsLanguageTitle)
-        , subtitle =
-            [ Typography.mutedBodyParagraph env.theme
+            , Typography.mutedBodyParagraph env.theme
                 (I18n.t env.language TidSettingsLanguageDescription)
+            , Element.el [ Element.width Element.fill ]
+                (languageControl env model)
             ]
-        , trailing =
-            [ Element.el [ Element.width (Element.px 200) ]
-                (UiInput.selectDropdownLabelHidden env.device
-                    env.theme
-                    env.language
-                    { label = I18n.t env.language TidSettingsLanguageTitle
-                    , selected = env.language
-                    , options =
-                        [ ( EN_US, I18n.languageName EN_US )
-                        , ( HI_IN, I18n.languageName HI_IN )
-                        ]
-                    , onChange = LanguageClicked
-                    , isOpen = model.languageOpen
-                    , onToggle = LanguageDropdownToggled
-                    }
-                )
+
+    else
+        Surface.staticRow
+            { leading = []
+            , title =
+                Typography.wrappedListItemTitle env.theme
+                    (I18n.t env.language TidSettingsLanguageTitle)
+            , subtitle =
+                [ Typography.mutedBodyParagraph env.theme
+                    (I18n.t env.language TidSettingsLanguageDescription)
+                ]
+            , trailing =
+                [ Element.el [ Element.width (Element.px 200) ]
+                    (languageControl env model)
+                ]
+            }
+
+
+languageControl : Env -> Model -> Element Msg
+languageControl env model =
+    UiInput.selectDropdownLabelHidden env.device
+        env.theme
+        env.language
+        { id = languageDropdownId
+        , label = I18n.t env.language TidSettingsLanguageTitle
+        , selected = env.language
+        , options =
+            [ ( EN_US, I18n.languageName EN_US )
+            , ( HI_IN, I18n.languageName HI_IN )
             ]
+        , onChange = LanguageClicked
+        , isOpen = model.languageOpen
+        , onToggle = LanguageDropdownToggled env.language
+        , active = model.languageActive
+        , onActiveChanged = LanguageActiveChanged
+        , onClose = LanguageDropdownClosed
         }
 
 

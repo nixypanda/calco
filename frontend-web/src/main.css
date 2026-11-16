@@ -39,6 +39,23 @@ body {
   box-shadow: var(--ui-card-shadow);
 }
 
+.ui-select-backdrop.ui-select-backdrop {
+  /* Doubled class: elm-ui appends its own single-class layout rules after this
+     stylesheet, so a plain selector would leave this layer in normal flow. */
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 15;
+  background: transparent;
+}
+
+.ui-select-anchor.ui-select-anchor {
+  /* Keep the trigger above the dismiss layer; the nearby menu uses z-index 20. */
+  position: relative;
+  z-index: 16;
+}
+
 .ui-unit-field:focus-within {
   /* The inner input is clipped by the field container, so the focus ring lives on
      the container instead of relying on the global :focus-visible outline. */

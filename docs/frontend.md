@@ -644,7 +644,13 @@ were removed; their actions now live here:
 - **Access** links to API keys.
 - **Preferences** owns the persisted dark-theme switch and a compact
   English/Hindi language dropdown. The dropdown shows the current language and
-  closes after a choice.
+  closes after a choice. Its selected option uses the blue/neutral field palette
+  with a check, not the teal chip fill. Phones stack the Language title,
+  description, and full-width dropdown; larger screens keep the title and
+  description beside a fixed-width dropdown so the Theme and Language rows
+  align. The trigger is a select-only combobox: Escape, an outside click, or a
+  second trigger press closes it, arrow/Home/End keys move the active option,
+  Enter/Space chooses it, and focus returns to the trigger after a choice.
 - **Account** provides the logout action.
 
 The normal-user top bar therefore has no theme switch, language control, or
@@ -652,10 +658,10 @@ profile button. Signed-out login and setup screens keep accessible theme and
 language controls, and admins keep the theme switch plus their account menu
 because they cannot open the normal-user Settings page. The admin account menu
 offers pressed-state language choices and logout only; it has no API keys entry.
-Selected language choices use the accessible chip-selection palette, and logout
-uses the outline danger tone. API key list and create screens group under the
-Settings destination; admins continue to see only the admin drawer because
-normal-user routes redirect them to the admin dashboard.
+Admin account-menu language choices use the accessible chip-selection palette,
+and logout uses the outline danger tone. API key list and create screens group
+under the Settings destination; admins continue to see only the admin drawer
+because normal-user routes redirect them to the admin dashboard.
 
 ### API Keys
 

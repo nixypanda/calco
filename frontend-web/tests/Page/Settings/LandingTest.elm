@@ -1,8 +1,8 @@
 module Page.Settings.LandingTest exposing (tests)
 
 {-| Settings landing route: the preference and account controls cross
-`Page.update` into app effects, the language dropdown opens and closes around a
-choice, and the rendered controls reflect the active theme and language.
+`Page.update` into app effects, the language menu opens, closes, changes
+language, and exposes listbox ARIA state for pointer and keyboard users.
 -}
 
 import Data.Route exposing (Route(..))
@@ -10,6 +10,7 @@ import Element
 import Expect
 import Html.Attributes as Attr
 import I18n
+import Json.Encode as Encode
 import Page
 import Support.Fixtures as Fixtures
 import Test exposing (Test, describe, test)
@@ -39,7 +40,7 @@ tests =
                     afterLanguage : Click
                     afterLanguage =
                         pageClick Settings
-                            (languageOption "हिन्दी")
+                            (languageOption (I18n.languageName HI_IN))
                             afterLanguageOpen.model
 
                     afterLogout : Click
@@ -80,7 +81,7 @@ tests =
                         , panes = [ "api-keys" ]
                         , failures = []
                         }
-        , test "a user opens the language dropdown, chooses Hindi, and sees it selected" <|
+        , test "a user opens, closes, and reopens the menu before choosing Hindi then English" <|
             \_ ->
                 let
                     opened : Click
@@ -91,15 +92,49 @@ tests =
                     openedView =
                         pageView env Settings opened.model
 
-                    chosen : Click
-                    chosen =
-                        pageClick Settings
-                            (languageOption "हिन्दी")
-                            opened.model
+                    closed : Click
+                    closed =
+                        pageClick Settings (languageTrigger EN_US) opened.model
 
-                    chosenView : Query.Single Page.Msg
-                    chosenView =
-                        pageView { env | language = HI_IN } Settings chosen.model
+                    closedView : Query.Single Page.Msg
+                    closedView =
+                        pageView env Settings closed.model
+
+                    reopened : Click
+                    reopened =
+                        pageClick Settings (languageTrigger EN_US) closed.model
+
+                    reopenedView : Query.Single Page.Msg
+                    reopenedView =
+                        pageView env Settings reopened.model
+
+                    chosenHindi : Click
+                    chosenHindi =
+                        pageClick Settings
+                            (languageOption (I18n.languageName HI_IN))
+                            reopened.model
+
+                    hindiView : Query.Single Page.Msg
+                    hindiView =
+                        pageView hindiEnv Settings chosenHindi.model
+
+                    reopenedForEnglish : Click
+                    reopenedForEnglish =
+                        pageClickWith hindiEnv
+                            Settings
+                            (languageTrigger HI_IN)
+                            chosenHindi.model
+
+                    chosenEnglish : Click
+                    chosenEnglish =
+                        pageClickWith hindiEnv
+                            Settings
+                            (languageOption (I18n.languageName EN_US))
+                            reopenedForEnglish.model
+
+                    englishView : Query.Single Page.Msg
+                    englishView =
+                        pageView env Settings chosenEnglish.model
                 in
                 Expect.all
                     [ \_ -> opened.failure |> Expect.equal Nothing
@@ -108,17 +143,149 @@ tests =
                         openedView
                             |> Query.find [ languageTrigger EN_US ]
                             |> Query.has [ expanded True ]
-                    , \_ -> openedView |> Query.has [ languageOption "हिन्दी" ]
+                    , \_ ->
+                        openedView
+                            |> Query.find [ languageOption (I18n.languageName EN_US) ]
+                            |> Query.has [ selectedChoice True ]
+                    , \_ ->
+                        openedView
+                            |> Query.find [ languageOption (I18n.languageName HI_IN) ]
+                            |> Query.has [ selectedChoice False ]
+                    , \_ ->
+                        closed
+                            |> .failure
+                            |> Expect.equal Nothing
+                    , \_ ->
+                        closedView
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has [ expanded False ]
+                    , \_ ->
+                        closedView
+                            |> Query.hasNot [ languageOption (I18n.languageName HI_IN) ]
+                    , \_ ->
+                        reopenedView
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has [ expanded True ]
+                    , \_ -> chosenHindi.failure |> Expect.equal Nothing
+                    , \_ -> chosenHindi.outMsg |> Expect.equal (Page.SetLanguage HI_IN)
+                    , \_ ->
+                        hindiView
+                            |> Query.find [ languageTrigger HI_IN ]
+                            |> Query.has
+                                [ expanded False
+                                , Selector.text (I18n.languageName HI_IN)
+                                ]
+                    , \_ ->
+                        hindiView
+                            |> Query.hasNot [ languageOption (I18n.languageName EN_US) ]
+                    , \_ ->
+                        reopenedForEnglish
+                            |> .failure
+                            |> Expect.equal Nothing
+                    , \_ ->
+                        chosenEnglish
+                            |> .failure
+                            |> Expect.equal Nothing
+                    , \_ -> chosenEnglish.outMsg |> Expect.equal (Page.SetLanguage EN_US)
+                    , \_ ->
+                        englishView
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has
+                                [ expanded False
+                                , Selector.text (I18n.languageName EN_US)
+                                ]
+                    ]
+                    ()
+        , test "keyboard and outside dismissal keep the menu accessible" <|
+            \_ ->
+                let
+                    opened : Click
+                    opened =
+                        pageClick Settings (languageTrigger EN_US) (pageFor Settings)
+
+                    moved : Click
+                    moved =
+                        pageKeyDown "ArrowDown"
+                            (languageTrigger EN_US)
+                            opened.model
+
+                    movedView : Query.Single Page.Msg
+                    movedView =
+                        pageView env Settings moved.model
+
+                    escaped : Click
+                    escaped =
+                        pageKeyDown "Escape"
+                            (languageTrigger EN_US)
+                            moved.model
+
+                    escapedView : Query.Single Page.Msg
+                    escapedView =
+                        pageView env Settings escaped.model
+
+                    reopened : Click
+                    reopened =
+                        pageClick Settings (languageTrigger EN_US) escaped.model
+
+                    dismissed : Click
+                    dismissed =
+                        pageClick Settings languageBackdrop reopened.model
+
+                    dismissedView : Query.Single Page.Msg
+                    dismissedView =
+                        pageView env Settings dismissed.model
+
+                    reopenedForKeyboard : Click
+                    reopenedForKeyboard =
+                        pageClick Settings (languageTrigger EN_US) dismissed.model
+
+                    movedAgain : Click
+                    movedAgain =
+                        pageKeyDown "ArrowDown"
+                            (languageTrigger EN_US)
+                            reopenedForKeyboard.model
+
+                    chosen : Click
+                    chosen =
+                        pageKeyDown "Enter"
+                            (languageTrigger EN_US)
+                            movedAgain.model
+
+                    chosenView : Query.Single Page.Msg
+                    chosenView =
+                        pageView hindiEnv Settings chosen.model
+                in
+                Expect.all
+                    [ \_ -> moved.failure |> Expect.equal Nothing
+                    , \_ -> moved.outMsg |> Expect.equal Page.NoOutMsg
+                    , \_ ->
+                        movedView
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has [ expanded True ]
+                    , \_ -> escaped.failure |> Expect.equal Nothing
+                    , \_ -> escaped.outMsg |> Expect.equal Page.NoOutMsg
+                    , \_ ->
+                        escapedView
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has [ expanded False ]
+                    , \_ ->
+                        escapedView
+                            |> Query.hasNot [ languageOption (I18n.languageName EN_US) ]
+                    , \_ -> dismissed.failure |> Expect.equal Nothing
+                    , \_ -> dismissed.outMsg |> Expect.equal Page.NoOutMsg
+                    , \_ ->
+                        dismissedView
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has [ expanded False ]
                     , \_ -> chosen.failure |> Expect.equal Nothing
                     , \_ -> chosen.outMsg |> Expect.equal (Page.SetLanguage HI_IN)
                     , \_ ->
                         chosenView
                             |> Query.find [ languageTrigger HI_IN ]
-                            |> Query.has [ expanded False, Selector.text "हिन्दी" ]
-                    , \_ -> chosenView |> Query.hasNot [ languageOption "English" ]
+                            |> Query.has [ expanded False ]
                     ]
                     ()
-        , test "preferences reflect the active theme and language" <|
+        , test "preferences reflect the active theme and language with one visible title" <|
             \_ ->
                 let
                     lightEnglish : Query.Single Page.Msg
@@ -134,7 +301,11 @@ tests =
 
                     hindi : Query.Single Page.Msg
                     hindi =
-                        pageView { env | language = HI_IN } Settings (pageFor Settings)
+                        pageView hindiEnv Settings (pageFor Settings)
+
+                    desktop : Query.Single Page.Msg
+                    desktop =
+                        pageView desktopEnv Settings (pageFor Settings)
                 in
                 Expect.all
                     [ \_ ->
@@ -152,9 +323,19 @@ tests =
                     , \_ ->
                         hindi
                             |> Query.find [ languageTrigger HI_IN ]
-                            |> Query.has [ expanded False, Selector.text "हिन्दी" ]
+                            |> Query.has
+                                [ expanded False
+                                , Selector.text (I18n.languageName HI_IN)
+                                ]
                     , \_ ->
                         lightEnglish
+                            |> Query.findAll
+                                [ Selector.exactText
+                                    (I18n.t EN_US TidSettingsLanguageTitle)
+                                ]
+                            |> Query.count (Expect.equal 1)
+                    , \_ ->
+                        desktop
                             |> Query.findAll
                                 [ Selector.exactText
                                     (I18n.t EN_US TidSettingsLanguageTitle)
@@ -166,7 +347,7 @@ tests =
 
 
 
--- PAGE CLICK
+-- PAGE EVENT
 
 
 type alias Click =
@@ -183,10 +364,24 @@ pageClick =
 
 pageClickWith : Env -> Route -> Selector -> Page.Model -> Click
 pageClickWith currentEnv route selector model =
+    pageEventWith currentEnv route Event.click selector model
+
+
+pageKeyDown : String -> Selector -> Page.Model -> Click
+pageKeyDown key selector model =
+    pageEventWith env
+        Settings
+        (Event.custom "keydown" (Encode.object [ ( "key", Encode.string key ) ]))
+        selector
+        model
+
+
+pageEventWith : Env -> Route -> ( String, Encode.Value ) -> Selector -> Page.Model -> Click
+pageEventWith currentEnv route event selector model =
     case
         pageView currentEnv route model
             |> Query.find [ selector ]
-            |> Event.simulate Event.click
+            |> Event.simulate event
             |> Event.toResult
     of
         Err reason ->
@@ -200,7 +395,7 @@ pageClickWith currentEnv route selector model =
                 Nothing ->
                     { model = model
                     , outMsg = Page.NoOutMsg
-                    , failure = Just "Page.update ignored the settings control click"
+                    , failure = Just "Page.update ignored the settings control event"
                     }
 
 
@@ -223,6 +418,10 @@ apply route model =
         |> Fixtures.tupleFirst
 
 
+
+-- SELECTORS
+
+
 themeToggle : Language -> Selector
 themeToggle language =
     Selector.attribute
@@ -232,7 +431,7 @@ themeToggle language =
 languageTrigger : Language -> Selector
 languageTrigger language =
     Selector.all
-        [ Selector.attribute (Attr.attribute "role" "button")
+        [ Selector.attribute (Attr.attribute "role" "combobox")
         , Selector.attribute
             (Attr.attribute "aria-label"
                 (I18n.t language TidSettingsLanguageTitle
@@ -245,7 +444,15 @@ languageTrigger language =
 
 languageOption : String -> Selector
 languageOption label =
-    buttonContaining label
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "option")
+        , Selector.containing [ Selector.text label ]
+        ]
+
+
+languageBackdrop : Selector
+languageBackdrop =
+    Selector.attribute (Attr.attribute "data-testid" "settings-language-backdrop")
 
 
 buttonContaining : String -> Selector
@@ -269,6 +476,19 @@ expanded isOpen =
         )
 
 
+selectedChoice : Bool -> Selector
+selectedChoice selected =
+    Selector.attribute
+        (Attr.attribute "aria-selected"
+            (if selected then
+                "true"
+
+             else
+                "false"
+            )
+        )
+
+
 pressedChoice : Bool -> Selector
 pressedChoice selected =
     Selector.attribute
@@ -282,6 +502,10 @@ pressedChoice selected =
         )
 
 
+
+-- ENV
+
+
 env : Env
 env =
     { theme = Theme.forMode Theme.Light
@@ -289,3 +513,13 @@ env =
     , viewport = RegularViewport
     , language = EN_US
     }
+
+
+hindiEnv : Env
+hindiEnv =
+    { env | language = HI_IN }
+
+
+desktopEnv : Env
+desktopEnv =
+    { env | device = { class = Element.Desktop, orientation = Element.Landscape } }
