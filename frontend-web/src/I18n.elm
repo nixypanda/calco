@@ -1,4 +1,4 @@
-module I18n exposing (defaultLanguage, en, t)
+module I18n exposing (defaultLanguage, en, languageCode, t)
 
 import Translations.Ids exposing (TranslationId)
 import Translations.Util exposing (Language(..), translate)
@@ -17,6 +17,19 @@ t =
 defaultLanguage : Language
 defaultLanguage =
     EN_US
+
+
+{-| The persisted form understood by `Translations.Util.parseLanguage`. Keeping
+the pair together makes the flag/bootstrap roundtrip a local contract.
+-}
+languageCode : Language -> String
+languageCode language =
+    case language of
+        EN_US ->
+            "en_US"
+
+        HI_IN ->
+            "hi_IN"
 
 
 {-| Escape hatch for strings produced outside the render path (for example,

@@ -163,12 +163,12 @@ viewFrame env model session route chromeSuppressed pageBusy updateBanner page to
         profileMenuEl =
             if
                 isMenuOpen ProfileMenu model
+                    && Auth.isAdmin session
                     && View.Chrome.showsAppChrome session chromeSuppressed route
             then
                 Just
                     (View.Chrome.profileMenu env
                         session
-                        (toMsg << NavigateClicked)
                         (toMsg LogoutClicked)
                         (toMsg << LanguageClicked)
                     )

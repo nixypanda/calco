@@ -517,11 +517,15 @@ in `Data` and `Page`, app coordination in `Main`.
 owns the JavaScript ports for:
 
 - local date and IANA timezone.
-- persisted theme preference.
+- persisted theme and language preferences.
 - requested page reloads.
 - camera barcode scanning through `barcodeScanner.js`.
 - clipboard copy request/result ports for API-key secrets through
   `navigator.clipboard.writeText`.
+
+Theme and language are loaded from `localStorage` through Elm flags and written
+back through the `persistThemeMode` and `persistLanguage` ports, so both
+preferences survive a reload.
 
 The scanner uses ZXing for EAN/UPC detection and stops camera tracks when the
 scan completes or is cancelled.
@@ -602,10 +606,13 @@ landing page. The navigation shows Library for those food and meal routes.
 ### Settings
 
 `Page.Settings.Landing` renders `/settings`, the account and preferences
-landing page. It currently links to API keys and leaves a placeholder for
-theme/language preferences. API key list and create screens group under the
-Settings destination; admins continue to see only the admin drawer because
-normal-user routes redirect them to the admin dashboard.
+landing page. It links to API keys, owns the persisted dark-theme and language
+controls, and provides the logout action. The normal-user top bar therefore has
+no theme switch or profile menu; signed-out auth screens keep an accessible
+theme switch, and admins keep the top-bar switch plus their account menu because
+they cannot open the normal-user Settings page. API key list and create screens
+group under the Settings destination; admins continue to see only the admin
+drawer because normal-user routes redirect them to the admin dashboard.
 
 ### API Keys
 
@@ -613,8 +620,8 @@ normal-user routes redirect them to the admin dashboard.
 `Page.Settings.ApiKeyCreate` renders `/settings/api-keys/new` for normal users.
 Anonymous visitors go to login; admin identities go to the admin dashboard.
 `View.Chrome` supplies the **API keys** and **Create API key** screen titles. The
-profile-menu **API keys** entry is shown to normal users only; admin sessions do
-not see it.
+Settings landing page is the normal-user entry point to API key management;
+admin sessions do not see that route.
 
 The list page provides:
 

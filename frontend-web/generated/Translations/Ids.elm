@@ -453,10 +453,15 @@ type TranslationId
     | TidNutritionDetailsVitaminsMinerals
     | TidSearchKcalPer100g String
     | TidSettingsAccessTitle
+    | TidSettingsAccountDescription
+    | TidSettingsAccountTitle
     | TidSettingsApiKeysSummary
     | TidSettingsDescription
-    | TidSettingsPreferencesComingSoon
+    | TidSettingsLanguageDescription
+    | TidSettingsLanguageTitle
     | TidSettingsPreferencesTitle
+    | TidSettingsThemeDescription
+    | TidSettingsThemeTitle
     | TidSetupDescription
     | TidSetupPasswordMinLength
     | TidSetupSubmit

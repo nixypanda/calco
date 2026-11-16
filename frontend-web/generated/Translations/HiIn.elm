@@ -1359,17 +1359,32 @@ hiInTranslations tid =
         TidSettingsAccessTitle ->
             "पहुँच"
 
+        TidSettingsAccountDescription ->
+            "इस डिवाइस पर CalCo से साइन आउट करें।"
+
+        TidSettingsAccountTitle ->
+            "खाता"
+
         TidSettingsApiKeysSummary ->
             "स्क्रिप्ट और टूल के लिए कुंजियाँ बनाएँ और रद्द करें।"
 
         TidSettingsDescription ->
             "अपना खाता, पहुँच और ऐप प्राथमिकताएँ प्रबंधित करें।"
 
-        TidSettingsPreferencesComingSoon ->
-            "थीम और भाषा के विकल्प जल्द ही यहाँ उपलब्ध होंगे।"
+        TidSettingsLanguageDescription ->
+            "ऐप में उपयोग की जाने वाली भाषा चुनें।"
+
+        TidSettingsLanguageTitle ->
+            "भाषा"
 
         TidSettingsPreferencesTitle ->
             "प्राथमिकताएँ"
+
+        TidSettingsThemeDescription ->
+            "गहरे रंग वाली स्कीम का उपयोग करें।"
+
+        TidSettingsThemeTitle ->
+            "डार्क थीम"
 
         TidSetupDescription ->
             "शुरू करने के लिए एडमिन खाता बनाएँ।"

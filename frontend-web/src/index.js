@@ -11,13 +11,15 @@ if ("scrollRestoration" in window.history) {
     window.history.scrollRestoration = "manual";
 }
 
-const stored = localStorage.getItem("themeMode") || "light";
+const storedThemeMode = localStorage.getItem("themeMode") || "light";
+const storedLanguage = localStorage.getItem("language") || "en_US";
 const app = Elm.Main.init({
     node: document.getElementById("root"),
     flags: {
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
-        themeMode: stored,
+        themeMode: storedThemeMode,
+        language: storedLanguage,
     },
 });
 
@@ -84,6 +86,10 @@ document.addEventListener("visibilitychange", () => {
 
 app.ports.persistThemeMode.subscribe((mode) => {
     localStorage.setItem("themeMode", mode);
+});
+
+app.ports.persistLanguage.subscribe((language) => {
+    localStorage.setItem("language", language);
 });
 
 app.ports.reloadPage.subscribe(() => {

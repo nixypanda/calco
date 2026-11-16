@@ -1359,17 +1359,32 @@ enUsTranslations tid =
         TidSettingsAccessTitle ->
             "Access"
 
+        TidSettingsAccountDescription ->
+            "Sign out of CalCo on this device."
+
+        TidSettingsAccountTitle ->
+            "Account"
+
         TidSettingsApiKeysSummary ->
             "Create and revoke keys for scripts and tools."
 
         TidSettingsDescription ->
             "Manage your account, access, and app preferences."
 
-        TidSettingsPreferencesComingSoon ->
-            "Theme and language options will be available here soon."
+        TidSettingsLanguageDescription ->
+            "Choose the language used across the app."
+
+        TidSettingsLanguageTitle ->
+            "Language"
 
         TidSettingsPreferencesTitle ->
             "Preferences"
+
+        TidSettingsThemeDescription ->
+            "Use a darker color scheme."
+
+        TidSettingsThemeTitle ->
+            "Dark theme"
 
         TidSetupDescription ->
             "Create the admin account to get started."

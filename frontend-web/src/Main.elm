@@ -30,11 +30,12 @@ import Element.Background as Background
 import Element.Font as Font
 import Html
 import Html.Attributes
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page
 import Process
 import Task
-import Translations.Util exposing (Language(..))
+import Translations.Util exposing (Language, parseLanguage)
 import Ui.Common as UiCommon exposing (uiClass)
 import Ui.Css as Css
 import Ui.Env as Env exposing (Env)
@@ -50,7 +51,7 @@ import View.Chrome
 
 
 type alias Flags =
-    { windowWidth : Int, windowHeight : Int, themeMode : String }
+    { windowWidth : Int, windowHeight : Int, themeMode : String, language : String }
 
 
 type alias Model =
@@ -113,7 +114,9 @@ init flags url key =
             { theme = Theme.forMode (Theme.modeFromString flags.themeMode)
             , device = classifyDevice flags.windowWidth flags.windowHeight
             , viewport = Env.viewportForWidth flags.windowWidth
-            , language = EN_US
+            , language =
+                parseLanguage flags.language
+                    |> Result.withDefault I18n.defaultLanguage
             }
       , version = versionModel
       }
@@ -378,35 +381,52 @@ applyChromeOutMsg outMsg model =
             )
 
         Chrome.Logout ->
-            let
-                generation : Int
-                generation =
-                    model.logoutGeneration + 1
-            in
-            ( { model
-                | page = Page.clearStore model.page
-                , loggingOut = True
-                , logoutGeneration = generation
-              }
-            , Cmd.batch
-                [ Api.Auth.logout (\_ -> LogoutCompleted generation)
-                , revokePhotoPreviewUrls (Page.photoPreviewUrls model.page)
-                , Process.sleep 5000 |> Task.perform (\_ -> LogoutTimedOut generation)
-                ]
-            )
+            beginLogout model
 
         Chrome.ToggleTheme ->
-            let
-                nextMode : Theme.Mode
-                nextMode =
-                    Theme.toggle model.env.theme.mode
-            in
-            ( { model | env = Env.withTheme model.env (Theme.forMode nextMode) }
-            , persistThemeMode (Theme.modeToString nextMode)
-            )
+            toggleTheme model
 
         Chrome.SetLanguage language ->
-            ( { model | env = Env.withLanguage model.env language }, Cmd.none )
+            setLanguage language model
+
+
+beginLogout : Model -> ( Model, Cmd Msg )
+beginLogout model =
+    let
+        generation : Int
+        generation =
+            model.logoutGeneration + 1
+    in
+    ( { model
+        | page = Page.clearStore model.page
+        , loggingOut = True
+        , logoutGeneration = generation
+      }
+    , Cmd.batch
+        [ Api.Auth.logout (\_ -> LogoutCompleted generation)
+        , revokePhotoPreviewUrls (Page.photoPreviewUrls model.page)
+        , Process.sleep 5000 |> Task.perform (\_ -> LogoutTimedOut generation)
+        ]
+    )
+
+
+toggleTheme : Model -> ( Model, Cmd Msg )
+toggleTheme model =
+    let
+        nextMode : Theme.Mode
+        nextMode =
+            Theme.toggle model.env.theme.mode
+    in
+    ( { model | env = Env.withTheme model.env (Theme.forMode nextMode) }
+    , persistThemeMode (Theme.modeToString nextMode)
+    )
+
+
+setLanguage : Language -> Model -> ( Model, Cmd Msg )
+setLanguage language model =
+    ( { model | env = Env.withLanguage model.env language }
+    , persistLanguage (I18n.languageCode language)
+    )
 
 
 normalizeChromeNavigation : Route -> Route -> Route
@@ -608,6 +628,15 @@ applyPageOutMsg outMsg model =
 
         Page.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+
+        Page.ToggleTheme ->
+            toggleTheme model
+
+        Page.SetLanguage language ->
+            setLanguage language model
+
+        Page.Logout ->
+            beginLogout model
 
         Page.SessionExpired ->
             ( { model
@@ -890,6 +919,9 @@ port copyTextResult : (CopyTextResult -> msg) -> Sub msg
 
 
 port persistThemeMode : String -> Cmd msg
+
+
+port persistLanguage : String -> Cmd msg
 
 
 port reloadPage : () -> Cmd msg

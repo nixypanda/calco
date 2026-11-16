@@ -18,7 +18,7 @@ import Support.Fuzz as SupportFuzz
 import Test exposing (Test, describe, fuzz2, fuzz3, test)
 import Test.Html.Event as Event
 import Test.Html.Query as Query
-import Test.Html.Selector as Selector
+import Test.Html.Selector as Selector exposing (Selector)
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
 import Ui.Env exposing (Env, Viewport(..))
@@ -201,15 +201,50 @@ tests =
                     , \_ -> expectBackTarget Settings SettingsApiKeys
                     ]
                     ()
-        , test "profile menu leaves diary entry points on the diary" <|
+        , test "normal app chrome has no topbar theme switch or profile button" <|
+            \_ ->
+                let
+                    topbar : Query.Single ()
+                    topbar =
+                        topbarFor user (DiaryDay Nothing Nothing)
+                in
+                Expect.all
+                    [ \_ -> topbar |> Query.hasNot [ themeSwitchSelector ]
+                    , \_ -> topbar |> Query.hasNot [ profileButtonSelector ]
+                    ]
+                    ()
+        , test "signed-out auth keeps an accessible topbar theme switch" <|
+            \_ ->
+                let
+                    topbar : Query.Single ()
+                    topbar =
+                        topbarFor anonymous AuthLogin
+                in
+                Expect.all
+                    [ \_ -> topbar |> Query.has [ themeSwitchSelector ]
+                    , \_ -> topbar |> Query.hasNot [ profileButtonSelector ]
+                    ]
+                    ()
+        , test "admins keep the theme switch and profile control" <|
+            \_ ->
+                let
+                    topbar : Query.Single ()
+                    topbar =
+                        topbarFor admin AdminDashboard
+                in
+                Expect.all
+                    [ \_ -> topbar |> Query.has [ themeSwitchSelector ]
+                    , \_ -> topbar |> Query.has [ profileButtonSelector ]
+                    ]
+                    ()
+        , test "the admin profile menu only offers account-level actions" <|
             \_ ->
                 let
                     menu : Query.Single ()
                     menu =
                         Chrome.profileMenu
                             (envFor { class = Element.Phone, orientation = Element.Portrait })
-                            user
-                            (always ())
+                            admin
                             ()
                             (always ())
                             |> Element.layout []
@@ -218,22 +253,16 @@ tests =
                 Expect.all
                     [ \_ ->
                         menu
-                            |> Query.hasNot
-                                [ Selector.exactText (I18n.en TidDiaryOpenCalendar) ]
-                    , \_ ->
-                        menu
-                            |> Query.hasNot
-                                [ Selector.exactText (I18n.en TidDiaryEditGoals) ]
-                    , \_ ->
-                        menu
-                            |> Query.hasNot
-                                [ Selector.exactText (I18n.en TidDiaryManageMealSlots) ]
-                    , \_ ->
-                        menu
-                            |> Query.has [ Selector.exactText (I18n.en TidNavApiKeys) ]
+                            |> Query.has
+                                [ Selector.text (I18n.en (TidCommonSignedInAs "admin")) ]
+                    , \_ -> menu |> Query.has [ Selector.text "English" ]
+                    , \_ -> menu |> Query.has [ Selector.text "हिन्दी" ]
                     , \_ ->
                         menu
                             |> Query.has [ Selector.exactText (I18n.en TidNavLogout) ]
+                    , \_ ->
+                        menu
+                            |> Query.hasNot [ Selector.exactText (I18n.en TidNavApiKeys) ]
                     ]
                     ()
         ]
@@ -310,6 +339,38 @@ drawerFor session =
         Element.none
         |> Element.layout []
         |> Query.fromHtml
+
+
+topbarFor : Session -> Route -> Query.Single ()
+topbarFor session route =
+    Chrome.topBarView
+        (envFor { class = Element.Phone, orientation = Element.Portrait })
+        session
+        route
+        False
+        ()
+        ()
+        ()
+        (\_ -> ())
+        { profileLabel = "U", profileMenu = Nothing }
+        |> Element.layout []
+        |> Query.fromHtml
+
+
+themeSwitchSelector : Selector
+themeSwitchSelector =
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.attribute (Attr.attribute "aria-label" (I18n.en TidCommonUseDarkTheme))
+        ]
+
+
+profileButtonSelector : Selector
+profileButtonSelector =
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.attribute (Attr.attribute "aria-label" (I18n.en TidCommonProfile))
+        ]
 
 
 date : LocalDate

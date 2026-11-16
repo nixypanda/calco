@@ -90,6 +90,7 @@ import Page.Users.Login as AuthLogin
 import Set exposing (Set)
 import Store exposing (Store)
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Page as UiPage
@@ -180,6 +181,9 @@ type OutMsg
     | RequestBarcodeScanStop
     | RevokePhotoPreviewUrls (List String)
     | CopyText Int Int String
+    | ToggleTheme
+    | SetLanguage Language
+    | Logout
     | LoginSucceeded Auth.LoginSession
     | SetupSucceeded Auth.LoginSession
 
@@ -2897,6 +2901,15 @@ applySettingsLandingOutMsg _ outMsg =
 
         SettingsLanding.Navigate route ->
             ( Cmd.none, Navigate route )
+
+        SettingsLanding.ToggleTheme ->
+            ( Cmd.none, ToggleTheme )
+
+        SettingsLanding.SetLanguage language ->
+            ( Cmd.none, SetLanguage language )
+
+        SettingsLanding.Logout ->
+            ( Cmd.none, Logout )
 
 
 applyApiKeysOutMsg : InitCtx -> Int -> SettingsApiKeys.OutMsg -> ( Cmd Msg, OutMsg )

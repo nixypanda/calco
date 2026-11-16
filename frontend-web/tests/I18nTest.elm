@@ -52,6 +52,17 @@ tests =
                     , \_ -> blankIds Util.HI_IN |> Expect.equal []
                     ]
                     ()
+        , test "persisted language codes parse back to the selected language" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        Util.parseLanguage (I18n.languageCode Util.EN_US)
+                            |> Expect.equal (Ok Util.EN_US)
+                    , \_ ->
+                        Util.parseLanguage (I18n.languageCode Util.HI_IN)
+                            |> Expect.equal (Ok Util.HI_IN)
+                    ]
+                    ()
         ]
 
 

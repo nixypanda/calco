@@ -118,6 +118,27 @@ topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNa
         meta : ScreenMeta
         meta =
             screenMeta env session route
+
+        themeControl : List (Element msg)
+        themeControl =
+            if offersThemeSwitch session then
+                [ Element.el
+                    [ Element.paddingEach
+                        { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 }
+                    ]
+                    (themeToggle env onThemeToggle)
+                ]
+
+            else
+                []
+
+        profileControl : List (Element msg)
+        profileControl =
+            if Auth.isAdmin session then
+                [ profileButton env onProfile profile ]
+
+            else
+                []
     in
     Element.row
         [ Element.width Element.fill
@@ -132,13 +153,9 @@ topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNa
             [ leadingButton env meta.leading onMenuClick onNavigate
             , Element.el [ Element.width Element.fill, Element.clip ]
                 (Typography.screenTitle env.theme meta.title)
-            , Element.el
-                [ Element.paddingEach
-                    { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 }
-                ]
-                (themeToggle env onThemeToggle)
-            , profileButton env onProfile profile
             ]
+                ++ themeControl
+                ++ profileControl
 
          else
             [ Element.row [ Element.spacing DesignTokens.space8, Element.centerY ]
@@ -148,9 +165,18 @@ topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNa
                 , Typography.pageTitle env.theme "CalCo"
                 ]
             , Element.el [ Element.width Element.fill ] Element.none
-            , themeToggle env onThemeToggle
             ]
+                ++ themeControl
         )
+
+
+{-| The top bar only offers the theme switch to signed-out auth screens and to
+admins, who cannot open the normal-user Settings page where the preference now
+lives.
+-}
+offersThemeSwitch : Session -> Bool
+offersThemeSwitch session =
+    not (Auth.isAuthenticated session) || Auth.isAdmin session
 
 
 themeToggle : Env -> msg -> Element msg
@@ -682,10 +708,10 @@ drawerItemButton theme config =
 -- PROFILE MENU
 
 
-profileMenu : Env -> Session -> (Route -> msg) -> msg -> (Language -> msg) -> Element msg
-profileMenu env session onNavigate onLogout onSetLanguage =
+profileMenu : Env -> Session -> msg -> (Language -> msg) -> Element msg
+profileMenu env session onLogout onSetLanguage =
     menuCard env.theme
-        { width = 240, children = profileMenuContent env session onNavigate onLogout onSetLanguage }
+        { width = 240, children = profileMenuContent env session onLogout onSetLanguage }
 
 
 menuCard : Theme -> { width : Int, children : List (Element msg) } -> Element msg
@@ -706,12 +732,11 @@ menuCard theme config =
 profileMenuContent :
     Env
     -> Session
-    -> (Route -> msg)
     -> msg
     -> (Language -> msg)
     -> List (Element msg)
-profileMenuContent env session onNavigate onLogout onSetLanguage =
-    Typography.mutedCaption env.theme
+profileMenuContent env session onLogout onSetLanguage =
+    [ Typography.mutedCaption env.theme
         (case session of
             Auth.Authenticated identity ->
                 I18n.t env.language (TidCommonSignedInAs identity.username)
@@ -719,62 +744,46 @@ profileMenuContent env session onNavigate onLogout onSetLanguage =
             _ ->
                 I18n.t env.language TidCommonSignedIn
         )
-        :: (if Auth.isAdmin session then
-                []
+    , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        [ Button.textButton env.device
+            env.theme
+            { tone =
+                if env.language == EN_US then
+                    Button.Primary
 
-            else
-                [ Button.textButton env.device
-                    env.theme
-                    { tone = Button.Ghost
-                    , width = Button.FullWidth
-                    , label = I18n.t env.language TidNavApiKeys
-                    , onPress = onNavigate SettingsApiKeys
-                    , submitState = Nothing
-                    , submittingLabel = Nothing
-                    , trailing = Nothing
-                    }
-                ]
-           )
-        ++ [ Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                [ Button.textButton env.device
-                    env.theme
-                    { tone =
-                        if env.language == EN_US then
-                            Button.Primary
+                else
+                    Button.Ghost
+            , width = Button.FullWidth
+            , label = "English"
+            , onPress = onSetLanguage EN_US
+            , submitState = Nothing
+            , submittingLabel = Nothing
+            , trailing = Nothing
+            }
+        , Button.textButton env.device
+            env.theme
+            { tone =
+                if env.language == HI_IN then
+                    Button.Primary
 
-                        else
-                            Button.Ghost
-                    , width = Button.FullWidth
-                    , label = "English"
-                    , onPress = onSetLanguage EN_US
-                    , submitState = Nothing
-                    , submittingLabel = Nothing
-                    , trailing = Nothing
-                    }
-                , Button.textButton env.device
-                    env.theme
-                    { tone =
-                        if env.language == HI_IN then
-                            Button.Primary
-
-                        else
-                            Button.Ghost
-                    , width = Button.FullWidth
-                    , label = "हिन्दी"
-                    , onPress = onSetLanguage HI_IN
-                    , submitState = Nothing
-                    , submittingLabel = Nothing
-                    , trailing = Nothing
-                    }
-                ]
-           , Button.textButton env.device
-                env.theme
-                { tone = Button.Danger
-                , width = Button.FullWidth
-                , label = I18n.t env.language TidNavLogout
-                , onPress = onLogout
-                , submitState = Nothing
-                , submittingLabel = Nothing
-                , trailing = Nothing
-                }
-           ]
+                else
+                    Button.Ghost
+            , width = Button.FullWidth
+            , label = "हिन्दी"
+            , onPress = onSetLanguage HI_IN
+            , submitState = Nothing
+            , submittingLabel = Nothing
+            , trailing = Nothing
+            }
+        ]
+    , Button.textButton env.device
+        env.theme
+        { tone = Button.Danger
+        , width = Button.FullWidth
+        , label = I18n.t env.language TidNavLogout
+        , onPress = onLogout
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Nothing
+        }
+    ]
