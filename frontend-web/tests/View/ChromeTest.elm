@@ -21,7 +21,7 @@ import Test.Html.Query as Query
 import Test.Html.Selector as Selector
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
-import Ui.Env exposing (Env)
+import Ui.Env exposing (Env, Viewport(..))
 import Ui.Theme as Theme
 import View.Chrome as Chrome
 
@@ -137,6 +137,7 @@ expectBackTarget target route =
     Chrome.topBarView
         { theme = Theme.forMode Theme.Light
         , device = { class = Element.Phone, orientation = Element.Portrait }
+        , viewport = RegularViewport
         , language = EN_US
         }
         user
@@ -176,6 +177,7 @@ envFor : Device -> Env
 envFor device =
     { theme = Theme.forMode Theme.Light
     , device = device
+    , viewport = RegularViewport
     , language = EN_US
     }
 

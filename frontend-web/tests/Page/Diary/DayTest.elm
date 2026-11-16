@@ -25,7 +25,7 @@ import Test.Html.Query as Query
 import Test.Html.Selector as Selector exposing (Selector)
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
-import Ui.Env exposing (Env)
+import Ui.Env exposing (Env, Viewport(..))
 import Ui.Theme as Theme
 
 
@@ -168,8 +168,9 @@ tests =
                             (Day.Navigate DiarySettings)
                     ]
                     ()
-        , {- The controls are the same at every breakpoint; breakpoint-specific
-             spacing, hover, and arrangement are browser-only.
+        , {- The controls are present at every breakpoint. The per-breakpoint
+             date-header arrangement is covered by the browser layout pass;
+             this test uses the desktop fixture.
           -}
           test "loaded diary exposes named calendar, today's goals, and meal-slot controls" <|
             \_ ->
@@ -462,6 +463,7 @@ env : Env
 env =
     { theme = Theme.light
     , device = { class = Element.Desktop, orientation = Element.Landscape }
+    , viewport = RegularViewport
     , language = EN_US
     }
 

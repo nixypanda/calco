@@ -15,7 +15,7 @@ import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
 import Translations.Util exposing (Language(..))
-import Ui.Env exposing (Env)
+import Ui.Env exposing (Env, Viewport(..))
 import Ui.Theme as Theme
 
 
@@ -89,5 +89,6 @@ env : Env
 env =
     { theme = Theme.light
     , device = { class = Element.Desktop, orientation = Element.Landscape }
+    , viewport = RegularViewport
     , language = EN_US
     }

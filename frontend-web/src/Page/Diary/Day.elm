@@ -48,7 +48,7 @@ import Ui.Button as Button
 import Ui.Color as UiColor
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
-import Ui.Env exposing (Env)
+import Ui.Env as Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Skeleton as Skeleton
@@ -698,18 +698,7 @@ dateCard env model =
 
         header : Element Msg
         header =
-            if UiCommon.isSmall env.device then
-                Element.column
-                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                    [ centeredDate
-                    , Element.row [ Element.width Element.fill ]
-                        [ previousButton
-                        , Element.el [ Element.width Element.fill ] Element.none
-                        , nextButton
-                        ]
-                    ]
-
-            else
+            if dateNavigationInline env then
                 Element.row
                     [ Element.width Element.fill
                     , Element.spacing DesignTokens.space12
@@ -718,6 +707,15 @@ dateCard env model =
                     [ previousButton
                     , centeredDate
                     , nextButton
+                    ]
+
+            else
+                Element.column
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                    [ centeredDate
+                    , Element.row
+                        [ Element.centerX, Element.spacing DesignTokens.space12 ]
+                        [ previousButton, nextButton ]
                     ]
     in
     Element.el [ Element.width Element.fill, UiCommon.testId "diary-date-card" ]
@@ -738,8 +736,9 @@ dateCard env model =
 
 {-| The date is a ghost trigger, not a second navigation bar: it keeps the
 heading typography and gains the calendar affordance and hover/focus target.
-Phone headers put it on its own row so the full localized date and its icon
-never compete with the two 44px day-navigation targets.
+The two 44px day-navigation targets share the date's row whenever the card has
+room. Truly narrow phones use a compact two-line header with the date centered
+above a centered arrow pair; see `dateNavigationInline`.
 -}
 dateButton : Env -> Model -> Element Msg
 dateButton env model =
@@ -807,6 +806,37 @@ dateButton env model =
         }
 
 
+{-| A phone-width card has `windowWidth - 32px` of page gutter and `- 40px`
+of card padding. The date button plus the two 44px arrows and 12px gaps need
+roughly 280px, so the regular viewport category (360px and wider) is the first
+comfortable inline row. `Ui.Env.viewportForWidth` makes that decision once at
+the resize boundary instead of re-rendering for every pixel inside a category.
+This is deliberately narrower than `Element.Phone`'s 600px boundary: a 485px
+phone has plenty of room, while a 320px phone does not.
+-}
+dateNavigationInline : Env -> Bool
+dateNavigationInline env =
+    case env.viewport of
+        Env.NarrowViewport ->
+            False
+
+        Env.RegularViewport ->
+            True
+
+
+{-| Shared by the loaded balance row and its skeleton so the two recipes keep
+the same compact width and right-edge alignment.
+-}
+phoneBalanceMaxWidth : Int
+phoneBalanceMaxWidth =
+    260
+
+
+phoneBalanceRowMaxWidth : Int
+phoneBalanceRowMaxWidth =
+    phoneBalanceMaxWidth + DesignTokens.space8 + DesignTokens.minimumTargetSize
+
+
 {-| The page-shaped loading body. The caller owns the single `Skeleton.busy`
 wrapper so `Page.bootstrapView` and the page's own loading branch cannot nest
 status regions.
@@ -862,7 +892,17 @@ skeletonDateHeader env =
         nextIcon =
             Skeleton.icon theme
     in
-    if UiCommon.isSmall env.device then
+    if dateNavigationInline env then
+        Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ previousIcon
+            , Element.el [ Element.width Element.fill ]
+                (Element.el [ Element.centerX ]
+                    (Skeleton.elLine theme { size = 24, width = Element.px 160 })
+                )
+            , nextIcon
+            ]
+
+    else
         Element.column
             [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ Element.el
@@ -872,21 +912,11 @@ skeletonDateHeader env =
                 (Element.el [ Element.centerX, Element.centerY ]
                     (Skeleton.elLine theme { size = 20, width = Element.px 160 })
                 )
-            , Element.row [ Element.width Element.fill ]
+            , Element.row
+                [ Element.centerX, Element.spacing DesignTokens.space12 ]
                 [ previousIcon
-                , Element.el [ Element.width Element.fill ] Element.none
                 , nextIcon
                 ]
-            ]
-
-    else
-        Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-            [ previousIcon
-            , Element.el [ Element.width Element.fill ]
-                (Element.el [ Element.centerX ]
-                    (Skeleton.elLine theme { size = 24, width = Element.px 160 })
-                )
-            , nextIcon
             ]
 
 
@@ -971,7 +1001,8 @@ skeletonCalorieHero env =
         Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ summary
             , Element.row
-                [ Element.width Element.fill
+                [ Element.width (Element.fill |> Element.maximum phoneBalanceRowMaxWidth)
+                , Element.alignRight
                 , Element.spacing DesignTokens.space8
                 , Element.centerY
                 ]
@@ -1143,12 +1174,12 @@ calorieHero env calories target =
         phoneBalance : Element Msg
         phoneBalance =
             Element.row
-                [ Element.width Element.fill
+                [ Element.width (Element.fill |> Element.maximum phoneBalanceRowMaxWidth)
+                , Element.alignRight
                 , Element.spacing DesignTokens.space8
                 , Element.centerY
                 ]
-                [ Element.el [ Element.width Element.fill, UiCommon.minWidthZero ]
-                    (calorieBalancePill env True target calories)
+                [ calorieBalancePill env True target calories
                 , editGoalsButton env
                 ]
     in
@@ -1184,9 +1215,10 @@ calorieHero env calories target =
         ]
 
 
-{-| The balance pill stays read-only. On Phone it takes the remaining width
-next to the edit action and wraps, so a long localized “kcal left/over” label
-cannot push the 44px action off the card.
+{-| The balance pill stays read-only. On Phone its row is capped at
+`phoneBalanceRowMaxWidth` and aligned to the right edge of the calorie card;
+the pill fills the room left by the 44px edit action, so a long localized
+“kcal left/over” label wraps instead of pushing the action off the card.
 -}
 calorieBalancePill : Env -> Bool -> Float -> Float -> Element msg
 calorieBalancePill env fullWidth target calories =
