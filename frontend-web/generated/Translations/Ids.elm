@@ -356,12 +356,9 @@ type TranslationId
     | TidNavAdmin
     | TidNavApiKeys
     | TidNavBack
-    | TidNavCalendar
     | TidNavDiary
     | TidNavFoods
-    | TidNavGoals
     | TidNavLogout
-    | TidNavMealSlots
     | TidNavMeals
     | TidNavMenu
     | TidNavMyFoods

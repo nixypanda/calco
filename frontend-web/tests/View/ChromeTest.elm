@@ -89,6 +89,41 @@ tests =
                             (GoalSettings Nothing Nothing)
                     ]
                     ()
+        , test "profile menu leaves diary entry points on the diary" <|
+            \_ ->
+                let
+                    menu : Query.Single ()
+                    menu =
+                        Chrome.profileMenu
+                            (envFor { class = Element.Phone, orientation = Element.Portrait })
+                            user
+                            (always ())
+                            ()
+                            (always ())
+                            |> Element.layout []
+                            |> Query.fromHtml
+                in
+                Expect.all
+                    [ \_ ->
+                        menu
+                            |> Query.hasNot
+                                [ Selector.exactText (I18n.en TidDiaryOpenCalendar) ]
+                    , \_ ->
+                        menu
+                            |> Query.hasNot
+                                [ Selector.exactText (I18n.en TidDiaryEditGoals) ]
+                    , \_ ->
+                        menu
+                            |> Query.hasNot
+                                [ Selector.exactText (I18n.en TidDiaryManageMealSlots) ]
+                    , \_ ->
+                        menu
+                            |> Query.has [ Selector.exactText (I18n.en TidNavApiKeys) ]
+                    , \_ ->
+                        menu
+                            |> Query.has [ Selector.exactText (I18n.en TidNavLogout) ]
+                    ]
+                    ()
         ]
 
 

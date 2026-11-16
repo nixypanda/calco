@@ -1068,23 +1068,14 @@ enUsTranslations tid =
         TidNavBack ->
             "Back"
 
-        TidNavCalendar ->
-            "Calendar"
-
         TidNavDiary ->
             "Diary"
 
         TidNavFoods ->
             "Foods"
 
-        TidNavGoals ->
-            "Goals"
-
         TidNavLogout ->
             "Logout"
-
-        TidNavMealSlots ->
-            "Meal slots"
 
         TidNavMeals ->
             "Meals"

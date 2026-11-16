@@ -1068,23 +1068,14 @@ hiInTranslations tid =
         TidNavBack ->
             "वापस"
 
-        TidNavCalendar ->
-            "कैलेंडर"
-
         TidNavDiary ->
             "डायरी"
 
         TidNavFoods ->
             "खाद्य पदार्थ"
 
-        TidNavGoals ->
-            "लक्ष्य"
-
         TidNavLogout ->
             "लॉग आउट"
-
-        TidNavMealSlots ->
-            "भोजन स्लॉट"
 
         TidNavMeals ->
             "भोजन"
