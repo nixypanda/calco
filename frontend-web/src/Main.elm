@@ -5,6 +5,7 @@ port module Main exposing
     , Msg
     , PageModel
     , classifyDevice
+    , drawerFocusTarget
     , logoutStillApplies
     , main
     , normalizeChromeNavigation
@@ -30,11 +31,13 @@ import Element.Background as Background
 import Element.Font as Font
 import Html
 import Html.Attributes
+import I18n
+import Json.Decode as Decode
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page
 import Process
 import Task
-import Translations.Util exposing (Language(..))
+import Translations.Util exposing (Language, parseLanguage)
 import Ui.Common as UiCommon exposing (uiClass)
 import Ui.Css as Css
 import Ui.Env as Env exposing (Env)
@@ -50,7 +53,7 @@ import View.Chrome
 
 
 type alias Flags =
-    { windowWidth : Int, windowHeight : Int, themeMode : String }
+    { windowWidth : Int, windowHeight : Int, themeMode : String, language : String }
 
 
 type alias Model =
@@ -113,7 +116,9 @@ init flags url key =
             { theme = Theme.forMode (Theme.modeFromString flags.themeMode)
             , device = classifyDevice flags.windowWidth flags.windowHeight
             , viewport = Env.viewportForWidth flags.windowWidth
-            , language = EN_US
+            , language =
+                parseLanguage flags.language
+                    |> Result.withDefault I18n.defaultLanguage
             }
       , version = versionModel
       }
@@ -137,6 +142,8 @@ type Msg
     | LogoutCompleted Int
     | LogoutTimedOut Int
     | ScrollToTopCompleted
+    | FocusCompleted
+    | KeyPressed String
     | WindowResized Int Int
     | GotPageMsg Page.Msg
     | GotLocalCtx RawLocalCtx
@@ -164,8 +171,20 @@ update msg model =
                 route : Route
                 route =
                     Data.Route.fromUrl url
+
+                nextChrome : Chrome.Model
+                nextChrome =
+                    Chrome.close model.chrome
+
+                ( nextModel, routeCmd ) =
+                    changeRouteTo route { model | route = route, chrome = nextChrome }
             in
-            changeRouteTo route { model | route = route, chrome = Chrome.close model.chrome }
+            ( nextModel
+            , Cmd.batch
+                [ routeCmd
+                , drawerFocusCmd model.chrome nextChrome
+                ]
+            )
 
         GotSession result ->
             updateBootstrapProgress (\progress -> { progress | session = Just result }) model
@@ -193,17 +212,35 @@ update msg model =
         ScrollToTopCompleted ->
             ( model, Cmd.none )
 
+        FocusCompleted ->
+            ( model, Cmd.none )
+
+        KeyPressed key ->
+            if key == "Escape" then
+                stepChromeUpdate (Chrome.update Chrome.EscapePressed model.chrome) model
+
+            else
+                ( model, Cmd.none )
+
         WindowResized width height ->
             let
                 nextEnv : Env
                 nextEnv =
                     reclassifyEnv width height model.env
+
+                nextChrome : Chrome.Model
+                nextChrome =
+                    Chrome.closeOnLayoutChange model.env.device nextEnv.device model.chrome
+
+                focusCmd : Cmd Msg
+                focusCmd =
+                    drawerFocusCmd model.chrome nextChrome
             in
-            if nextEnv == model.env then
+            if nextEnv == model.env && nextChrome == model.chrome then
                 ( model, Cmd.none )
 
             else
-                ( { model | env = nextEnv }, Cmd.none )
+                ( { model | env = nextEnv, chrome = nextChrome }, focusCmd )
 
         GotVersionMsg versionMsg ->
             let
@@ -362,7 +399,60 @@ classifyDevice width height =
 
 stepChromeUpdate : ( Chrome.Model, Chrome.OutMsg ) -> Model -> ( Model, Cmd Msg )
 stepChromeUpdate ( chrome, outMsg ) model =
-    applyChromeOutMsg outMsg { model | chrome = chrome }
+    let
+        ( nextModel, outCmd ) =
+            applyChromeOutMsg outMsg { model | chrome = chrome }
+
+        focusCmd : Cmd Msg
+        focusCmd =
+            drawerFocusCmd model.chrome chrome
+    in
+    ( nextModel, Cmd.batch [ outCmd, focusCmd ] )
+
+
+{-| Focus enters a newly opened drawer and returns to its trigger when the
+drawer closes. Browser Back and layout changes bypass Chrome messages, so every
+drawer close uses this same transition rule.
+-}
+drawerFocusTarget : Chrome.Model -> Chrome.Model -> Maybe String
+drawerFocusTarget previous next =
+    if Chrome.isDrawerOpen next && not (Chrome.isDrawerOpen previous) then
+        Just "app-drawer-close"
+
+    else if Chrome.isDrawerOpen previous && not (Chrome.isDrawerOpen next) then
+        Just "app-menu-trigger"
+
+    else
+        Nothing
+
+
+drawerFocusCmd : Chrome.Model -> Chrome.Model -> Cmd Msg
+drawerFocusCmd previous next =
+    case drawerFocusTarget previous next of
+        Just "app-menu-trigger" ->
+            focusDrawerTrigger
+
+        Just id ->
+            focusElement id
+
+        Nothing ->
+            Cmd.none
+
+
+{-| Phone layouts replace the drawer trigger with the bottom navigation. If a
+layout change closes the drawer there, focus the current destination instead of
+dropping it on the document body.
+-}
+focusDrawerTrigger : Cmd Msg
+focusDrawerTrigger =
+    Browser.Dom.focus "app-menu-trigger"
+        |> Task.onError (\_ -> Browser.Dom.focus "app-bottom-nav-current")
+        |> Task.attempt (\_ -> FocusCompleted)
+
+
+focusElement : String -> Cmd Msg
+focusElement id =
+    Browser.Dom.focus id |> Task.attempt (\_ -> FocusCompleted)
 
 
 applyChromeOutMsg : Chrome.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -372,41 +462,58 @@ applyChromeOutMsg outMsg model =
             ( model, Cmd.none )
 
         Chrome.Navigate route ->
-            ( model
+            ( { model | page = Page.dismissTransient model.page }
             , Nav.pushUrl model.key
                 (Data.Route.routeToPath (normalizeChromeNavigation model.route route))
             )
 
         Chrome.Logout ->
-            let
-                generation : Int
-                generation =
-                    model.logoutGeneration + 1
-            in
-            ( { model
-                | page = Page.clearStore model.page
-                , loggingOut = True
-                , logoutGeneration = generation
-              }
-            , Cmd.batch
-                [ Api.Auth.logout (\_ -> LogoutCompleted generation)
-                , revokePhotoPreviewUrls (Page.photoPreviewUrls model.page)
-                , Process.sleep 5000 |> Task.perform (\_ -> LogoutTimedOut generation)
-                ]
-            )
+            beginLogout model
 
         Chrome.ToggleTheme ->
-            let
-                nextMode : Theme.Mode
-                nextMode =
-                    Theme.toggle model.env.theme.mode
-            in
-            ( { model | env = Env.withTheme model.env (Theme.forMode nextMode) }
-            , persistThemeMode (Theme.modeToString nextMode)
-            )
+            toggleTheme model
 
         Chrome.SetLanguage language ->
-            ( { model | env = Env.withLanguage model.env language }, Cmd.none )
+            setLanguage language model
+
+
+beginLogout : Model -> ( Model, Cmd Msg )
+beginLogout model =
+    let
+        generation : Int
+        generation =
+            model.logoutGeneration + 1
+    in
+    ( { model
+        | page = Page.clearStore model.page
+        , loggingOut = True
+        , logoutGeneration = generation
+      }
+    , Cmd.batch
+        [ Api.Auth.logout (\_ -> LogoutCompleted generation)
+        , revokePhotoPreviewUrls (Page.photoPreviewUrls model.page)
+        , Process.sleep 5000 |> Task.perform (\_ -> LogoutTimedOut generation)
+        ]
+    )
+
+
+toggleTheme : Model -> ( Model, Cmd Msg )
+toggleTheme model =
+    let
+        nextMode : Theme.Mode
+        nextMode =
+            Theme.toggle model.env.theme.mode
+    in
+    ( { model | env = Env.withTheme model.env (Theme.forMode nextMode) }
+    , persistThemeMode (Theme.modeToString nextMode)
+    )
+
+
+setLanguage : Language -> Model -> ( Model, Cmd Msg )
+setLanguage language model =
+    ( { model | env = Env.withLanguage model.env language }
+    , persistLanguage (I18n.languageCode language)
+    )
 
 
 normalizeChromeNavigation : Route -> Route -> Route
@@ -608,6 +715,15 @@ applyPageOutMsg outMsg model =
 
         Page.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+
+        Page.ToggleTheme ->
+            toggleTheme model
+
+        Page.SetLanguage language ->
+            setLanguage language model
+
+        Page.Logout ->
+            beginLogout model
 
         Page.SessionExpired ->
             ( { model
@@ -851,13 +967,15 @@ isBootstrapped bootstrap =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
+subscriptions model =
     Sub.batch
         [ localCtxReceived GotLocalCtx
         , barcodeScannerEvent GotBarcodeScannerEvent
         , copyTextResult GotCopyTextResult
         , Browser.Events.onResize WindowResized
+        , Browser.Events.onKeyDown (Decode.map KeyPressed (Decode.field "key" Decode.string))
         , Sub.map GotVersionMsg Version.subscriptions
+        , Sub.map GotPageMsg (Page.paneSubscriptions model.page)
         ]
 
 
@@ -890,6 +1008,9 @@ port copyTextResult : (CopyTextResult -> msg) -> Sub msg
 
 
 port persistThemeMode : String -> Cmd msg
+
+
+port persistLanguage : String -> Cmd msg
 
 
 port reloadPage : () -> Cmd msg

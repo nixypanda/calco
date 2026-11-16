@@ -981,6 +981,18 @@ enUsTranslations tid =
         TidGoalSettingsStatusSavedFrom hole0 ->
             "Saved goals effective from " ++ hole0 ++ "."
 
+        TidLibraryBrowseTitle ->
+            "Browse"
+
+        TidLibraryDescription ->
+            "Your saved foods and meals, ready to reuse."
+
+        TidLibraryFoodsDescription ->
+            "Custom foods you've saved."
+
+        TidLibraryMealsDescription ->
+            "Meals you've built from your foods."
+
         TidLoginPasswordRequired ->
             "Password is required"
 
@@ -1074,6 +1086,9 @@ enUsTranslations tid =
         TidNavFoods ->
             "Foods"
 
+        TidNavLibrary ->
+            "Library"
+
         TidNavLogout ->
             "Logout"
 
@@ -1094,6 +1109,9 @@ enUsTranslations tid =
 
         TidNavSearchFoods ->
             "Search Foods"
+
+        TidNavSettings ->
+            "Settings"
 
         TidNutrientAddedSugars ->
             "Added Sugars"
@@ -1338,6 +1356,36 @@ enUsTranslations tid =
         TidSearchKcalPer100g hole0 ->
             hole0 ++ " kcal per 100 g"
 
+        TidSettingsAccessTitle ->
+            "Access"
+
+        TidSettingsAccountDescription ->
+            "Sign out of CalCo on this device."
+
+        TidSettingsAccountTitle ->
+            "Account"
+
+        TidSettingsApiKeysSummary ->
+            "Create and revoke keys for scripts and tools."
+
+        TidSettingsDescription ->
+            "Manage your account, access, and app preferences."
+
+        TidSettingsLanguageDescription ->
+            "Choose the language used across the app."
+
+        TidSettingsLanguageTitle ->
+            "Language"
+
+        TidSettingsPreferencesTitle ->
+            "Preferences"
+
+        TidSettingsThemeDescription ->
+            "Use a darker color scheme."
+
+        TidSettingsThemeTitle ->
+            "Dark theme"
+
         TidSetupDescription ->
             "Create the admin account to get started."
 
@@ -1401,6 +1449,9 @@ enUsTranslations tid =
         TidTitleGoals ->
             "Goals"
 
+        TidTitleLibrary ->
+            "Library"
+
         TidTitleLogFood ->
             "Log Food"
 
@@ -1427,6 +1478,9 @@ enUsTranslations tid =
 
         TidTitleSearchFoods ->
             "Search Foods"
+
+        TidTitleSettings ->
+            "Settings"
 
         TidTitleSetup ->
             "Setup"

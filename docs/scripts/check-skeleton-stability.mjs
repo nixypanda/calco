@@ -2957,8 +2957,7 @@ async function navigateToSearchInApp(client) {
     `(() => {
       const nav = document.querySelector('[data-testid="app-bottom-nav"]');
       if (!nav) return null;
-      const tabs = [...nav.querySelectorAll('[tabindex="0"]')];
-      const target = tabs[1] || nav.children[1];
+      const target = nav.querySelector('[data-nav-target="search"]');
       if (!target) return null;
       target.click();
       return "bottom-nav-search-tab";
@@ -2987,19 +2986,21 @@ async function navigateToSearchInApp(client) {
   await waitUntil(
     client,
     `(() => {
-      const buttons = [...document.querySelectorAll('button, [role="button"]')];
-      return buttons.some((button) => (button.textContent ?? "").trim() === "Search Foods");
+      return Boolean(
+        document.querySelector(
+          '[data-testid="app-drawer"] [data-nav-target="search"]',
+        ),
+      );
     })()`,
-    "the top-bar drawer Search Foods item",
+    "the top-bar drawer Search item",
     4_000,
   );
 
   const clickedItem = await evaluate(
     client,
     `(() => {
-      const buttons = [...document.querySelectorAll('button, [role="button"]')];
-      const search = buttons.find(
-        (button) => (button.textContent ?? "").trim() === "Search Foods",
+      const search = document.querySelector(
+        '[data-testid="app-drawer"] [data-nav-target="search"]',
       );
       if (!search) return false;
       search.click();

@@ -1,6 +1,7 @@
 module Ui.Input exposing
     ( InputConfig
     , SearchLabel(..)
+    , SelectMenuPlacement(..)
     , checkbox
     , completionDropdown
     , completionRow
@@ -15,7 +16,10 @@ module Ui.Input exposing
     , passwordInput
     , searchInput
     , selectDropdown
+    , selectDropdownLabelHidden
+    , selectDropdownTriggerId
     , selectDropdownWithState
+    , selectOptionId
     , suggestionList
     , toggleSwitch
     )
@@ -28,7 +32,9 @@ import Element.Input as Input
 import Element.Region as Region
 import Html
 import Html.Attributes
+import Html.Events
 import I18n
+import Json.Decode as Decode
 import Lib.Number as Number
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
@@ -61,6 +67,14 @@ hidden label with no on-screen hint.
 type SearchLabel
     = LabelAbove String
     | LabelInside String
+
+
+{-| Which side of a select trigger the option list opens on. Pages measure the
+open trigger against the viewport so a menu near the bottom opens upward.
+-}
+type SelectMenuPlacement
+    = MenuBelow
+    | MenuAbove
 
 
 {-| elm-ui moves `Element.padding` on `Input.text` into the inner `<input>` as
@@ -435,7 +449,7 @@ optionRowView theme config =
                 theme.textMuted
 
             else if config.selected then
-                theme.solidControlFg
+                theme.chipSelectedFg
 
             else
                 theme.textPrimary
@@ -444,9 +458,12 @@ optionRowView theme config =
         ([ Element.width Element.fill
          , Element.paddingXY space12 10
          , Border.rounded radiusControl
+
+         -- The chip selection palette keeps the selected foreground at 4.5:1
+         -- or better in both themes; white on the solid brand fill does not.
          , Background.color
             (if config.selected then
-                theme.brandBlue
+                theme.chipSelectedBg
 
              else
                 theme.cardBg
@@ -534,15 +551,252 @@ selectDropdownWithState :
         }
     -> Element msg
 selectDropdownWithState device theme language config =
+    selectDropdownView
+        device
+        theme
+        language
+        { label = config.label
+        , selected = config.selected
+        , options = config.options
+        , onChange = config.onChange
+        , isOpen = config.isOpen
+        , onToggle = config.onToggle
+        , disabled = config.disabled
+        }
+
+
+{-| The trigger id for `selectDropdownLabelHidden`, so a page can return focus
+to the control after a choice.
+-}
+selectDropdownTriggerId : String -> String
+selectDropdownTriggerId id =
+    id ++ "-trigger"
+
+
+{-| A select-only combobox for a control whose visible title already lives in
+the surrounding row. The trigger carries the accessible name and selected value,
+exposes the listbox state, supports arrow/Home/End/Escape keys, and dismisses on
+an outside click. Options expose their selected state for assistive technology;
+the chosen option uses the blue/neutral field palette rather than the chip fill.
+-}
+selectDropdownLabelHidden :
+    Device
+    -> Theme
+    -> Language
+    ->
+        { id : String
+        , label : String
+        , selected : a
+        , options : List ( a, String )
+        , onChange : a -> msg
+        , isOpen : Bool
+        , onToggle : msg
+        , active : Maybe a
+        , onActiveChanged : Maybe a -> msg
+        , onClose : msg
+        , menuPlacement : SelectMenuPlacement
+        }
+    -> Element msg
+selectDropdownLabelHidden device theme language config =
+    let
+        triggerId : String
+        triggerId =
+            selectDropdownTriggerId config.id
+
+        listboxId : String
+        listboxId =
+            config.id ++ "-listbox"
+
+        selectedLabel : String
+        selectedLabel =
+            selectedOptionLabel config.selected config.options
+
+        activeOptionId : Maybe String
+        activeOptionId =
+            if config.isOpen then
+                config.active
+                    |> Maybe.andThen (optionIndex config.options)
+                    |> Maybe.map (selectOptionId config.id)
+
+            else
+                Nothing
+
+        triggerAttributes : List (Element.Attribute msg)
+        triggerAttributes =
+            [ Element.width Element.fill
+            , Element.height (Element.px minimumTargetSize)
+            , Border.rounded radiusControl
+            , Background.color theme.cardBg
+            , Element.clip
+            , Element.pointer
+            , Element.htmlAttribute (Html.Attributes.id triggerId)
+            , Element.htmlAttribute (Html.Attributes.tabindex 0)
+            , Element.htmlAttribute (Html.Attributes.attribute "role" "combobox")
+            , Element.htmlAttribute (Html.Attributes.attribute "aria-haspopup" "listbox")
+            , Element.htmlAttribute
+                (Html.Attributes.attribute "aria-expanded" (boolString config.isOpen))
+            , Element.htmlAttribute
+                (Html.Attributes.attribute
+                    "aria-label"
+                    (config.label ++ ": " ++ selectedLabel)
+                )
+            , Element.htmlAttribute
+                (keydownHandler
+                    { isOpen = config.isOpen
+                    , selected = config.selected
+                    , options = config.options
+                    , active = config.active
+                    , onToggle = config.onToggle
+                    , onChange = config.onChange
+                    , onActiveChanged = config.onActiveChanged
+                    , onClose = config.onClose
+                    }
+                )
+            , Element.htmlAttribute (Html.Events.onClick config.onToggle)
+            , uiClass "ui-motion"
+            , testId "field-control"
+            , hoverEffect device [ Border.color theme.brandBlue ]
+            ]
+                ++ (if config.isOpen then
+                        [ Element.htmlAttribute
+                            (Html.Attributes.attribute "aria-controls" listboxId)
+                        ]
+
+                    else
+                        []
+                   )
+                ++ (case activeOptionId of
+                        Just id ->
+                            [ Element.htmlAttribute
+                                (Html.Attributes.attribute "aria-activedescendant" id)
+                            ]
+
+                        Nothing ->
+                            []
+                   )
+                ++ inputBorder theme
+
+        renderOption : Int -> ( a, String ) -> Element msg
+        renderOption index ( value, label ) =
+            dropdownOption theme
+                { id = selectOptionId config.id index
+                , label = label
+                , selected = value == config.selected
+                , active = config.active == Just value
+                , onPress = config.onChange value
+                }
+
+        menuOverlayOffset : Element.Attribute msg
+        menuOverlayOffset =
+            case config.menuPlacement of
+                MenuAbove ->
+                    Element.moveUp 4
+
+                MenuBelow ->
+                    Element.moveDown 4
+
+        optionsElement : Element msg
+        optionsElement =
+            Element.el
+                [ Element.width Element.fill
+                , menuOverlayOffset
+                , Element.htmlAttribute (Html.Attributes.id listboxId)
+                , Element.htmlAttribute (Html.Attributes.attribute "role" "listbox")
+                , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
+                ]
+                (optionList theme
+                    { maxHeight = Nothing
+                    , rows = List.indexedMap renderOption config.options
+                    }
+                )
+
+        menuPositionAttrs : List (Element.Attribute msg)
+        menuPositionAttrs =
+            case config.menuPlacement of
+                MenuAbove ->
+                    [ Element.above optionsElement ]
+
+                MenuBelow ->
+                    [ Element.below optionsElement ]
+
+        triggerAnchor : List (Element.Attribute msg)
+        triggerAnchor =
+            [ Element.width Element.fill
+            , uiClass
+                ("ui-select-anchor"
+                    ++ (if config.isOpen then
+                            " ui-select-anchor--open"
+
+                        else
+                            ""
+                       )
+                )
+            ]
+                ++ (if config.isOpen then
+                        menuPositionAttrs
+
+                    else
+                        []
+                   )
+
+        backdrop : List (Element msg)
+        backdrop =
+            if config.isOpen then
+                [ Element.el
+                    [ Element.width Element.fill
+                    , Element.height Element.fill
+                    , uiClass "ui-select-backdrop"
+                    , testId (config.id ++ "-backdrop")
+                    , Element.htmlAttribute (Html.Attributes.attribute "aria-hidden" "true")
+                    , Element.htmlAttribute (Html.Events.onClick config.onClose)
+                    ]
+                    Element.none
+                ]
+
+            else
+                []
+    in
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing space4
+        , testId "field"
+        , dataAttribute "data-field-kind" "select"
+        ]
+        (Element.el triggerAnchor
+            (Element.el triggerAttributes
+                (Element.row
+                    [ Element.width Element.fill
+                    , Element.height Element.fill
+                    ]
+                    [ dropdownFieldText theme language False selectedLabel
+                    , dropdownDivider theme
+                    , dropdownChevronSegment theme config.isOpen
+                    ]
+                )
+            )
+            :: backdrop
+        )
+
+
+selectDropdownView :
+    Device
+    -> Theme
+    -> Language
+    ->
+        { label : String
+        , selected : a
+        , options : List ( a, String )
+        , onChange : a -> msg
+        , isOpen : Bool
+        , onToggle : msg
+        , disabled : Bool
+        }
+    -> Element msg
+selectDropdownView device theme language config =
     let
         selectedLabel : String
         selectedLabel =
-            case List.filter (\( val, _ ) -> val == config.selected) config.options of
-                ( _, lbl ) :: _ ->
-                    lbl
-
-                [] ->
-                    ""
+            selectedOptionLabel config.selected config.options
 
         isSelected : a -> Bool
         isSelected val =
@@ -560,7 +814,9 @@ selectDropdownWithState device theme language config =
         optionsElement : Element msg
         optionsElement =
             Element.el
-                [ Element.moveDown 4, Element.htmlAttribute (Html.Attributes.style "z-index" "20") ]
+                [ Element.moveDown 4
+                , Element.htmlAttribute (Html.Attributes.style "z-index" "20")
+                ]
                 (optionList theme
                     { maxHeight = Nothing, rows = List.map renderOption config.options }
                 )
@@ -572,64 +828,6 @@ selectDropdownWithState device theme language config =
 
             else
                 [ Element.width Element.fill ]
-
-        selectedColor : Element.Color
-        selectedColor =
-            if config.disabled || selectedLabel == "" then
-                theme.textMuted
-
-            else
-                theme.textPrimary
-
-        fieldText : Element msg
-        fieldText =
-            Element.el
-                [ Element.width Element.fill
-                , Element.height Element.fill
-                , Element.paddingEach { top = 0, right = space12, bottom = 0, left = space12 }
-                ]
-                (Element.el [ Element.centerY ]
-                    (Element.el [ body, Font.color selectedColor ]
-                        (Element.text
-                            (if selectedLabel == "" then
-                                I18n.t language TidUiSelectPlaceholder
-
-                             else
-                                selectedLabel
-                            )
-                        )
-                    )
-                )
-
-        triggerDivider : Element msg
-        triggerDivider =
-            Element.el
-                [ Element.width (Element.px 1)
-                , Element.height Element.fill
-                , Background.color theme.divider
-                ]
-                Element.none
-
-        chevronSegment : Element msg
-        chevronSegment =
-            Element.el
-                [ Element.height Element.fill
-                , Element.paddingEach { top = 0, right = space12, bottom = 0, left = space12 }
-                , Background.color theme.cardBg
-                ]
-                (Element.el [ Element.centerY ]
-                    (Icon.view
-                        { icon =
-                            if config.isOpen then
-                                Icon.ChevronUp
-
-                            else
-                                Icon.ChevronDown
-                        , size = 20
-                        , color = theme.textMuted
-                        }
-                    )
-                )
     in
     Element.column
         [ Element.width Element.fill
@@ -674,10 +872,356 @@ selectDropdownWithState device theme language config =
                         Just config.onToggle
                 , label =
                     Element.row [ Element.width Element.fill, Element.height Element.fill ]
-                        [ fieldText, triggerDivider, chevronSegment ]
+                        [ dropdownFieldText theme language config.disabled selectedLabel
+                        , dropdownDivider theme
+                        , dropdownChevronSegment theme config.isOpen
+                        ]
                 }
             )
         ]
+
+
+selectedOptionLabel : a -> List ( a, String ) -> String
+selectedOptionLabel selected options =
+    options
+        |> List.filter (\( value, _ ) -> value == selected)
+        |> List.head
+        |> Maybe.map Tuple.second
+        |> Maybe.withDefault ""
+
+
+dropdownFieldText : Theme -> Language -> Bool -> String -> Element msg
+dropdownFieldText theme language disabled selectedLabel =
+    let
+        textColor : Element.Color
+        textColor =
+            if disabled || String.isEmpty selectedLabel then
+                theme.textMuted
+
+            else
+                theme.textPrimary
+    in
+    Element.el
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.paddingEach { top = 0, right = space12, bottom = 0, left = space12 }
+        ]
+        (Element.el [ Element.centerY ]
+            (Element.el [ body, Font.color textColor ]
+                (Element.text
+                    (if String.isEmpty selectedLabel then
+                        I18n.t language TidUiSelectPlaceholder
+
+                     else
+                        selectedLabel
+                    )
+                )
+            )
+        )
+
+
+dropdownDivider : Theme -> Element msg
+dropdownDivider theme =
+    Element.el
+        [ Element.width (Element.px 1)
+        , Element.height Element.fill
+        , Background.color theme.divider
+        ]
+        Element.none
+
+
+dropdownChevronSegment : Theme -> Bool -> Element msg
+dropdownChevronSegment theme isOpen =
+    Element.el
+        [ Element.height Element.fill
+        , Element.paddingEach { top = 0, right = space12, bottom = 0, left = space12 }
+        , Background.color theme.cardBg
+        ]
+        (Element.el [ Element.centerY ]
+            (Icon.view
+                { icon =
+                    if isOpen then
+                        Icon.ChevronUp
+
+                    else
+                        Icon.ChevronDown
+                , size = 20
+                , color = theme.textMuted
+                }
+            )
+        )
+
+
+dropdownOption :
+    Theme
+    -> { id : String, label : String, selected : Bool, active : Bool, onPress : msg }
+    -> Element msg
+dropdownOption theme config =
+    Element.el
+        ([ Element.width Element.fill
+         , Element.paddingXY space12 10
+         , Border.rounded radiusControl
+         , Background.color
+            (if config.selected then
+                theme.brandBlueSoft
+
+             else if config.active then
+                theme.inputFill
+
+             else
+                theme.cardBg
+            )
+         , Font.color theme.textPrimary
+         , Element.pointer
+         , Element.htmlAttribute (Html.Attributes.id config.id)
+         , Element.htmlAttribute (Html.Attributes.attribute "role" "option")
+         , Element.htmlAttribute
+            (Html.Attributes.attribute "aria-selected" (boolString config.selected))
+         , Element.htmlAttribute (Html.Events.onClick config.onPress)
+         , uiClass
+            ("ui-motion ui-pressable"
+                ++ (if config.active then
+                        " ui-option-active"
+
+                    else
+                        ""
+                   )
+            )
+         ]
+            ++ (if config.selected then
+                    [ Font.medium ]
+
+                else
+                    [ Element.mouseOver [ Background.color theme.inputFill ] ]
+               )
+        )
+        (Element.row [ Element.width Element.fill, Element.spacing space8, minWidthZero ]
+            [ Element.el [ Element.width Element.fill, minWidthZero ]
+                (Element.text config.label)
+            , if config.selected then
+                Icon.view { icon = Icon.Check, size = 18, color = theme.textPrimary }
+
+              else
+                Element.none
+            ]
+        )
+
+
+optionIndex : List ( a, String ) -> a -> Maybe Int
+optionIndex options selected =
+    options
+        |> List.indexedMap (\index ( value, _ ) -> ( index, value ))
+        |> List.filter (\( _, value ) -> value == selected)
+        |> List.head
+        |> Maybe.map Tuple.first
+
+
+{-| Stable option id for a select control. Exposed alongside the trigger id so
+callers and tests do not duplicate the listbox id shape.
+-}
+selectOptionId : String -> Int -> String
+selectOptionId id index =
+    optionId (id ++ "-listbox") index
+
+
+optionId : String -> Int -> String
+optionId listboxId index =
+    listboxId ++ "-option-" ++ String.fromInt index
+
+
+type alias KeydownResult msg =
+    { message : msg
+    , stopPropagation : Bool
+    , preventDefault : Bool
+    }
+
+
+keydownHandler :
+    { isOpen : Bool
+    , selected : a
+    , options : List ( a, String )
+    , active : Maybe a
+    , onToggle : msg
+    , onChange : a -> msg
+    , onActiveChanged : Maybe a -> msg
+    , onClose : msg
+    }
+    -> Html.Attribute msg
+keydownHandler config =
+    Html.Events.custom "keydown"
+        (Decode.field "key" Decode.string
+            |> Decode.andThen (keydownDecoder config)
+        )
+
+
+keydownDecoder :
+    { isOpen : Bool
+    , selected : a
+    , options : List ( a, String )
+    , active : Maybe a
+    , onToggle : msg
+    , onChange : a -> msg
+    , onActiveChanged : Maybe a -> msg
+    , onClose : msg
+    }
+    -> String
+    -> Decode.Decoder (KeydownResult msg)
+keydownDecoder config key =
+    case key of
+        "Escape" ->
+            if config.isOpen then
+                handled config.onClose
+
+            else
+                Decode.fail "Escape with the menu closed"
+
+        "Tab" ->
+            if config.isOpen then
+                handledWithoutDefault config.onClose
+
+            else
+                Decode.fail "Tab with the menu closed"
+
+        "ArrowDown" ->
+            if config.isOpen then
+                let
+                    next : Maybe a
+                    next =
+                        nextOption config.options config.active config.selected
+                in
+                handled (config.onActiveChanged next)
+
+            else
+                handled config.onToggle
+
+        "ArrowUp" ->
+            if config.isOpen then
+                let
+                    previous : Maybe a
+                    previous =
+                        previousOption config.options config.active config.selected
+                in
+                handled (config.onActiveChanged previous)
+
+            else
+                handled config.onToggle
+
+        "Home" ->
+            if config.isOpen then
+                handled (config.onActiveChanged (firstOption config.options))
+
+            else
+                Decode.fail "Home with the menu closed"
+
+        "End" ->
+            if config.isOpen then
+                handled (config.onActiveChanged (lastOption config.options))
+
+            else
+                Decode.fail "End with the menu closed"
+
+        "Enter" ->
+            chooseActiveOption config
+
+        " " ->
+            chooseActiveOption config
+
+        "Spacebar" ->
+            chooseActiveOption config
+
+        _ ->
+            Decode.fail "Unhandled key"
+
+
+chooseActiveOption :
+    { isOpen : Bool
+    , selected : a
+    , options : List ( a, String )
+    , active : Maybe a
+    , onToggle : msg
+    , onChange : a -> msg
+    , onActiveChanged : Maybe a -> msg
+    , onClose : msg
+    }
+    -> Decode.Decoder (KeydownResult msg)
+chooseActiveOption config =
+    if config.isOpen then
+        handled (config.onChange (Maybe.withDefault config.selected config.active))
+
+    else
+        handled config.onToggle
+
+
+handled : msg -> Decode.Decoder (KeydownResult msg)
+handled message =
+    handledWith message True
+
+
+handledWithoutDefault : msg -> Decode.Decoder (KeydownResult msg)
+handledWithoutDefault message =
+    handledWith message False
+
+
+handledWith : msg -> Bool -> Decode.Decoder (KeydownResult msg)
+handledWith message preventDefault =
+    Decode.succeed
+        { message = message
+        , stopPropagation = True
+        , preventDefault = preventDefault
+        }
+
+
+nextOption : List ( a, String ) -> Maybe a -> a -> Maybe a
+nextOption options active selected =
+    case List.length options of
+        0 ->
+            Nothing
+
+        count ->
+            optionAt options (modBy count (currentOptionIndex options active selected + 1))
+
+
+previousOption : List ( a, String ) -> Maybe a -> a -> Maybe a
+previousOption options active selected =
+    case List.length options of
+        0 ->
+            Nothing
+
+        count ->
+            optionAt options (modBy count (currentOptionIndex options active selected - 1))
+
+
+firstOption : List ( a, String ) -> Maybe a
+firstOption options =
+    options
+        |> List.head
+        |> Maybe.map Tuple.first
+
+
+lastOption : List ( a, String ) -> Maybe a
+lastOption options =
+    options
+        |> List.reverse
+        |> List.head
+        |> Maybe.map Tuple.first
+
+
+currentOptionIndex : List ( a, String ) -> Maybe a -> a -> Int
+currentOptionIndex options active selected =
+    case active |> Maybe.andThen (optionIndex options) of
+        Just index ->
+            index
+
+        Nothing ->
+            optionIndex options selected |> Maybe.withDefault 0
+
+
+optionAt : List ( a, String ) -> Int -> Maybe a
+optionAt options index =
+    options
+        |> List.drop index
+        |> List.head
+        |> Maybe.map Tuple.first
 
 
 

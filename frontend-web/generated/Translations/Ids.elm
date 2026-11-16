@@ -327,6 +327,10 @@ type TranslationId
     | TidGoalSettingsStatusDefaultForDate
     | TidGoalSettingsStatusSavedActive
     | TidGoalSettingsStatusSavedFrom String
+    | TidLibraryBrowseTitle
+    | TidLibraryDescription
+    | TidLibraryFoodsDescription
+    | TidLibraryMealsDescription
     | TidLoginPasswordRequired
     | TidLoginSubmit
     | TidLoginSubmitting
@@ -358,6 +362,7 @@ type TranslationId
     | TidNavBack
     | TidNavDiary
     | TidNavFoods
+    | TidNavLibrary
     | TidNavLogout
     | TidNavMeals
     | TidNavMenu
@@ -365,6 +370,7 @@ type TranslationId
     | TidNavMyMeals
     | TidNavSearch
     | TidNavSearchFoods
+    | TidNavSettings
     | TidNutrientAddedSugars
     | TidNutrientCalcium
     | TidNutrientCarbRich
@@ -446,6 +452,16 @@ type TranslationId
     | TidNutritionDetailsViewReferenceSource
     | TidNutritionDetailsVitaminsMinerals
     | TidSearchKcalPer100g String
+    | TidSettingsAccessTitle
+    | TidSettingsAccountDescription
+    | TidSettingsAccountTitle
+    | TidSettingsApiKeysSummary
+    | TidSettingsDescription
+    | TidSettingsLanguageDescription
+    | TidSettingsLanguageTitle
+    | TidSettingsPreferencesTitle
+    | TidSettingsThemeDescription
+    | TidSettingsThemeTitle
     | TidSetupDescription
     | TidSetupPasswordMinLength
     | TidSetupSubmit
@@ -467,6 +483,7 @@ type TranslationId
     | TidTitleEditUser
     | TidTitleFood
     | TidTitleGoals
+    | TidTitleLibrary
     | TidTitleLogFood
     | TidTitleLogWithAi
     | TidTitleLogin
@@ -476,6 +493,7 @@ type TranslationId
     | TidTitleMyMeals
     | TidTitleNutritionDetails
     | TidTitleSearchFoods
+    | TidTitleSettings
     | TidTitleSetup
     | TidUiCategoryOverflowMore String
     | TidUiDetailRowLabelSuffix String

@@ -18,6 +18,7 @@ module Page exposing
     , bootShell
     , bootstrapView
     , clearStore
+    , dismissTransient
     , init
     , initPreserving
     , isBusy
@@ -27,6 +28,7 @@ module Page exposing
     , modalView
     , paneKeys
     , panePlanForRoute
+    , paneSubscriptions
     , photoPreviewUrls
     , reconcile
     , update
@@ -73,6 +75,7 @@ import Page.FoodLog.CreateAdHoc as CreateAdHocLog
 import Page.FoodLog.CreateWithAi as CreateWithAiLog
 import Page.FoodLog.Entry as FoodLogEntry
 import Page.Goals.Settings as GoalsSettings
+import Page.Library as Library
 import Page.Meal.Create as MealCreate
 import Page.Meal.Edit as MealEdit
 import Page.Meal.List as MealList
@@ -80,6 +83,7 @@ import Page.Meal.Show as MealShow
 import Page.NutritionDetails as NutritionDetails
 import Page.Settings.ApiKeyCreate as SettingsApiKeyCreate
 import Page.Settings.ApiKeys as SettingsApiKeys
+import Page.Settings.Landing as SettingsLanding
 import Page.Users.BootstrapSetup as BootstrapSetup
 import Page.Users.CreateUser as AdminCreateUser
 import Page.Users.Dashboard as AdminDashboard
@@ -88,6 +92,7 @@ import Page.Users.Login as AuthLogin
 import Set exposing (Set)
 import Store exposing (Store)
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Page as UiPage
@@ -119,6 +124,8 @@ type Pane
     | NutritionDetailsPane LocalDate NutritionDetails.Model
     | GoalsSettingsPane LocalDate GoalsSettings.Model
     | DiarySettingsPane DiarySettings.Model
+    | LibraryPane Library.Model
+    | SettingsLandingPane SettingsLanding.Model
     | ApiKeysPane Int SettingsApiKeys.Model
     | ApiKeyCreatePane Int SettingsApiKeyCreate.Model
     | FoodSearchPane FoodSearch.Model
@@ -176,6 +183,9 @@ type OutMsg
     | RequestBarcodeScanStop
     | RevokePhotoPreviewUrls (List String)
     | CopyText Int Int String
+    | ToggleTheme
+    | SetLanguage Language
+    | Logout
     | LoginSucceeded Auth.LoginSession
     | SetupSucceeded Auth.LoginSession
 
@@ -274,6 +284,48 @@ clearStore model =
     }
 
 
+{-| Close page-owned transient UI before a navigation command, including a
+bottom-nav tap that targets the current route. The pane keeps its loaded data.
+-}
+dismissTransient : Model -> Model
+dismissTransient model =
+    { model | panes = List.map dismissPaneTransient model.panes }
+
+
+dismissPaneTransient : Pane -> Pane
+dismissPaneTransient pane =
+    case pane of
+        SettingsLandingPane settings ->
+            SettingsLandingPane (SettingsLanding.dismissTransient settings)
+
+        _ ->
+            pane
+
+
+{-| Subscriptions owned by the mounted panes. Only an open settings language
+menu subscribes to scroll and resize so it can be re-measured; every other route
+returns `Sub.none`.
+-}
+paneSubscriptions : Model -> Sub Msg
+paneSubscriptions model =
+    model.panes
+        |> List.filterMap paneSubscriptionsFor
+        |> Sub.batch
+
+
+paneSubscriptionsFor : Pane -> Maybe (Sub Msg)
+paneSubscriptionsFor pane =
+    case pane of
+        SettingsLandingPane settings ->
+            Just
+                (Sub.map GotSettingsLandingMsg
+                    (SettingsLanding.subscriptions settings)
+                )
+
+        _ ->
+            Nothing
+
+
 paneKeys : Model -> List String
 paneKeys model =
     List.map paneKey model.panes
@@ -338,6 +390,12 @@ paneKey pane =
 
         DiarySettingsPane _ ->
             "diary-settings"
+
+        LibraryPane _ ->
+            "library"
+
+        SettingsLandingPane _ ->
+            "settings"
 
         ApiKeysPane _ _ ->
             "api-keys"
@@ -902,6 +960,12 @@ needsSessionData pane =
         DiarySettingsPane _ ->
             True
 
+        LibraryPane _ ->
+            False
+
+        SettingsLandingPane _ ->
+            False
+
         ApiKeysPane _ _ ->
             False
 
@@ -1055,6 +1119,16 @@ panePlanForRoute context existing =
             [ readyPlan (diarySettingsDesired context)
                 |> withSkeleton
                     (\env -> UiPage.pageContainer [ DiarySettings.skeletonView env ])
+            ]
+
+        Library ->
+            [ readyPlan (simpleDesired "library" (LibraryPane Library.init)) ]
+
+        Settings ->
+            [ readyPlan
+                (simpleDesired "settings"
+                    (SettingsLandingPane SettingsLanding.init)
+                )
             ]
 
         SettingsApiKeys ->
@@ -1752,6 +1826,8 @@ type Msg
     | GotNutritionDetailsMsg NutritionDetails.Msg
     | GotGoalsSettingsMsg GoalsSettings.Msg
     | GotDiarySettingsMsg DiarySettings.Msg
+    | GotLibraryMsg Library.Msg
+    | GotSettingsLandingMsg SettingsLanding.Msg
     | GotApiKeysMsg Int SettingsApiKeys.Msg
     | GotApiKeyCreateMsg Int SettingsApiKeyCreate.Msg
     | CopyTextResult Int Int Bool
@@ -2127,6 +2203,22 @@ updatePane allPanes context msg pane =
                 applyDiarySettingsOutMsg
                 mutation
                 (DiarySettings.update subMsg sub)
+
+        ( GotLibraryMsg subMsg, LibraryPane sub ) ->
+            stepPane context
+                LibraryPane
+                GotLibraryMsg
+                applyLibraryOutMsg
+                NoMutation
+                (Library.update subMsg sub)
+
+        ( GotSettingsLandingMsg subMsg, SettingsLandingPane sub ) ->
+            stepPane context
+                SettingsLandingPane
+                GotSettingsLandingMsg
+                applySettingsLandingOutMsg
+                NoMutation
+                (SettingsLanding.update subMsg sub)
 
         ( GotApiKeysMsg generation subMsg, ApiKeysPane currentGeneration sub ) ->
             if generation /= currentGeneration then
@@ -2833,6 +2925,32 @@ applyDiarySettingsOutMsg _ outMsg =
 
         DiarySettings.SessionExpired ->
             ( Cmd.none, SessionExpired )
+
+
+applyLibraryOutMsg : InitCtx -> Library.OutMsg -> ( Cmd Msg, OutMsg )
+applyLibraryOutMsg _ outMsg =
+    case outMsg of
+        Library.Navigate route ->
+            ( Cmd.none, Navigate route )
+
+
+applySettingsLandingOutMsg : InitCtx -> SettingsLanding.OutMsg -> ( Cmd Msg, OutMsg )
+applySettingsLandingOutMsg _ outMsg =
+    case outMsg of
+        SettingsLanding.NoOp ->
+            ( Cmd.none, NoOutMsg )
+
+        SettingsLanding.Navigate route ->
+            ( Cmd.none, Navigate route )
+
+        SettingsLanding.ToggleTheme ->
+            ( Cmd.none, ToggleTheme )
+
+        SettingsLanding.SetLanguage language ->
+            ( Cmd.none, SetLanguage language )
+
+        SettingsLanding.Logout ->
+            ( Cmd.none, Logout )
 
 
 applyApiKeysOutMsg : InitCtx -> Int -> SettingsApiKeys.OutMsg -> ( Cmd Msg, OutMsg )
@@ -3590,6 +3708,12 @@ paneView env selectedDate paneCount index pane =
 
         DiarySettingsPane sub ->
             Element.map GotDiarySettingsMsg (DiarySettings.view env sub)
+
+        LibraryPane sub ->
+            Element.map GotLibraryMsg (Library.view env sub)
+
+        SettingsLandingPane sub ->
+            Element.map GotSettingsLandingMsg (SettingsLanding.view env sub)
 
         ApiKeysPane generation sub ->
             Element.map (GotApiKeysMsg generation) (SettingsApiKeys.view env sub)

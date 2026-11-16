@@ -3,6 +3,7 @@ module View.Chrome exposing
     , ScreenMeta
     , bottomNavBar
     , drawerOverlay
+    , drawerVisible
     , profileMenu
     , shouldReserveBottomNav
     , showBottomNav
@@ -103,21 +104,52 @@ topBarView :
     -> Session
     -> Route
     -> Bool
+    -> Bool
     -> msg
     -> msg
     -> msg
+    -> (Language -> msg)
     -> (Route -> msg)
     -> { profileLabel : String, profileMenu : Maybe (Element msg) }
     -> Element msg
-topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNavigate profile =
+topBarView env session route hidden menuOpen onMenu onProfile onTheme onSetLang onNavigate profile =
     let
         chromeShown : Bool
         chromeShown =
-            showsAppChrome session suppressed route
+            showsAppChrome session hidden route
 
         meta : ScreenMeta
         meta =
             screenMeta env session route
+
+        themeControl : List (Element msg)
+        themeControl =
+            if offersThemeSwitch session then
+                [ Element.el
+                    [ Element.paddingEach
+                        { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 }
+                    ]
+                    (themeToggle env onTheme)
+                ]
+
+            else
+                []
+
+        languageControl : List (Element msg)
+        languageControl =
+            if offersLanguageSwitch session then
+                [ languageToggle env onSetLang ]
+
+            else
+                []
+
+        profileControl : List (Element msg)
+        profileControl =
+            if Auth.isAdmin session then
+                [ profileButton env onProfile profile ]
+
+            else
+                []
     in
     Element.row
         [ Element.width Element.fill
@@ -129,16 +161,12 @@ topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNa
         , UiCommon.testId "app-topbar"
         ]
         (if chromeShown then
-            [ leadingButton env meta.leading onMenuClick onNavigate
+            [ leadingButton env menuOpen meta.leading onMenu onNavigate
             , Element.el [ Element.width Element.fill, Element.clip ]
                 (Typography.screenTitle env.theme meta.title)
-            , Element.el
-                [ Element.paddingEach
-                    { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 }
-                ]
-                (themeToggle env onThemeToggle)
-            , profileButton env onProfile profile
             ]
+                ++ themeControl
+                ++ profileControl
 
          else
             [ Element.row [ Element.spacing DesignTokens.space8, Element.centerY ]
@@ -148,9 +176,36 @@ topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNa
                 , Typography.pageTitle env.theme "CalCo"
                 ]
             , Element.el [ Element.width Element.fill ] Element.none
-            , themeToggle env onThemeToggle
             ]
+                ++ languageControl
+                ++ themeControl
         )
+
+
+{-| The top bar only offers the theme switch to signed-out auth screens and to
+admins, who cannot open the normal-user Settings page where the preference now
+lives.
+-}
+offersThemeSwitch : Session -> Bool
+offersThemeSwitch session =
+    not (Auth.isAuthenticated session) || Auth.isAdmin session
+
+
+{-| Login and setup are the only signed-out screens, and they have no account
+menu or Settings page to hold a language choice.
+-}
+offersLanguageSwitch : Session -> Bool
+offersLanguageSwitch session =
+    not (Auth.isAuthenticated session)
+
+
+boolString : Bool -> String
+boolString value =
+    if value then
+        "true"
+
+    else
+        "false"
 
 
 themeToggle : Env -> msg -> Element msg
@@ -162,12 +217,60 @@ themeToggle env onToggle =
         }
 
 
-leadingButton : Env -> LeadingAction -> msg -> (Route -> msg) -> Element msg
-leadingButton env leading onMenuClick onNavigate =
+{-| A compact auth-screen control that names the language it switches to. The
+neutral fill and primary text keep the control legible in both themes without
+reintroducing the normal-user profile menu.
+-}
+languageToggle : Env -> (Language -> msg) -> Element msg
+languageToggle env onSetLanguage =
+    let
+        target : Language
+        target =
+            case env.language of
+                EN_US ->
+                    HI_IN
+
+                HI_IN ->
+                    EN_US
+
+        targetName : String
+        targetName =
+            I18n.languageName target
+
+        description : String
+        description =
+            I18n.t env.language TidSettingsLanguageTitle ++ ": " ++ targetName
+    in
+    Input.button
+        [ Element.height (Element.px 44)
+        , Element.paddingXY DesignTokens.space12 0
+        , Border.rounded DesignTokens.radiusPill
+        , Border.width 1
+        , Border.color env.theme.divider
+        , Background.color env.theme.cardBg
+        , Font.color env.theme.textPrimary
+        , Font.medium
+        , Font.size 14
+        , Region.description description
+        , Element.htmlAttribute (Html.Attributes.title description)
+        , UiCommon.testId "language-toggle"
+        ]
+        { onPress = Just (onSetLanguage target)
+        , label = Element.text targetName
+        }
+
+
+leadingButton : Env -> Bool -> LeadingAction -> msg -> (Route -> msg) -> Element msg
+leadingButton env menuExpanded leading onMenuClick onNavigate =
     case leading of
         OpenMenu ->
-            Button.iconButton env.device
+            Button.iconButtonWithAttributes env.device
                 env.theme
+                [ Element.htmlAttribute (Html.Attributes.id "app-menu-trigger")
+                , Element.htmlAttribute
+                    (Html.Attributes.attribute "aria-expanded" (boolString menuExpanded))
+                , Element.htmlAttribute (Html.Attributes.attribute "aria-controls" "app-drawer")
+                ]
                 { icon = Icon.Menu
                 , title = I18n.t env.language TidNavMenu
                 , onPress = Just onMenuClick
@@ -318,9 +421,29 @@ screenMeta env session route =
             , leading = GoBack (DiaryDay Nothing Nothing)
             }
 
+        Library ->
+            { title = I18n.t env.language TidTitleLibrary
+            , leading =
+                if phoneNonAdmin then
+                    ShowAppIcon
+
+                else
+                    OpenMenu
+            }
+
+        Settings ->
+            { title = I18n.t env.language TidTitleSettings
+            , leading =
+                if phoneNonAdmin then
+                    ShowAppIcon
+
+                else
+                    OpenMenu
+            }
+
         SettingsApiKeys ->
             { title = I18n.t env.language TidTitleApiKeys
-            , leading = GoBack (DiaryDay Nothing Nothing)
+            , leading = GoBack Settings
             }
 
         SettingsApiKeyCreate ->
@@ -337,7 +460,17 @@ screenMeta env session route =
 
                     Nothing ->
                         I18n.t env.language TidTitleSearchFoods
-            , leading = GoBack (DiaryDay maybeDate Nothing)
+            , leading =
+                case maybeSlot of
+                    Just _ ->
+                        GoBack (DiaryDay maybeDate Nothing)
+
+                    Nothing ->
+                        if phoneNonAdmin then
+                            ShowAppIcon
+
+                        else
+                            OpenMenu
             }
 
         FoodShow _ maybeDate maybeSlot _ ->
@@ -374,22 +507,12 @@ screenMeta env session route =
 
         CustomFoodList ->
             { title = I18n.t env.language TidTitleMyFoods
-            , leading =
-                if phoneNonAdmin then
-                    NoLeadingAction
-
-                else
-                    GoBack (DiaryDay Nothing Nothing)
+            , leading = GoBack Library
             }
 
         MealList ->
             { title = I18n.t env.language TidTitleMyMeals
-            , leading =
-                if phoneNonAdmin then
-                    NoLeadingAction
-
-                else
-                    GoBack (DiaryDay Nothing Nothing)
+            , leading = GoBack Library
             }
 
         MealCreate ->
@@ -421,29 +544,57 @@ bottomNavBar env route onNavigate =
         [ tabButton env
             route
             onNavigate
-            (I18n.t env.language TidNavDiary)
-            (DiaryDay Nothing Nothing)
-            Icon.Home
+            { label = I18n.t env.language TidNavDiary
+            , target = DiaryDay Nothing Nothing
+            , navTarget = "diary"
+            , icon = Icon.Home
+            }
         , tabButton env
             route
             onNavigate
-            (I18n.t env.language TidNavSearch)
-            (FoodSearch Nothing Nothing)
-            Icon.Search
-        , tabButton env route onNavigate (I18n.t env.language TidNavFoods) CustomFoodList Icon.Box
-        , tabButton env route onNavigate (I18n.t env.language TidNavMeals) MealList Icon.Utensils
+            { label = I18n.t env.language TidNavSearch
+            , target = FoodSearch Nothing Nothing
+            , navTarget = "search"
+            , icon = Icon.Search
+            }
+        , tabButton env
+            route
+            onNavigate
+            { label = I18n.t env.language TidNavLibrary
+            , target = Library
+            , navTarget = "library"
+            , icon = Icon.Library
+            }
+        , tabButton env
+            route
+            onNavigate
+            { label = I18n.t env.language TidNavSettings
+            , target = Settings
+            , navTarget = "settings"
+            , icon = Icon.Settings
+            }
         ]
 
 
-tabButton : Env -> Route -> (Route -> msg) -> String -> Route -> Icon -> Element msg
-tabButton env route onNavigate label target icon =
+tabButton :
+    Env
+    -> Route
+    -> (Route -> msg)
+    -> { label : String, target : Route, navTarget : String, icon : Icon }
+    -> Element msg
+tabButton env route onNavigate config =
     let
         active : Bool
         active =
-            primaryRoute route == primaryRoute target
+            primaryRoute route == primaryRoute config.target
     in
     bottomNavTab env.theme
-        { icon = icon, label = label, active = active, onPress = onNavigate target }
+        { icon = config.icon
+        , label = config.label
+        , active = active
+        , navTarget = config.navTarget
+        , onPress = onNavigate config.target
+        }
 
 
 bottomNavContainer : Theme -> List (Element msg) -> Element msg
@@ -468,7 +619,10 @@ bottomNavContainer theme items =
         items
 
 
-bottomNavTab : Theme -> { icon : Icon, label : String, active : Bool, onPress : msg } -> Element msg
+bottomNavTab :
+    Theme
+    -> { icon : Icon, label : String, active : Bool, navTarget : String, onPress : msg }
+    -> Element msg
 bottomNavTab theme config =
     let
         iconColor : Element.Color
@@ -480,12 +634,12 @@ bottomNavTab theme config =
                 theme.textMuted
     in
     Input.button
-        [ Element.width (Element.fillPortion 1)
-        , Element.height Element.fill
-        , Element.paddingEach
+        ([ Element.width (Element.fillPortion 1)
+         , Element.height Element.fill
+         , Element.paddingEach
             { top = DesignTokens.space8, right = 0, bottom = DesignTokens.space4, left = 0 }
-        , Font.color iconColor
-        , Border.widthEach
+         , Font.color iconColor
+         , Border.widthEach
             { top =
                 if config.active then
                     2
@@ -496,14 +650,33 @@ bottomNavTab theme config =
             , left = 0
             , right = 0
             }
-        , Border.color theme.brandBlue
-        ]
+         , Border.color theme.brandBlue
+         , UiCommon.dataAttribute "data-nav-target" config.navTarget
+         ]
+            ++ (if config.active then
+                    [ Element.htmlAttribute (Html.Attributes.id "app-bottom-nav-current")
+                    , Element.htmlAttribute (Html.Attributes.attribute "aria-current" "page")
+                    ]
+
+                else
+                    []
+               )
+        )
         { onPress = Just config.onPress
         , label =
             Element.column [ Element.centerX, Element.centerY, Element.spacing DesignTokens.space2 ]
                 [ Element.el [ Element.centerX ]
                     (Icon.view { icon = config.icon, size = 22, color = iconColor })
-                , Element.el [ Element.centerX, Typography.caption ] (Element.text config.label)
+                , Element.el
+                    ([ Element.centerX, Typography.caption ]
+                        ++ (if config.active then
+                                [ Font.semiBold ]
+
+                            else
+                                []
+                           )
+                    )
+                    (Element.text config.label)
                 ]
         }
 
@@ -522,11 +695,11 @@ drawerOverlay :
     -> (Route -> msg)
     -> List (Element.Attribute msg)
 drawerOverlay env session route chromeSuppressed drawerOpen onClose onNavigate =
-    if drawerOpen && showsAppChrome session chromeSuppressed route then
+    if drawerVisible session chromeSuppressed route drawerOpen then
         [ Element.inFront
             (Element.row [ Element.width Element.fill, Element.height Element.fill ]
                 [ drawerView env session route onClose onNavigate
-                , scrimOverlay env.theme (Just onClose)
+                , scrimOverlay env.theme (I18n.t env.language TidCommonClose) (Just onClose)
                 ]
             )
         ]
@@ -535,12 +708,21 @@ drawerOverlay env session route chromeSuppressed drawerOpen onClose onNavigate =
         []
 
 
+{-| The drawer is an overlay, so the rest of the shell must be inert while it
+renders. Both the overlay and the inert state follow this one predicate.
+-}
+drawerVisible : Session -> Bool -> Route -> Bool -> Bool
+drawerVisible session chromeSuppressed route drawerOpen =
+    drawerOpen && showsAppChrome session chromeSuppressed route
+
+
 drawerView : Env -> Session -> Route -> msg -> (Route -> msg) -> Element msg
 drawerView env session route onClose onNavigate =
     drawerPanel env.theme
         (Element.row [ Element.spacing DesignTokens.space8 ]
-            [ Button.iconButton env.device
+            [ Button.iconButtonWithAttributes env.device
                 env.theme
+                [ Element.htmlAttribute (Html.Attributes.id "app-drawer-close") ]
                 { icon = Icon.Menu
                 , title = I18n.t env.language TidCommonClose
                 , onPress = Just onClose
@@ -559,54 +741,79 @@ drawerItems env session route onNavigate =
         [ drawerItem env.theme
             route
             onNavigate
-            Nothing
-            (I18n.t env.language TidNavAdmin)
-            AdminDashboard
+            { icon = Nothing
+            , label = I18n.t env.language TidNavAdmin
+            , navTarget = "admin"
+            , target = AdminDashboard
+            }
         ]
 
     else
         [ drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Home)
-            (I18n.t env.language TidNavDiary)
-            (DiaryDay Nothing Nothing)
+            { icon = Just Icon.Home
+            , label = I18n.t env.language TidNavDiary
+            , navTarget = "diary"
+            , target = DiaryDay Nothing Nothing
+            }
         , drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Search)
-            (I18n.t env.language TidNavSearchFoods)
-            (FoodSearch Nothing Nothing)
+            { icon = Just Icon.Search
+            , label = I18n.t env.language TidNavSearch
+            , navTarget = "search"
+            , target = FoodSearch Nothing Nothing
+            }
         , drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Box)
-            (I18n.t env.language TidNavMyFoods)
-            CustomFoodList
+            { icon = Just Icon.Library
+            , label = I18n.t env.language TidNavLibrary
+            , navTarget = "library"
+            , target = Library
+            }
         , drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Utensils)
-            (I18n.t env.language TidNavMyMeals)
-            MealList
+            { icon = Just Icon.Settings
+            , label = I18n.t env.language TidNavSettings
+            , navTarget = "settings"
+            , target = Settings
+            }
         ]
 
 
-drawerItem : Theme -> Route -> (Route -> msg) -> Maybe Icon -> String -> Route -> Element msg
-drawerItem theme current onNavigate icon label target =
+drawerItem :
+    Theme
+    -> Route
+    -> (Route -> msg)
+    -> { icon : Maybe Icon, label : String, navTarget : String, target : Route }
+    -> Element msg
+drawerItem theme current onNavigate config =
     let
         selected : Bool
         selected =
-            primaryRoute current == primaryRoute target
+            primaryRoute current == primaryRoute config.target
     in
     drawerItemButton theme
-        { icon = icon, label = label, selected = selected, onPress = onNavigate target }
+        { icon = config.icon
+        , label = config.label
+        , selected = selected
+        , navTarget = config.navTarget
+        , onPress = onNavigate config.target
+        }
 
 
-scrimOverlay : Theme -> Maybe msg -> Element msg
-scrimOverlay theme onPress =
+scrimOverlay : Theme -> String -> Maybe msg -> Element msg
+scrimOverlay theme label onPress =
     Input.button
-        [ Element.width Element.fill, Element.height Element.fill, Background.color theme.scrim ]
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Background.color theme.scrim
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" label)
+        , UiCommon.testId "app-drawer-scrim"
+        ]
         { onPress = onPress, label = Element.none }
 
 
@@ -620,13 +827,15 @@ drawerPanel theme children =
         , Background.color theme.cardSurfaceBg
         , UiCommon.uiClass "ui-card-shadow"
         , Region.navigation
+        , Element.htmlAttribute (Html.Attributes.id "app-drawer")
+        , UiCommon.testId "app-drawer"
         ]
         children
 
 
 drawerItemButton :
     Theme
-    -> { icon : Maybe Icon, label : String, selected : Bool, onPress : msg }
+    -> { icon : Maybe Icon, label : String, selected : Bool, navTarget : String, onPress : msg }
     -> Element msg
 drawerItemButton theme config =
     let
@@ -646,25 +855,41 @@ drawerItemButton theme config =
 
                 Nothing ->
                     Element.none
+
+        labelAttrs : List (Element.Attribute msg)
+        labelAttrs =
+            if config.selected then
+                [ Font.semiBold ]
+
+            else
+                []
     in
     Input.button
-        [ Element.width Element.fill
-        , Element.paddingXY DesignTokens.space16 DesignTokens.space12
-        , Border.rounded DesignTokens.radiusControl
-        , Background.color
+        ([ Element.width Element.fill
+         , Element.paddingXY DesignTokens.space16 DesignTokens.space12
+         , Border.rounded DesignTokens.radiusControl
+         , Background.color
             (if config.selected then
                 theme.drawerSelectionBg
 
              else
                 theme.cardBg
             )
-        , Font.color itemColor
-        , Font.medium
-        ]
+         , Font.color itemColor
+         , Font.medium
+         , UiCommon.dataAttribute "data-nav-target" config.navTarget
+         ]
+            ++ (if config.selected then
+                    [ Element.htmlAttribute (Html.Attributes.attribute "aria-current" "page") ]
+
+                else
+                    []
+               )
+        )
         { onPress = Just config.onPress
         , label =
             Element.row [ Element.spacing DesignTokens.space12, Element.centerY ]
-                [ iconEl, Element.text config.label ]
+                [ iconEl, Element.el labelAttrs (Element.text config.label) ]
         }
 
 
@@ -672,10 +897,10 @@ drawerItemButton theme config =
 -- PROFILE MENU
 
 
-profileMenu : Env -> Session -> (Route -> msg) -> msg -> (Language -> msg) -> Element msg
-profileMenu env session onNavigate onLogout onSetLanguage =
+profileMenu : Env -> Session -> msg -> (Language -> msg) -> Element msg
+profileMenu env session onLogout onSetLanguage =
     menuCard env.theme
-        { width = 240, children = profileMenuContent env session onNavigate onLogout onSetLanguage }
+        { width = 240, children = profileMenuContent env session onLogout onSetLanguage }
 
 
 menuCard : Theme -> { width : Int, children : List (Element msg) } -> Element msg
@@ -696,12 +921,11 @@ menuCard theme config =
 profileMenuContent :
     Env
     -> Session
-    -> (Route -> msg)
     -> msg
     -> (Language -> msg)
     -> List (Element msg)
-profileMenuContent env session onNavigate onLogout onSetLanguage =
-    Typography.mutedCaption env.theme
+profileMenuContent env session onLogout onSetLanguage =
+    [ Typography.mutedCaption env.theme
         (case session of
             Auth.Authenticated identity ->
                 I18n.t env.language (TidCommonSignedInAs identity.username)
@@ -709,62 +933,29 @@ profileMenuContent env session onNavigate onLogout onSetLanguage =
             _ ->
                 I18n.t env.language TidCommonSignedIn
         )
-        :: (if Auth.isAdmin session then
-                []
+    , Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+        [ languageOption env onSetLanguage EN_US
+        , languageOption env onSetLanguage HI_IN
+        ]
+    , Button.textButton env.device
+        env.theme
+        { tone = Button.DangerOutline
+        , width = Button.FullWidth
+        , label = I18n.t env.language TidNavLogout
+        , onPress = onLogout
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Nothing
+        }
+    ]
 
-            else
-                [ Button.textButton env.device
-                    env.theme
-                    { tone = Button.Ghost
-                    , width = Button.FullWidth
-                    , label = I18n.t env.language TidNavApiKeys
-                    , onPress = onNavigate SettingsApiKeys
-                    , submitState = Nothing
-                    , submittingLabel = Nothing
-                    , trailing = Nothing
-                    }
-                ]
-           )
-        ++ [ Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                [ Button.textButton env.device
-                    env.theme
-                    { tone =
-                        if env.language == EN_US then
-                            Button.Primary
 
-                        else
-                            Button.Ghost
-                    , width = Button.FullWidth
-                    , label = "English"
-                    , onPress = onSetLanguage EN_US
-                    , submitState = Nothing
-                    , submittingLabel = Nothing
-                    , trailing = Nothing
-                    }
-                , Button.textButton env.device
-                    env.theme
-                    { tone =
-                        if env.language == HI_IN then
-                            Button.Primary
-
-                        else
-                            Button.Ghost
-                    , width = Button.FullWidth
-                    , label = "हिन्दी"
-                    , onPress = onSetLanguage HI_IN
-                    , submitState = Nothing
-                    , submittingLabel = Nothing
-                    , trailing = Nothing
-                    }
-                ]
-           , Button.textButton env.device
-                env.theme
-                { tone = Button.Danger
-                , width = Button.FullWidth
-                , label = I18n.t env.language TidNavLogout
-                , onPress = onLogout
-                , submitState = Nothing
-                , submittingLabel = Nothing
-                , trailing = Nothing
-                }
-           ]
+languageOption : Env -> (Language -> msg) -> Language -> Element msg
+languageOption env onSetLanguage language =
+    UiInput.optionRowWithState env.theme
+        { label = I18n.languageName language
+        , selected = env.language == language
+        , onPress = onSetLanguage language
+        , disabled = False
+        , trailing = Nothing
+        }

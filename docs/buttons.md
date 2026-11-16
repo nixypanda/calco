@@ -51,7 +51,7 @@ state (muted colors, no interaction).
 | `Primary` | brandBlue | white | none | Primary actions (Submit, Save, Create) |
 | `PrimaryOutline` | cardBg | brandBlue | 1px brandBlue | Secondary actions (Cancel, Choose photos) |
 | `Danger` | dangerSolid | white | none | Destructive actions (Delete, Confirm) |
-| `DangerOutline` | cardBg | dangerFg | 1px dangerFg | Destructive secondary (Remove photo) |
+| `DangerOutline` | cardBg | dangerFg | 1px dangerFg | Destructive secondary (Remove photo, Logout) |
 | `Ghost` | transparent | brandBlue (muted when disabled) | none | Text links ("+ Add Food", "+ Create Meal") |
 | `GhostFilled` | brandBlueSoft | brandBlue | none | Filled links ("Details", "Load earlier") |
 
@@ -109,12 +109,13 @@ toggle group, not a standalone button.
 A grid cell with `aria-pressed` state and conditional background. The
 label is a complex day number + dot indicator element.
 
-### Profile initial button (`View/Chrome.elm`)
+### Admin profile initial button (`View/Chrome.elm`)
 
-A 44x44 circle showing a single character. `iconButton` takes an `Icon`
-record, not text. Could potentially be a `textButton` with `ContentWidth`
-but the circular shape and specific sizing make it cleaner as a custom
-element.
+A 44x44 circle showing a single character. Only signed-in admins see this
+control; normal-user account actions live on Settings. `iconButton` takes an
+`Icon` record, not text. Could potentially be a `textButton` with
+`ContentWidth` but the circular shape and specific sizing make it cleaner as a
+custom element.
 
 ### Update banner (`View/Chrome.elm`)
 

@@ -392,11 +392,21 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /admin/users/:id/edit
 /home
 /home?date=YYYY-MM-DD
+/calendar
+/calendar?month=YYYY-MM
+/details
+/details?date=YYYY-MM-DD
 /settings/goals
 /settings/goals?date=YYYY-MM-DD&calendar_month=YYYY-MM
 /settings/diary
+/library
+/settings
 /settings/api-keys
 /settings/api-keys/new
+/logs/new/ad-hoc
+/logs/new/ad-hoc?date=YYYY-MM-DD&meal_slot=:slot
+/logs/new/ai
+/logs/new/ai?date=YYYY-MM-DD&meal_slot=:slot
 /logs/:id
 /search
 /search?date=YYYY-MM-DD
@@ -406,6 +416,7 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /foods/:id?meal_slot=:slot
 /foods/custom
 /foods/custom/new
+/foods/custom/new/ai
 /foods/custom/:id
 /foods/custom/:id/edit
 /meals
@@ -415,6 +426,25 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /
 *
 ```
+
+### Navigation Destinations
+
+Phones use a bottom navigation and larger screens use a drawer, both with the
+same four normal-user destinations. The selected destination comes from
+`Data.Route.primaryRoute`, not from a URL prefix:
+
+| Destination | Routes that select it |
+| --- | --- |
+| Diary | `/home`, `/calendar`, `/details`, `/logs/:id`, `/settings/goals`, `/settings/diary` |
+| Search | `/search`, `/foods/:id`, `/logs/new/ad-hoc`, `/logs/new/ai` |
+| Library | `/library`, `/foods/custom` and its create/show/edit/AI routes, `/meals` and its create/show/edit routes |
+| Settings | `/settings`, `/settings/api-keys`, `/settings/api-keys/new` |
+
+Goals and diary preferences stay under Diary even though their paths start with
+`/settings`. The saved-food and saved-meal screens stay under Library, while the
+`/foods/:id` catalog detail and `/logs/new/...` entry routes stay under Search.
+Admin sessions see only the Admin drawer destination because normal-user routes
+redirect them to the admin dashboard.
 
 Rules:
 
@@ -515,11 +545,19 @@ in `Data` and `Page`, app coordination in `Main`.
 owns the JavaScript ports for:
 
 - local date and IANA timezone.
-- persisted theme preference.
+- persisted theme and language preferences.
 - requested page reloads.
 - camera barcode scanning through `barcodeScanner.js`.
 - clipboard copy request/result ports for API-key secrets through
   `navigator.clipboard.writeText`.
+
+Theme and language are loaded from `localStorage` through Elm flags and written
+back through the `persistThemeMode` and `persistLanguage` ports, so both
+preferences survive a reload. Storage access is best-effort: reads and writes
+are guarded, and unavailable storage falls back to the light theme and
+`en_US` instead of blocking startup. Boot and language changes also set the
+document `lang` attribute to `en-US` or `hi-IN` so assistive technology and
+browser language features follow the selected locale.
 
 The scanner uses ZXing for EAN/UPC detection and stops camera tracks when the
 scan completes or is cancelled.
@@ -565,7 +603,9 @@ It provides:
 - meal-slot grouped logs.
 - add-food actions per meal slot.
 - recent-item quick add and latest-slot repeat actions.
-- bottom navigation on phones and a drawer on larger screens.
+- a Phone bottom navigation with Diary, Search, Library, and Settings
+  destinations; larger screens use a drawer with the same four flat
+  destinations.
 
 Users can inspect previous days with the diary date selector. The selected
 date is a ghost button with a calendar icon that opens the calendar at that
@@ -585,7 +625,48 @@ screen is out of scope.
 macro targets for the current local day. It can carry optional diary date and
 calendar context in its URL solely so Back returns to the diary day the user
 came from; goal data is always scoped to today. Plain `/settings/goals` still
-works.
+works. Goals, calendar, and meal-slot settings group under the Diary
+destination in the navigation.
+
+### Library
+
+`Page.Library` renders `/library`, the saved-item landing page. It links to the
+existing food and meal routes: `My Foods` opens `Page.CustomFood.List`, and
+`My Meals` opens `Page.Meal.List`. Both child screens return to the Library
+landing page. The navigation shows Library for those food and meal routes.
+
+### Settings
+
+`Page.Settings.Landing` renders `/settings`, the normal-user account and
+preferences landing page. The normal-user top-bar theme switch and profile menu
+were removed; their actions now live here:
+
+- **Access** links to API keys.
+- **Preferences** owns the persisted dark-theme switch and a compact
+  English/Hindi language dropdown. The dropdown shows the current language and
+  closes after a choice. Its selected option uses the blue/neutral field palette
+  with a check, not the teal chip fill; the keyboard-active option gets a
+  neutral fill and an inset brand-blue ring so the two states stay distinct.
+  Phones stack the Language title, description, and full-width dropdown; larger
+  screens keep the title and description beside a fixed-width dropdown so the
+  Theme and Language rows align. The trigger is a select-only combobox: Escape,
+  an outside click, or a second trigger press closes it, arrow/Home/End keys move
+  the active option, Enter/Space chooses it, and focus returns to the trigger
+  after a choice. The menu opens below the trigger, or above it when the trigger
+  is too close to the Phone bottom nav, so the options stay uncovered. Placement
+  uses viewport coordinates and is re-measured on resize and scroll while the
+  menu is open.
+- **Account** provides the logout action.
+
+The normal-user top bar therefore has no theme switch, language control, or
+profile button. Signed-out login and setup screens keep accessible theme and
+language controls, and admins keep the theme switch plus their account menu
+because they cannot open the normal-user Settings page. The admin account menu
+offers pressed-state language choices and logout only; it has no API keys entry.
+Admin account-menu language choices use the accessible chip-selection palette,
+and logout uses the outline danger tone. API key list and create screens group
+under the Settings destination; admins continue to see only the admin drawer
+because normal-user routes redirect them to the admin dashboard.
 
 ### API Keys
 
@@ -593,8 +674,8 @@ works.
 `Page.Settings.ApiKeyCreate` renders `/settings/api-keys/new` for normal users.
 Anonymous visitors go to login; admin identities go to the admin dashboard.
 `View.Chrome` supplies the **API keys** and **Create API key** screen titles. The
-profile-menu **API keys** entry is shown to normal users only; admin sessions do
-not see it.
+Settings landing page is the normal-user entry point to API key management;
+admin sessions do not see that route.
 
 The list page provides:
 
@@ -754,6 +835,10 @@ Control conventions:
   `Ui.fullWidthDangerButton`, and icon-button helpers for actions.
 - use `Ui.input`, `Ui.passwordInput`, and `Ui.selectDropdown` for
   form fields.
+- keyboard focus uses the brand-blue 2px outline; do not replace it with the
+  teal chip-selection palette. A field group that paints the ring on its
+  container, such as the unit-suffix field, suppresses the inner control's
+  global outline so keyboard focus is not painted twice.
 - use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, and `Ui.Feedback.loading`
   for common states.
 - use `Ui.panel` when several related blocks belong under one header: the panel

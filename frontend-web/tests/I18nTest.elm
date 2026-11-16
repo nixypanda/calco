@@ -11,8 +11,9 @@ Hindi translations so a blank or missing entry in each shape is caught.
 -}
 
 import Expect
+import Fuzz
 import I18n
-import Test exposing (Test, describe, test)
+import Test exposing (Test, describe, fuzz, test)
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util as Util
 
@@ -25,6 +26,10 @@ tests =
                 Expect.all
                     [ exact Util.EN_US TidNavDiary "Diary"
                     , exact Util.HI_IN TidNavDiary "डायरी"
+                    , exact Util.EN_US TidNavLibrary "Library"
+                    , exact Util.HI_IN TidNavLibrary "लाइब्रेरी"
+                    , exact Util.EN_US TidNavSettings "Settings"
+                    , exact Util.HI_IN TidNavSettings "सेटिंग्स"
                     , exact Util.EN_US TidCommonSave "Save"
                     , exact Util.HI_IN TidCommonSave "सहेजें"
                     , exact Util.EN_US
@@ -48,7 +53,20 @@ tests =
                     , \_ -> blankIds Util.HI_IN |> Expect.equal []
                     ]
                     ()
+        , fuzz languageFuzzer "every language code parses back to its language" <|
+            \language ->
+                Util.parseLanguage (I18n.languageCode language)
+                    |> Expect.equal (Ok language)
+        , test "persisted language codes keep their stored spelling" <|
+            \_ ->
+                List.map I18n.languageCode [ Util.EN_US, Util.HI_IN ]
+                    |> Expect.equal [ "en_US", "hi_IN" ]
         ]
+
+
+languageFuzzer : Fuzz.Fuzzer Util.Language
+languageFuzzer =
+    Fuzz.oneOfValues [ Util.EN_US, Util.HI_IN ]
 
 
 exact : Util.Language -> TranslationId -> String -> () -> Expect.Expectation
@@ -64,6 +82,8 @@ blankIds language =
 sampleIds : List TranslationId
 sampleIds =
     [ TidNavDiary
+    , TidNavLibrary
+    , TidNavSettings
     , TidCommonSave
     , TidDiarySettingsSelectAtLeastOne
     , TidApiErrorNetwork
@@ -75,4 +95,6 @@ sampleIds =
     , TidDiaryOpenCalendar
     , TidDiaryEditGoals
     , TidDiaryManageMealSlots
+    , TidLibraryDescription
+    , TidSettingsDescription
     ]

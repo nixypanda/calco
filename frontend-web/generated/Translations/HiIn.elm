@@ -981,6 +981,18 @@ hiInTranslations tid =
         TidGoalSettingsStatusSavedFrom hole0 ->
             "सहेजे गए लक्ष्य " ++ hole0 ++ " से प्रभावी।"
 
+        TidLibraryBrowseTitle ->
+            "ब्राउज़ करें"
+
+        TidLibraryDescription ->
+            "आपके सहेजे गए खाद्य पदार्थ और भोजन, दोबारा उपयोग के लिए तैयार।"
+
+        TidLibraryFoodsDescription ->
+            "आपके सहेजे गए कस्टम खाद्य पदार्थ।"
+
+        TidLibraryMealsDescription ->
+            "आपके खाद्य पदार्थों से बनाए गए भोजन।"
+
         TidLoginPasswordRequired ->
             "पासवर्ड आवश्यक है"
 
@@ -1074,6 +1086,9 @@ hiInTranslations tid =
         TidNavFoods ->
             "खाद्य पदार्थ"
 
+        TidNavLibrary ->
+            "लाइब्रेरी"
+
         TidNavLogout ->
             "लॉग आउट"
 
@@ -1094,6 +1109,9 @@ hiInTranslations tid =
 
         TidNavSearchFoods ->
             "खाद्य पदार्थ खोजें"
+
+        TidNavSettings ->
+            "सेटिंग्स"
 
         TidNutrientAddedSugars ->
             "अतिरिक्त शर्करा"
@@ -1338,6 +1356,36 @@ hiInTranslations tid =
         TidSearchKcalPer100g hole0 ->
             hole0 ++ " kcal प्रति 100 g"
 
+        TidSettingsAccessTitle ->
+            "पहुँच"
+
+        TidSettingsAccountDescription ->
+            "इस डिवाइस पर CalCo से साइन आउट करें।"
+
+        TidSettingsAccountTitle ->
+            "खाता"
+
+        TidSettingsApiKeysSummary ->
+            "स्क्रिप्ट और टूल के लिए कुंजियाँ बनाएँ और रद्द करें।"
+
+        TidSettingsDescription ->
+            "अपना खाता, पहुँच और ऐप प्राथमिकताएँ प्रबंधित करें।"
+
+        TidSettingsLanguageDescription ->
+            "ऐप में उपयोग की जाने वाली भाषा चुनें।"
+
+        TidSettingsLanguageTitle ->
+            "भाषा"
+
+        TidSettingsPreferencesTitle ->
+            "प्राथमिकताएँ"
+
+        TidSettingsThemeDescription ->
+            "गहरे रंग वाली स्कीम का उपयोग करें।"
+
+        TidSettingsThemeTitle ->
+            "डार्क थीम"
+
         TidSetupDescription ->
             "शुरू करने के लिए एडमिन खाता बनाएँ।"
 
@@ -1401,6 +1449,9 @@ hiInTranslations tid =
         TidTitleGoals ->
             "लक्ष्य"
 
+        TidTitleLibrary ->
+            "लाइब्रेरी"
+
         TidTitleLogFood ->
             "भोजन दर्ज करें"
 
@@ -1427,6 +1478,9 @@ hiInTranslations tid =
 
         TidTitleSearchFoods ->
             "खाद्य पदार्थ खोजें"
+
+        TidTitleSettings ->
+            "सेटिंग्स"
 
         TidTitleSetup ->
             "सेटअप"

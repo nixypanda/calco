@@ -289,6 +289,8 @@ route =
         , Fuzz.map NutritionDetails maybeLocalDate
         , Fuzz.map2 GoalSettings maybeLocalDate maybePeriod
         , Fuzz.constant DiarySettings
+        , Fuzz.constant Library
+        , Fuzz.constant Settings
         , Fuzz.constant SettingsApiKeys
         , Fuzz.constant SettingsApiKeyCreate
         , Fuzz.map3 FoodLogEntry segment maybeLocalDate maybePeriod

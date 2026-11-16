@@ -349,6 +349,10 @@ formSection theme title content =
     section theme { header = Just (subsectionTitle theme title), body = content, footer = Nothing }
 
 
+{-| A selectable row. The trailing slot stays inside the same press target, so
+a decorative chevron or badge cannot create a dead click area. Use `staticRow`
+when the trailing slot contains its own interactive control.
+-}
 listRow :
     { onSelect : msg
     , leading : List (Element msg)
@@ -358,18 +362,21 @@ listRow :
     }
     -> Element msg
 listRow config =
-    Element.wrappedRow (listRowAttrs ++ [ testId "list-row" ])
-        [ Input.button
-            [ Element.width Element.fill, uiClass "ui-motion ui-pressable" ]
-            { onPress = Just config.onSelect
-            , label =
-                Element.row listRowLabelAttrs
+    Input.button
+        [ Element.width Element.fill
+        , testId "list-row"
+        , uiClass "ui-motion ui-pressable"
+        ]
+        { onPress = Just config.onSelect
+        , label =
+            listRowContent []
+                [ Element.row listRowLabelAttrs
                     [ listRowLeading config.leading
                     , listRowText config.title config.subtitle
                     ]
-            }
-        , listRowTrailing config.trailing
-        ]
+                , listRowTrailing config.trailing
+                ]
+        }
 
 
 {-| A non-selectable companion to `listRow` for rows whose own actions live in
@@ -383,7 +390,7 @@ staticRow :
     }
     -> Element msg
 staticRow config =
-    Element.wrappedRow (listRowAttrs ++ [ testId "list-row" ])
+    listRowContent [ testId "list-row" ]
         [ Element.row listRowLabelAttrs
             [ listRowLeading config.leading
             , listRowText config.title config.subtitle
@@ -392,9 +399,25 @@ staticRow config =
         ]
 
 
+{-| `wrappedRow` moves half of its spacing into child margins and cancels it with
+an equal negative row margin, so its own padding is visually lost in this
+elm-ui version. Put the regular row inset on an outer element instead.
+-}
+listRowInset : Int
+listRowInset =
+    space16
+
+
+listRowContent : List (Element.Attribute msg) -> List (Element msg) -> Element msg
+listRowContent extraAttrs children =
+    Element.el
+        ([ Element.width Element.fill, Element.padding listRowInset ] ++ extraAttrs)
+        (Element.wrappedRow listRowAttrs children)
+
+
 listRowAttrs : List (Element.Attribute msg)
 listRowAttrs =
-    [ Element.width Element.fill, Element.padding space16, Element.spacing space12 ]
+    [ Element.width Element.fill, Element.spacing space12 ]
 
 
 listRowLabelAttrs : List (Element.Attribute msg)
@@ -422,6 +445,10 @@ listRowTrailing trailing =
         Element.row [ Element.padding space8, Element.spacing space12, Element.alignTop ] trailing
 
 
+{-| Rows always reserve the icon slot, even without an icon, so rows sharing a
+list keep the same text inset. Panels that stack text above a control must
+align their own leading edge instead of moving every row.
+-}
 listRowLeading : List (Element msg) -> Element msg
 listRowLeading leading =
     Element.el

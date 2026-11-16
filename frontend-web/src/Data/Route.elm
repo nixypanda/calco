@@ -24,6 +24,8 @@ type Route
     | NutritionDetails (Maybe LocalDate)
     | GoalSettings (Maybe LocalDate) (Maybe String)
     | DiarySettings
+    | Library
+    | Settings
     | SettingsApiKeys
     | SettingsApiKeyCreate
     | FoodLogEntry String (Maybe LocalDate) (Maybe String)
@@ -63,6 +65,8 @@ routeParser =
         , Parser.map GoalSettings
             (s "settings" </> s "goals" <?> dateQuery <?> Query.string "calendar_month")
         , Parser.map DiarySettings (s "settings" </> s "diary")
+        , Parser.map Library (s "library")
+        , Parser.map Settings (s "settings")
         , Parser.map SettingsApiKeys (s "settings" </> s "api-keys")
         , Parser.map SettingsApiKeyCreate (s "settings" </> s "api-keys" </> s "new")
         , Parser.map AdHocLogCreate
@@ -110,23 +114,39 @@ dateQuery =
     Query.string "date" |> Query.map (Maybe.andThen LocalDate.fromString)
 
 
+{-| Canonical route for shell navigation. Every contextual variant collapses to
+the landing route of its destination, so date and meal-slot context cannot
+change which bottom-nav or drawer item is current.
+-}
 primaryRoute : Route -> Route
 primaryRoute route =
     case route of
-        FoodShow _ maybeDate maybeSlot _ ->
-            FoodSearch maybeDate maybeSlot
+        FoodSearch _ _ ->
+            FoodSearch Nothing Nothing
+
+        FoodShow _ _ _ _ ->
+            FoodSearch Nothing Nothing
+
+        AdHocLogCreate _ _ ->
+            FoodSearch Nothing Nothing
+
+        AiLogCreate _ _ ->
+            FoodSearch Nothing Nothing
+
+        CustomFoodList ->
+            Library
 
         CustomFoodCreate ->
-            CustomFoodList
+            Library
 
         CustomFoodCreateWithAi ->
-            CustomFoodList
+            Library
 
         CustomFoodEdit _ ->
-            CustomFoodList
+            Library
 
         CustomFoodShow _ ->
-            CustomFoodList
+            Library
 
         AdminCreateUser ->
             AdminDashboard
@@ -134,26 +154,26 @@ primaryRoute route =
         AdminEditUser _ ->
             AdminDashboard
 
+        MealList ->
+            Library
+
         MealCreate ->
-            MealList
+            Library
+
+        SettingsApiKeys ->
+            Settings
 
         SettingsApiKeyCreate ->
-            SettingsApiKeys
+            Settings
 
         MealShow _ ->
-            MealList
+            Library
 
         MealEdit _ ->
-            MealList
+            Library
 
         FoodLogEntry _ _ _ ->
             DiaryDay Nothing Nothing
-
-        AdHocLogCreate maybeDate maybeSlot ->
-            FoodSearch maybeDate maybeSlot
-
-        AiLogCreate maybeDate maybeSlot ->
-            FoodSearch maybeDate maybeSlot
 
         DiaryDay _ _ ->
             DiaryDay Nothing Nothing
@@ -164,8 +184,11 @@ primaryRoute route =
         NutritionDetails _ ->
             DiaryDay Nothing Nothing
 
-        FoodSearch maybeDate maybeSlot ->
-            FoodSearch maybeDate maybeSlot
+        GoalSettings _ _ ->
+            DiaryDay Nothing Nothing
+
+        DiarySettings ->
+            DiaryDay Nothing Nothing
 
         other ->
             other
@@ -223,6 +246,12 @@ routeToPath route =
 
         DiarySettings ->
             "/settings/diary"
+
+        Library ->
+            "/library"
+
+        Settings ->
+            "/settings"
 
         SettingsApiKeys ->
             "/settings/api-keys"

@@ -181,6 +181,8 @@ allRoutes =
     , NutritionDetails (Just Fixtures.today)
     , GoalSettings (Just Fixtures.today) (Just "2026-08")
     , DiarySettings
+    , Library
+    , Settings
     , SettingsApiKeys
     , SettingsApiKeyCreate
     , FoodLogEntry "log-1" (Just Fixtures.today) (Just "2026-08")

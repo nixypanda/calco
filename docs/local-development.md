@@ -176,11 +176,14 @@ running it records the new baseline without recreating existing tables.
 Frontend copy is translated at compile time via
 [i18n-to-elm](https://github.com/dragonwasrobot/i18n-to-elm) (pinned to `v0.5.0`).
 
-- `frontend-web/i18n/en_US.json` is the hand-edited source of truth: one flat
+- `frontend-web/i18n/*.json` are the hand-edited per-locale sources: one flat
   object of strict PascalCase keys, with `{0}`, `{1}` holes for interpolation.
-- `frontend-web/generated/Translations/` is generated Elm. It is **committed**
-  and must never be hand-edited or reformatted.
-- Regenerate after editing the JSON:
+  Supported locales are `en_US` and `hi_IN`, stored in `en_US.json` and
+  `hi_IN.json`. Add the same key to every locale file when adding copy.
+- `frontend-web/generated/Translations/` is generated Elm for those locales
+  (`EnUs.elm`, `HiIn.elm`, `Ids.elm`, `Util.elm`). It is **committed** and must
+  never be hand-edited or reformatted.
+- Regenerate after editing any JSON:
 
   ```bash
   just i18n
@@ -195,17 +198,24 @@ Frontend copy is translated at compile time via
   import I18n
   import Translations.Ids exposing (TranslationId(..))
 
-  Element.text (I18n.t TidNavDiary)
-  Element.text (I18n.t (TidTitleAddToMealSlot (MealSlot.label slot)))
+  Element.text (I18n.t env.language TidNavDiary)
+  Element.text (I18n.t env.language (TidTitleAddToMealSlot (MealSlot.label env.language slot)))
   ```
 
-  Note: Elm imports `TranslationId(..)`, not individual constructors.
+  Note: Elm imports `TranslationId(..)`, not individual constructors. Use
+  `I18n.en` only for strings produced outside the render path, such as messages
+  computed during `update`.
 
-`en_US` is the only locale. `generated/` is a second Elm source directory and is
-excluded from `elm-format` and `elm-review`; `src`/`tests` stay formatted normal
-Elm. Assistant output language is handled separately in the backend system
-prompt (`backend/src/assistant/infra/food_draft/prompt.rs`), not by
-this pipeline.
+The default language is `en_US`. The Settings page and the signed-out auth
+chrome switch between English and Hindi, and the selected locale is persisted in
+`localStorage` as `en_US` or `hi_IN`; an unknown persisted value falls back to
+`en_US`. The document `lang` attribute follows the selected locale as `en-US` or
+`hi-IN`, and unavailable storage falls back to `en_US` without blocking boot.
+The `generated/` directory is a second Elm source directory and is excluded from
+`elm-format` and `elm-review`; `src`/`tests` stay formatted normal Elm.
+Assistant output language is handled
+separately in the backend system prompt
+(`backend/src/assistant/infra/food_draft/prompt.rs`), not by this pipeline.
 
 ## Verification
 

@@ -8,6 +8,7 @@ is asserted deterministically inside that property, not as a separate example.
 
 -}
 
+import Chrome
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
 import Element exposing (DeviceClass(..), Orientation(..))
@@ -40,6 +41,7 @@ tests =
             [ genericSearchNavigation
             , navigationIsUnchangedOtherwise
             ]
+        , describe "drawer focus" [ drawerFocusFollowsVisibility ]
         , describe "rendersOnePane" [ renderedPaneLayoutDrivesScrollReset ]
         , describe "logoutStillApplies" [ staleLogoutIsIgnored ]
         ]
@@ -213,6 +215,36 @@ navigationIsUnchangedOtherwise =
         (\current target ->
             Main.normalizeChromeNavigation current target |> Expect.equal target
         )
+
+
+{-| A closing drawer can happen through Escape, the scrim, browser Back, or a
+layout change; all of them return focus to the trigger. Opening it moves focus
+to the drawer's close control. No other transition steals focus.
+-}
+drawerFocusFollowsVisibility : Test
+drawerFocusFollowsVisibility =
+    test "focus follows the drawer lifecycle" <|
+        \_ ->
+            let
+                opened : Chrome.Model
+                opened =
+                    Chrome.update Chrome.MenuClicked Chrome.init
+                        |> Tuple.first
+
+                closed : Chrome.Model
+                closed =
+                    Chrome.close opened
+            in
+            Expect.all
+                [ \_ ->
+                    Main.drawerFocusTarget Chrome.init opened
+                        |> Expect.equal (Just "app-drawer-close")
+                , \_ ->
+                    Main.drawerFocusTarget opened closed
+                        |> Expect.equal (Just "app-menu-trigger")
+                , \_ -> Main.drawerFocusTarget opened opened |> Expect.equal Nothing
+                ]
+                ()
 
 
 {-| The scroll-reset decision follows `Ui.Workspace`'s visibility rule, so the

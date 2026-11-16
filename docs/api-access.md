@@ -54,10 +54,11 @@ keys in v1.
 
 ## Create And Store A Key
 
-Create keys from a signed-in browser session:
+Create keys from a signed-in normal-user browser session. Admin identities
+cannot open Settings or API key management:
 
-1. Open the profile menu and choose **API keys**, or navigate to
-   `/settings/api-keys`, then choose **Create API key**.
+1. Open **Settings** from the bottom navigation or drawer, choose **API keys**,
+   or navigate directly to `/settings/api-keys`, then choose **Create API key**.
 2. Choose a name, scope, and expiry on `/settings/api-keys/new`. A blocking
    progress dialog covers the form while the key is being created; the app
    chrome behind it is inert and cannot be reached with Tab.
@@ -227,7 +228,7 @@ error; it is not silently ignored.
 
 ## Revocation
 
-Revoke a key from **API keys** in the profile menu. Revocation takes effect
+Revoke a key from **Settings** > **API keys**. Revocation takes effect
 immediately for subsequent requests. Revoke any key that may have leaked or is
 no longer in use.
 
