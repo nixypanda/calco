@@ -1,7 +1,8 @@
 module Page.Settings.LandingTest exposing (tests)
 
-{-| Settings landing behavior: API keys stay reachable, theme and language
-preferences live here, and the account action can sign the user out.
+{-| Settings landing route: the preference and account controls cross
+`Page.update` into app effects, API keys opens its pane, and the rendered
+controls reflect the active theme and language.
 -}
 
 import Data.Route exposing (Route(..))
@@ -9,8 +10,8 @@ import Element
 import Expect
 import Html.Attributes as Attr
 import I18n
-import Page.Settings.Landing as Landing
-import Support.Story as Story
+import Page
+import Support.Fixtures as Fixtures
 import Test exposing (Test, describe, test)
 import Test.Html.Event as Event
 import Test.Html.Query as Query
@@ -24,107 +25,143 @@ import Ui.Theme as Theme
 tests : Test
 tests =
     describe "Page.Settings.Landing"
-        [ test "shows access, preferences, and account controls" <|
+        [ test "preference and account controls reach the app layer" <|
             \_ ->
                 let
-                    html : Query.Single Landing.Msg
-                    html =
-                        pageView env
+                    afterTheme : Click
+                    afterTheme =
+                        pageClick Settings (themeToggle EN_US) (pageFor Settings)
+
+                    afterLanguage : Click
+                    afterLanguage =
+                        pageClick Settings (buttonContaining "हिन्दी") afterTheme.model
+
+                    afterLogout : Click
+                    afterLogout =
+                        pageClick Settings
+                            (buttonContaining (I18n.t EN_US TidNavLogout))
+                            afterLanguage.model
+
+                    afterApiKeys : Click
+                    afterApiKeys =
+                        pageClick Settings
+                            (buttonContaining (I18n.t EN_US TidTitleApiKeys))
+                            afterLogout.model
+
+                    apiKeys : Page.Model
+                    apiKeys =
+                        apply SettingsApiKeys afterApiKeys.model
                 in
-                Expect.all
-                    [ \_ -> html |> Query.has [ Selector.text (I18n.t EN_US TidTitleApiKeys) ]
-                    , \_ ->
-                        html
-                            |> Query.has
-                                [ Selector.text (I18n.t EN_US TidSettingsPreferencesTitle) ]
-                    , \_ ->
-                        html
-                            |> Query.has [ Selector.text (I18n.t EN_US TidSettingsThemeTitle) ]
-                    , \_ -> html |> Query.has [ Selector.text "English" ]
-                    , \_ -> html |> Query.has [ Selector.text "हिन्दी" ]
-                    , \_ ->
-                        html
-                            |> Query.has
-                                [ Selector.text (I18n.t EN_US TidSettingsAccountTitle) ]
-                    , \_ ->
-                        html
-                            |> Query.has [ Selector.text (I18n.t EN_US TidNavLogout) ]
+                { theme = afterTheme.outMsg
+                , language = afterLanguage.outMsg
+                , logout = afterLogout.outMsg
+                , apiKeys = afterApiKeys.outMsg
+                , panes = Page.paneKeys apiKeys
+                , failures =
+                    [ afterTheme.failure
+                    , afterLanguage.failure
+                    , afterLogout.failure
+                    , afterApiKeys.failure
                     ]
-                    ()
-        , test "the dark theme switch reflects the active theme" <|
+                        |> List.filterMap identity
+                }
+                    |> Expect.equal
+                        { theme = Page.ToggleTheme
+                        , language = Page.SetLanguage HI_IN
+                        , logout = Page.Logout
+                        , apiKeys = Page.Navigate SettingsApiKeys
+                        , panes = [ "api-keys" ]
+                        , failures = []
+                        }
+        , test "preferences reflect the active theme and language" <|
             \_ ->
                 let
-                    html : Query.Single Landing.Msg
-                    html =
-                        pageView { env | theme = Theme.forMode Theme.Dark }
-                in
-                html
-                    |> Query.find [ themeToggleButton ]
-                    |> Query.has [ Selector.attribute (Attr.attribute "aria-pressed" "true") ]
-        , test "the selected language is exposed as a pressed choice" <|
-            \_ ->
-                let
-                    html : Query.Single Landing.Msg
-                    html =
-                        pageView env
+                    darkEnglish : Query.Single Page.Msg
+                    darkEnglish =
+                        pageView
+                            { env | theme = Theme.forMode Theme.Dark }
+                            Settings
+                            (pageFor Settings)
+
+                    hindi : Query.Single Page.Msg
+                    hindi =
+                        pageView { env | language = HI_IN } Settings (pageFor Settings)
                 in
                 Expect.all
                     [ \_ ->
-                        html
-                            |> Query.find [ buttonContaining "English" ]
+                        darkEnglish
+                            |> Query.find [ themeToggle EN_US ]
                             |> Query.has [ pressedChoice True ]
                     , \_ ->
-                        html
+                        hindi
                             |> Query.find [ buttonContaining "हिन्दी" ]
+                            |> Query.has [ pressedChoice True ]
+                    , \_ ->
+                        hindi
+                            |> Query.find [ buttonContaining "English" ]
                             |> Query.has [ pressedChoice False ]
-                    ]
-                    ()
-        , test "the API keys row chevron sits inside its press target" <|
-            \_ ->
-                pageView env
-                    |> Query.find [ buttonContaining (I18n.t EN_US TidTitleApiKeys) ]
-                    |> Query.has [ Selector.tag "svg" ]
-        , test "the API keys entry navigates to API key management" <|
-            \_ ->
-                Story.start ( Landing.init, Landing.NoOp )
-                    |> step Landing.ApiKeysClicked
-                    |> finish
-                        (\( _, outMsg ) ->
-                            outMsg |> Expect.equal (Landing.Navigate SettingsApiKeys)
-                        )
-        , test "preferences and account controls reach the app layer" <|
-            \_ ->
-                let
-                    html : Query.Single Landing.Msg
-                    html =
-                        pageView env
-                in
-                Expect.all
-                    [ \_ ->
-                        outMsgAfterClick html themeToggleButton
-                            |> Expect.equal Landing.ToggleTheme
-                    , \_ ->
-                        outMsgAfterClick html (buttonContaining "हिन्दी")
-                            |> Expect.equal (Landing.SetLanguage HI_IN)
-                    , \_ ->
-                        outMsgAfterClick html
-                            (buttonContaining (I18n.t EN_US TidNavLogout))
-                            |> Expect.equal Landing.Logout
                     ]
                     ()
         ]
 
 
-pageView : Env -> Query.Single Landing.Msg
-pageView currentEnv =
-    Landing.view currentEnv Landing.init
+
+-- PAGE CLICK
+
+
+type alias Click =
+    { model : Page.Model
+    , outMsg : Page.OutMsg
+    , failure : Maybe String
+    }
+
+
+pageClick : Route -> Selector -> Page.Model -> Click
+pageClick route selector model =
+    case
+        pageView env route model
+            |> Query.find [ selector ]
+            |> Event.simulate Event.click
+            |> Event.toResult
+    of
+        Err reason ->
+            { model = model, outMsg = Page.NoOutMsg, failure = Just reason }
+
+        Ok msg ->
+            case Page.update { route = route, today = Just Fixtures.today } msg model of
+                Just ( next, _, outMsg ) ->
+                    { model = next, outMsg = outMsg, failure = Nothing }
+
+                Nothing ->
+                    { model = model
+                    , outMsg = Page.NoOutMsg
+                    , failure = Just "Page.update ignored the settings control click"
+                    }
+
+
+pageView : Env -> Route -> Page.Model -> Query.Single Page.Msg
+pageView currentEnv route model =
+    Page.view currentEnv route model
         |> Element.layout []
         |> Query.fromHtml
 
 
-themeToggleButton : Selector
-themeToggleButton =
-    Selector.attribute (Attr.attribute "aria-label" (I18n.t EN_US TidCommonUseDarkTheme))
+pageFor : Route -> Page.Model
+pageFor route =
+    Page.init { route = route, today = Just Fixtures.today }
+        |> Fixtures.tupleFirst
+
+
+apply : Route -> Page.Model -> Page.Model
+apply route model =
+    Page.initPreserving { route = route, today = Just Fixtures.today } model
+        |> Fixtures.tupleFirst
+
+
+themeToggle : Language -> Selector
+themeToggle language =
+    Selector.attribute
+        (Attr.attribute "aria-label" (I18n.t language TidCommonUseDarkTheme))
 
 
 buttonContaining : String -> Selector
@@ -146,38 +183,6 @@ pressedChoice selected =
                 "false"
             )
         )
-
-
-outMsgAfterClick : Query.Single Landing.Msg -> Selector -> Landing.OutMsg
-outMsgAfterClick html selector =
-    case html |> Query.find [ selector ] |> Event.simulate Event.click |> Event.toResult of
-        Ok msg ->
-            Landing.update msg Landing.init
-                |> (\( _, _, outMsg ) -> outMsg)
-
-        Err _ ->
-            Landing.NoOp
-
-
-
--- STORY PIPELINE
-
-
-type alias Journey =
-    Story.Journey Landing.Model Landing.OutMsg
-
-
-step : Landing.Msg -> Journey -> Journey
-step =
-    Story.step (Story.ignoreCmd Landing.update)
-
-
-finish :
-    (( Landing.Model, Landing.OutMsg ) -> Expect.Expectation)
-    -> Journey
-    -> Expect.Expectation
-finish =
-    Story.finish
 
 
 env : Env

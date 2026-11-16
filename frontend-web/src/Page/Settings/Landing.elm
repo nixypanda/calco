@@ -48,8 +48,7 @@ type Msg
 
 
 type OutMsg
-    = NoOp
-    | Navigate Route
+    = Navigate Route
     | ToggleTheme
     | SetLanguage Language
     | Logout

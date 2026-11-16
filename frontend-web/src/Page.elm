@@ -2886,9 +2886,6 @@ applyDiarySettingsOutMsg _ outMsg =
 applyLibraryOutMsg : InitCtx -> Library.OutMsg -> ( Cmd Msg, OutMsg )
 applyLibraryOutMsg _ outMsg =
     case outMsg of
-        Library.NoOp ->
-            ( Cmd.none, NoOutMsg )
-
         Library.Navigate route ->
             ( Cmd.none, Navigate route )
 
@@ -2896,9 +2893,6 @@ applyLibraryOutMsg _ outMsg =
 applySettingsLandingOutMsg : InitCtx -> SettingsLanding.OutMsg -> ( Cmd Msg, OutMsg )
 applySettingsLandingOutMsg _ outMsg =
     case outMsg of
-        SettingsLanding.NoOp ->
-            ( Cmd.none, NoOutMsg )
-
         SettingsLanding.Navigate route ->
             ( Cmd.none, Navigate route )
 

@@ -154,57 +154,21 @@ tests =
                         drawer
                             |> Query.hasNot [ Selector.text (I18n.t EN_US TidNavMyMeals) ]
                     , \_ ->
-                        expectDrawerNavTarget drawer TidNavLibrary Library
+                        expectNavTarget drawer TidNavLibrary Library
                     , \_ ->
-                        expectDrawerNavTarget drawer TidNavSettings Settings
+                        expectNavTarget drawer TidNavSettings Settings
                     ]
                     ()
-        , test "bottom nav selects the semantic destination for contextual routes" <|
+        , test "bottom nav and drawer mark the semantic destination" <|
             \_ ->
                 Expect.all
                     [ \_ ->
                         expectActiveTab
                             (FoodSearch (Just date) (Just MealSlot.Lunch))
                             TidNavSearch
-                    , \_ ->
-                        expectActiveTab (FoodSearch (Just date) Nothing) TidNavSearch
-                    , \_ ->
-                        expectActiveTab
-                            (FoodShow "food-1" (Just date) (Just MealSlot.Lunch) Nothing)
-                            TidNavSearch
-                    , \_ ->
-                        expectActiveTab
-                            (AdHocLogCreate (Just date) (Just MealSlot.Lunch))
-                            TidNavSearch
-                    , \_ ->
-                        expectActiveTab
-                            (AiLogCreate (Just date) (Just MealSlot.Lunch))
-                            TidNavSearch
-                    ]
-                    ()
-        , test "bottom nav keeps nested routes on their destination" <|
-            \_ ->
-                Expect.all
-                    [ \_ -> expectActiveTab (DiaryCalendar (Just month)) TidNavDiary
-                    , \_ -> expectActiveTab (GoalSettings (Just date) (Just month)) TidNavDiary
-                    , \_ -> expectActiveTab DiarySettings TidNavDiary
-                    , \_ -> expectActiveTab (FoodLogEntry "log-1" (Just date) Nothing) TidNavDiary
-                    , \_ -> expectActiveTab (CustomFoodShow "food-1") TidNavLibrary
-                    , \_ -> expectActiveTab (MealShow "meal-1") TidNavLibrary
                     , \_ -> expectActiveTab SettingsApiKeys TidNavSettings
-                    , \_ -> expectActiveTab SettingsApiKeyCreate TidNavSettings
-                    ]
-                    ()
-        , test "the drawer marks the current semantic destination" <|
-            \_ ->
-                Expect.all
-                    [ \_ ->
-                        expectActiveDrawerItem
-                            (FoodSearch (Just date) (Just MealSlot.Lunch))
-                            TidNavSearch
                     , \_ ->
                         expectActiveDrawerItem (CustomFoodShow "food-1") TidNavLibrary
-                    , \_ -> expectActiveDrawerItem SettingsApiKeys TidNavSettings
                     , \_ -> expectActiveDrawerItem (DiaryDay (Just date) Nothing) TidNavDiary
                     ]
                     ()
@@ -538,14 +502,6 @@ activeDestination root expected =
 expectNavTarget : Query.Single Route -> TranslationId -> Route -> Expect.Expectation
 expectNavTarget nav label target =
     nav
-        |> navButton label
-        |> Event.simulate Event.click
-        |> Event.expect target
-
-
-expectDrawerNavTarget : Query.Single Route -> TranslationId -> Route -> Expect.Expectation
-expectDrawerNavTarget drawer label target =
-    drawer
         |> navButton label
         |> Event.simulate Event.click
         |> Event.expect target

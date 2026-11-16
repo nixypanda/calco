@@ -1,7 +1,7 @@
 module Page.LibraryTest exposing (tests)
 
-{-| Library landing behavior: both saved-item destinations are visible and
-open their existing list routes.
+{-| Library route story: the visible rows are the navigation controls, and a
+click crosses `Page.update` into the list pane Main would reconcile.
 -}
 
 import Data.Route exposing (Route(..))
@@ -9,9 +9,10 @@ import Element
 import Expect
 import Html.Attributes as Attr
 import I18n
-import Page.Library as Library
-import Support.Story as Story
+import Page
+import Support.Fixtures as Fixtures
 import Test exposing (Test, describe, test)
+import Test.Html.Event as Event
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector exposing (Selector)
 import Translations.Ids exposing (TranslationId(..))
@@ -23,89 +24,99 @@ import Ui.Theme as Theme
 tests : Test
 tests =
     describe "Page.Library"
-        [ test "shows the saved foods and meals destinations" <|
+        [ test "food and meal rows open their list panes" <|
             \_ ->
                 let
-                    html : Query.Single Library.Msg
-                    html =
-                        Library.view env Library.init
-                            |> Element.layout []
-                            |> Query.fromHtml
+                    afterFoods : Click
+                    afterFoods =
+                        clickRow TidTitleMyFoods Library (pageFor Library)
+
+                    foods : Page.Model
+                    foods =
+                        apply CustomFoodList afterFoods.model
+
+                    afterMeals : Click
+                    afterMeals =
+                        clickRow TidTitleMyMeals Library (apply Library foods)
+
+                    meals : Page.Model
+                    meals =
+                        apply MealList afterMeals.model
                 in
-                Expect.all
-                    [ \_ -> html |> Query.has [ Selector.text (I18n.t EN_US TidTitleMyFoods) ]
-                    , \_ -> html |> Query.has [ Selector.text (I18n.t EN_US TidTitleMyMeals) ]
-                    ]
-                    ()
-        , test "each destination keeps its chevron inside the press target" <|
-            \_ ->
-                let
-                    html : Query.Single Library.Msg
-                    html =
-                        Library.view env Library.init
-                            |> Element.layout []
-                            |> Query.fromHtml
-                in
-                Expect.all
-                    [ \_ ->
-                        html
-                            |> Query.find [ rowContaining (I18n.t EN_US TidTitleMyFoods) ]
-                            |> Query.has [ Selector.tag "svg" ]
-                    , \_ ->
-                        html
-                            |> Query.find [ rowContaining (I18n.t EN_US TidTitleMyMeals) ]
-                            |> Query.has [ Selector.tag "svg" ]
-                    ]
-                    ()
-        , test "food and meal entries navigate to their lists" <|
-            \_ ->
-                Expect.all
-                    [ \_ ->
-                        Story.start ( Library.init, Library.NoOp )
-                            |> step Library.MyFoodsClicked
-                            |> finish
-                                (\( _, outMsg ) ->
-                                    outMsg |> Expect.equal (Library.Navigate CustomFoodList)
-                                )
-                    , \_ ->
-                        Story.start ( Library.init, Library.NoOp )
-                            |> step Library.MyMealsClicked
-                            |> finish
-                                (\( _, outMsg ) ->
-                                    outMsg |> Expect.equal (Library.Navigate MealList)
-                                )
-                    ]
-                    ()
+                { foodsOut = afterFoods.outMsg
+                , foodsPanes = Page.paneKeys foods
+                , mealsOut = afterMeals.outMsg
+                , mealsPanes = Page.paneKeys meals
+                , failures =
+                    [ afterFoods.failure, afterMeals.failure ] |> List.filterMap identity
+                }
+                    |> Expect.equal
+                        { foodsOut = Page.Navigate CustomFoodList
+                        , foodsPanes = [ "custom-food-list" ]
+                        , mealsOut = Page.Navigate MealList
+                        , mealsPanes = [ "meal-list" ]
+                        , failures = []
+                        }
         ]
 
 
 
--- STORY PIPELINE
+-- PAGE CLICK
 
 
-type alias Journey =
-    Story.Journey Library.Model Library.OutMsg
+type alias Click =
+    { model : Page.Model
+    , outMsg : Page.OutMsg
+    , failure : Maybe String
+    }
 
 
-step : Library.Msg -> Journey -> Journey
-step =
-    Story.step (Story.ignoreCmd Library.update)
+clickRow : TranslationId -> Route -> Page.Model -> Click
+clickRow label route model =
+    pageClick route
+        (Selector.all
+            [ Selector.attribute (Attr.attribute "role" "button")
+            , Selector.containing [ Selector.text (I18n.t EN_US label) ]
+            ]
+        )
+        model
 
 
-finish :
-    (( Library.Model, Library.OutMsg ) -> Expect.Expectation)
-    -> Journey
-    -> Expect.Expectation
-finish =
-    Story.finish
+pageClick : Route -> Selector -> Page.Model -> Click
+pageClick route selector model =
+    case
+        Page.view env route model
+            |> Element.layout []
+            |> Query.fromHtml
+            |> Query.find [ selector ]
+            |> Event.simulate Event.click
+            |> Event.toResult
+    of
+        Err reason ->
+            { model = model, outMsg = Page.NoOutMsg, failure = Just reason }
+
+        Ok msg ->
+            case Page.update { route = route, today = Just Fixtures.today } msg model of
+                Just ( next, _, outMsg ) ->
+                    { model = next, outMsg = outMsg, failure = Nothing }
+
+                Nothing ->
+                    { model = model
+                    , outMsg = Page.NoOutMsg
+                    , failure = Just "Page.update ignored the library row click"
+                    }
 
 
-rowContaining : String -> Selector
-rowContaining label =
-    Selector.all
-        [ Selector.attribute (Attr.attribute "role" "button")
-        , Selector.containing [ Selector.text label ]
-        ]
+pageFor : Route -> Page.Model
+pageFor route =
+    Page.init { route = route, today = Just Fixtures.today }
+        |> Fixtures.tupleFirst
+
+
+apply : Route -> Page.Model -> Page.Model
+apply route model =
+    Page.initPreserving { route = route, today = Just Fixtures.today } model
+        |> Fixtures.tupleFirst
 
 
 env : Env
