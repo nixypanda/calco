@@ -19,7 +19,7 @@ import Support.Fixtures as Fixtures
 import Support.Fuzz as FuzzSupport
 import Test exposing (Test, describe, fuzz, fuzz2, fuzz3, test)
 import Translations.Util exposing (Language(..))
-import Ui.Env exposing (Env)
+import Ui.Env as UiEnv exposing (Env, Viewport(..))
 import Ui.Theme as Theme
 
 
@@ -32,6 +32,10 @@ tests =
             , orientationLaw
             ]
         , describe "reclassifyDevice" [ reclassifyLaw ]
+        , describe "viewport classification"
+            [ viewportBreakpoint
+            , viewportResizeIsSemantic
+            ]
         , describe "normalizeChromeNavigation"
             [ genericSearchNavigation
             , navigationIsUnchangedOtherwise
@@ -144,6 +148,40 @@ reclassifyLaw =
         )
 
 
+viewportBreakpoint : Test
+viewportBreakpoint =
+    test "the viewport category changes between 359 and 360px" <|
+        \_ ->
+            Expect.all
+                [ \_ -> UiEnv.viewportForWidth 320 |> Expect.equal NarrowViewport
+                , \_ -> UiEnv.viewportForWidth 359 |> Expect.equal NarrowViewport
+                , \_ -> UiEnv.viewportForWidth 360 |> Expect.equal RegularViewport
+                , \_ -> UiEnv.viewportForWidth 485 |> Expect.equal RegularViewport
+                ]
+                ()
+
+
+{-| The semantic comparison is what keeps a continuous drag from re-rendering
+inside one category, while still crossing the breakpoint in either direction.
+-}
+viewportResizeIsSemantic : Test
+viewportResizeIsSemantic =
+    test "resize changes the model only across the viewport category" <|
+        \_ ->
+            Expect.all
+                [ \_ -> Main.reclassifyViewport 320 NarrowViewport |> Expect.equal Nothing
+                , \_ -> Main.reclassifyViewport 359 NarrowViewport |> Expect.equal Nothing
+                , \_ ->
+                    Main.reclassifyViewport 360 NarrowViewport
+                        |> Expect.equal (Just RegularViewport)
+                , \_ -> Main.reclassifyViewport 485 RegularViewport |> Expect.equal Nothing
+                , \_ ->
+                    Main.reclassifyViewport 359 RegularViewport
+                        |> Expect.equal (Just NarrowViewport)
+                ]
+                ()
+
+
 genericSearchNavigation : Test
 genericSearchNavigation =
     fuzz routeFuzzer
@@ -241,6 +279,7 @@ scrollEnv : DeviceClass -> Env
 scrollEnv class =
     { theme = Theme.forMode Theme.Light
     , device = { class = class, orientation = Portrait }
+    , viewport = RegularViewport
     , language = EN_US
     }
 

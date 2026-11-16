@@ -185,6 +185,7 @@ type TranslationId
     | TidDiaryCalories
     | TidDiaryCarbs
     | TidDiaryDetails
+    | TidDiaryEditGoals
     | TidDiaryGoalMet
     | TidDiaryKcal String
     | TidDiaryKcalEaten
@@ -196,9 +197,12 @@ type TranslationId
     | TidDiaryMacroGramsWithTarget String String
     | TidDiaryMacroSummaryGrams String String String
     | TidDiaryMacroSummaryPercent String String String
+    | TidDiaryManageMealSlots
     | TidDiaryNextDay
     | TidDiaryNoItems
     | TidDiaryOfKcal String
+    | TidDiaryOpenCalendar
+    | TidDiaryOpenCalendarFor String
     | TidDiaryOther
     | TidDiaryPreviousDay
     | TidDiarySettingsMealSlotsDescription
@@ -352,12 +356,9 @@ type TranslationId
     | TidNavAdmin
     | TidNavApiKeys
     | TidNavBack
-    | TidNavCalendar
     | TidNavDiary
     | TidNavFoods
-    | TidNavGoals
     | TidNavLogout
-    | TidNavMealSlots
     | TidNavMeals
     | TidNavMenu
     | TidNavMyFoods

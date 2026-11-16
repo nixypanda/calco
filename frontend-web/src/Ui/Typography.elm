@@ -11,6 +11,7 @@ module Ui.Typography exposing
     , pageTitle
     , screenTitle
     , sectionTitle
+    , sectionTitleCompact
     , subsectionTitle
     , tableHeader
     , truncatedHeader
@@ -83,6 +84,15 @@ screenTitle theme text =
 sectionTitle : Theme -> String -> Element msg
 sectionTitle theme text =
     Element.el [ sizeSectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 2 ]
+        (Element.text text)
+
+
+{-| Keeps the section-heading semantics while using the 20px subsection size.
+Phone headers use this when the 24px line plus its controls cannot fit.
+-}
+sectionTitleCompact : Theme -> String -> Element msg
+sectionTitleCompact theme text =
+    Element.el [ sizeSubsectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 2 ]
         (Element.text text)
 
 

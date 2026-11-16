@@ -387,23 +387,45 @@ iconButton device theme config =
 
                 _ ->
                     22
-    in
-    Input.button
-        [ Element.width (Element.px 44)
-        , Element.height (Element.px 44)
-        , Background.color iconTone.bgColor
-        , Font.color iconTone.iconColor
-        , Font.center
-        , Border.rounded radiusPill
-        , Border.width 1
-        , Border.color iconTone.border
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device
-            [ Background.color iconTone.hoverBg, Border.color iconTone.hoverBorder ]
-        , Element.htmlAttribute (Html.Attributes.title config.title)
-        ]
-        { onPress = config.onPress
-        , label =
+
+        label : Element msg
+        label =
             Element.el [ Element.centerX, Element.centerY ]
                 (Icon.view { icon = config.icon, size = iconSize, color = iconTone.iconColor })
-        }
+
+        visualAttrs : List (Element.Attribute msg)
+        visualAttrs =
+            [ Element.width (Element.px 44)
+            , Element.height (Element.px 44)
+            , Background.color iconTone.bgColor
+            , Font.color iconTone.iconColor
+            , Font.center
+            , Border.rounded radiusPill
+            , Border.width 1
+            , Border.color iconTone.border
+            ]
+
+        interactiveAttrs : List (Element.Attribute msg)
+        interactiveAttrs =
+            [ uiClass "ui-motion ui-pressable"
+            , hoverEffect device
+                [ Background.color iconTone.hoverBg, Border.color iconTone.hoverBorder ]
+            , Element.htmlAttribute (Html.Attributes.title config.title)
+            ]
+                ++ (if String.isEmpty config.title then
+                        []
+
+                    else
+                        [ Element.htmlAttribute
+                            (Html.Attributes.attribute "aria-label" config.title)
+                        ]
+                   )
+    in
+    if isActive then
+        Input.button (visualAttrs ++ interactiveAttrs)
+            { onPress = config.onPress
+            , label = label
+            }
+
+    else
+        Element.el visualAttrs label

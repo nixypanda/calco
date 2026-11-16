@@ -84,7 +84,7 @@ resolveKnownSession session adminExists route =
             NutritionDetails _ ->
                 Render route
 
-            GoalSettings ->
+            GoalSettings _ _ ->
                 Render route
 
             DiarySettings ->

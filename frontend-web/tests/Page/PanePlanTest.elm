@@ -51,7 +51,8 @@ tests =
                         , DiaryDay Nothing (Just month)
                         , DiaryCalendar (Just month)
                         , NutritionDetails (Just date)
-                        , GoalSettings
+                        , GoalSettings Nothing Nothing
+                        , GoalSettings (Just date) (Just month)
                         , FoodShow "food-1" (Just date) (Just MealSlot.Lunch) Nothing
                         , FoodSearch (Just date) (Just MealSlot.Lunch)
                         , FoodLogEntry "log-1" (Just date) Nothing
@@ -145,7 +146,12 @@ tests =
                         , ( NutritionDetails (Just date)
                           , [ "diary:2026-07-20:none", "nutrition-details:2026-07-20" ]
                           )
-                        , ( GoalSettings, [ "goals-settings:2026-08-18" ] )
+                        , ( GoalSettings Nothing Nothing
+                          , [ "goals-settings:2026-08-18" ]
+                          )
+                        , ( GoalSettings (Just date) (Just month)
+                          , [ "goals-settings:2026-08-18" ]
+                          )
                         ]
                 in
                 Expect.all

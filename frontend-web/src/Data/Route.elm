@@ -22,7 +22,7 @@ type Route
     | DiaryDay (Maybe LocalDate) (Maybe String)
     | DiaryCalendar (Maybe String)
     | NutritionDetails (Maybe LocalDate)
-    | GoalSettings
+    | GoalSettings (Maybe LocalDate) (Maybe String)
     | DiarySettings
     | SettingsApiKeys
     | SettingsApiKeyCreate
@@ -60,7 +60,8 @@ routeParser =
         , Parser.map DiaryDay (s "home" <?> dateQuery <?> Query.string "calendar_month")
         , Parser.map DiaryCalendar (s "calendar" <?> Query.string "month")
         , Parser.map NutritionDetails (s "details" <?> dateQuery)
-        , Parser.map GoalSettings (s "settings" </> s "goals")
+        , Parser.map GoalSettings
+            (s "settings" </> s "goals" <?> dateQuery <?> Query.string "calendar_month")
         , Parser.map DiarySettings (s "settings" </> s "diary")
         , Parser.map SettingsApiKeys (s "settings" </> s "api-keys")
         , Parser.map SettingsApiKeyCreate (s "settings" </> s "api-keys" </> s "new")
@@ -211,8 +212,14 @@ routeToPath route =
                     maybeDate
                 ]
 
-        GoalSettings ->
-            "/settings/goals"
+        GoalSettings maybeDate maybeCalendarMonth ->
+            withQueryParams "/settings/goals"
+                [ Maybe.map
+                    (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
+                    maybeDate
+                , Maybe.map (\month -> "calendar_month=" ++ Url.percentEncode month)
+                    maybeCalendarMonth
+                ]
 
         DiarySettings ->
             "/settings/diary"

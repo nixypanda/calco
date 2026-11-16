@@ -555,6 +555,9 @@ hiInTranslations tid =
         TidDiaryDetails ->
             "विवरण"
 
+        TidDiaryEditGoals ->
+            "आज के लक्ष्य संपादित करें"
+
         TidDiaryGoalMet ->
             "लक्ष्य पूरा हुआ"
 
@@ -588,6 +591,9 @@ hiInTranslations tid =
         TidDiaryMacroSummaryPercent hole0 hole1 hole2 ->
             "कार्ब्स " ++ hole0 ++ "% ⋅ प्रोटीन " ++ hole1 ++ "% ⋅ वसा " ++ hole2 ++ "%"
 
+        TidDiaryManageMealSlots ->
+            "भोजन स्लॉट प्रबंधित करें"
+
         TidDiaryNextDay ->
             "अगला दिन"
 
@@ -596,6 +602,12 @@ hiInTranslations tid =
 
         TidDiaryOfKcal hole0 ->
             hole0 ++ " kcal में से"
+
+        TidDiaryOpenCalendar ->
+            "कैलेंडर खोलें"
+
+        TidDiaryOpenCalendarFor hole0 ->
+            hole0 ++ " के लिए कैलेंडर खोलें"
 
         TidDiaryOther ->
             "अन्य"
@@ -1056,23 +1068,14 @@ hiInTranslations tid =
         TidNavBack ->
             "वापस"
 
-        TidNavCalendar ->
-            "कैलेंडर"
-
         TidNavDiary ->
             "डायरी"
 
         TidNavFoods ->
             "खाद्य पदार्थ"
 
-        TidNavGoals ->
-            "लक्ष्य"
-
         TidNavLogout ->
             "लॉग आउट"
-
-        TidNavMealSlots ->
-            "भोजन स्लॉट"
 
         TidNavMeals ->
             "भोजन"

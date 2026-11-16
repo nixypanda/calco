@@ -308,9 +308,9 @@ screenMeta env session route =
         AdminEditUser _ ->
             { title = I18n.t env.language TidTitleEditUser, leading = GoBack AdminDashboard }
 
-        GoalSettings ->
+        GoalSettings maybeDate maybeCalendarMonth ->
             { title = I18n.t env.language TidTitleGoals
-            , leading = GoBack (DiaryDay Nothing Nothing)
+            , leading = GoBack (DiaryDay maybeDate maybeCalendarMonth)
             }
 
         DiarySettings ->
@@ -701,7 +701,7 @@ profileMenuContent :
     -> (Language -> msg)
     -> List (Element msg)
 profileMenuContent env session onNavigate onLogout onSetLanguage =
-    [ Typography.mutedCaption env.theme
+    Typography.mutedCaption env.theme
         (case session of
             Auth.Authenticated identity ->
                 I18n.t env.language (TidCommonSignedInAs identity.username)
@@ -709,38 +709,7 @@ profileMenuContent env session onNavigate onLogout onSetLanguage =
             _ ->
                 I18n.t env.language TidCommonSignedIn
         )
-    , Button.textButton env.device
-        env.theme
-        { tone = Button.Ghost
-        , width = Button.FullWidth
-        , label = I18n.t env.language TidNavCalendar
-        , onPress = onNavigate (DiaryCalendar Nothing)
-        , submitState = Nothing
-        , submittingLabel = Nothing
-        , trailing = Nothing
-        }
-    , Button.textButton env.device
-        env.theme
-        { tone = Button.Ghost
-        , width = Button.FullWidth
-        , label = I18n.t env.language TidNavGoals
-        , onPress = onNavigate GoalSettings
-        , submitState = Nothing
-        , submittingLabel = Nothing
-        , trailing = Nothing
-        }
-    , Button.textButton env.device
-        env.theme
-        { tone = Button.Ghost
-        , width = Button.FullWidth
-        , label = I18n.t env.language TidNavMealSlots
-        , onPress = onNavigate DiarySettings
-        , submitState = Nothing
-        , submittingLabel = Nothing
-        , trailing = Nothing
-        }
-    ]
-        ++ (if Auth.isAdmin session then
+        :: (if Auth.isAdmin session then
                 []
 
             else

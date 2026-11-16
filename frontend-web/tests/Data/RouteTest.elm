@@ -28,6 +28,20 @@ tests =
                             |> Expect.equal (Route.primaryRoute route)
                     ]
                     ()
+        , {- Plain goals settings stays context-free; the fuzzer covers the
+             optional date/month roundtrip, while this pins the old URL.
+          -}
+          test "plain goals settings stays context-free" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        parsePath "/settings/goals"
+                            |> Expect.equal (Just (GoalSettings Nothing Nothing))
+                    , \_ ->
+                        Route.routeToPath (GoalSettings Nothing Nothing)
+                            |> Expect.equal "/settings/goals"
+                    ]
+                    ()
         , {- Negative exception: NotFound is the only route excluded from the
              roundtrip because `routeToPath NotFound == "/"` parses as `Root`.
              This case protects the intentional fallback for unknown URLs.

@@ -9,6 +9,7 @@ port module Main exposing
     , main
     , normalizeChromeNavigation
     , reclassifyDevice
+    , reclassifyViewport
     , rendersOnePane
     )
 
@@ -111,6 +112,7 @@ init flags url key =
       , env =
             { theme = Theme.forMode (Theme.modeFromString flags.themeMode)
             , device = classifyDevice flags.windowWidth flags.windowHeight
+            , viewport = Env.viewportForWidth flags.windowWidth
             , language = EN_US
             }
       , version = versionModel
@@ -192,12 +194,16 @@ update msg model =
             ( model, Cmd.none )
 
         WindowResized width height ->
-            case reclassifyDevice width height model.env.device of
-                Just device ->
-                    ( { model | env = Env.withDevice model.env device }, Cmd.none )
+            let
+                nextEnv : Env
+                nextEnv =
+                    reclassifyEnv width height model.env
+            in
+            if nextEnv == model.env then
+                ( model, Cmd.none )
 
-                Nothing ->
-                    ( model, Cmd.none )
+            else
+                ( { model | env = nextEnv }, Cmd.none )
 
         GotVersionMsg versionMsg ->
             let
@@ -272,8 +278,9 @@ clearLogoutState model =
 
 
 {-| A drag emits resize events continuously, but the app only renders from the
-classified device. Returning `Nothing` when the classification is unchanged
-leaves the model untouched so Elm can skip the re-render.
+classified device and viewport category. Returning `Nothing` when the
+classification is unchanged leaves the model untouched so Elm can skip the
+re-render.
 -}
 reclassifyDevice : Int -> Int -> Element.Device -> Maybe Element.Device
 reclassifyDevice width height current =
@@ -287,6 +294,43 @@ reclassifyDevice width height current =
 
     else
         Just next
+
+
+{-| Same comparison for the coarse viewport category, so moving from 375px to
+485px does not churn the model while crossing 359/360px still does.
+-}
+reclassifyViewport : Int -> Env.Viewport -> Maybe Env.Viewport
+reclassifyViewport width current =
+    let
+        next : Env.Viewport
+        next =
+            Env.viewportForWidth width
+    in
+    if next == current then
+        Nothing
+
+    else
+        Just next
+
+
+reclassifyEnv : Int -> Int -> Env -> Env
+reclassifyEnv width height env =
+    let
+        withDevice : Env
+        withDevice =
+            case reclassifyDevice width height env.device of
+                Just device ->
+                    Env.withDevice env device
+
+                Nothing ->
+                    env
+    in
+    case reclassifyViewport width withDevice.viewport of
+        Just viewport ->
+            Env.withViewport withDevice viewport
+
+        Nothing ->
+            withDevice
 
 
 {-| Classify from width so changing viewport height cannot unexpectedly enable

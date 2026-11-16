@@ -26,6 +26,7 @@ module Page.Diary.Day exposing
 
 import Api.Client as Client
 import Api.Logs exposing (BatchLogResponse, CreateLogRequest, LatestSlotsResponse)
+import Data.Calendar as Calendar
 import Data.DiaryPrefs as DiaryPrefs exposing (DiaryPrefs)
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.Goals exposing (GoalSnapshot, GoalTargets)
@@ -47,7 +48,7 @@ import Ui.Button as Button
 import Ui.Color as UiColor
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
-import Ui.Env exposing (Env)
+import Ui.Env as Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Skeleton as Skeleton
@@ -218,11 +219,14 @@ type Msg
     | CopyLatestCompleted LocalDate (Result Client.ApiError BatchLogResponse)
     | PreviousDayClicked
     | NextDayClicked
+    | CalendarClicked
+    | GoalsClicked
     | DetailsClicked
     | MacroModeToggled
     | AddFoodClicked MealSlot
     | LogClicked String
     | MealsClicked
+    | MealSlotsClicked
     | TodayChanged LocalDate
 
 
@@ -391,6 +395,18 @@ update msg model =
             , Navigate (NutritionDetails (Just model.currentDate))
             )
 
+        CalendarClicked ->
+            ( model
+            , Cmd.none
+            , Navigate (DiaryCalendar (Just (Calendar.monthKey model.currentDate)))
+            )
+
+        GoalsClicked ->
+            ( model
+            , Cmd.none
+            , Navigate (GoalSettings (Just model.currentDate) model.calendarMonth)
+            )
+
         MacroModeToggled ->
             ( { model | macroMode = toggleMacroMode model.macroMode }, Cmd.none, NoOp )
 
@@ -408,6 +424,9 @@ update msg model =
 
         MealsClicked ->
             ( model, Cmd.none, Navigate MealList )
+
+        MealSlotsClicked ->
+            ( model, Cmd.none, Navigate DiarySettings )
 
         TodayChanged today ->
             ( { model | today = today }, Cmd.none, NoOp )
@@ -611,7 +630,10 @@ contentView env model =
         Failed date message ->
             if LocalDate.equals date model.currentDate then
                 Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-                    [ dateCard env model, Feedback.errorBanner env.theme message ]
+                    [ dateCard env model
+                    , Feedback.errorBanner env.theme message
+                    , manageMealSlotsButton env
+                    ]
 
             else
                 Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
@@ -638,43 +660,67 @@ dateCard env model =
         logs : List FoodLog
         logs =
             diaryLogs model.currentDate model.diary
+
+        previousButton : Element Msg
+        previousButton =
+            Button.iconButton env.device
+                env.theme
+                { icon = Icon.ChevronLeft
+                , title = I18n.t env.language TidDiaryPreviousDay
+                , onPress = Just PreviousDayClicked
+                , tone = Button.Primary
+                }
+
+        nextButton : Element Msg
+        nextButton =
+            if canGoNext then
+                Button.iconButton env.device
+                    env.theme
+                    { icon = Icon.ChevronRight
+                    , title = I18n.t env.language TidDiaryNextDay
+                    , onPress = Just NextDayClicked
+                    , tone = Button.Primary
+                    }
+
+            else
+                Button.iconButton env.device
+                    env.theme
+                    { icon = Icon.ChevronRight
+                    , title = ""
+                    , onPress = Nothing
+                    , tone = Button.Primary
+                    }
+
+        centeredDate : Element Msg
+        centeredDate =
+            Element.el [ Element.width Element.fill ]
+                (Element.el [ Element.centerX ] (dateButton env model))
+
+        header : Element Msg
+        header =
+            if dateNavigationInline env then
+                Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space12
+                    , Element.centerY
+                    ]
+                    [ previousButton
+                    , centeredDate
+                    , nextButton
+                    ]
+
+            else
+                Element.column
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                    [ centeredDate
+                    , Element.row
+                        [ Element.centerX, Element.spacing DesignTokens.space12 ]
+                        [ previousButton, nextButton ]
+                    ]
     in
     Element.el [ Element.width Element.fill, UiCommon.testId "diary-date-card" ]
         (Surface.section env.theme
-            { header =
-                Just
-                    (Element.row
-                        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                        [ Button.iconButton env.device
-                            env.theme
-                            { icon = Icon.ChevronLeft
-                            , title = I18n.t env.language TidDiaryPreviousDay
-                            , onPress = Just PreviousDayClicked
-                            , tone = Button.Primary
-                            }
-                        , Element.el [ Element.width Element.fill, Font.center ]
-                            (Typography.sectionTitle env.theme
-                                (LocalDate.display env.language model.currentDate)
-                            )
-                        , if canGoNext then
-                            Button.iconButton env.device
-                                env.theme
-                                { icon = Icon.ChevronRight
-                                , title = I18n.t env.language TidDiaryNextDay
-                                , onPress = Just NextDayClicked
-                                , tone = Button.Primary
-                                }
-
-                          else
-                            Button.iconButton env.device
-                                env.theme
-                                { icon = Icon.ChevronRight
-                                , title = ""
-                                , onPress = Nothing
-                                , tone = Button.Primary
-                                }
-                        ]
-                    )
+            { header = Just header
             , body =
                 [ case loadedGoalTargets model.currentDate model.diary of
                     Just targets ->
@@ -688,6 +734,109 @@ dateCard env model =
         )
 
 
+{-| The date is a ghost trigger, not a second navigation bar: it keeps the
+heading typography and gains the calendar affordance and hover/focus target.
+The two 44px day-navigation targets share the date's row whenever the card has
+room. Truly narrow phones use a compact two-line header with the date centered
+above a centered arrow pair; see `dateNavigationInline`.
+-}
+dateButton : Env -> Model -> Element Msg
+dateButton env model =
+    let
+        displayedDate : String
+        displayedDate =
+            LocalDate.display env.language model.currentDate
+
+        compact : Bool
+        compact =
+            UiCommon.isSmall env.device
+
+        horizontalPadding : Int
+        horizontalPadding =
+            if compact then
+                DesignTokens.space8
+
+            else
+                DesignTokens.space12
+
+        title : Element Msg
+        title =
+            if compact then
+                Typography.sectionTitleCompact env.theme displayedDate
+
+            else
+                Typography.sectionTitle env.theme displayedDate
+    in
+    Input.button
+        [ Element.width Element.shrink
+        , Element.paddingEach
+            { top = 10
+            , right = horizontalPadding
+            , bottom = 10
+            , left = horizontalPadding
+            }
+        , Element.htmlAttribute
+            (Html.Attributes.style
+                "min-height"
+                (String.fromInt DesignTokens.minimumTargetSize ++ "px")
+            )
+        , Border.rounded DesignTokens.radiusPill
+        , Background.color (Element.rgba 0 0 0 0)
+        , UiCommon.uiClass "ui-motion ui-pressable"
+        , UiCommon.hoverEffect env.device
+            [ Background.color env.theme.brandBlueSoft ]
+        , UiCommon.testId "open-calendar"
+        , Element.htmlAttribute
+            (Html.Attributes.title (I18n.t env.language TidDiaryOpenCalendar))
+        , Element.htmlAttribute
+            (Html.Attributes.attribute "aria-label"
+                (I18n.t env.language (TidDiaryOpenCalendarFor displayedDate))
+            )
+        ]
+        { onPress = Just CalendarClicked
+        , label =
+            Element.row [ Element.spacing DesignTokens.space8, Element.centerY ]
+                [ title
+                , Icon.view
+                    { icon = Icon.Calendar
+                    , size = 18
+                    , color = env.theme.brandBlue
+                    }
+                ]
+        }
+
+
+{-| A phone-width card has `windowWidth - 32px` of page gutter and `- 40px`
+of card padding. The date button plus the two 44px arrows and 12px gaps need
+roughly 280px, so the regular viewport category (360px and wider) is the first
+comfortable inline row. `Ui.Env.viewportForWidth` makes that decision once at
+the resize boundary instead of re-rendering for every pixel inside a category.
+This is deliberately narrower than `Element.Phone`'s 600px boundary: a 485px
+phone has plenty of room, while a 320px phone does not.
+-}
+dateNavigationInline : Env -> Bool
+dateNavigationInline env =
+    case env.viewport of
+        Env.NarrowViewport ->
+            False
+
+        Env.RegularViewport ->
+            True
+
+
+{-| Shared by the loaded balance row and its skeleton so the two recipes keep
+the same compact width and right-edge alignment.
+-}
+phoneBalanceMaxWidth : Int
+phoneBalanceMaxWidth =
+    260
+
+
+phoneBalanceRowMaxWidth : Int
+phoneBalanceRowMaxWidth =
+    phoneBalanceMaxWidth + DesignTokens.space8 + DesignTokens.minimumTargetSize
+
+
 {-| The page-shaped loading body. The caller owns the single `Skeleton.busy`
 wrapper so `Page.bootstrapView` and the page's own loading branch cannot nest
 status regions.
@@ -697,7 +846,9 @@ skeletonView env maybePrefs =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ skeletonDateCard env
         , Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-            (List.map (\_ -> skeletonMealSlot env) (skeletonSlots maybePrefs))
+            (Skeleton.button env.theme
+                :: List.map (\_ -> skeletonMealSlot env) (skeletonSlots maybePrefs)
+            )
         ]
 
 
@@ -719,39 +870,70 @@ skeletonDateCard : Env -> Element msg
 skeletonDateCard env =
     Element.el [ Element.width Element.fill, UiCommon.testId "diary-date-card" ]
         (Surface.section env.theme
-            { header = Just (skeletonDateHeader env.theme)
-            , body = [ skeletonTotals env.theme ]
+            { header = Just (skeletonDateHeader env)
+            , body = [ skeletonTotals env ]
             , footer = Nothing
             }
         )
 
 
-skeletonDateHeader : Theme -> Element msg
-skeletonDateHeader theme =
-    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Skeleton.icon theme
-        , Element.el [ Element.width Element.fill ]
-            (Element.el [ Element.centerX ]
-                (Skeleton.elLine theme { size = 24, width = Element.px 160 })
-            )
-        , Skeleton.icon theme
-        ]
+skeletonDateHeader : Env -> Element msg
+skeletonDateHeader env =
+    let
+        theme : Theme
+        theme =
+            env.theme
+
+        previousIcon : Element msg
+        previousIcon =
+            Skeleton.icon theme
+
+        nextIcon : Element msg
+        nextIcon =
+            Skeleton.icon theme
+    in
+    if dateNavigationInline env then
+        Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ previousIcon
+            , Element.el [ Element.width Element.fill ]
+                (Element.el [ Element.centerX ]
+                    (Skeleton.elLine theme { size = 24, width = Element.px 160 })
+                )
+            , nextIcon
+            ]
+
+    else
+        Element.column
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ Element.el
+                [ Element.width Element.fill
+                , Element.height (Element.px DesignTokens.minimumTargetSize)
+                ]
+                (Element.el [ Element.centerX, Element.centerY ]
+                    (Skeleton.elLine theme { size = 20, width = Element.px 160 })
+                )
+            , Element.row
+                [ Element.centerX, Element.spacing DesignTokens.space12 ]
+                [ previousIcon
+                , nextIcon
+                ]
+            ]
 
 
-skeletonTotals : Theme -> Element msg
-skeletonTotals theme =
+skeletonTotals : Env -> Element msg
+skeletonTotals env =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-            [ skeletonCalorieHero theme
-            , skeletonProgressBar theme 12
+            [ skeletonCalorieHero env
+            , skeletonProgressBar env.theme 12
             , Element.el [ Element.width Element.fill ]
                 (Element.el [ Element.alignRight ]
-                    (Skeleton.elLine theme { size = 16, width = Element.px 120 })
+                    (Skeleton.elLine env.theme { size = 16, width = Element.px 120 })
                 )
             ]
-        , Surface.hairline theme
-        , skeletonMacroRow theme
-        , skeletonDetailsAction theme
+        , Surface.hairline env.theme
+        , skeletonMacroRow env.theme
+        , skeletonDetailsAction env.theme
         ]
 
 
@@ -788,28 +970,59 @@ skeletonProgressBar theme height =
         Element.none
 
 
-skeletonCalorieHero : Theme -> Element msg
-skeletonCalorieHero theme =
-    Element.row
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
-        , Element.centerY
-        ]
-        [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
-            [ Skeleton.elLine theme { size = 13, width = Element.px 80 }
-            , Skeleton.elLine theme { size = 44, width = Element.px 160 }
-            , Skeleton.elLine theme { size = 16, width = Element.px 110 }
+skeletonCalorieHero : Env -> Element msg
+skeletonCalorieHero env =
+    let
+        theme : Theme
+        theme =
+            env.theme
+
+        summary : Element msg
+        summary =
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
+                [ Skeleton.elLine theme { size = 13, width = Element.px 80 }
+                , Skeleton.elLine theme { size = 44, width = Element.px 160 }
+                , Skeleton.elLine theme { size = 16, width = Element.px 110 }
+                ]
+
+        pill : Element.Length -> Element msg
+        pill width =
+            Element.el
+                [ Element.width width
+                , Element.height (Element.px 40)
+                , Background.color theme.inputFill
+                , Border.rounded DesignTokens.radiusPill
+                , UiCommon.uiClass "ui-skeleton"
+                , UiCommon.skeletonRegion
+                ]
+                Element.none
+    in
+    if UiCommon.isSmall env.device then
+        Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ summary
+            , Element.row
+                [ Element.width (Element.fill |> Element.maximum phoneBalanceRowMaxWidth)
+                , Element.alignRight
+                , Element.spacing DesignTokens.space8
+                , Element.centerY
+                ]
+                [ pill Element.fill
+                , Skeleton.icon theme
+                ]
             ]
-        , Element.el
-            [ Element.width (Element.px 96)
-            , Element.height (Element.px 40)
-            , Background.color theme.inputFill
-            , Border.rounded DesignTokens.radiusPill
-            , UiCommon.uiClass "ui-skeleton"
-            , UiCommon.skeletonRegion
+
+    else
+        Element.row
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space12
+            , Element.centerY
             ]
-            Element.none
-        ]
+            [ summary
+            , Element.row [ Element.spacing DesignTokens.space8, Element.centerY ]
+                [ pill (Element.px 96)
+                , Skeleton.icon theme
+                ]
+            ]
 
 
 skeletonMacroRow : Theme -> Element msg
@@ -933,20 +1146,56 @@ detailsAction env =
         }
 
 
-calorieHero : Env -> Float -> Float -> Element msg
+calorieHero : Env -> Float -> Float -> Element Msg
 calorieHero env calories target =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Element.row
-            [ Element.width Element.fill, Element.spacing DesignTokens.space12, Element.centerY ]
-            [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
+    let
+        summary : Element Msg
+        summary =
+            Element.column
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space2
+                , UiCommon.minWidthZero
+                ]
                 [ Element.el [ Font.bold, Font.color env.theme.textMedium, Typography.caption ]
                     (Element.text (I18n.t env.language TidDiaryCalories))
                 , Typography.heroStat env.theme (formatWhole calories)
                 , Element.el [ Typography.body, Font.color env.theme.textMuted ]
                     (Element.text (I18n.t env.language TidDiaryKcalEaten))
                 ]
-            , calorieBalancePill env target calories
-            ]
+
+        desktopBalance : Element Msg
+        desktopBalance =
+            Element.row
+                [ Element.spacing DesignTokens.space8, Element.centerY ]
+                [ calorieBalancePill env False target calories
+                , editGoalsButton env
+                ]
+
+        phoneBalance : Element Msg
+        phoneBalance =
+            Element.row
+                [ Element.width (Element.fill |> Element.maximum phoneBalanceRowMaxWidth)
+                , Element.alignRight
+                , Element.spacing DesignTokens.space8
+                , Element.centerY
+                ]
+                [ calorieBalancePill env True target calories
+                , editGoalsButton env
+                ]
+    in
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        [ if UiCommon.isSmall env.device then
+            Element.column
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                [ summary, phoneBalance ]
+
+          else
+            Element.row
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space12
+                , Element.centerY
+                ]
+                [ summary, desktopBalance ]
         , progressBar env.theme
             (if target > 0 && calories > target then
                 env.theme.dangerSolid
@@ -966,8 +1215,13 @@ calorieHero env calories target =
         ]
 
 
-calorieBalancePill : Env -> Float -> Float -> Element msg
-calorieBalancePill env target calories =
+{-| The balance pill stays read-only. On Phone its row is capped at
+`phoneBalanceRowMaxWidth` and aligned to the right edge of the calorie card;
+the pill fills the room left by the 44px edit action, so a long localized
+“kcal left/over” label wraps instead of pushing the action off the card.
+-}
+calorieBalancePill : Env -> Bool -> Float -> Float -> Element msg
+calorieBalancePill env fullWidth target calories =
     if target <= 0 then
         Element.none
 
@@ -991,17 +1245,50 @@ calorieBalancePill env target calories =
 
                 else
                     I18n.t env.language TidDiaryGoalMet
+
+            widthAttrs : List (Element.Attribute msg)
+            widthAttrs =
+                if fullWidth then
+                    [ Element.width Element.fill, UiCommon.minWidthZero ]
+
+                else
+                    [ Element.alignRight ]
+
+            labelView : Element msg
+            labelView =
+                if fullWidth then
+                    Element.paragraph
+                        [ Element.width Element.fill, UiCommon.minWidthZero ]
+                        [ Element.text label ]
+
+                else
+                    Element.text label
         in
         Element.el
-            [ Background.color (UiColor.withAlpha 0.2 statusColor)
-            , Font.color statusColor
-            , Border.rounded DesignTokens.radiusPill
-            , Element.paddingXY DesignTokens.space16 DesignTokens.space12
-            , Typography.body
-            , Font.bold
-            , Element.alignRight
-            ]
-            (Element.text label)
+            ([ Background.color (UiColor.withAlpha 0.2 statusColor)
+             , Font.color statusColor
+             , Border.rounded DesignTokens.radiusPill
+             , Element.paddingXY DesignTokens.space16 DesignTokens.space12
+             , Typography.body
+             , Font.bold
+             ]
+                ++ widthAttrs
+            )
+            labelView
+
+
+{-| The balance pill stays read-only. This separate icon button is the edit
+affordance, with a tooltip and an explicit accessible name.
+-}
+editGoalsButton : Env -> Element Msg
+editGoalsButton env =
+    Button.iconButton env.device
+        env.theme
+        { icon = Icon.Pencil
+        , title = I18n.t env.language TidDiaryEditGoals
+        , onPress = Just GoalsClicked
+        , tone = Button.Primary
+        }
 
 
 type alias MacroSummary =
@@ -1241,7 +1528,24 @@ type alias SlotSection =
 logGroupsView : Env -> Model -> List FoodLog -> Element Msg
 logGroupsView env model logs =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        (visibleSlotSections model.prefs logs |> List.map (slotView env model))
+        (manageMealSlotsButton env
+            :: List.map (slotView env model) (visibleSlotSections model.prefs logs)
+        )
+
+
+manageMealSlotsButton : Env -> Element Msg
+manageMealSlotsButton env =
+    Button.textButtonWithAttributes env.device
+        env.theme
+        [ UiCommon.testId "manage-meal-slots" ]
+        { tone = Button.Ghost
+        , width = Button.FullWidth
+        , label = I18n.t env.language TidDiaryManageMealSlots
+        , onPress = MealSlotsClicked
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Nothing
+        }
 
 
 {-| The loaded page's section rules, shared by the view and its property test:

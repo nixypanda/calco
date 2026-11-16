@@ -71,4 +71,8 @@ sampleIds =
     , TidNutritionDetailsLoggedItemsIncludedOne "1"
     , TidApiErrorRateLimitedSeconds "5"
     , TidMealSlotLateNightSnack
+    , TidDiaryOpenCalendarFor "30 May 2026"
+    , TidDiaryOpenCalendar
+    , TidDiaryEditGoals
+    , TidDiaryManageMealSlots
     ]
