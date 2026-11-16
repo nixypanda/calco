@@ -75,6 +75,19 @@ body {
   box-shadow: 0 0 0 2px rgba(18, 147, 216, 0.25);
 }
 
+.ui-unit-field input:focus-visible {
+  /* The container already paints this control's focus ring; stop the global
+     focus rule from painting a second outline on the clipped inner input. */
+  outline: none !important;
+}
+
+.ui-option-active.ui-option-active {
+  /* Keyboard-active dropdown option. The inset ring layers over the selected
+     soft-blue fill or the neutral row fill without changing option geometry.
+     The darker brand blue clears 3:1 against both fills. */
+  box-shadow: inset 0 0 0 2px var(--ui-brand-blue-pressed);
+}
+
 /* Shared motion
    These classes are attached by Elm primitives and centralize transitions/animations. */
 /* Motion classes stay in CSS because transitions, keyframes, and media queries are

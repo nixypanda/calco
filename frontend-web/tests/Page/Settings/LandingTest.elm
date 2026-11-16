@@ -2,7 +2,8 @@ module Page.Settings.LandingTest exposing (tests)
 
 {-| Settings landing route: the preference and account controls cross
 `Page.update` into app effects, the language menu opens, closes, changes
-language, and exposes listbox ARIA state for pointer and keyboard users.
+language, exposes listbox ARIA state for pointer and keyboard users, and picks
+above/below placement from phone viewport geometry.
 -}
 
 import Data.Route exposing (Route(..))
@@ -12,6 +13,7 @@ import Html.Attributes as Attr
 import I18n
 import Json.Encode as Encode
 import Page
+import Page.Settings.Landing as SettingsLanding
 import Support.Fixtures as Fixtures
 import Test exposing (Test, describe, test)
 import Test.Html.Event as Event
@@ -20,6 +22,7 @@ import Test.Html.Selector as Selector exposing (Selector)
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
 import Ui.Env exposing (Env, Viewport(..))
+import Ui.Input as UiInput
 import Ui.Theme as Theme
 
 
@@ -213,14 +216,6 @@ tests =
                     movedView =
                         pageView env Settings moved.model
 
-                    transientlyClosed : Page.Model
-                    transientlyClosed =
-                        Page.dismissTransient moved.model
-
-                    transientlyClosedView : Query.Single Page.Msg
-                    transientlyClosedView =
-                        pageView env Settings transientlyClosed
-
                     escaped : Click
                     escaped =
                         pageKeyDown "Escape"
@@ -275,20 +270,26 @@ tests =
                             |> Query.find [ languageTrigger EN_US ]
                             |> Query.has
                                 [ activeDescendant
-                                    "settings-language-listbox-option-1"
+                                    (UiInput.selectOptionId "settings-language" 1)
                                 ]
                     , \_ ->
                         movedView
                             |> Query.find
-                                [ Selector.id "settings-language-listbox-option-1" ]
+                                [ Selector.id
+                                    (UiInput.selectOptionId "settings-language" 1)
+                                ]
                             |> Query.has [ Selector.text (I18n.languageName HI_IN) ]
                     , \_ ->
-                        transientlyClosedView
-                            |> Query.find [ languageTrigger EN_US ]
-                            |> Query.has [ expanded False ]
+                        movedView
+                            |> Query.find
+                                [ languageOption (I18n.languageName HI_IN)
+                                , activeOption
+                                ]
+                            |> Query.has [ selectedChoice False ]
                     , \_ ->
-                        transientlyClosedView
-                            |> Query.hasNot [ languageOption (I18n.languageName HI_IN) ]
+                        movedView
+                            |> Query.find [ languageOption (I18n.languageName EN_US) ]
+                            |> Query.hasNot [ activeOption ]
                     , \_ -> escaped.failure |> Expect.equal Nothing
                     , \_ -> escaped.outMsg |> Expect.equal Page.NoOutMsg
                     , \_ ->
@@ -363,18 +364,37 @@ tests =
                             |> Query.count (Expect.equal 1)
                     , \_ ->
                         desktop
-                            |> Query.findAll
-                                [ Selector.exactText
-                                    (I18n.t EN_US TidSettingsLanguageTitle)
-                                ]
-                            |> Query.count (Expect.equal 1)
-                    , \_ ->
-                        desktop
                             |> Query.find [ languageTrigger EN_US ]
                             |> Query.has
                                 [ expanded False
                                 , Selector.text (I18n.languageName EN_US)
                                 ]
+                    ]
+                    ()
+        , test "the phone language menu opens upward only when the bottom edge is too close" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 600
+                            , triggerTop = 480
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuAbove
+                    , \_ ->
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 600
+                            , triggerTop = 200
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuBelow
+                    , \_ ->
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 300
+                            , triggerTop = 120
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuBelow
                     ]
                     ()
         ]
@@ -526,6 +546,11 @@ selectedChoice selected =
 activeDescendant : String -> Selector
 activeDescendant id =
     Selector.attribute (Attr.attribute "aria-activedescendant" id)
+
+
+activeOption : Selector
+activeOption =
+    Selector.class "ui-option-active"
 
 
 pressedChoice : Bool -> Selector

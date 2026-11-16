@@ -371,9 +371,9 @@ listRow config =
         , label =
             listRowContent []
                 [ Element.row listRowLabelAttrs
-                    (listRowLeading config.leading
-                        ++ [ listRowText config.title config.subtitle ]
-                    )
+                    [ listRowLeading config.leading
+                    , listRowText config.title config.subtitle
+                    ]
                 , listRowTrailing config.trailing
                 ]
         }
@@ -392,9 +392,9 @@ staticRow :
 staticRow config =
     listRowContent [ testId "list-row" ]
         [ Element.row listRowLabelAttrs
-            (listRowLeading config.leading
-                ++ [ listRowText config.title config.subtitle ]
-            )
+            [ listRowLeading config.leading
+            , listRowText config.title config.subtitle
+            ]
         , listRowTrailing config.trailing
         ]
 
@@ -445,25 +445,25 @@ listRowTrailing trailing =
         Element.row [ Element.padding space8, Element.spacing space12, Element.alignTop ] trailing
 
 
-{-| Rows without a leading icon must not reserve the icon slot and its gap:
-that would push their title right of stacked rows such as the Phone Language
-block.
+{-| Rows always reserve the icon slot, even without an icon, so rows sharing a
+list keep the same text inset. Panels that stack text above a control must
+align their own leading edge instead of moving every row.
 -}
-listRowLeading : List (Element msg) -> List (Element msg)
+listRowLeading : List (Element msg) -> Element msg
 listRowLeading leading =
-    case leading of
-        first :: _ ->
-            [ Element.el
-                [ Element.width (Element.px 12)
-                , Element.paddingEach
-                    { top = space2, right = 0, bottom = 0, left = 0 }
-                , Element.alignTop
-                ]
+    Element.el
+        [ Element.width (Element.px 12)
+        , Element.paddingEach
+            { top = space2, right = 0, bottom = 0, left = 0 }
+        , Element.alignTop
+        ]
+        (case leading of
+            first :: _ ->
                 first
-            ]
 
-        [] ->
-            []
+            [] ->
+                Element.none
+        )
 
 
 detailRow : Theme -> Language -> String -> Element msg -> Element msg

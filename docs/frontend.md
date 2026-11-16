@@ -645,14 +645,15 @@ were removed; their actions now live here:
 - **Preferences** owns the persisted dark-theme switch and a compact
   English/Hindi language dropdown. The dropdown shows the current language and
   closes after a choice. Its selected option uses the blue/neutral field palette
-  with a check, not the teal chip fill. Phones stack the Language title,
-  description, and full-width dropdown; larger screens keep the title and
-  description beside a fixed-width dropdown so the Theme and Language rows
-  align. The trigger is a select-only combobox: Escape, an outside click, or a
-  second trigger press closes it, arrow/Home/End keys move the active option,
-  Enter/Space chooses it, and focus returns to the trigger after a choice. The
-  menu opens below the trigger, or above it when the trigger is too close to the
-  Phone bottom nav, so the options stay uncovered.
+  with a check, not the teal chip fill; the keyboard-active option gets a
+  neutral fill and an inset brand-blue ring so the two states stay distinct.
+  Phones stack the Language title, description, and full-width dropdown; larger
+  screens keep the title and description beside a fixed-width dropdown so the
+  Theme and Language rows align. The trigger is a select-only combobox: Escape,
+  an outside click, or a second trigger press closes it, arrow/Home/End keys move
+  the active option, Enter/Space chooses it, and focus returns to the trigger
+  after a choice. The menu opens below the trigger, or above it when the trigger
+  is too close to the Phone bottom nav, so the options stay uncovered.
 - **Account** provides the logout action.
 
 The normal-user top bar therefore has no theme switch, language control, or
@@ -833,7 +834,9 @@ Control conventions:
 - use `Ui.input`, `Ui.passwordInput`, and `Ui.selectDropdown` for
   form fields.
 - keyboard focus uses the brand-blue 2px outline; do not replace it with the
-  teal chip-selection palette.
+  teal chip-selection palette. A field group that paints the ring on its
+  container, such as the unit-suffix field, suppresses the inner control's
+  global outline so keyboard focus is not painted twice.
 - use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, and `Ui.Feedback.loading`
   for common states.
 - use `Ui.panel` when several related blocks belong under one header: the panel

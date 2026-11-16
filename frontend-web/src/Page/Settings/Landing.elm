@@ -4,6 +4,7 @@ module Page.Settings.Landing exposing
     , OutMsg(..)
     , dismissTransient
     , init
+    , menuPlacementFor
     , update
     , view
     )
@@ -139,29 +140,43 @@ bottomChromeClearance =
     56
 
 
+{-| Pure placement decision from the open trigger's viewport geometry, so the
+phone bottom-nav clearance is testable without a browser.
+-}
+menuPlacementFor :
+    { viewportHeight : Float, triggerTop : Float, triggerHeight : Float }
+    -> UiInput.SelectMenuPlacement
+menuPlacementFor bounds =
+    let
+        spaceAbove : Float
+        spaceAbove =
+            bounds.triggerTop
+
+        spaceBelow : Float
+        spaceBelow =
+            bounds.viewportHeight - (bounds.triggerTop + bounds.triggerHeight)
+    in
+    if
+        spaceBelow
+            < toFloat (languageMenuEstimatedHeight + bottomChromeClearance)
+            && spaceAbove
+            > spaceBelow
+    then
+        UiInput.MenuAbove
+
+    else
+        UiInput.MenuBelow
+
+
 measureLanguageMenu : Cmd Msg
 measureLanguageMenu =
     Task.map2
         (\viewport trigger ->
-            let
-                spaceAbove : Float
-                spaceAbove =
-                    trigger.element.y
-
-                spaceBelow : Float
-                spaceBelow =
-                    viewport.viewport.height - (trigger.element.y + trigger.element.height)
-            in
-            if
-                spaceBelow
-                    < toFloat (languageMenuEstimatedHeight + bottomChromeClearance)
-                    && spaceAbove
-                    > spaceBelow
-            then
-                UiInput.MenuAbove
-
-            else
-                UiInput.MenuBelow
+            menuPlacementFor
+                { viewportHeight = viewport.viewport.height
+                , triggerTop = trigger.element.y
+                , triggerHeight = trigger.element.height
+                }
         )
         Browser.Dom.getViewport
         (Browser.Dom.getElement (UiInput.selectDropdownTriggerId languageDropdownId))
@@ -262,19 +277,27 @@ languageDropdownId =
 languageRow : Env -> Model -> Element Msg
 languageRow env model =
     if UiCommon.isSmall env.device then
-        Element.column
-            [ Element.width Element.fill
-            , Element.padding DesignTokens.space16
-            , Element.spacing DesignTokens.space8
-            , UiCommon.testId "list-row"
-            ]
-            [ Typography.wrappedListItemTitle env.theme
-                (I18n.t env.language TidSettingsLanguageTitle)
-            , Typography.mutedBodyParagraph env.theme
-                (I18n.t env.language TidSettingsLanguageDescription)
-            , Element.el [ Element.width Element.fill ]
-                (languageControl env model)
-            ]
+        Surface.staticRow
+            { leading = []
+            , title =
+                Typography.wrappedListItemTitle env.theme
+                    (I18n.t env.language TidSettingsLanguageTitle)
+            , subtitle =
+                [ Typography.mutedBodyParagraph env.theme
+                    (I18n.t env.language TidSettingsLanguageDescription)
+                , Element.el
+                    [ Element.width Element.fill
+                    , Element.paddingEach
+                        { top = DesignTokens.space8
+                        , right = 0
+                        , bottom = 0
+                        , left = 0
+                        }
+                    ]
+                    (languageControl env model)
+                ]
+            , trailing = []
+            }
 
     else
         Surface.staticRow

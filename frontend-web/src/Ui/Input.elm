@@ -19,6 +19,7 @@ module Ui.Input exposing
     , selectDropdownLabelHidden
     , selectDropdownTriggerId
     , selectDropdownWithState
+    , selectOptionId
     , suggestionList
     , toggleSwitch
     )
@@ -615,7 +616,7 @@ selectDropdownLabelHidden device theme language config =
             if config.isOpen then
                 config.active
                     |> Maybe.andThen (optionIndex config.options)
-                    |> Maybe.map (optionId listboxId)
+                    |> Maybe.map (selectOptionId config.id)
 
             else
                 Nothing
@@ -678,16 +679,27 @@ selectDropdownLabelHidden device theme language config =
         renderOption : Int -> ( a, String ) -> Element msg
         renderOption index ( value, label ) =
             dropdownOption theme
-                { id = optionId listboxId index
+                { id = selectOptionId config.id index
                 , label = label
                 , selected = value == config.selected
+                , active = config.active == Just value
                 , onPress = config.onChange value
                 }
+
+        menuOverlayOffset : Element.Attribute msg
+        menuOverlayOffset =
+            case config.menuPlacement of
+                MenuAbove ->
+                    Element.moveUp 4
+
+                MenuBelow ->
+                    Element.moveDown 4
 
         optionsElement : Element msg
         optionsElement =
             Element.el
                 [ Element.width Element.fill
+                , menuOverlayOffset
                 , Element.htmlAttribute (Html.Attributes.id listboxId)
                 , Element.htmlAttribute (Html.Attributes.attribute "role" "listbox")
                 , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
@@ -702,10 +714,10 @@ selectDropdownLabelHidden device theme language config =
         menuPositionAttrs =
             case config.menuPlacement of
                 MenuAbove ->
-                    [ Element.above optionsElement, Element.moveUp 4 ]
+                    [ Element.above optionsElement ]
 
                 MenuBelow ->
-                    [ Element.below optionsElement, Element.moveDown 4 ]
+                    [ Element.below optionsElement ]
 
         triggerAnchor : List (Element.Attribute msg)
         triggerAnchor =
@@ -942,7 +954,7 @@ dropdownChevronSegment theme isOpen =
 
 dropdownOption :
     Theme
-    -> { id : String, label : String, selected : Bool, onPress : msg }
+    -> { id : String, label : String, selected : Bool, active : Bool, onPress : msg }
     -> Element msg
 dropdownOption theme config =
     Element.el
@@ -952,6 +964,9 @@ dropdownOption theme config =
          , Background.color
             (if config.selected then
                 theme.brandBlueSoft
+
+             else if config.active then
+                theme.inputFill
 
              else
                 theme.cardBg
@@ -963,7 +978,15 @@ dropdownOption theme config =
          , Element.htmlAttribute
             (Html.Attributes.attribute "aria-selected" (boolString config.selected))
          , Element.htmlAttribute (Html.Events.onClick config.onPress)
-         , uiClass "ui-motion ui-pressable"
+         , uiClass
+            ("ui-motion ui-pressable"
+                ++ (if config.active then
+                        " ui-option-active"
+
+                    else
+                        ""
+                   )
+            )
          ]
             ++ (if config.selected then
                     [ Font.medium ]
@@ -991,6 +1014,14 @@ optionIndex options selected =
         |> List.filter (\( _, value ) -> value == selected)
         |> List.head
         |> Maybe.map Tuple.first
+
+
+{-| Stable option id for a select control. Exposed alongside the trigger id so
+callers and tests do not duplicate the listbox id shape.
+-}
+selectOptionId : String -> Int -> String
+selectOptionId id index =
+    optionId (id ++ "-listbox") index
 
 
 optionId : String -> Int -> String
