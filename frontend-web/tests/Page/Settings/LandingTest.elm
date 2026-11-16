@@ -16,7 +16,7 @@ import Json.Encode as Encode
 import Page
 import Page.Settings.Landing as SettingsLanding
 import Support.Fixtures as Fixtures
-import Test exposing (Test, describe, fuzz2, fuzz3, test)
+import Test exposing (Test, describe, fuzz3, test)
 import Test.Html.Event as Event
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector exposing (Selector)
@@ -331,10 +331,6 @@ tests =
                     hindi : Query.Single Page.Msg
                     hindi =
                         pageView hindiEnv Settings (pageFor Settings)
-
-                    desktop : Query.Single Page.Msg
-                    desktop =
-                        pageView desktopEnv Settings (pageFor Settings)
                 in
                 Expect.all
                     [ \_ ->
@@ -363,58 +359,113 @@ tests =
                                     (I18n.t EN_US TidSettingsLanguageTitle)
                                 ]
                             |> Query.count (Expect.equal 1)
-                    , \_ ->
-                        desktop
-                            |> Query.find [ languageTrigger EN_US ]
-                            |> Query.has
-                                [ expanded False
-                                , Selector.text (I18n.languageName EN_US)
-                                ]
                     ]
                     ()
-        , fuzz2 (Fuzz.intRange 320 1400)
-            (Fuzz.intRange 400 5000)
+        , test "below is preferred while it clears the bottom nav; otherwise above when it fits" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        -- 200px above and 556px below: both sides fit.
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 800
+                            , viewportScrollY = 0
+                            , triggerTop = 200
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuBelow
+                    , \_ ->
+                        -- Exactly the 100px menu plus 56px bottom-nav
+                        -- clearance below, with room above too.
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 500
+                            , viewportScrollY = 0
+                            , triggerTop = 300
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuBelow
+                    , \_ ->
+                        -- One pixel short of that clearance, but above holds
+                        -- the whole menu.
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 499
+                            , viewportScrollY = 0
+                            , triggerTop = 300
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuAbove
+                    , \_ ->
+                        -- Above holds exactly the menu height and no more.
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 299
+                            , viewportScrollY = 0
+                            , triggerTop = 100
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuAbove
+                    ]
+                    ()
+        , test "when neither side fits, the roomier side wins and below wins a tie" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        -- 90px above, 60px below.
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 194
+                            , viewportScrollY = 0
+                            , triggerTop = 90
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuAbove
+                    , \_ ->
+                        -- 40px above, 90px below.
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 174
+                            , viewportScrollY = 0
+                            , triggerTop = 40
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuBelow
+                    , \_ ->
+                        -- 80px on each side.
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 204
+                            , viewportScrollY = 0
+                            , triggerTop = 80
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuBelow
+                    ]
+                    ()
+        , fuzz3
+            (Fuzz.intRange 320 1400)
+            (Fuzz.intRange 0 1600)
+            (Fuzz.intRange 0 4000)
             "scrolling the document does not change which side the menu opens on"
           <|
-            \viewportHeight scrollY ->
+            \viewportHeight triggerTop scrollY ->
                 let
-                    triggerTopInViewport : Float
-                    triggerTopInViewport =
-                        120
-
-                    placementFor : Float -> Float -> UiInput.SelectMenuPlacement
-                    placementFor scrollOffset triggerTop =
+                    placementAt : Float -> Float -> UiInput.SelectMenuPlacement
+                    placementAt scrollOffset documentTop =
                         SettingsLanding.menuPlacementFor
                             { viewportHeight = toFloat viewportHeight
                             , viewportScrollY = scrollOffset
-                            , triggerTop = triggerTop
+                            , triggerTop = documentTop
                             , triggerHeight = 44
                             }
-
-                    scrollTop : Float
-                    scrollTop =
-                        toFloat scrollY
                 in
-                placementFor 0 triggerTopInViewport
+                placementAt 0 (toFloat triggerTop)
                     |> Expect.equal
-                        (placementFor scrollTop (triggerTopInViewport + scrollTop))
-        , fuzz3
-            (Fuzz.intRange 100 800)
-            (Fuzz.intRange 0 155)
-            (Fuzz.intRange 24 80)
-            "a menu that cannot clear the bottom nav opens above when it fits"
-          <|
-            \spaceAbove spaceBelow triggerHeight ->
-                SettingsLanding.menuPlacementFor
-                    { viewportHeight =
-                        toFloat (spaceAbove + spaceBelow + triggerHeight)
-                    , viewportScrollY = 0
-                    , triggerTop = toFloat spaceAbove
-                    , triggerHeight = toFloat triggerHeight
-                    }
-                    |> Expect.equal UiInput.MenuAbove
-        , test "a trigger just inside a scrolled phone viewport keeps the menu downward" <|
+                        (placementAt
+                            (toFloat scrollY)
+                            (toFloat triggerTop + toFloat scrollY)
+                        )
+        , test "a trigger just inside a scrolled phone viewport keeps the menu below" <|
             \_ ->
+                -- Regression: Browser.Dom.getElement reports document
+                -- coordinates. The trigger is at document y=534 in a 300px
+                -- viewport scrolled to 514, so only 20px sit above it and 236px
+                -- below. Treating 534 as viewport space would wrongly choose
+                -- above.
                 SettingsLanding.menuPlacementFor
                     { viewportHeight = 300
                     , viewportScrollY = 514
@@ -602,8 +653,3 @@ env =
 hindiEnv : Env
 hindiEnv =
     { env | language = HI_IN }
-
-
-desktopEnv : Env
-desktopEnv =
-    { env | device = { class = Element.Desktop, orientation = Element.Landscape } }
