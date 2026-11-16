@@ -402,6 +402,17 @@ tests =
                             , triggerHeight = 44
                             }
                             |> Expect.equal UiInput.MenuAbove
+                    , \_ ->
+                        -- One pixel less above than the menu needs, while
+                        -- below is also just short of the clearance: neither
+                        -- side fits, so the roomier side (below) wins.
+                        SettingsLanding.menuPlacementFor
+                            { viewportHeight = 298
+                            , viewportScrollY = 0
+                            , triggerTop = 99
+                            , triggerHeight = 44
+                            }
+                            |> Expect.equal UiInput.MenuBelow
                     ]
                     ()
         , test "when neither side fits, the roomier side wins and below wins a tie" <|
