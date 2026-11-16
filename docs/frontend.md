@@ -642,8 +642,9 @@ preferences landing page. The normal-user top-bar theme switch and profile menu
 were removed; their actions now live here:
 
 - **Access** links to API keys.
-- **Preferences** owns the persisted dark-theme switch and the English/Hindi
-  language choice.
+- **Preferences** owns the persisted dark-theme switch and a compact
+  English/Hindi language dropdown. The dropdown shows the current language and
+  closes after a choice.
 - **Account** provides the logout action.
 
 The normal-user top bar therefore has no theme switch, language control, or

@@ -13,7 +13,6 @@ import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
 import Ui.Button as Button
-import Ui.DesignTokens as DesignTokens
 import Ui.Env exposing (Env)
 import Ui.Icon as Icon
 import Ui.Input as UiInput
@@ -28,12 +27,12 @@ import Ui.Typography as Typography
 
 
 type alias Model =
-    ()
+    { languageOpen : Bool }
 
 
 init : Model
 init =
-    ()
+    { languageOpen = False }
 
 
 
@@ -43,12 +42,14 @@ init =
 type Msg
     = ApiKeysClicked
     | ThemeToggleClicked
+    | LanguageDropdownToggled
     | LanguageClicked Language
     | LogoutClicked
 
 
 type OutMsg
-    = Navigate Route
+    = NoOp
+    | Navigate Route
     | ToggleTheme
     | SetLanguage Language
     | Logout
@@ -63,8 +64,11 @@ update msg model =
         ThemeToggleClicked ->
             ( model, Cmd.none, ToggleTheme )
 
+        LanguageDropdownToggled ->
+            ( { model | languageOpen = not model.languageOpen }, Cmd.none, NoOp )
+
         LanguageClicked language ->
-            ( model, Cmd.none, SetLanguage language )
+            ( { model | languageOpen = False }, Cmd.none, SetLanguage language )
 
         LogoutClicked ->
             ( model, Cmd.none, Logout )
@@ -75,12 +79,12 @@ update msg model =
 
 
 view : Env -> Model -> Element Msg
-view env _ =
+view env model =
     UiPage.pageContainer
         [ Typography.mutedBodyParagraph env.theme
             (I18n.t env.language TidSettingsDescription)
         , accessSection env
-        , preferencesSection env
+        , preferencesSection env model
         , accountSection env
         ]
 
@@ -123,8 +127,8 @@ accessSection env =
         }
 
 
-preferencesSection : Env -> Element Msg
-preferencesSection env =
+preferencesSection : Env -> Model -> Element Msg
+preferencesSection env model =
     Surface.section env.theme
         { header =
             Just
@@ -150,40 +154,40 @@ preferencesSection env =
                     ]
                 }
             , Surface.hairline env.theme
-            , Element.column
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
-                [ Typography.wrappedListItemTitle env.theme
-                    (I18n.t env.language TidSettingsLanguageTitle)
-                , Typography.mutedBodyParagraph env.theme
-                    (I18n.t env.language TidSettingsLanguageDescription)
-                , languageOptions env
-                ]
+            , languageRow env model
             ]
         , footer = Nothing
         }
 
 
-languageOptions : Env -> Element Msg
-languageOptions env =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space4
-        ]
-        [ languageOption env EN_US
-        , languageOption env HI_IN
-        ]
-
-
-languageOption : Env -> Language -> Element Msg
-languageOption env language =
-    UiInput.optionRowWithState env.theme
-        { label = I18n.languageName language
-        , selected = env.language == language
-        , onPress = LanguageClicked language
-        , disabled = False
-        , trailing = Nothing
+languageRow : Env -> Model -> Element Msg
+languageRow env model =
+    Surface.staticRow
+        { leading = []
+        , title =
+            Typography.wrappedListItemTitle env.theme
+                (I18n.t env.language TidSettingsLanguageTitle)
+        , subtitle =
+            [ Typography.mutedBodyParagraph env.theme
+                (I18n.t env.language TidSettingsLanguageDescription)
+            ]
+        , trailing =
+            [ Element.el [ Element.width (Element.px 200) ]
+                (UiInput.selectDropdownLabelHidden env.device
+                    env.theme
+                    env.language
+                    { label = I18n.t env.language TidSettingsLanguageTitle
+                    , selected = env.language
+                    , options =
+                        [ ( EN_US, I18n.languageName EN_US )
+                        , ( HI_IN, I18n.languageName HI_IN )
+                        ]
+                    , onChange = LanguageClicked
+                    , isOpen = model.languageOpen
+                    , onToggle = LanguageDropdownToggled
+                    }
+                )
+            ]
         }
 
 

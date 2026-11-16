@@ -1,8 +1,8 @@
 module Page.Settings.LandingTest exposing (tests)
 
 {-| Settings landing route: the preference and account controls cross
-`Page.update` into app effects, API keys opens its pane, and the rendered
-controls reflect the active theme and language.
+`Page.update` into app effects, the language dropdown opens and closes around a
+choice, and the rendered controls reflect the active theme and language.
 -}
 
 import Data.Route exposing (Route(..))
@@ -32,23 +32,21 @@ tests =
                     afterTheme =
                         pageClick Settings (themeToggle EN_US) (pageFor Settings)
 
+                    afterLanguageOpen : Click
+                    afterLanguageOpen =
+                        pageClick Settings (languageTrigger EN_US) afterTheme.model
+
                     afterLanguage : Click
                     afterLanguage =
-                        pageClick Settings (buttonContaining "हिन्दी") afterTheme.model
-
-                    afterEnglish : Click
-                    afterEnglish =
-                        pageClickWith
-                            { env | language = HI_IN }
-                            Settings
-                            (buttonContaining "English")
-                            afterLanguage.model
+                        pageClick Settings
+                            (languageOption "हिन्दी")
+                            afterLanguageOpen.model
 
                     afterLogout : Click
                     afterLogout =
                         pageClick Settings
                             (buttonContaining (I18n.t EN_US TidNavLogout))
-                            afterEnglish.model
+                            afterLanguage.model
 
                     afterApiKeys : Click
                     afterApiKeys =
@@ -62,14 +60,13 @@ tests =
                 in
                 { theme = afterTheme.outMsg
                 , language = afterLanguage.outMsg
-                , english = afterEnglish.outMsg
                 , logout = afterLogout.outMsg
                 , apiKeys = afterApiKeys.outMsg
                 , panes = Page.paneKeys apiKeys
                 , failures =
                     [ afterTheme.failure
+                    , afterLanguageOpen.failure
                     , afterLanguage.failure
-                    , afterEnglish.failure
                     , afterLogout.failure
                     , afterApiKeys.failure
                     ]
@@ -78,12 +75,49 @@ tests =
                     |> Expect.equal
                         { theme = Page.ToggleTheme
                         , language = Page.SetLanguage HI_IN
-                        , english = Page.SetLanguage EN_US
                         , logout = Page.Logout
                         , apiKeys = Page.Navigate SettingsApiKeys
                         , panes = [ "api-keys" ]
                         , failures = []
                         }
+        , test "a user opens the language dropdown, chooses Hindi, and sees it selected" <|
+            \_ ->
+                let
+                    opened : Click
+                    opened =
+                        pageClick Settings (languageTrigger EN_US) (pageFor Settings)
+
+                    openedView : Query.Single Page.Msg
+                    openedView =
+                        pageView env Settings opened.model
+
+                    chosen : Click
+                    chosen =
+                        pageClick Settings
+                            (languageOption "हिन्दी")
+                            opened.model
+
+                    chosenView : Query.Single Page.Msg
+                    chosenView =
+                        pageView { env | language = HI_IN } Settings chosen.model
+                in
+                Expect.all
+                    [ \_ -> opened.failure |> Expect.equal Nothing
+                    , \_ -> opened.outMsg |> Expect.equal Page.NoOutMsg
+                    , \_ ->
+                        openedView
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has [ expanded True ]
+                    , \_ -> openedView |> Query.has [ languageOption "हिन्दी" ]
+                    , \_ -> chosen.failure |> Expect.equal Nothing
+                    , \_ -> chosen.outMsg |> Expect.equal (Page.SetLanguage HI_IN)
+                    , \_ ->
+                        chosenView
+                            |> Query.find [ languageTrigger HI_IN ]
+                            |> Query.has [ expanded False, Selector.text "हिन्दी" ]
+                    , \_ -> chosenView |> Query.hasNot [ languageOption "English" ]
+                    ]
+                    ()
         , test "preferences reflect the active theme and language" <|
             \_ ->
                 let
@@ -112,13 +146,20 @@ tests =
                             |> Query.find [ themeToggle EN_US ]
                             |> Query.has [ pressedChoice True ]
                     , \_ ->
-                        hindi
-                            |> Query.find [ buttonContaining "हिन्दी" ]
-                            |> Query.has [ pressedChoice True ]
+                        lightEnglish
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has [ expanded False, Selector.text "English" ]
                     , \_ ->
                         hindi
-                            |> Query.find [ buttonContaining "English" ]
-                            |> Query.has [ pressedChoice False ]
+                            |> Query.find [ languageTrigger HI_IN ]
+                            |> Query.has [ expanded False, Selector.text "हिन्दी" ]
+                    , \_ ->
+                        lightEnglish
+                            |> Query.findAll
+                                [ Selector.exactText
+                                    (I18n.t EN_US TidSettingsLanguageTitle)
+                                ]
+                            |> Query.count (Expect.equal 1)
                     ]
                     ()
         ]
@@ -188,12 +229,44 @@ themeToggle language =
         (Attr.attribute "aria-label" (I18n.t language TidCommonUseDarkTheme))
 
 
+languageTrigger : Language -> Selector
+languageTrigger language =
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.attribute
+            (Attr.attribute "aria-label"
+                (I18n.t language TidSettingsLanguageTitle
+                    ++ ": "
+                    ++ I18n.languageName language
+                )
+            )
+        ]
+
+
+languageOption : String -> Selector
+languageOption label =
+    buttonContaining label
+
+
 buttonContaining : String -> Selector
 buttonContaining label =
     Selector.all
         [ Selector.attribute (Attr.attribute "role" "button")
         , Selector.containing [ Selector.text label ]
         ]
+
+
+expanded : Bool -> Selector
+expanded isOpen =
+    Selector.attribute
+        (Attr.attribute "aria-expanded"
+            (if isOpen then
+                "true"
+
+             else
+                "false"
+            )
+        )
 
 
 pressedChoice : Bool -> Selector

@@ -15,6 +15,7 @@ module Ui.Input exposing
     , passwordInput
     , searchInput
     , selectDropdown
+    , selectDropdownLabelHidden
     , selectDropdownWithState
     , suggestionList
     , toggleSwitch
@@ -537,6 +538,75 @@ selectDropdownWithState :
         }
     -> Element msg
 selectDropdownWithState device theme language config =
+    selectDropdownView
+        device
+        theme
+        language
+        DropdownLabelVisible
+        { label = config.label
+        , selected = config.selected
+        , options = config.options
+        , onChange = config.onChange
+        , isOpen = config.isOpen
+        , onToggle = config.onToggle
+        , disabled = config.disabled
+        }
+
+
+{-| A dropdown for a control whose visible title already lives in the
+surrounding row. The label is not drawn above the trigger, but it still names the
+control for assistive technology together with the selected value.
+-}
+selectDropdownLabelHidden :
+    Device
+    -> Theme
+    -> Language
+    ->
+        { label : String
+        , selected : a
+        , options : List ( a, String )
+        , onChange : a -> msg
+        , isOpen : Bool
+        , onToggle : msg
+        }
+    -> Element msg
+selectDropdownLabelHidden device theme language config =
+    selectDropdownView
+        device
+        theme
+        language
+        DropdownLabelHidden
+        { label = config.label
+        , selected = config.selected
+        , options = config.options
+        , onChange = config.onChange
+        , isOpen = config.isOpen
+        , onToggle = config.onToggle
+        , disabled = False
+        }
+
+
+type DropdownLabel
+    = DropdownLabelVisible
+    | DropdownLabelHidden
+
+
+selectDropdownView :
+    Device
+    -> Theme
+    -> Language
+    -> DropdownLabel
+    ->
+        { label : String
+        , selected : a
+        , options : List ( a, String )
+        , onChange : a -> msg
+        , isOpen : Bool
+        , onToggle : msg
+        , disabled : Bool
+        }
+    -> Element msg
+selectDropdownView device theme language labelMode config =
     let
         selectedLabel : String
         selectedLabel =
@@ -546,6 +616,22 @@ selectDropdownWithState device theme language config =
 
                 [] ->
                     ""
+
+        accessibleLabel : List (Element.Attribute msg)
+        accessibleLabel =
+            case labelMode of
+                DropdownLabelVisible ->
+                    []
+
+                DropdownLabelHidden ->
+                    [ Region.description
+                        (if String.isEmpty selectedLabel then
+                            config.label
+
+                         else
+                            config.label ++ ": " ++ selectedLabel
+                        )
+                    ]
 
         isSelected : a -> Bool
         isSelected val =
@@ -640,47 +726,55 @@ selectDropdownWithState device theme language config =
         , testId "field"
         , dataAttribute "data-field-kind" "select"
         ]
-        [ fieldLabel theme config.label
-        , Element.el triggerAnchor
-            (Input.button
-                ([ Element.width Element.fill
-                 , Element.height (Element.px minimumTargetSize)
-                 , Border.rounded radiusControl
-                 , Background.color theme.cardBg
-                 , Element.clip
-                 , Element.alpha
-                    (if config.disabled then
-                        0.6
+        ((case labelMode of
+            DropdownLabelVisible ->
+                [ fieldLabel theme config.label ]
 
-                     else
-                        1
-                    )
-                 , Element.htmlAttribute
-                    (Html.Attributes.attribute "aria-disabled"
-                        (boolString config.disabled)
-                    )
-                 , Element.htmlAttribute
-                    (Html.Attributes.attribute "aria-expanded"
-                        (boolString (config.isOpen && not config.disabled))
-                    )
-                 , uiClass "ui-motion"
-                 , testId "field-control"
-                 , hoverEffect device [ Border.color theme.brandBlue ]
-                 ]
-                    ++ inputBorder theme
-                )
-                { onPress =
-                    if config.disabled then
-                        Nothing
+            DropdownLabelHidden ->
+                []
+         )
+            ++ [ Element.el triggerAnchor
+                    (Input.button
+                        ([ Element.width Element.fill
+                         , Element.height (Element.px minimumTargetSize)
+                         , Border.rounded radiusControl
+                         , Background.color theme.cardBg
+                         , Element.clip
+                         , Element.alpha
+                            (if config.disabled then
+                                0.6
 
-                    else
-                        Just config.onToggle
-                , label =
-                    Element.row [ Element.width Element.fill, Element.height Element.fill ]
-                        [ fieldText, triggerDivider, chevronSegment ]
-                }
-            )
-        ]
+                             else
+                                1
+                            )
+                         , Element.htmlAttribute
+                            (Html.Attributes.attribute "aria-disabled"
+                                (boolString config.disabled)
+                            )
+                         , Element.htmlAttribute
+                            (Html.Attributes.attribute "aria-expanded"
+                                (boolString (config.isOpen && not config.disabled))
+                            )
+                         , uiClass "ui-motion"
+                         , testId "field-control"
+                         , hoverEffect device [ Border.color theme.brandBlue ]
+                         ]
+                            ++ accessibleLabel
+                            ++ inputBorder theme
+                        )
+                        { onPress =
+                            if config.disabled then
+                                Nothing
+
+                            else
+                                Just config.onToggle
+                        , label =
+                            Element.row [ Element.width Element.fill, Element.height Element.fill ]
+                                [ fieldText, triggerDivider, chevronSegment ]
+                        }
+                    )
+               ]
+        )
 
 
 
