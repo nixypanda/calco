@@ -397,6 +397,8 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /settings/diary
 /settings/api-keys
 /settings/api-keys/new
+/library
+/settings
 /logs/:id
 /search
 /search?date=YYYY-MM-DD
@@ -565,7 +567,9 @@ It provides:
 - meal-slot grouped logs.
 - add-food actions per meal slot.
 - recent-item quick add and latest-slot repeat actions.
-- bottom navigation on phones and a drawer on larger screens.
+- a Phone bottom navigation with Diary, Search, Library, and Settings
+  destinations; larger screens use a drawer with the same four flat
+  destinations.
 
 Users can inspect previous days with the diary date selector. The selected
 date is a ghost button with a calendar icon that opens the calendar at that
@@ -585,7 +589,23 @@ screen is out of scope.
 macro targets for the current local day. It can carry optional diary date and
 calendar context in its URL solely so Back returns to the diary day the user
 came from; goal data is always scoped to today. Plain `/settings/goals` still
-works.
+works. Goals, calendar, and meal-slot settings group under the Diary
+destination in the navigation.
+
+### Library
+
+`Page.Library` renders `/library`, the saved-item landing page. It links to the
+existing food and meal routes: `My Foods` opens `Page.CustomFood.List`, and
+`My Meals` opens `Page.Meal.List`. Both child screens return to the Library
+landing page. The navigation shows Library for those food and meal routes.
+
+### Settings
+
+`Page.Settings.Landing` renders `/settings`, the account and preferences
+landing page. It currently links to API keys and leaves a placeholder for
+theme/language preferences. API key list and create screens group under the
+Settings destination; admins continue to see only the admin drawer because
+normal-user routes redirect them to the admin dashboard.
 
 ### API Keys
 

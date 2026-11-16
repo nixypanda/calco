@@ -440,8 +440,8 @@ bottomNavBar env route onNavigate =
             (I18n.t env.language TidNavSearch)
             (FoodSearch Nothing Nothing)
             Icon.Search
-        , tabButton env route onNavigate (I18n.t env.language TidNavFoods) CustomFoodList Icon.Box
-        , tabButton env route onNavigate (I18n.t env.language TidNavMeals) MealList Icon.Utensils
+        , tabButton env route onNavigate (I18n.t env.language TidNavLibrary) Library Icon.Library
+        , tabButton env route onNavigate (I18n.t env.language TidNavSettings) Settings Icon.Settings
         ]
 
 
@@ -585,20 +585,20 @@ drawerItems env session route onNavigate =
             route
             onNavigate
             (Just Icon.Search)
-            (I18n.t env.language TidNavSearchFoods)
+            (I18n.t env.language TidNavSearch)
             (FoodSearch Nothing Nothing)
         , drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Box)
-            (I18n.t env.language TidNavMyFoods)
-            CustomFoodList
+            (Just Icon.Library)
+            (I18n.t env.language TidNavLibrary)
+            Library
         , drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Utensils)
-            (I18n.t env.language TidNavMyMeals)
-            MealList
+            (Just Icon.Settings)
+            (I18n.t env.language TidNavSettings)
+            Settings
         ]
 
 

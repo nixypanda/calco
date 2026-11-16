@@ -78,6 +78,110 @@ tests =
                         |> Expect.equal False
                 )
             ]
+        , test "Phone bottom nav offers diary, search, library, and settings" <|
+            \_ ->
+                let
+                    nav : Query.Single Route
+                    nav =
+                        Chrome.bottomNavBar
+                            (envFor { class = Element.Phone, orientation = Element.Portrait })
+                            (DiaryDay Nothing Nothing)
+                            identity
+                            |> Element.layout []
+                            |> Query.fromHtml
+                in
+                Expect.all
+                    [ \_ ->
+                        nav
+                            |> Query.has
+                                [ Selector.text (I18n.t EN_US TidNavDiary) ]
+                    , \_ ->
+                        nav
+                            |> Query.has
+                                [ Selector.text (I18n.t EN_US TidNavSearch) ]
+                    , \_ ->
+                        nav
+                            |> Query.has
+                                [ Selector.text (I18n.t EN_US TidNavLibrary) ]
+                    , \_ ->
+                        nav
+                            |> Query.has
+                                [ Selector.text (I18n.t EN_US TidNavSettings) ]
+                    , \_ ->
+                        nav
+                            |> Query.hasNot
+                                [ Selector.text (I18n.t EN_US TidNavFoods) ]
+                    , \_ ->
+                        nav
+                            |> Query.hasNot
+                                [ Selector.text (I18n.t EN_US TidNavMeals) ]
+                    , \_ ->
+                        expectNavTarget nav
+                            TidNavLibrary
+                            Library
+                    , \_ ->
+                        expectNavTarget nav
+                            TidNavSettings
+                            Settings
+                    ]
+                    ()
+        , test "the drawer offers the same four flat destinations" <|
+            \_ ->
+                let
+                    drawer : Query.Single Route
+                    drawer =
+                        drawerFor user
+                in
+                Expect.all
+                    [ \_ ->
+                        drawer
+                            |> Query.has [ Selector.text (I18n.t EN_US TidNavDiary) ]
+                    , \_ ->
+                        drawer
+                            |> Query.has [ Selector.text (I18n.t EN_US TidNavSearch) ]
+                    , \_ ->
+                        drawer
+                            |> Query.has [ Selector.text (I18n.t EN_US TidNavLibrary) ]
+                    , \_ ->
+                        drawer
+                            |> Query.has [ Selector.text (I18n.t EN_US TidNavSettings) ]
+                    , \_ ->
+                        drawer
+                            |> Query.hasNot [ Selector.text (I18n.t EN_US TidNavMyFoods) ]
+                    , \_ ->
+                        drawer
+                            |> Query.hasNot [ Selector.text (I18n.t EN_US TidNavMyMeals) ]
+                    , \_ ->
+                        expectDrawerNavTarget drawer TidNavLibrary Library
+                    , \_ ->
+                        expectDrawerNavTarget drawer TidNavSettings Settings
+                    ]
+                    ()
+        , test "an admin drawer only offers the admin destination" <|
+            \_ ->
+                let
+                    drawer : Query.Single Route
+                    drawer =
+                        drawerFor admin
+                in
+                Expect.all
+                    [ \_ ->
+                        drawer
+                            |> Query.has [ Selector.text (I18n.t EN_US TidNavAdmin) ]
+                    , \_ ->
+                        drawer
+                            |> Query.hasNot [ Selector.text (I18n.t EN_US TidNavDiary) ]
+                    , \_ ->
+                        drawer
+                            |> Query.hasNot [ Selector.text (I18n.t EN_US TidNavSearch) ]
+                    , \_ ->
+                        drawer
+                            |> Query.hasNot [ Selector.text (I18n.t EN_US TidNavLibrary) ]
+                    , \_ ->
+                        drawer
+                            |> Query.hasNot [ Selector.text (I18n.t EN_US TidNavSettings) ]
+                    ]
+                    ()
         , test "goals Back keeps the diary date and calendar context" <|
             \_ ->
                 Expect.all
@@ -87,6 +191,14 @@ tests =
                     , \_ ->
                         expectBackTarget (DiaryDay Nothing Nothing)
                             (GoalSettings Nothing Nothing)
+                    ]
+                    ()
+        , test "library and settings child pages return to their landing pages" <|
+            \_ ->
+                Expect.all
+                    [ \_ -> expectBackTarget Library CustomFoodList
+                    , \_ -> expectBackTarget Library MealList
+                    , \_ -> expectBackTarget Settings SettingsApiKeys
                     ]
                     ()
         , test "profile menu leaves diary entry points on the diary" <|
@@ -156,6 +268,48 @@ expectBackTarget target route =
             ]
         |> Event.simulate Event.click
         |> Event.expect target
+
+
+expectNavTarget : Query.Single Route -> TranslationId -> Route -> Expect.Expectation
+expectNavTarget nav label target =
+    nav
+        |> navButton label
+        |> Event.simulate Event.click
+        |> Event.expect target
+
+
+expectDrawerNavTarget : Query.Single Route -> TranslationId -> Route -> Expect.Expectation
+expectDrawerNavTarget drawer label target =
+    drawer
+        |> navButton label
+        |> Event.simulate Event.click
+        |> Event.expect target
+
+
+navButton : TranslationId -> Query.Single msg -> Query.Single msg
+navButton label root =
+    Query.find
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.containing [ Selector.text (I18n.t EN_US label) ]
+        ]
+        root
+
+
+drawerFor : Session -> Query.Single Route
+drawerFor session =
+    Element.el
+        (Chrome.drawerOverlay
+            (envFor { class = Element.Phone, orientation = Element.Portrait })
+            session
+            (DiaryDay Nothing Nothing)
+            False
+            True
+            (DiaryDay Nothing Nothing)
+            identity
+        )
+        Element.none
+        |> Element.layout []
+        |> Query.fromHtml
 
 
 date : LocalDate
