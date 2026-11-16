@@ -4,6 +4,7 @@ module Chrome exposing
     , OutMsg(..)
     , bottomNavLayoutAttrs
     , close
+    , closeOnLayoutChange
     , init
     , isDrawerOpen
     , update
@@ -12,8 +13,9 @@ module Chrome exposing
 
 import Data.Auth as Auth exposing (Session)
 import Data.Route exposing (Route)
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Region as Region
+import Html.Attributes
 import Lib.Text as Text
 import Translations.Util exposing (Language)
 import Ui.Common as UiCommon
@@ -111,6 +113,18 @@ isDrawerOpen model =
     isMenuOpen DrawerMenu model
 
 
+{-| Phone and non-phone layouts use different navigation, so a menu opened in
+one must not remain latent in the other and reappear when the layout returns.
+-}
+closeOnLayoutChange : Device -> Device -> Model -> Model
+closeOnLayoutChange previous next model =
+    if UiCommon.isSmall previous /= UiCommon.isSmall next then
+        NoMenu
+
+    else
+        model
+
+
 
 -- VIEW
 
@@ -155,6 +169,23 @@ viewFrame env model session route chromeSuppressed pageBusy updateBanner page to
         reserveBottomNav =
             View.Chrome.shouldReserveBottomNav env session route
 
+        drawerIsVisible : Bool
+        drawerIsVisible =
+            not useBottomNav
+                && View.Chrome.drawerVisible
+                    session
+                    chromeSuppressed
+                    route
+                    (isMenuOpen DrawerMenu model)
+
+        shellAttrs : List (Element.Attribute msg)
+        shellAttrs =
+            if drawerIsVisible then
+                [ Element.htmlAttribute (Html.Attributes.attribute "inert" "") ]
+
+            else
+                []
+
         chromeAttrs : List (Element.Attribute msg)
         chromeAttrs =
             if useBottomNav then
@@ -196,20 +227,28 @@ viewFrame env model session route chromeSuppressed pageBusy updateBanner page to
                     []
     in
     Element.column ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
-        (View.Chrome.topBarView env
-            session
-            route
-            chromeSuppressed
-            (isMenuOpen DrawerMenu model)
-            (toMsg MenuClicked)
-            (toMsg ProfileClicked)
-            (toMsg ThemeToggleClicked)
-            (toMsg << LanguageClicked)
-            (toMsg << NavigateClicked)
-            { profileLabel = profileLetter session, profileMenu = profileMenuEl }
-            :: updateBannerItems
-            ++ [ Element.el (pageAttrs reserveBottomNav pageBusy) page ]
-        )
+        [ Element.column
+            ([ Element.width Element.fill
+             , Element.height Element.fill
+             , UiCommon.testId "app-shell-content"
+             ]
+                ++ shellAttrs
+            )
+            (View.Chrome.topBarView env
+                session
+                route
+                chromeSuppressed
+                (isMenuOpen DrawerMenu model)
+                (toMsg MenuClicked)
+                (toMsg ProfileClicked)
+                (toMsg ThemeToggleClicked)
+                (toMsg << LanguageClicked)
+                (toMsg << NavigateClicked)
+                { profileLabel = profileLetter session, profileMenu = profileMenuEl }
+                :: updateBannerItems
+                ++ [ Element.el (pageAttrs reserveBottomNav pageBusy) page ]
+            )
+        ]
 
 
 showBottomNav : Env -> Session -> Bool -> Route -> Bool

@@ -290,6 +290,53 @@ tests =
                         [ Selector.attribute
                             (Attr.attribute "aria-label" (I18n.en TidCommonClose))
                         ]
+        , test "an open drawer makes the shell content inert" <|
+            \_ ->
+                let
+                    opened : ChromeState.Model
+                    opened =
+                        ChromeState.update ChromeState.MenuClicked ChromeState.init
+                            |> Tuple.first
+                in
+                Expect.all
+                    [ \_ ->
+                        frameFor ChromeState.init
+                            |> Query.find [ shellContentSelector ]
+                            |> Query.hasNot [ inertSelector ]
+                    , \_ ->
+                        frameFor opened
+                            |> Query.find [ shellContentSelector ]
+                            |> Query.has [ inertSelector ]
+                    , \_ ->
+                        frameFor opened
+                            |> Query.find [ drawerSelector ]
+                            |> Query.hasNot [ inertSelector ]
+                    ]
+                    ()
+        , test "phone and wider layout changes close open chrome" <|
+            \_ ->
+                let
+                    opened : ChromeState.Model
+                    opened =
+                        ChromeState.update ChromeState.MenuClicked ChromeState.init
+                            |> Tuple.first
+
+                    desktop : Device
+                    desktop =
+                        { class = Element.Desktop, orientation = Element.Landscape }
+
+                    remainsOpen : Device -> Device -> Bool
+                    remainsOpen previous next =
+                        ChromeState.closeOnLayoutChange previous next opened
+                            |> ChromeState.isDrawerOpen
+                in
+                Expect.all
+                    [ \_ -> remainsOpen tabletDevice phoneDevice |> Expect.equal False
+                    , \_ -> remainsOpen phoneDevice tabletDevice |> Expect.equal False
+                    , \_ -> remainsOpen tabletDevice desktop |> Expect.equal True
+                    , \_ -> remainsOpen tabletDevice tabletDevice |> Expect.equal True
+                    ]
+                    ()
         , test "Escape removes an open drawer" <|
             \_ ->
                 let
@@ -545,6 +592,22 @@ drawerFor session route =
         |> Query.fromHtml
 
 
+frameFor : ChromeState.Model -> Query.Single ChromeState.Msg
+frameFor model =
+    ChromeState.viewFrame
+        (envFor tabletDevice)
+        model
+        user
+        (DiaryDay Nothing Nothing)
+        False
+        False
+        Nothing
+        Element.none
+        identity
+        |> Element.layout []
+        |> Query.fromHtml
+
+
 topbarFor : Session -> Route -> Query.Single ()
 topbarFor session route =
     topbarForWith { device = phoneDevice, menuExpanded = False } session route
@@ -628,6 +691,26 @@ buttonContaining label =
 phoneDevice : Device
 phoneDevice =
     { class = Element.Phone, orientation = Element.Portrait }
+
+
+tabletDevice : Device
+tabletDevice =
+    { class = Element.Tablet, orientation = Element.Portrait }
+
+
+inertSelector : Selector
+inertSelector =
+    Selector.attribute (Attr.attribute "inert" "")
+
+
+shellContentSelector : Selector
+shellContentSelector =
+    Selector.attribute (Attr.attribute "data-testid" "app-shell-content")
+
+
+drawerSelector : Selector
+drawerSelector =
+    Selector.attribute (Attr.attribute "data-testid" "app-drawer")
 
 
 backButtonSelector : Selector

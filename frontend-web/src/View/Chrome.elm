@@ -3,6 +3,7 @@ module View.Chrome exposing
     , ScreenMeta
     , bottomNavBar
     , drawerOverlay
+    , drawerVisible
     , profileMenu
     , shouldReserveBottomNav
     , showBottomNav
@@ -692,7 +693,7 @@ drawerOverlay :
     -> (Route -> msg)
     -> List (Element.Attribute msg)
 drawerOverlay env session route chromeSuppressed drawerOpen onClose onNavigate =
-    if drawerOpen && showsAppChrome session chromeSuppressed route then
+    if drawerVisible session chromeSuppressed route drawerOpen then
         [ Element.inFront
             (Element.row [ Element.width Element.fill, Element.height Element.fill ]
                 [ drawerView env session route onClose onNavigate
@@ -703,6 +704,14 @@ drawerOverlay env session route chromeSuppressed drawerOpen onClose onNavigate =
 
     else
         []
+
+
+{-| The drawer is an overlay, so the rest of the shell must be inert while it
+renders. Both the overlay and the inert state follow this one predicate.
+-}
+drawerVisible : Session -> Bool -> Route -> Bool -> Bool
+drawerVisible session chromeSuppressed route drawerOpen =
+    drawerOpen && showsAppChrome session chromeSuppressed route
 
 
 drawerView : Env -> Session -> Route -> msg -> (Route -> msg) -> Element msg

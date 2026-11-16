@@ -5,6 +5,7 @@ port module Main exposing
     , Msg
     , PageModel
     , classifyDevice
+    , drawerFocusTarget
     , logoutStillApplies
     , main
     , normalizeChromeNavigation
@@ -170,8 +171,20 @@ update msg model =
                 route : Route
                 route =
                     Data.Route.fromUrl url
+
+                nextChrome : Chrome.Model
+                nextChrome =
+                    Chrome.close model.chrome
+
+                ( nextModel, routeCmd ) =
+                    changeRouteTo route { model | route = route, chrome = nextChrome }
             in
-            changeRouteTo route { model | route = route, chrome = Chrome.close model.chrome }
+            ( nextModel
+            , Cmd.batch
+                [ routeCmd
+                , drawerFocusCmd model.chrome nextChrome
+                ]
+            )
 
         GotSession result ->
             updateBootstrapProgress (\progress -> { progress | session = Just result }) model
@@ -214,12 +227,20 @@ update msg model =
                 nextEnv : Env
                 nextEnv =
                     reclassifyEnv width height model.env
+
+                nextChrome : Chrome.Model
+                nextChrome =
+                    Chrome.closeOnLayoutChange model.env.device nextEnv.device model.chrome
+
+                focusCmd : Cmd Msg
+                focusCmd =
+                    drawerFocusCmd model.chrome nextChrome
             in
-            if nextEnv == model.env then
+            if nextEnv == model.env && nextChrome == model.chrome then
                 ( model, Cmd.none )
 
             else
-                ( { model | env = nextEnv }, Cmd.none )
+                ( { model | env = nextEnv, chrome = nextChrome }, focusCmd )
 
         GotVersionMsg versionMsg ->
             let
@@ -384,16 +405,35 @@ stepChromeUpdate ( chrome, outMsg ) model =
 
         focusCmd : Cmd Msg
         focusCmd =
-            if Chrome.isDrawerOpen chrome && not (Chrome.isDrawerOpen model.chrome) then
-                focusElement "app-drawer-close"
-
-            else if Chrome.isDrawerOpen model.chrome && not (Chrome.isDrawerOpen chrome) then
-                focusElement "app-menu-trigger"
-
-            else
-                Cmd.none
+            drawerFocusCmd model.chrome chrome
     in
     ( nextModel, Cmd.batch [ outCmd, focusCmd ] )
+
+
+{-| Focus enters a newly opened drawer and returns to its trigger when the
+drawer closes. Browser Back and layout changes bypass Chrome messages, so every
+drawer close uses this same transition rule.
+-}
+drawerFocusTarget : Chrome.Model -> Chrome.Model -> Maybe String
+drawerFocusTarget previous next =
+    if Chrome.isDrawerOpen next && not (Chrome.isDrawerOpen previous) then
+        Just "app-drawer-close"
+
+    else if Chrome.isDrawerOpen previous && not (Chrome.isDrawerOpen next) then
+        Just "app-menu-trigger"
+
+    else
+        Nothing
+
+
+drawerFocusCmd : Chrome.Model -> Chrome.Model -> Cmd Msg
+drawerFocusCmd previous next =
+    case drawerFocusTarget previous next of
+        Just id ->
+            focusElement id
+
+        Nothing ->
+            Cmd.none
 
 
 focusElement : String -> Cmd Msg
