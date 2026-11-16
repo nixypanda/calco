@@ -2,6 +2,7 @@ module Page.Settings.Landing exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
+    , dismissTransient
     , init
     , update
     , view
@@ -33,6 +34,7 @@ import Ui.Typography as Typography
 type alias Model =
     { languageOpen : Bool
     , languageActive : Maybe Language
+    , languageMenuPlacement : UiInput.SelectMenuPlacement
     }
 
 
@@ -40,7 +42,16 @@ init : Model
 init =
     { languageOpen = False
     , languageActive = Nothing
+    , languageMenuPlacement = UiInput.MenuBelow
     }
+
+
+{-| Navigation closes page-owned transient UI before the destination changes,
+so tapping an already-active bottom-nav tab still dismisses the language menu.
+-}
+dismissTransient : Model -> Model
+dismissTransient model =
+    { model | languageOpen = False, languageActive = Nothing }
 
 
 
@@ -55,6 +66,7 @@ type Msg
     | LanguageActiveChanged (Maybe Language)
     | LanguageClicked Language
     | LanguageFocusCompleted
+    | LanguageMenuMeasured UiInput.SelectMenuPlacement
     | LogoutClicked
 
 
@@ -77,19 +89,19 @@ update msg model =
 
         LanguageDropdownToggled currentLanguage ->
             if model.languageOpen then
-                ( { model | languageOpen = False, languageActive = Nothing }
+                ( dismissTransient model
                 , Cmd.none
                 , NoOp
                 )
 
             else
                 ( { model | languageOpen = True, languageActive = Just currentLanguage }
-                , Cmd.none
+                , measureLanguageMenu
                 , NoOp
                 )
 
         LanguageDropdownClosed ->
-            ( { model | languageOpen = False, languageActive = Nothing }
+            ( dismissTransient model
             , Cmd.none
             , NoOp
             )
@@ -98,7 +110,7 @@ update msg model =
             ( { model | languageActive = language }, Cmd.none, NoOp )
 
         LanguageClicked language ->
-            ( { model | languageOpen = False, languageActive = Nothing }
+            ( dismissTransient model
             , Browser.Dom.focus (UiInput.selectDropdownTriggerId languageDropdownId)
                 |> Task.attempt (\_ -> LanguageFocusCompleted)
             , SetLanguage language
@@ -107,8 +119,53 @@ update msg model =
         LanguageFocusCompleted ->
             ( model, Cmd.none, NoOp )
 
+        LanguageMenuMeasured placement ->
+            ( { model | languageMenuPlacement = placement }, Cmd.none, NoOp )
+
         LogoutClicked ->
             ( model, Cmd.none, Logout )
+
+
+{-| Two option rows, their padding, and the menu border, plus a little
+headroom. The bottom clearance matches the Phone bottom nav.
+-}
+languageMenuEstimatedHeight : Int
+languageMenuEstimatedHeight =
+    100
+
+
+bottomChromeClearance : Int
+bottomChromeClearance =
+    56
+
+
+measureLanguageMenu : Cmd Msg
+measureLanguageMenu =
+    Task.map2
+        (\viewport trigger ->
+            let
+                spaceAbove : Float
+                spaceAbove =
+                    trigger.element.y
+
+                spaceBelow : Float
+                spaceBelow =
+                    viewport.viewport.height - (trigger.element.y + trigger.element.height)
+            in
+            if
+                spaceBelow
+                    < toFloat (languageMenuEstimatedHeight + bottomChromeClearance)
+                    && spaceAbove
+                    > spaceBelow
+            then
+                UiInput.MenuAbove
+
+            else
+                UiInput.MenuBelow
+        )
+        Browser.Dom.getViewport
+        (Browser.Dom.getElement (UiInput.selectDropdownTriggerId languageDropdownId))
+        |> Task.attempt (Result.withDefault UiInput.MenuBelow >> LanguageMenuMeasured)
 
 
 
@@ -254,6 +311,7 @@ languageControl env model =
         , active = model.languageActive
         , onActiveChanged = LanguageActiveChanged
         , onClose = LanguageDropdownClosed
+        , menuPlacement = model.languageMenuPlacement
         }
 
 

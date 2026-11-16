@@ -462,7 +462,7 @@ applyChromeOutMsg outMsg model =
             ( model, Cmd.none )
 
         Chrome.Navigate route ->
-            ( model
+            ( { model | page = Page.dismissTransient model.page }
             , Nav.pushUrl model.key
                 (Data.Route.routeToPath (normalizeChromeNavigation model.route route))
             )

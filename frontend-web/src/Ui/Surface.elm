@@ -369,11 +369,11 @@ listRow config =
         ]
         { onPress = Just config.onSelect
         , label =
-            Element.wrappedRow listRowAttrs
+            listRowContent []
                 [ Element.row listRowLabelAttrs
-                    [ listRowLeading config.leading
-                    , listRowText config.title config.subtitle
-                    ]
+                    (listRowLeading config.leading
+                        ++ [ listRowText config.title config.subtitle ]
+                    )
                 , listRowTrailing config.trailing
                 ]
         }
@@ -390,18 +390,34 @@ staticRow :
     }
     -> Element msg
 staticRow config =
-    Element.wrappedRow (listRowAttrs ++ [ testId "list-row" ])
+    listRowContent [ testId "list-row" ]
         [ Element.row listRowLabelAttrs
-            [ listRowLeading config.leading
-            , listRowText config.title config.subtitle
-            ]
+            (listRowLeading config.leading
+                ++ [ listRowText config.title config.subtitle ]
+            )
         , listRowTrailing config.trailing
         ]
 
 
+{-| `wrappedRow` moves half of its spacing into child margins and cancels it with
+an equal negative row margin, so its own padding is visually lost in this
+elm-ui version. Put the regular row inset on an outer element instead.
+-}
+listRowInset : Int
+listRowInset =
+    space16
+
+
+listRowContent : List (Element.Attribute msg) -> List (Element msg) -> Element msg
+listRowContent extraAttrs children =
+    Element.el
+        ([ Element.width Element.fill, Element.padding listRowInset ] ++ extraAttrs)
+        (Element.wrappedRow listRowAttrs children)
+
+
 listRowAttrs : List (Element.Attribute msg)
 listRowAttrs =
-    [ Element.width Element.fill, Element.padding space16, Element.spacing space12 ]
+    [ Element.width Element.fill, Element.spacing space12 ]
 
 
 listRowLabelAttrs : List (Element.Attribute msg)
@@ -429,21 +445,25 @@ listRowTrailing trailing =
         Element.row [ Element.padding space8, Element.spacing space12, Element.alignTop ] trailing
 
 
-listRowLeading : List (Element msg) -> Element msg
+{-| Rows without a leading icon must not reserve the icon slot and its gap:
+that would push their title right of stacked rows such as the Phone Language
+block.
+-}
+listRowLeading : List (Element msg) -> List (Element msg)
 listRowLeading leading =
-    Element.el
-        [ Element.width (Element.px 12)
-        , Element.paddingEach
-            { top = space2, right = 0, bottom = 0, left = 0 }
-        , Element.alignTop
-        ]
-        (case leading of
-            first :: _ ->
+    case leading of
+        first :: _ ->
+            [ Element.el
+                [ Element.width (Element.px 12)
+                , Element.paddingEach
+                    { top = space2, right = 0, bottom = 0, left = 0 }
+                , Element.alignTop
+                ]
                 first
+            ]
 
-            [] ->
-                Element.none
-        )
+        [] ->
+            []
 
 
 detailRow : Theme -> Language -> String -> Element msg -> Element msg

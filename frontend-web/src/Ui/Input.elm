@@ -1,6 +1,7 @@
 module Ui.Input exposing
     ( InputConfig
     , SearchLabel(..)
+    , SelectMenuPlacement(..)
     , checkbox
     , completionDropdown
     , completionRow
@@ -65,6 +66,14 @@ hidden label with no on-screen hint.
 type SearchLabel
     = LabelAbove String
     | LabelInside String
+
+
+{-| Which side of a select trigger the option list opens on. Pages measure the
+open trigger against the viewport so a menu near the bottom opens upward.
+-}
+type SelectMenuPlacement
+    = MenuBelow
+    | MenuAbove
 
 
 {-| elm-ui moves `Element.padding` on `Input.text` into the inner `<input>` as
@@ -584,6 +593,7 @@ selectDropdownLabelHidden :
         , active : Maybe a
         , onActiveChanged : Maybe a -> msg
         , onClose : msg
+        , menuPlacement : SelectMenuPlacement
         }
     -> Element msg
 selectDropdownLabelHidden device theme language config =
@@ -678,7 +688,6 @@ selectDropdownLabelHidden device theme language config =
         optionsElement =
             Element.el
                 [ Element.width Element.fill
-                , Element.moveDown 4
                 , Element.htmlAttribute (Html.Attributes.id listboxId)
                 , Element.htmlAttribute (Html.Attributes.attribute "role" "listbox")
                 , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
@@ -689,13 +698,30 @@ selectDropdownLabelHidden device theme language config =
                     }
                 )
 
+        menuPositionAttrs : List (Element.Attribute msg)
+        menuPositionAttrs =
+            case config.menuPlacement of
+                MenuAbove ->
+                    [ Element.above optionsElement, Element.moveUp 4 ]
+
+                MenuBelow ->
+                    [ Element.below optionsElement, Element.moveDown 4 ]
+
         triggerAnchor : List (Element.Attribute msg)
         triggerAnchor =
             [ Element.width Element.fill
-            , uiClass "ui-select-anchor"
+            , uiClass
+                ("ui-select-anchor"
+                    ++ (if config.isOpen then
+                            " ui-select-anchor--open"
+
+                        else
+                            ""
+                       )
+                )
             ]
                 ++ (if config.isOpen then
-                        [ Element.below optionsElement ]
+                        menuPositionAttrs
 
                     else
                         []

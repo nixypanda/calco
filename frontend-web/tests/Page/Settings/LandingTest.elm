@@ -213,6 +213,14 @@ tests =
                     movedView =
                         pageView env Settings moved.model
 
+                    transientlyClosed : Page.Model
+                    transientlyClosed =
+                        Page.dismissTransient moved.model
+
+                    transientlyClosedView : Query.Single Page.Msg
+                    transientlyClosedView =
+                        pageView env Settings transientlyClosed
+
                     escaped : Click
                     escaped =
                         pageKeyDown "Escape"
@@ -262,6 +270,25 @@ tests =
                         movedView
                             |> Query.find [ languageTrigger EN_US ]
                             |> Query.has [ expanded True ]
+                    , \_ ->
+                        movedView
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has
+                                [ activeDescendant
+                                    "settings-language-listbox-option-1"
+                                ]
+                    , \_ ->
+                        movedView
+                            |> Query.find
+                                [ Selector.id "settings-language-listbox-option-1" ]
+                            |> Query.has [ Selector.text (I18n.languageName HI_IN) ]
+                    , \_ ->
+                        transientlyClosedView
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has [ expanded False ]
+                    , \_ ->
+                        transientlyClosedView
+                            |> Query.hasNot [ languageOption (I18n.languageName HI_IN) ]
                     , \_ -> escaped.failure |> Expect.equal Nothing
                     , \_ -> escaped.outMsg |> Expect.equal Page.NoOutMsg
                     , \_ ->
@@ -341,6 +368,13 @@ tests =
                                     (I18n.t EN_US TidSettingsLanguageTitle)
                                 ]
                             |> Query.count (Expect.equal 1)
+                    , \_ ->
+                        desktop
+                            |> Query.find [ languageTrigger EN_US ]
+                            |> Query.has
+                                [ expanded False
+                                , Selector.text (I18n.languageName EN_US)
+                                ]
                     ]
                     ()
         ]
@@ -487,6 +521,11 @@ selectedChoice selected =
                 "false"
             )
         )
+
+
+activeDescendant : String -> Selector
+activeDescendant id =
+    Selector.attribute (Attr.attribute "aria-activedescendant" id)
 
 
 pressedChoice : Bool -> Selector

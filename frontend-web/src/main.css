@@ -28,8 +28,11 @@ body {
 }
 
 *:focus-visible {
-  /* Consistent keyboard focus belongs in one global rule. */
-  outline: 2px solid var(--ui-focus-ring, #008f87);
+  /* Consistent keyboard focus belongs in one global rule. elm-ui's static
+     `.s:focus` rule and its generated `.s.focusable:focus` rules set
+     `outline: none` with class specificity, so this global ring must stay
+     important to remain visible on elm-ui controls. */
+  outline: 2px solid var(--ui-focus-ring, #1293d8) !important;
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -41,7 +44,9 @@ body {
 
 .ui-select-backdrop.ui-select-backdrop {
   /* Doubled class: elm-ui appends its own single-class layout rules after this
-     stylesheet, so a plain selector would leave this layer in normal flow. */
+     stylesheet, so a plain selector would leave this layer in normal flow.
+     Stay below the bottom-nav root layer (z-index 20) so the nav remains
+     tappable and dismisses the menu instead of being blocked by the scrim. */
   position: fixed;
   inset: 0;
   width: 100%;
@@ -56,11 +61,18 @@ body {
   z-index: 16;
 }
 
+.ui-select-anchor.ui-select-anchor.ui-select-anchor--open {
+  /* The bottom nav is an elm-ui `inFront` layer at z-index 20. An open menu
+     must paint above it so options near the bottom of the viewport are not
+     hidden; closed triggers stay below the nav. */
+  z-index: 30;
+}
+
 .ui-unit-field:focus-within {
   /* The inner input is clipped by the field container, so the focus ring lives on
      the container instead of relying on the global :focus-visible outline. */
-  border-color: var(--ui-focus-ring, #008f87);
-  box-shadow: 0 0 0 2px rgba(0, 143, 135, 0.25);
+  border-color: var(--ui-focus-ring, #1293d8);
+  box-shadow: 0 0 0 2px rgba(18, 147, 216, 0.25);
 }
 
 /* Shared motion

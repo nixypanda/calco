@@ -18,6 +18,7 @@ module Page exposing
     , bootShell
     , bootstrapView
     , clearStore
+    , dismissTransient
     , init
     , initPreserving
     , isBusy
@@ -280,6 +281,24 @@ clearStore model =
         , waitingForToday = True
         , store = Store.reset model.store
     }
+
+
+{-| Close page-owned transient UI before a navigation command, including a
+bottom-nav tap that targets the current route. The pane keeps its loaded data.
+-}
+dismissTransient : Model -> Model
+dismissTransient model =
+    { model | panes = List.map dismissPaneTransient model.panes }
+
+
+dismissPaneTransient : Pane -> Pane
+dismissPaneTransient pane =
+    case pane of
+        SettingsLandingPane settings ->
+            SettingsLandingPane (SettingsLanding.dismissTransient settings)
+
+        _ ->
+            pane
 
 
 paneKeys : Model -> List String

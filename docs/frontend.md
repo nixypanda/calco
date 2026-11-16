@@ -650,7 +650,9 @@ were removed; their actions now live here:
   description beside a fixed-width dropdown so the Theme and Language rows
   align. The trigger is a select-only combobox: Escape, an outside click, or a
   second trigger press closes it, arrow/Home/End keys move the active option,
-  Enter/Space chooses it, and focus returns to the trigger after a choice.
+  Enter/Space chooses it, and focus returns to the trigger after a choice. The
+  menu opens below the trigger, or above it when the trigger is too close to the
+  Phone bottom nav, so the options stay uncovered.
 - **Account** provides the logout action.
 
 The normal-user top bar therefore has no theme switch, language control, or
@@ -830,6 +832,8 @@ Control conventions:
   `Ui.fullWidthDangerButton`, and icon-button helpers for actions.
 - use `Ui.input`, `Ui.passwordInput`, and `Ui.selectDropdown` for
   form fields.
+- keyboard focus uses the brand-blue 2px outline; do not replace it with the
+  teal chip-selection palette.
 - use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, and `Ui.Feedback.loading`
   for common states.
 - use `Ui.panel` when several related blocks belong under one header: the panel
