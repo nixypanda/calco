@@ -5,7 +5,9 @@ destination carried by screen metadata. The Back case drives the rendered
 control so the route context reaches the user action, not just a helper.
 -}
 
+import Chrome as ChromeState
 import Data.Auth as Auth exposing (Session(..))
+import Data.MealSlot as MealSlot
 import Data.Route exposing (Route(..))
 import Element exposing (Device)
 import Expect
@@ -130,7 +132,7 @@ tests =
                 let
                     drawer : Query.Single Route
                     drawer =
-                        drawerFor user
+                        drawerFor user (DiaryDay Nothing Nothing)
                 in
                 Expect.all
                     [ \_ ->
@@ -157,12 +159,61 @@ tests =
                         expectDrawerNavTarget drawer TidNavSettings Settings
                     ]
                     ()
+        , test "bottom nav selects the semantic destination for contextual routes" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        expectActiveTab
+                            (FoodSearch (Just date) (Just MealSlot.Lunch))
+                            TidNavSearch
+                    , \_ ->
+                        expectActiveTab (FoodSearch (Just date) Nothing) TidNavSearch
+                    , \_ ->
+                        expectActiveTab
+                            (FoodShow "food-1" (Just date) (Just MealSlot.Lunch) Nothing)
+                            TidNavSearch
+                    , \_ ->
+                        expectActiveTab
+                            (AdHocLogCreate (Just date) (Just MealSlot.Lunch))
+                            TidNavSearch
+                    , \_ ->
+                        expectActiveTab
+                            (AiLogCreate (Just date) (Just MealSlot.Lunch))
+                            TidNavSearch
+                    ]
+                    ()
+        , test "bottom nav keeps nested routes on their destination" <|
+            \_ ->
+                Expect.all
+                    [ \_ -> expectActiveTab (DiaryCalendar (Just month)) TidNavDiary
+                    , \_ -> expectActiveTab (GoalSettings (Just date) (Just month)) TidNavDiary
+                    , \_ -> expectActiveTab DiarySettings TidNavDiary
+                    , \_ -> expectActiveTab (FoodLogEntry "log-1" (Just date) Nothing) TidNavDiary
+                    , \_ -> expectActiveTab (CustomFoodShow "food-1") TidNavLibrary
+                    , \_ -> expectActiveTab (MealShow "meal-1") TidNavLibrary
+                    , \_ -> expectActiveTab SettingsApiKeys TidNavSettings
+                    , \_ -> expectActiveTab SettingsApiKeyCreate TidNavSettings
+                    ]
+                    ()
+        , test "the drawer marks the current semantic destination" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        expectActiveDrawerItem
+                            (FoodSearch (Just date) (Just MealSlot.Lunch))
+                            TidNavSearch
+                    , \_ ->
+                        expectActiveDrawerItem (CustomFoodShow "food-1") TidNavLibrary
+                    , \_ -> expectActiveDrawerItem SettingsApiKeys TidNavSettings
+                    , \_ -> expectActiveDrawerItem (DiaryDay (Just date) Nothing) TidNavDiary
+                    ]
+                    ()
         , test "an admin drawer only offers the admin destination" <|
             \_ ->
                 let
                     drawer : Query.Single Route
                     drawer =
-                        drawerFor admin
+                        drawerFor admin AdminDashboard
                 in
                 Expect.all
                     [ \_ ->
@@ -199,6 +250,117 @@ tests =
                     [ \_ -> expectBackTarget Library CustomFoodList
                     , \_ -> expectBackTarget Library MealList
                     , \_ -> expectBackTarget Settings SettingsApiKeys
+                    ]
+                    ()
+        , test "top-level search exposes the drawer menu on larger screens" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        expectMenuLeading
+                            { class = Element.Tablet, orientation = Element.Portrait }
+                            (FoodSearch (Just date) Nothing)
+                    , \_ ->
+                        expectMenuLeading
+                            { class = Element.Desktop, orientation = Element.Landscape }
+                            (FoodSearch Nothing Nothing)
+                    ]
+                    ()
+        , test "contextual search keeps Back to the dated diary" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        expectBackTargetOn
+                            { class = Element.Phone, orientation = Element.Portrait }
+                            (DiaryDay (Just date) Nothing)
+                            (FoodSearch (Just date) (Just MealSlot.Lunch))
+                    , \_ ->
+                        expectBackTargetOn
+                            { class = Element.Desktop, orientation = Element.Landscape }
+                            (DiaryDay (Just date) Nothing)
+                            (FoodSearch (Just date) (Just MealSlot.Lunch))
+                    ]
+                    ()
+        , test "the drawer trigger exposes its expanded state" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        topbarForWith
+                            { device = { class = Element.Tablet, orientation = Element.Portrait }
+                            , menuExpanded = False
+                            }
+                            user
+                            Library
+                            |> menuTrigger
+                            |> Query.has
+                                [ Selector.attribute (Attr.attribute "aria-expanded" "false") ]
+                    , \_ ->
+                        topbarForWith
+                            { device = { class = Element.Tablet, orientation = Element.Portrait }
+                            , menuExpanded = True
+                            }
+                            user
+                            Library
+                            |> menuTrigger
+                            |> Query.has
+                                [ Selector.attribute (Attr.attribute "aria-expanded" "true") ]
+                    , \_ ->
+                        topbarForWith
+                            { device = { class = Element.Tablet, orientation = Element.Portrait }
+                            , menuExpanded = False
+                            }
+                            user
+                            Library
+                            |> menuTrigger
+                            |> Query.has
+                                [ Selector.attribute (Attr.attribute "aria-controls" "app-drawer") ]
+                    ]
+                    ()
+        , test "the drawer scrim has an accessible close label" <|
+            \_ ->
+                drawerFor user (DiaryDay Nothing Nothing)
+                    |> Query.find
+                        [ Selector.attribute
+                            (Attr.attribute "data-testid" "app-drawer-scrim")
+                        ]
+                    |> Query.has
+                        [ Selector.attribute
+                            (Attr.attribute "aria-label" (I18n.en TidCommonClose))
+                        ]
+        , test "Escape removes an open drawer" <|
+            \_ ->
+                let
+                    opened : ChromeState.Model
+                    opened =
+                        ChromeState.update ChromeState.MenuClicked ChromeState.init
+                            |> Tuple.first
+
+                    openedAfterEscape : ChromeState.Model
+                    openedAfterEscape =
+                        ChromeState.update ChromeState.EscapePressed opened |> Tuple.first
+
+                    drawerVisible : ChromeState.Model -> Query.Single Route
+                    drawerVisible model =
+                        Element.el
+                            (Chrome.drawerOverlay
+                                (envFor { class = Element.Phone, orientation = Element.Portrait })
+                                user
+                                (DiaryDay Nothing Nothing)
+                                False
+                                (ChromeState.isDrawerOpen model)
+                                (DiaryDay Nothing Nothing)
+                                identity
+                            )
+                            Element.none
+                            |> Element.layout []
+                            |> Query.fromHtml
+                in
+                Expect.all
+                    [ \_ ->
+                        drawerVisible opened
+                            |> Query.has [ Selector.text (I18n.en TidNavDiary) ]
+                    , \_ ->
+                        drawerVisible openedAfterEscape
+                            |> Query.hasNot [ Selector.text (I18n.en TidNavDiary) ]
                     ]
                     ()
         , test "normal app chrome has no topbar theme switch or profile button" <|
@@ -275,28 +437,62 @@ reservesOnPhone device route =
 
 expectBackTarget : Route -> Route -> Expect.Expectation
 expectBackTarget target route =
-    Chrome.topBarView
-        { theme = Theme.forMode Theme.Light
-        , device = { class = Element.Phone, orientation = Element.Portrait }
-        , viewport = RegularViewport
-        , language = EN_US
-        }
-        user
-        route
-        False
-        (DiaryDay Nothing Nothing)
-        (DiaryDay Nothing Nothing)
-        (DiaryDay Nothing Nothing)
-        identity
-        { profileLabel = "U", profileMenu = Nothing }
-        |> Element.layout []
-        |> Query.fromHtml
-        |> Query.find
-            [ Selector.attribute (Attr.attribute "role" "button")
-            , Selector.attribute (Attr.attribute "aria-label" (I18n.en TidNavBack))
-            ]
+    expectBackTargetOn phoneDevice target route
+
+
+expectBackTargetOn : Device -> Route -> Route -> Expect.Expectation
+expectBackTargetOn device target route =
+    topbarRoutes { device = device, menuExpanded = False } user route
+        |> Query.find [ backButtonSelector ]
         |> Event.simulate Event.click
         |> Event.expect target
+
+
+expectMenuLeading : Device -> Route -> Expect.Expectation
+expectMenuLeading device route =
+    let
+        topbar : Query.Single Route
+        topbar =
+            topbarRoutes { device = device, menuExpanded = False } user route
+    in
+    Expect.all
+        [ \_ -> topbar |> Query.has [ menuTriggerSelector ]
+        , \_ -> topbar |> Query.hasNot [ backButtonSelector ]
+        ]
+        ()
+
+
+expectActiveTab : Route -> TranslationId -> Expect.Expectation
+expectActiveTab route expected =
+    let
+        nav : Query.Single Route
+        nav =
+            bottomNavFor route
+    in
+    activeDestination nav expected
+
+
+expectActiveDrawerItem : Route -> TranslationId -> Expect.Expectation
+expectActiveDrawerItem route expected =
+    let
+        drawer : Query.Single Route
+        drawer =
+            drawerFor user route
+    in
+    activeDestination drawer expected
+
+
+activeDestination : Query.Single Route -> TranslationId -> Expect.Expectation
+activeDestination root expected =
+    Expect.all
+        ((\_ -> navButton expected root |> Query.has [ ariaCurrentPage ])
+            :: List.map
+                (\label _ ->
+                    navButton label root |> Query.hasNot [ ariaCurrentPage ]
+                )
+                (List.filter (\label -> label /= expected) navLabels)
+        )
+        ()
 
 
 expectNavTarget : Query.Single Route -> TranslationId -> Route -> Expect.Expectation
@@ -324,13 +520,25 @@ navButton label root =
         root
 
 
-drawerFor : Session -> Query.Single Route
-drawerFor session =
+navLabels : List TranslationId
+navLabels =
+    [ TidNavDiary, TidNavSearch, TidNavLibrary, TidNavSettings ]
+
+
+bottomNavFor : Route -> Query.Single Route
+bottomNavFor route =
+    Chrome.bottomNavBar (envFor phoneDevice) route identity
+        |> Element.layout []
+        |> Query.fromHtml
+
+
+drawerFor : Session -> Route -> Query.Single Route
+drawerFor session route =
     Element.el
         (Chrome.drawerOverlay
-            (envFor { class = Element.Phone, orientation = Element.Portrait })
+            (envFor phoneDevice)
             session
-            (DiaryDay Nothing Nothing)
+            route
             False
             True
             (DiaryDay Nothing Nothing)
@@ -343,11 +551,21 @@ drawerFor session =
 
 topbarFor : Session -> Route -> Query.Single ()
 topbarFor session route =
+    topbarForWith { device = phoneDevice, menuExpanded = False } session route
+
+
+topbarForWith :
+    { device : Device, menuExpanded : Bool }
+    -> Session
+    -> Route
+    -> Query.Single ()
+topbarForWith options session route =
     Chrome.topBarView
-        (envFor { class = Element.Phone, orientation = Element.Portrait })
+        (envFor options.device)
         session
         route
         False
+        options.menuExpanded
         ()
         ()
         ()
@@ -355,6 +573,58 @@ topbarFor session route =
         { profileLabel = "U", profileMenu = Nothing }
         |> Element.layout []
         |> Query.fromHtml
+
+
+topbarRoutes :
+    { device : Device, menuExpanded : Bool }
+    -> Session
+    -> Route
+    -> Query.Single Route
+topbarRoutes options session route =
+    Chrome.topBarView
+        (envFor options.device)
+        session
+        route
+        False
+        options.menuExpanded
+        (DiaryDay Nothing Nothing)
+        (DiaryDay Nothing Nothing)
+        (DiaryDay Nothing Nothing)
+        identity
+        { profileLabel = "U", profileMenu = Nothing }
+        |> Element.layout []
+        |> Query.fromHtml
+
+
+menuTrigger : Query.Single msg -> Query.Single msg
+menuTrigger root =
+    Query.find [ menuTriggerSelector ] root
+
+
+phoneDevice : Device
+phoneDevice =
+    { class = Element.Phone, orientation = Element.Portrait }
+
+
+backButtonSelector : Selector
+backButtonSelector =
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.attribute (Attr.attribute "aria-label" (I18n.en TidNavBack))
+        ]
+
+
+menuTriggerSelector : Selector
+menuTriggerSelector =
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.attribute (Attr.attribute "aria-label" (I18n.en TidNavMenu))
+        ]
+
+
+ariaCurrentPage : Selector
+ariaCurrentPage =
+    Selector.attribute (Attr.attribute "aria-current" "page")
 
 
 themeSwitchSelector : Selector

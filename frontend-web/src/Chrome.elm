@@ -1,10 +1,11 @@
 module Chrome exposing
     ( Model
-    , Msg
+    , Msg(..)
     , OutMsg(..)
     , bottomNavLayoutAttrs
     , close
     , init
+    , isDrawerOpen
     , update
     , viewFrame
     )
@@ -47,6 +48,7 @@ close _ =
 type Msg
     = MenuClicked
     | DrawerClosed
+    | EscapePressed
     | ProfileClicked
     | NavigateClicked Route
     | LogoutClicked
@@ -69,6 +71,9 @@ update msg model =
             ( toggleMenu DrawerMenu model, NoOutMsg )
 
         DrawerClosed ->
+            ( NoMenu, NoOutMsg )
+
+        EscapePressed ->
             ( NoMenu, NoOutMsg )
 
         ProfileClicked ->
@@ -99,6 +104,11 @@ toggleMenu target current =
 isMenuOpen : Model -> Model -> Bool
 isMenuOpen target current =
     current == target
+
+
+isDrawerOpen : Model -> Bool
+isDrawerOpen model =
+    isMenuOpen DrawerMenu model
 
 
 
@@ -190,6 +200,7 @@ viewFrame env model session route chromeSuppressed pageBusy updateBanner page to
             session
             route
             chromeSuppressed
+            (isMenuOpen DrawerMenu model)
             (toMsg MenuClicked)
             (toMsg ProfileClicked)
             (toMsg ThemeToggleClicked)

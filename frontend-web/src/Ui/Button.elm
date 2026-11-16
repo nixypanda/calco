@@ -5,6 +5,7 @@ module Ui.Button exposing
     , SubmitState(..)
     , bottomActionButtons
     , iconButton
+    , iconButtonWithAttributes
     , submittingOrIdle
     , textButton
     , textButtonWithAttributes
@@ -339,6 +340,19 @@ iconButton :
     -> { icon : Icon, title : String, onPress : Maybe msg, tone : ButtonTone }
     -> Element msg
 iconButton device theme config =
+    iconButtonWithAttributes device theme [] config
+
+
+{-| Same as `iconButton`, with caller-supplied attributes on the actual button.
+Useful for trigger state such as `aria-expanded`, `aria-controls`, and focus ids.
+-}
+iconButtonWithAttributes :
+    Device
+    -> Theme
+    -> List (Element.Attribute msg)
+    -> { icon : Icon, title : String, onPress : Maybe msg, tone : ButtonTone }
+    -> Element msg
+iconButtonWithAttributes device theme extraAttrs config =
     let
         isActive : Bool
         isActive =
@@ -420,6 +434,7 @@ iconButton device theme config =
                             (Html.Attributes.attribute "aria-label" config.title)
                         ]
                    )
+                ++ extraAttrs
     in
     if isActive then
         Input.button (visualAttrs ++ interactiveAttrs)
@@ -428,4 +443,4 @@ iconButton device theme config =
             }
 
     else
-        Element.el visualAttrs label
+        Element.el (visualAttrs ++ extraAttrs) label

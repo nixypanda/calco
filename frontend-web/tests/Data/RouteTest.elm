@@ -1,7 +1,10 @@
 module Data.RouteTest exposing (tests)
 
+import Data.MealSlot as MealSlot
 import Data.Route as Route exposing (Route(..))
 import Expect
+import Lib.Date exposing (LocalDate)
+import Support.Fixtures as Fixtures
 import Support.Fuzz as Support
 import Test exposing (Test, describe, fuzz, test)
 import Url
@@ -28,7 +31,7 @@ tests =
                             |> Expect.equal (Route.primaryRoute route)
                     ]
                     ()
-        , test "nav destinations group diary, library, and settings routes" <|
+        , test "nav destinations group contextual and nested routes" <|
             \_ ->
                 Expect.all
                     [ \_ ->
@@ -40,6 +43,22 @@ tests =
                     , \_ ->
                         Route.primaryRoute DiarySettings
                             |> Expect.equal (DiaryDay Nothing Nothing)
+                    , \_ ->
+                        Route.primaryRoute (FoodLogEntry "log-1" (Just date) Nothing)
+                            |> Expect.equal (DiaryDay Nothing Nothing)
+                    , \_ ->
+                        Route.primaryRoute (FoodSearch (Just date) (Just MealSlot.Lunch))
+                            |> Expect.equal (FoodSearch Nothing Nothing)
+                    , \_ ->
+                        Route.primaryRoute
+                            (FoodShow "food-1" (Just date) (Just MealSlot.Lunch) Nothing)
+                            |> Expect.equal (FoodSearch Nothing Nothing)
+                    , \_ ->
+                        Route.primaryRoute (AdHocLogCreate (Just date) (Just MealSlot.Lunch))
+                            |> Expect.equal (FoodSearch Nothing Nothing)
+                    , \_ ->
+                        Route.primaryRoute (AiLogCreate (Just date) (Just MealSlot.Lunch))
+                            |> Expect.equal (FoodSearch Nothing Nothing)
                     , \_ ->
                         Route.primaryRoute CustomFoodList
                             |> Expect.equal Library
@@ -89,3 +108,8 @@ tests =
 parsePath : String -> Maybe Route
 parsePath path =
     Url.fromString ("http://localhost" ++ path) |> Maybe.map Route.fromUrl
+
+
+date : LocalDate
+date =
+    Fixtures.date "2026-07-20"

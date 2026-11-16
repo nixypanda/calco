@@ -114,11 +114,24 @@ dateQuery =
     Query.string "date" |> Query.map (Maybe.andThen LocalDate.fromString)
 
 
+{-| Canonical route for shell navigation. Every contextual variant collapses to
+the landing route of its destination, so date and meal-slot context cannot
+change which bottom-nav or drawer item is current.
+-}
 primaryRoute : Route -> Route
 primaryRoute route =
     case route of
-        FoodShow _ maybeDate maybeSlot _ ->
-            FoodSearch maybeDate maybeSlot
+        FoodSearch _ _ ->
+            FoodSearch Nothing Nothing
+
+        FoodShow _ _ _ _ ->
+            FoodSearch Nothing Nothing
+
+        AdHocLogCreate _ _ ->
+            FoodSearch Nothing Nothing
+
+        AiLogCreate _ _ ->
+            FoodSearch Nothing Nothing
 
         CustomFoodList ->
             Library
@@ -162,12 +175,6 @@ primaryRoute route =
         FoodLogEntry _ _ _ ->
             DiaryDay Nothing Nothing
 
-        AdHocLogCreate maybeDate maybeSlot ->
-            FoodSearch maybeDate maybeSlot
-
-        AiLogCreate maybeDate maybeSlot ->
-            FoodSearch maybeDate maybeSlot
-
         DiaryDay _ _ ->
             DiaryDay Nothing Nothing
 
@@ -182,9 +189,6 @@ primaryRoute route =
 
         DiarySettings ->
             DiaryDay Nothing Nothing
-
-        FoodSearch maybeDate maybeSlot ->
-            FoodSearch maybeDate maybeSlot
 
         other ->
             other

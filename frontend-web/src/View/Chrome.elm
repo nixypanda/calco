@@ -103,17 +103,18 @@ topBarView :
     -> Session
     -> Route
     -> Bool
+    -> Bool
     -> msg
     -> msg
     -> msg
     -> (Route -> msg)
     -> { profileLabel : String, profileMenu : Maybe (Element msg) }
     -> Element msg
-topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNavigate profile =
+topBarView env session route hidden menuOpen onMenu onProfile onTheme onNavigate profile =
     let
         chromeShown : Bool
         chromeShown =
-            showsAppChrome session suppressed route
+            showsAppChrome session hidden route
 
         meta : ScreenMeta
         meta =
@@ -126,7 +127,7 @@ topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNa
                     [ Element.paddingEach
                         { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 }
                     ]
-                    (themeToggle env onThemeToggle)
+                    (themeToggle env onTheme)
                 ]
 
             else
@@ -150,7 +151,7 @@ topBarView env session route suppressed onMenuClick onProfile onThemeToggle onNa
         , UiCommon.testId "app-topbar"
         ]
         (if chromeShown then
-            [ leadingButton env meta.leading onMenuClick onNavigate
+            [ leadingButton env menuOpen meta.leading onMenu onNavigate
             , Element.el [ Element.width Element.fill, Element.clip ]
                 (Typography.screenTitle env.theme meta.title)
             ]
@@ -179,6 +180,15 @@ offersThemeSwitch session =
     not (Auth.isAuthenticated session) || Auth.isAdmin session
 
 
+boolString : Bool -> String
+boolString value =
+    if value then
+        "true"
+
+    else
+        "false"
+
+
 themeToggle : Env -> msg -> Element msg
 themeToggle env onToggle =
     UiInput.toggleSwitch env.theme
@@ -188,12 +198,17 @@ themeToggle env onToggle =
         }
 
 
-leadingButton : Env -> LeadingAction -> msg -> (Route -> msg) -> Element msg
-leadingButton env leading onMenuClick onNavigate =
+leadingButton : Env -> Bool -> LeadingAction -> msg -> (Route -> msg) -> Element msg
+leadingButton env menuExpanded leading onMenuClick onNavigate =
     case leading of
         OpenMenu ->
-            Button.iconButton env.device
+            Button.iconButtonWithAttributes env.device
                 env.theme
+                [ Element.htmlAttribute (Html.Attributes.id "app-menu-trigger")
+                , Element.htmlAttribute
+                    (Html.Attributes.attribute "aria-expanded" (boolString menuExpanded))
+                , Element.htmlAttribute (Html.Attributes.attribute "aria-controls" "app-drawer")
+                ]
                 { icon = Icon.Menu
                 , title = I18n.t env.language TidNavMenu
                 , onPress = Just onMenuClick
@@ -383,7 +398,17 @@ screenMeta env session route =
 
                     Nothing ->
                         I18n.t env.language TidTitleSearchFoods
-            , leading = GoBack (DiaryDay maybeDate Nothing)
+            , leading =
+                case maybeSlot of
+                    Just _ ->
+                        GoBack (DiaryDay maybeDate Nothing)
+
+                    Nothing ->
+                        if phoneNonAdmin then
+                            ShowAppIcon
+
+                        else
+                            OpenMenu
             }
 
         FoodShow _ maybeDate maybeSlot _ ->
@@ -457,29 +482,57 @@ bottomNavBar env route onNavigate =
         [ tabButton env
             route
             onNavigate
-            (I18n.t env.language TidNavDiary)
-            (DiaryDay Nothing Nothing)
-            Icon.Home
+            { label = I18n.t env.language TidNavDiary
+            , target = DiaryDay Nothing Nothing
+            , navTarget = "diary"
+            , icon = Icon.Home
+            }
         , tabButton env
             route
             onNavigate
-            (I18n.t env.language TidNavSearch)
-            (FoodSearch Nothing Nothing)
-            Icon.Search
-        , tabButton env route onNavigate (I18n.t env.language TidNavLibrary) Library Icon.Library
-        , tabButton env route onNavigate (I18n.t env.language TidNavSettings) Settings Icon.Settings
+            { label = I18n.t env.language TidNavSearch
+            , target = FoodSearch Nothing Nothing
+            , navTarget = "search"
+            , icon = Icon.Search
+            }
+        , tabButton env
+            route
+            onNavigate
+            { label = I18n.t env.language TidNavLibrary
+            , target = Library
+            , navTarget = "library"
+            , icon = Icon.Library
+            }
+        , tabButton env
+            route
+            onNavigate
+            { label = I18n.t env.language TidNavSettings
+            , target = Settings
+            , navTarget = "settings"
+            , icon = Icon.Settings
+            }
         ]
 
 
-tabButton : Env -> Route -> (Route -> msg) -> String -> Route -> Icon -> Element msg
-tabButton env route onNavigate label target icon =
+tabButton :
+    Env
+    -> Route
+    -> (Route -> msg)
+    -> { label : String, target : Route, navTarget : String, icon : Icon }
+    -> Element msg
+tabButton env route onNavigate config =
     let
         active : Bool
         active =
-            primaryRoute route == primaryRoute target
+            primaryRoute route == primaryRoute config.target
     in
     bottomNavTab env.theme
-        { icon = icon, label = label, active = active, onPress = onNavigate target }
+        { icon = config.icon
+        , label = config.label
+        , active = active
+        , navTarget = config.navTarget
+        , onPress = onNavigate config.target
+        }
 
 
 bottomNavContainer : Theme -> List (Element msg) -> Element msg
@@ -504,7 +557,10 @@ bottomNavContainer theme items =
         items
 
 
-bottomNavTab : Theme -> { icon : Icon, label : String, active : Bool, onPress : msg } -> Element msg
+bottomNavTab :
+    Theme
+    -> { icon : Icon, label : String, active : Bool, navTarget : String, onPress : msg }
+    -> Element msg
 bottomNavTab theme config =
     let
         iconColor : Element.Color
@@ -516,12 +572,12 @@ bottomNavTab theme config =
                 theme.textMuted
     in
     Input.button
-        [ Element.width (Element.fillPortion 1)
-        , Element.height Element.fill
-        , Element.paddingEach
+        ([ Element.width (Element.fillPortion 1)
+         , Element.height Element.fill
+         , Element.paddingEach
             { top = DesignTokens.space8, right = 0, bottom = DesignTokens.space4, left = 0 }
-        , Font.color iconColor
-        , Border.widthEach
+         , Font.color iconColor
+         , Border.widthEach
             { top =
                 if config.active then
                     2
@@ -532,14 +588,31 @@ bottomNavTab theme config =
             , left = 0
             , right = 0
             }
-        , Border.color theme.brandBlue
-        ]
+         , Border.color theme.brandBlue
+         , UiCommon.dataAttribute "data-nav-target" config.navTarget
+         ]
+            ++ (if config.active then
+                    [ Element.htmlAttribute (Html.Attributes.attribute "aria-current" "page") ]
+
+                else
+                    []
+               )
+        )
         { onPress = Just config.onPress
         , label =
             Element.column [ Element.centerX, Element.centerY, Element.spacing DesignTokens.space2 ]
                 [ Element.el [ Element.centerX ]
                     (Icon.view { icon = config.icon, size = 22, color = iconColor })
-                , Element.el [ Element.centerX, Typography.caption ] (Element.text config.label)
+                , Element.el
+                    ([ Element.centerX, Typography.caption ]
+                        ++ (if config.active then
+                                [ Font.semiBold ]
+
+                            else
+                                []
+                           )
+                    )
+                    (Element.text config.label)
                 ]
         }
 
@@ -562,7 +635,7 @@ drawerOverlay env session route chromeSuppressed drawerOpen onClose onNavigate =
         [ Element.inFront
             (Element.row [ Element.width Element.fill, Element.height Element.fill ]
                 [ drawerView env session route onClose onNavigate
-                , scrimOverlay env.theme (Just onClose)
+                , scrimOverlay env.theme (I18n.t env.language TidCommonClose) (Just onClose)
                 ]
             )
         ]
@@ -575,8 +648,9 @@ drawerView : Env -> Session -> Route -> msg -> (Route -> msg) -> Element msg
 drawerView env session route onClose onNavigate =
     drawerPanel env.theme
         (Element.row [ Element.spacing DesignTokens.space8 ]
-            [ Button.iconButton env.device
+            [ Button.iconButtonWithAttributes env.device
                 env.theme
+                [ Element.htmlAttribute (Html.Attributes.id "app-drawer-close") ]
                 { icon = Icon.Menu
                 , title = I18n.t env.language TidCommonClose
                 , onPress = Just onClose
@@ -595,54 +669,79 @@ drawerItems env session route onNavigate =
         [ drawerItem env.theme
             route
             onNavigate
-            Nothing
-            (I18n.t env.language TidNavAdmin)
-            AdminDashboard
+            { icon = Nothing
+            , label = I18n.t env.language TidNavAdmin
+            , navTarget = "admin"
+            , target = AdminDashboard
+            }
         ]
 
     else
         [ drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Home)
-            (I18n.t env.language TidNavDiary)
-            (DiaryDay Nothing Nothing)
+            { icon = Just Icon.Home
+            , label = I18n.t env.language TidNavDiary
+            , navTarget = "diary"
+            , target = DiaryDay Nothing Nothing
+            }
         , drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Search)
-            (I18n.t env.language TidNavSearch)
-            (FoodSearch Nothing Nothing)
+            { icon = Just Icon.Search
+            , label = I18n.t env.language TidNavSearch
+            , navTarget = "search"
+            , target = FoodSearch Nothing Nothing
+            }
         , drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Library)
-            (I18n.t env.language TidNavLibrary)
-            Library
+            { icon = Just Icon.Library
+            , label = I18n.t env.language TidNavLibrary
+            , navTarget = "library"
+            , target = Library
+            }
         , drawerItem env.theme
             route
             onNavigate
-            (Just Icon.Settings)
-            (I18n.t env.language TidNavSettings)
-            Settings
+            { icon = Just Icon.Settings
+            , label = I18n.t env.language TidNavSettings
+            , navTarget = "settings"
+            , target = Settings
+            }
         ]
 
 
-drawerItem : Theme -> Route -> (Route -> msg) -> Maybe Icon -> String -> Route -> Element msg
-drawerItem theme current onNavigate icon label target =
+drawerItem :
+    Theme
+    -> Route
+    -> (Route -> msg)
+    -> { icon : Maybe Icon, label : String, navTarget : String, target : Route }
+    -> Element msg
+drawerItem theme current onNavigate config =
     let
         selected : Bool
         selected =
-            primaryRoute current == primaryRoute target
+            primaryRoute current == primaryRoute config.target
     in
     drawerItemButton theme
-        { icon = icon, label = label, selected = selected, onPress = onNavigate target }
+        { icon = config.icon
+        , label = config.label
+        , selected = selected
+        , navTarget = config.navTarget
+        , onPress = onNavigate config.target
+        }
 
 
-scrimOverlay : Theme -> Maybe msg -> Element msg
-scrimOverlay theme onPress =
+scrimOverlay : Theme -> String -> Maybe msg -> Element msg
+scrimOverlay theme label onPress =
     Input.button
-        [ Element.width Element.fill, Element.height Element.fill, Background.color theme.scrim ]
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Background.color theme.scrim
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" label)
+        , UiCommon.testId "app-drawer-scrim"
+        ]
         { onPress = onPress, label = Element.none }
 
 
@@ -656,13 +755,15 @@ drawerPanel theme children =
         , Background.color theme.cardSurfaceBg
         , UiCommon.uiClass "ui-card-shadow"
         , Region.navigation
+        , Element.htmlAttribute (Html.Attributes.id "app-drawer")
+        , UiCommon.testId "app-drawer"
         ]
         children
 
 
 drawerItemButton :
     Theme
-    -> { icon : Maybe Icon, label : String, selected : Bool, onPress : msg }
+    -> { icon : Maybe Icon, label : String, selected : Bool, navTarget : String, onPress : msg }
     -> Element msg
 drawerItemButton theme config =
     let
@@ -682,25 +783,41 @@ drawerItemButton theme config =
 
                 Nothing ->
                     Element.none
+
+        labelAttrs : List (Element.Attribute msg)
+        labelAttrs =
+            if config.selected then
+                [ Font.semiBold ]
+
+            else
+                []
     in
     Input.button
-        [ Element.width Element.fill
-        , Element.paddingXY DesignTokens.space16 DesignTokens.space12
-        , Border.rounded DesignTokens.radiusControl
-        , Background.color
+        ([ Element.width Element.fill
+         , Element.paddingXY DesignTokens.space16 DesignTokens.space12
+         , Border.rounded DesignTokens.radiusControl
+         , Background.color
             (if config.selected then
                 theme.drawerSelectionBg
 
              else
                 theme.cardBg
             )
-        , Font.color itemColor
-        , Font.medium
-        ]
+         , Font.color itemColor
+         , Font.medium
+         , UiCommon.dataAttribute "data-nav-target" config.navTarget
+         ]
+            ++ (if config.selected then
+                    [ Element.htmlAttribute (Html.Attributes.attribute "aria-current" "page") ]
+
+                else
+                    []
+               )
+        )
         { onPress = Just config.onPress
         , label =
             Element.row [ Element.spacing DesignTokens.space12, Element.centerY ]
-                [ iconEl, Element.text config.label ]
+                [ iconEl, Element.el labelAttrs (Element.text config.label) ]
         }
 
 

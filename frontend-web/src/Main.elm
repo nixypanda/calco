@@ -31,6 +31,7 @@ import Element.Font as Font
 import Html
 import Html.Attributes
 import I18n
+import Json.Decode as Decode
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page
 import Process
@@ -140,6 +141,8 @@ type Msg
     | LogoutCompleted Int
     | LogoutTimedOut Int
     | ScrollToTopCompleted
+    | FocusCompleted
+    | KeyPressed String
     | WindowResized Int Int
     | GotPageMsg Page.Msg
     | GotLocalCtx RawLocalCtx
@@ -195,6 +198,16 @@ update msg model =
 
         ScrollToTopCompleted ->
             ( model, Cmd.none )
+
+        FocusCompleted ->
+            ( model, Cmd.none )
+
+        KeyPressed key ->
+            if key == "Escape" then
+                stepChromeUpdate (Chrome.update Chrome.EscapePressed model.chrome) model
+
+            else
+                ( model, Cmd.none )
 
         WindowResized width height ->
             let
@@ -365,7 +378,27 @@ classifyDevice width height =
 
 stepChromeUpdate : ( Chrome.Model, Chrome.OutMsg ) -> Model -> ( Model, Cmd Msg )
 stepChromeUpdate ( chrome, outMsg ) model =
-    applyChromeOutMsg outMsg { model | chrome = chrome }
+    let
+        ( nextModel, outCmd ) =
+            applyChromeOutMsg outMsg { model | chrome = chrome }
+
+        focusCmd : Cmd Msg
+        focusCmd =
+            if Chrome.isDrawerOpen chrome && not (Chrome.isDrawerOpen model.chrome) then
+                focusElement "app-drawer-close"
+
+            else if Chrome.isDrawerOpen model.chrome && not (Chrome.isDrawerOpen chrome) then
+                focusElement "app-menu-trigger"
+
+            else
+                Cmd.none
+    in
+    ( nextModel, Cmd.batch [ outCmd, focusCmd ] )
+
+
+focusElement : String -> Cmd Msg
+focusElement id =
+    Browser.Dom.focus id |> Task.attempt (\_ -> FocusCompleted)
 
 
 applyChromeOutMsg : Chrome.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -886,6 +919,7 @@ subscriptions _ =
         , barcodeScannerEvent GotBarcodeScannerEvent
         , copyTextResult GotCopyTextResult
         , Browser.Events.onResize WindowResized
+        , Browser.Events.onKeyDown (Decode.map KeyPressed (Decode.field "key" Decode.string))
         , Sub.map GotVersionMsg Version.subscriptions
         ]
 
