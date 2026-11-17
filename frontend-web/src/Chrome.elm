@@ -7,6 +7,7 @@ module Chrome exposing
     , closeOnLayoutChange
     , init
     , isDrawerOpen
+    , isThemeMenuOpen
     , update
     , viewFrame
     )
@@ -20,6 +21,7 @@ import Lib.Text as Text
 import Translations.Util exposing (Language)
 import Ui.Common as UiCommon
 import Ui.Env exposing (Env)
+import Ui.Theme as Theme
 import View.Chrome
 
 
@@ -31,6 +33,7 @@ type Model
     = NoMenu
     | DrawerMenu
     | ProfileMenu
+    | ThemeMenu
 
 
 init : Model
@@ -54,7 +57,9 @@ type Msg
     | ProfileClicked
     | NavigateClicked Route
     | LogoutClicked
-    | ThemeToggleClicked
+    | ThemeMenuClicked
+    | ThemeMenuClosed
+    | ThemePreferenceClicked Theme.Preference
     | LanguageClicked Language
 
 
@@ -62,7 +67,7 @@ type OutMsg
     = NoOutMsg
     | Navigate Route
     | Logout
-    | ToggleTheme
+    | SetThemePreference Theme.Preference
     | SetLanguage Language
 
 
@@ -87,8 +92,20 @@ update msg model =
         LogoutClicked ->
             ( NoMenu, Logout )
 
-        ThemeToggleClicked ->
-            ( model, ToggleTheme )
+        ThemeMenuClicked ->
+            ( toggleMenu ThemeMenu model, NoOutMsg )
+
+        ThemeMenuClosed ->
+            -- A click-away queued for the old theme menu can arrive after
+            -- another click opened the profile or drawer menu.
+            if isThemeMenuOpen model then
+                ( NoMenu, NoOutMsg )
+
+            else
+                ( model, NoOutMsg )
+
+        ThemePreferenceClicked preference ->
+            ( NoMenu, SetThemePreference preference )
 
         LanguageClicked language ->
             ( NoMenu, SetLanguage language )
@@ -111,6 +128,11 @@ isMenuOpen target current =
 isDrawerOpen : Model -> Bool
 isDrawerOpen model =
     isMenuOpen DrawerMenu model
+
+
+isThemeMenuOpen : Model -> Bool
+isThemeMenuOpen model =
+    isMenuOpen ThemeMenu model
 
 
 {-| Phone and non-phone layouts use different navigation, so a menu opened in
@@ -239,9 +261,13 @@ viewFrame env model session route chromeSuppressed pageBusy updateBanner page to
                 route
                 chromeSuppressed
                 (isMenuOpen DrawerMenu model)
+                { open = isMenuOpen ThemeMenu model
+                , onToggle = toMsg ThemeMenuClicked
+                , onSelect = toMsg << ThemePreferenceClicked
+                , onClose = toMsg ThemeMenuClosed
+                }
                 (toMsg MenuClicked)
                 (toMsg ProfileClicked)
-                (toMsg ThemeToggleClicked)
                 (toMsg << LanguageClicked)
                 (toMsg << NavigateClicked)
                 { profileLabel = profileLetter session, profileMenu = profileMenuEl }

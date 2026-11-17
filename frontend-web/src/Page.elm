@@ -98,6 +98,7 @@ import Ui.Env exposing (Env)
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
+import Ui.Theme as Theme
 import Ui.Workspace as Workspace
 
 
@@ -183,7 +184,7 @@ type OutMsg
     | RequestBarcodeScanStop
     | RevokePhotoPreviewUrls (List String)
     | CopyText Int Int String
-    | ToggleTheme
+    | SetThemePreference Theme.Preference
     | SetLanguage Language
     | Logout
     | LoginSucceeded Auth.LoginSession
@@ -2943,8 +2944,8 @@ applySettingsLandingOutMsg _ outMsg =
         SettingsLanding.Navigate route ->
             ( Cmd.none, Navigate route )
 
-        SettingsLanding.ToggleTheme ->
-            ( Cmd.none, ToggleTheme )
+        SettingsLanding.SetThemePreference preference ->
+            ( Cmd.none, SetThemePreference preference )
 
         SettingsLanding.SetLanguage language ->
             ( Cmd.none, SetLanguage language )

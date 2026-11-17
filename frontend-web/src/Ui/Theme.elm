@@ -1,11 +1,17 @@
 module Ui.Theme exposing
     ( Mode(..)
+    , Preference(..)
+    , State
     , Theme
     , forMode
+    , forState
+    , fromFlags
     , light
-    , modeFromString
-    , modeToString
-    , toggle
+    , preferenceFromString
+    , preferenceToString
+    , savedPreference
+    , selectPreference
+    , setSystemPrefersDark
     )
 
 import Element exposing (Color, rgb255, rgba255)
@@ -16,8 +22,33 @@ type Mode
     | Dark
 
 
+{-| The saved choice. `System` follows the operating-system color scheme;
+`LightMode` and `DarkMode` override it. The names stay distinct from `Mode`'s
+constructors because both types live in this module.
+-}
+type Preference
+    = System
+    | LightMode
+    | DarkMode
+
+
+{-| The saved choice plus the latest operating-system scheme. The effective
+`Mode` is derived from both, so the resolved palette is never stored alongside
+the inputs it came from.
+-}
+type State
+    = State
+        { preference : Preference
+        , systemMode : Mode
+        }
+
+
+{-| A resolved palette. `mode` is the effective scheme, while `preference` is
+carried for theme controls so they do not need a second source.
+-}
 type alias Theme =
     { mode : Mode
+    , preference : Preference
     , pageBg : Color
     , cardBg : Color
     , cardSurfaceBg : Color
@@ -63,6 +94,7 @@ type alias Theme =
 light : Theme
 light =
     { mode = Light
+    , preference = LightMode
     , pageBg = rgb255 244 246 248
     , cardBg = rgb255 255 255 255
     , cardSurfaceBg = rgb255 250 253 254
@@ -118,6 +150,7 @@ light =
 dark : Theme
 dark =
     { mode = Dark
+    , preference = DarkMode
     , pageBg = rgb255 18 20 26
     , cardBg = rgb255 28 32 40
     , cardSurfaceBg = rgb255 30 38 48
@@ -160,6 +193,10 @@ dark =
     }
 
 
+{-| Build a palette with its matching preference. Application state resolves
+through `forState`; this constructor is for previews and tests, and still cannot
+produce a palette whose `mode` and `preference` disagree.
+-}
 forMode : Mode -> Theme
 forMode mode =
     case mode of
@@ -170,30 +207,100 @@ forMode mode =
             dark
 
 
-toggle : Mode -> Mode
-toggle mode =
-    case mode of
-        Light ->
-            Dark
+{-| Resolve the typed theme state into the palette that views consume. The
+palette keeps the saved preference for theme controls, while its `mode` is the
+effective light/dark choice.
+-}
+forState : State -> Theme
+forState state =
+    let
+        palette : Theme
+        palette =
+            forMode (effectiveMode state)
+    in
+    { palette | preference = savedPreference state }
 
-        Dark ->
+
+{-| Parse the two raw JavaScript flags at the transport boundary.
+-}
+fromFlags : String -> Bool -> State
+fromFlags rawPreference systemPrefersDark =
+    State
+        { preference = preferenceFromString rawPreference
+        , systemMode = modeFromBool systemPrefersDark
+        }
+
+
+savedPreference : State -> Preference
+savedPreference (State state) =
+    state.preference
+
+
+selectPreference : Preference -> State -> State
+selectPreference next (State state) =
+    State { state | preference = next }
+
+
+{-| Record the latest OS scheme even while a manual choice overrides it, so
+selecting `System` later follows the current setting without another port
+round trip.
+-}
+setSystemPrefersDark : Bool -> State -> State
+setSystemPrefersDark systemPrefersDark (State state) =
+    State { state | systemMode = modeFromBool systemPrefersDark }
+
+
+effectiveMode : State -> Mode
+effectiveMode state =
+    case savedPreference state of
+        System ->
+            systemMode state
+
+        LightMode ->
             Light
 
-
-modeToString : Mode -> String
-modeToString mode =
-    case mode of
-        Dark ->
-            "dark"
-
-        Light ->
-            "light"
+        DarkMode ->
+            Dark
 
 
-modeFromString : String -> Mode
-modeFromString s =
-    if s == "dark" then
+systemMode : State -> Mode
+systemMode (State state) =
+    state.systemMode
+
+
+modeFromBool : Bool -> Mode
+modeFromBool systemPrefersDark =
+    if systemPrefersDark then
         Dark
 
     else
         Light
+
+
+preferenceToString : Preference -> String
+preferenceToString preference =
+    case preference of
+        System ->
+            "system"
+
+        LightMode ->
+            "light"
+
+        DarkMode ->
+            "dark"
+
+
+{-| Old saved values were only "light" or "dark"; keep honoring them and treat
+anything missing or unknown as the system preference.
+-}
+preferenceFromString : String -> Preference
+preferenceFromString value =
+    case value of
+        "light" ->
+            LightMode
+
+        "dark" ->
+            DarkMode
+
+        _ ->
+            System

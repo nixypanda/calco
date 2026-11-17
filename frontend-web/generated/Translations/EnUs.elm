@@ -429,8 +429,14 @@ enUsTranslations tid =
         TidCommonTapToRefresh ->
             "Tap to refresh"
 
-        TidCommonUseDarkTheme ->
-            "Use dark theme"
+        TidCommonThemeDark ->
+            "Dark"
+
+        TidCommonThemeLight ->
+            "Light"
+
+        TidCommonThemeSystem ->
+            "System"
 
         TidCommonUsername ->
             "Username"
@@ -1381,10 +1387,10 @@ enUsTranslations tid =
             "Preferences"
 
         TidSettingsThemeDescription ->
-            "Use a darker color scheme."
+            "Choose how CalCo looks. System follows your device setting."
 
         TidSettingsThemeTitle ->
-            "Dark theme"
+            "Theme"
 
         TidSetupDescription ->
             "Create the admin account to get started."

@@ -14,6 +14,7 @@ import Expect
 import Fuzz
 import Html.Attributes as Attr
 import I18n
+import Json.Encode as Encode
 import Lib.Date exposing (LocalDate)
 import Support.Fixtures as Fixtures
 import Support.Fuzz as SupportFuzz
@@ -25,6 +26,7 @@ import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language(..))
 import Ui.Env exposing (Env, Viewport(..))
 import Ui.Theme as Theme
+import Ui.ThemeChoice as ThemeChoice
 import View.Chrome as Chrome
 
 
@@ -234,6 +236,7 @@ tests =
                         topbarForWith
                             { device = { class = Element.Tablet, orientation = Element.Portrait }
                             , menuExpanded = False
+                            , themeMenuOpen = False
                             }
                             user
                             Library
@@ -244,6 +247,7 @@ tests =
                         topbarForWith
                             { device = { class = Element.Tablet, orientation = Element.Portrait }
                             , menuExpanded = True
+                            , themeMenuOpen = False
                             }
                             user
                             Library
@@ -254,6 +258,7 @@ tests =
                         topbarForWith
                             { device = { class = Element.Tablet, orientation = Element.Portrait }
                             , menuExpanded = False
+                            , themeMenuOpen = False
                             }
                             user
                             Library
@@ -351,6 +356,122 @@ tests =
                             |> Query.hasNot [ Selector.text (I18n.en TidNavDiary) ]
                     ]
                     ()
+        , test "the theme menu closes on Escape, outside click, and preference choice" <|
+            \_ ->
+                let
+                    opened : ChromeState.Model
+                    opened =
+                        ChromeState.update ChromeState.ThemeMenuClicked ChromeState.init
+                            |> Tuple.first
+
+                    escaped : ChromeState.Model
+                    escaped =
+                        ChromeState.update ChromeState.EscapePressed opened
+                            |> Tuple.first
+
+                    dismissed : ChromeState.Model
+                    dismissed =
+                        ChromeState.update ChromeState.ThemeMenuClosed opened
+                            |> Tuple.first
+
+                    ( chosen, chosenOutMsg ) =
+                        ChromeState.update
+                            (ChromeState.ThemePreferenceClicked Theme.DarkMode)
+                            opened
+                in
+                Expect.all
+                    [ \_ -> ChromeState.isThemeMenuOpen opened |> Expect.equal True
+                    , \_ -> ChromeState.isThemeMenuOpen escaped |> Expect.equal False
+                    , \_ -> ChromeState.isThemeMenuOpen dismissed |> Expect.equal False
+                    , \_ -> ChromeState.isThemeMenuOpen chosen |> Expect.equal False
+                    , \_ ->
+                        chosenOutMsg
+                            |> Expect.equal
+                                (ChromeState.SetThemePreference Theme.DarkMode)
+                    ]
+                    ()
+        , test "a late theme-menu dismissal cannot close a newer menu" <|
+            \_ ->
+                let
+                    themeOpen : ChromeState.Model
+                    themeOpen =
+                        ChromeState.update ChromeState.ThemeMenuClicked ChromeState.init
+                            |> Tuple.first
+
+                    profileOpen : ChromeState.Model
+                    profileOpen =
+                        ChromeState.update ChromeState.ProfileClicked themeOpen
+                            |> Tuple.first
+
+                    profileAfterLateDismiss : ChromeState.Model
+                    profileAfterLateDismiss =
+                        ChromeState.update ChromeState.ThemeMenuClosed profileOpen
+                            |> Tuple.first
+
+                    drawerOpen : ChromeState.Model
+                    drawerOpen =
+                        ChromeState.update ChromeState.MenuClicked themeOpen
+                            |> Tuple.first
+
+                    drawerAfterLateDismiss : ChromeState.Model
+                    drawerAfterLateDismiss =
+                        ChromeState.update ChromeState.ThemeMenuClosed drawerOpen
+                            |> Tuple.first
+                in
+                Expect.all
+                    [ \_ -> ChromeState.isThemeMenuOpen themeOpen |> Expect.equal True
+                    , \_ ->
+                        profileOpen
+                            |> adminFrameFor
+                            |> Query.has [ Selector.text (I18n.en TidNavLogout) ]
+                    , \_ ->
+                        profileAfterLateDismiss
+                            |> adminFrameFor
+                            |> Query.has [ Selector.text (I18n.en TidNavLogout) ]
+                    , \_ ->
+                        ChromeState.isDrawerOpen drawerOpen
+                            |> Expect.equal True
+                    , \_ ->
+                        ChromeState.isDrawerOpen drawerAfterLateDismiss
+                            |> Expect.equal True
+                    ]
+                    ()
+        , test "the theme menu dismisses when focus leaves the chooser" <|
+            \_ ->
+                let
+                    topbar : Query.Single ChromeState.Msg
+                    topbar =
+                        topbarMenuMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+
+                    focusLeft : ( String, Encode.Value )
+                    focusLeft =
+                        Event.custom "focusout"
+                            (Encode.object
+                                [ ( "relatedTarget"
+                                  , Encode.object
+                                        [ ( "id", Encode.string "page-control" )
+                                        , ( "parentElement", Encode.null )
+                                        ]
+                                  )
+                                ]
+                            )
+                in
+                Expect.all
+                    [ \_ ->
+                        topbar
+                            |> Query.find [ Selector.id ThemeChoice.menuId ]
+                            |> Event.simulate focusLeft
+                            |> Event.expect ChromeState.ThemeMenuClosed
+                    , \_ ->
+                        topbar
+                            |> Query.find [ themeMenuTriggerSelector Theme.System ]
+                            |> Event.simulate focusLeft
+                            |> Event.expect ChromeState.ThemeMenuClosed
+                    ]
+                    ()
         , test "normal app chrome has no topbar theme, language, or profile controls" <|
             \_ ->
                 let
@@ -359,7 +480,9 @@ tests =
                         topbarFor user (DiaryDay Nothing Nothing)
                 in
                 Expect.all
-                    [ \_ -> topbar |> Query.hasNot [ themeSwitchSelector ]
+                    [ \_ ->
+                        topbar
+                            |> Query.hasNot [ themeMenuTriggerSelector Theme.LightMode ]
                     , \_ -> topbar |> Query.hasNot [ languageToggleSelector EN_US HI_IN ]
                     , \_ -> topbar |> Query.hasNot [ profileButtonSelector ]
                     ]
@@ -367,8 +490,12 @@ tests =
         , test "signed-out login and setup offer theme and language controls but no profile" <|
             \_ ->
                 Expect.all
-                    [ \_ -> topbarFor anonymous AuthLogin |> Query.has [ themeSwitchSelector ]
-                    , \_ -> topbarFor anonymous BootstrapSetup |> Query.has [ themeSwitchSelector ]
+                    [ \_ ->
+                        topbarFor anonymous AuthLogin
+                            |> Query.has [ themeMenuTriggerSelector Theme.LightMode ]
+                    , \_ ->
+                        topbarFor anonymous BootstrapSetup
+                            |> Query.has [ themeMenuTriggerSelector Theme.LightMode ]
                     , \_ ->
                         topbarFor anonymous AuthLogin
                             |> Query.has [ languageToggleSelector EN_US HI_IN ]
@@ -399,25 +526,115 @@ tests =
                             |> Event.expect (ChromeState.LanguageClicked EN_US)
                     ]
                     ()
-        , test "the theme switch reflects the current mode and toggles" <|
+        , test "the compact theme chooser reflects the saved preference and opens" <|
             \_ ->
                 Expect.all
                     [ \_ ->
-                        topbarMessages (envForMode Theme.Light) anonymous AuthLogin
-                            |> Query.find [ themeSwitchSelector ]
-                            |> Query.has [ ariaPressed False ]
+                        topbarMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeMenuTriggerSelector Theme.System ]
+                            |> Query.has [ ariaExpanded False ]
                     , \_ ->
-                        topbarMessages (envForMode Theme.Dark) anonymous AuthLogin
-                            |> Query.find [ themeSwitchSelector ]
-                            |> Query.has [ ariaPressed True ]
+                        topbarMessages
+                            (envForThemePreference Theme.LightMode)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeMenuTriggerSelector Theme.LightMode ]
+                            |> Query.has [ ariaExpanded False ]
                     , \_ ->
-                        topbarMessages (envForMode Theme.Light) anonymous AuthLogin
-                            |> Query.find [ themeSwitchSelector ]
+                        topbarMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.hasNot [ themeOptionSelector Theme.DarkMode ]
+                    , \_ ->
+                        topbarMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeMenuTriggerSelector Theme.System ]
+                            |> Query.has
+                                [ Selector.id ThemeChoice.compactTriggerId
+                                , Selector.attribute
+                                    (Attr.attribute "aria-controls" ThemeChoice.menuId)
+                                ]
+                    , \_ ->
+                        topbarMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeMenuTriggerSelector Theme.System ]
                             |> Event.simulate Event.click
-                            |> Event.expect ChromeState.ThemeToggleClicked
+                            |> Event.expect ChromeState.ThemeMenuClicked
+                    , \_ ->
+                        topbarMenuMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeMenuTriggerSelector Theme.System ]
+                            |> Query.has [ ariaExpanded True ]
+                    , \_ ->
+                        topbarMenuMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ Selector.id "theme-menu" ]
+                            |> Query.has
+                                [ Selector.attribute (Attr.attribute "role" "group")
+                                , Selector.attribute
+                                    (Attr.attribute "aria-label"
+                                        (I18n.en TidSettingsThemeTitle)
+                                    )
+                                ]
                     ]
                     ()
-        , test "admins keep the theme switch and profile control" <|
+        , test "the compact theme menu shows the saved choice and selects another" <|
+            \_ ->
+                Expect.all
+                    [ \_ ->
+                        topbarMenuMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeOptionSelector Theme.System ]
+                            |> Query.has [ ariaPressed True ]
+                    , \_ ->
+                        topbarMenuMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeOptionSelector Theme.LightMode ]
+                            |> Query.has [ ariaPressed False ]
+                    , \_ ->
+                        topbarMenuMessages
+                            (envForThemePreference Theme.DarkMode)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeOptionSelector Theme.DarkMode ]
+                            |> Query.has [ ariaPressed True ]
+                    , \_ ->
+                        topbarMenuMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeOptionSelector Theme.LightMode ]
+                            |> Event.simulate Event.click
+                            |> Event.expect
+                                (ChromeState.ThemePreferenceClicked Theme.LightMode)
+                    , \_ ->
+                        topbarMenuMessages
+                            (envForThemePreference Theme.System)
+                            anonymous
+                            AuthLogin
+                            |> Query.find [ themeOptionSelector Theme.DarkMode ]
+                            |> Event.simulate Event.click
+                            |> Event.expect
+                                (ChromeState.ThemePreferenceClicked Theme.DarkMode)
+                    ]
+                    ()
+        , test "admins keep the compact theme chooser and profile control" <|
             \_ ->
                 let
                     topbar : Query.Single ()
@@ -425,7 +642,7 @@ tests =
                         topbarFor admin AdminDashboard
                 in
                 Expect.all
-                    [ \_ -> topbar |> Query.has [ themeSwitchSelector ]
+                    [ \_ -> topbar |> Query.has [ themeMenuTriggerSelector Theme.LightMode ]
                     , \_ -> topbar |> Query.has [ profileButtonSelector ]
                     , \_ ->
                         topbar
@@ -495,7 +712,10 @@ expectBackTarget target route =
 
 expectBackTargetOn : Device -> Route -> Route -> Expect.Expectation
 expectBackTargetOn device target route =
-    topbarRoutes { device = device, menuExpanded = False } user route
+    topbarRoutes
+        { device = device, menuExpanded = False, themeMenuOpen = False }
+        user
+        route
         |> Query.find [ backButtonSelector ]
         |> Event.simulate Event.click
         |> Event.expect target
@@ -506,7 +726,10 @@ expectMenuLeading device route =
     let
         topbar : Query.Single Route
         topbar =
-            topbarRoutes { device = device, menuExpanded = False } user route
+            topbarRoutes
+                { device = device, menuExpanded = False, themeMenuOpen = False }
+                user
+                route
     in
     Expect.all
         [ \_ -> topbar |> Query.has [ menuTriggerSelector ]
@@ -604,11 +827,25 @@ drawerFor session route =
 
 frameFor : ChromeState.Model -> Query.Single ChromeState.Msg
 frameFor model =
+    frameForSession user (DiaryDay Nothing Nothing) model
+
+
+adminFrameFor : ChromeState.Model -> Query.Single ChromeState.Msg
+adminFrameFor model =
+    frameForSession admin AdminDashboard model
+
+
+frameForSession :
+    Session
+    -> Route
+    -> ChromeState.Model
+    -> Query.Single ChromeState.Msg
+frameForSession session route model =
     ChromeState.viewFrame
         (envFor tabletDevice)
         model
-        user
-        (DiaryDay Nothing Nothing)
+        session
+        route
         False
         False
         Nothing
@@ -620,11 +857,14 @@ frameFor model =
 
 topbarFor : Session -> Route -> Query.Single ()
 topbarFor session route =
-    topbarForWith { device = phoneDevice, menuExpanded = False } session route
+    topbarForWith
+        { device = phoneDevice, menuExpanded = False, themeMenuOpen = False }
+        session
+        route
 
 
 topbarForWith :
-    { device : Device, menuExpanded : Bool }
+    { device : Device, menuExpanded : Bool, themeMenuOpen : Bool }
     -> Session
     -> Route
     -> Query.Single ()
@@ -635,7 +875,11 @@ topbarForWith options session route =
         route
         False
         options.menuExpanded
-        ()
+        { open = options.themeMenuOpen
+        , onToggle = ()
+        , onSelect = \_ -> ()
+        , onClose = ()
+        }
         ()
         ()
         (\_ -> ())
@@ -646,7 +890,7 @@ topbarForWith options session route =
 
 
 topbarRoutes :
-    { device : Device, menuExpanded : Bool }
+    { device : Device, menuExpanded : Bool, themeMenuOpen : Bool }
     -> Session
     -> Route
     -> Query.Single Route
@@ -657,7 +901,11 @@ topbarRoutes options session route =
         route
         False
         options.menuExpanded
-        (DiaryDay Nothing Nothing)
+        { open = options.themeMenuOpen
+        , onToggle = DiaryDay Nothing Nothing
+        , onSelect = always (DiaryDay Nothing Nothing)
+        , onClose = DiaryDay Nothing Nothing
+        }
         (DiaryDay Nothing Nothing)
         (DiaryDay Nothing Nothing)
         (always (DiaryDay Nothing Nothing))
@@ -669,15 +917,29 @@ topbarRoutes options session route =
 
 topbarMessages : Env -> Session -> Route -> Query.Single ChromeState.Msg
 topbarMessages currentEnv session route =
+    topbarMessagesWithThemeMenu False currentEnv session route
+
+
+topbarMenuMessages : Env -> Session -> Route -> Query.Single ChromeState.Msg
+topbarMenuMessages currentEnv session route =
+    topbarMessagesWithThemeMenu True currentEnv session route
+
+
+topbarMessagesWithThemeMenu : Bool -> Env -> Session -> Route -> Query.Single ChromeState.Msg
+topbarMessagesWithThemeMenu themeMenuOpen currentEnv session route =
     Chrome.topBarView
         currentEnv
         session
         route
         False
         False
+        { open = themeMenuOpen
+        , onToggle = ChromeState.ThemeMenuClicked
+        , onSelect = ChromeState.ThemePreferenceClicked
+        , onClose = ChromeState.ThemeMenuClosed
+        }
         ChromeState.MenuClicked
         ChromeState.ProfileClicked
-        ChromeState.ThemeToggleClicked
         ChromeState.LanguageClicked
         ChromeState.NavigateClicked
         { profileLabel = "U", profileMenu = Nothing }
@@ -773,12 +1035,51 @@ ariaPressed active =
         )
 
 
-themeSwitchSelector : Selector
-themeSwitchSelector =
+ariaExpanded : Bool -> Selector
+ariaExpanded expanded =
+    Selector.attribute
+        (Attr.attribute "aria-expanded"
+            (if expanded then
+                "true"
+
+             else
+                "false"
+            )
+        )
+
+
+themeMenuTriggerSelector : Theme.Preference -> Selector
+themeMenuTriggerSelector preference =
     Selector.all
         [ Selector.attribute (Attr.attribute "role" "button")
-        , Selector.attribute (Attr.attribute "aria-label" (I18n.en TidCommonUseDarkTheme))
+        , Selector.attribute
+            (Attr.attribute "aria-label"
+                (I18n.en TidSettingsThemeTitle ++ ": " ++ themePreferenceLabel preference)
+            )
         ]
+
+
+themeOptionSelector : Theme.Preference -> Selector
+themeOptionSelector preference =
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.containing [ Selector.text (themePreferenceLabel preference) ]
+        ]
+
+
+themePreferenceLabel : Theme.Preference -> String
+themePreferenceLabel preference =
+    I18n.en
+        (case preference of
+            Theme.System ->
+                TidCommonThemeSystem
+
+            Theme.LightMode ->
+                TidCommonThemeLight
+
+            Theme.DarkMode ->
+                TidCommonThemeDark
+        )
 
 
 languageToggleSelector : Language -> Language -> Selector
@@ -832,9 +1133,13 @@ envForLanguage language =
     { envForPhone | language = language }
 
 
-envForMode : Theme.Mode -> Env
-envForMode mode =
-    { envForPhone | theme = Theme.forMode mode }
+envForThemePreference : Theme.Preference -> Env
+envForThemePreference preference =
+    { envForPhone
+        | theme =
+            Theme.forState
+                (Theme.fromFlags (Theme.preferenceToString preference) False)
+    }
 
 
 envForPhone : Env

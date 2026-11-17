@@ -143,7 +143,9 @@ type TranslationId
     | TidCommonSignedInAs String
     | TidCommonStatus
     | TidCommonTapToRefresh
-    | TidCommonUseDarkTheme
+    | TidCommonThemeDark
+    | TidCommonThemeLight
+    | TidCommonThemeSystem
     | TidCommonUsername
     | TidCommonUsernameRequired
     | TidCustomFoodConfirmDelete

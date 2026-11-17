@@ -14,7 +14,36 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="CalCo" />
-    <meta name="theme-color" content="#5ee0d5" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f4f6f8" />
+    <meta name="darkreader-lock" />
+    <script>
+      // Apply the saved/system scheme before CSS paints, so dark mode does not
+      // flash the light document background while Elm starts.
+      (function () {
+        var preference;
+        try {
+          preference = localStorage.getItem("themeMode");
+        } catch (_) {}
+        var prefersDark =
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var mode =
+          preference === "light"
+            ? "light"
+            : preference === "dark" || prefersDark
+              ? "dark"
+              : "light";
+        var color = mode === "dark" ? "#12141a" : "#f4f6f8";
+        document.documentElement.dataset.theme = mode;
+        document.documentElement.style.colorScheme = mode;
+        document.documentElement.style.backgroundColor = color;
+        var themeColor = document.querySelector('meta[name="theme-color"]');
+        if (themeColor) {
+          themeColor.setAttribute("content", color);
+        }
+      })();
+    </script>
     <title>CalCo</title>
   </head>
   <body>

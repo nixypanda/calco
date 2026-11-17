@@ -32,6 +32,10 @@ tests =
                     , exact Util.HI_IN TidNavSettings "सेटिंग्स"
                     , exact Util.EN_US TidCommonSave "Save"
                     , exact Util.HI_IN TidCommonSave "सहेजें"
+                    , exact Util.EN_US TidCommonThemeSystem "System"
+                    , exact Util.HI_IN TidCommonThemeDark "डार्क"
+                    , exact Util.EN_US TidSettingsThemeTitle "Theme"
+                    , exact Util.HI_IN TidSettingsThemeTitle "थीम"
                     , exact Util.EN_US
                         TidDiarySettingsSelectAtLeastOne
                         "Select at least one meal slot."

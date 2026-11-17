@@ -192,7 +192,7 @@ Before starting each numbered section below:
 ### 10. Admin flows
 
 1. Log in as `admin` and verify the admin user list loads. Verify the admin top
-   bar keeps the theme switch and profile menu, and that the menu offers
+   bar keeps the theme choice and profile menu, and that the menu offers
    language and logout but no API keys entry.
 2. Open the existing `me` user and verify username, display name, status, creation time, reset-password form, and disable action are present.
 3. Open Create User and verify empty and partial submissions show required-field errors.

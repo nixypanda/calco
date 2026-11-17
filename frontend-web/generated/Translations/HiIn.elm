@@ -429,8 +429,14 @@ hiInTranslations tid =
         TidCommonTapToRefresh ->
             "रीफ़्रेश करने के लिए टैप करें"
 
-        TidCommonUseDarkTheme ->
-            "डार्क थीम का उपयोग करें"
+        TidCommonThemeDark ->
+            "डार्क"
+
+        TidCommonThemeLight ->
+            "लाइट"
+
+        TidCommonThemeSystem ->
+            "सिस्टम"
 
         TidCommonUsername ->
             "उपयोगकर्ता नाम"
@@ -1381,10 +1387,10 @@ hiInTranslations tid =
             "प्राथमिकताएँ"
 
         TidSettingsThemeDescription ->
-            "गहरे रंग वाली स्कीम का उपयोग करें।"
+            "चुनें कि CalCo कैसा दिखे। सिस्टम आपके डिवाइस की सेटिंग का अनुसरण करता है।"
 
         TidSettingsThemeTitle ->
-            "डार्क थीम"
+            "थीम"
 
         TidSetupDescription ->
             "शुरू करने के लिए एडमिन खाता बनाएँ।"

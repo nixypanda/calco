@@ -553,11 +553,25 @@ owns the JavaScript ports for:
 
 Theme and language are loaded from `localStorage` through Elm flags and written
 back through the `persistThemeMode` and `persistLanguage` ports, so both
-preferences survive a reload. Storage access is best-effort: reads and writes
-are guarded, and unavailable storage falls back to the light theme and
-`en_US` instead of blocking startup. Boot and language changes also set the
-document `lang` attribute to `en-US` or `hi-IN` so assistive technology and
-browser language features follow the selected locale.
+preferences survive a reload. The saved theme choice is `system`, `light`, or
+`dark`; an empty or unknown value defaults to `system`, while old saved
+`light`/`dark` values stay explicit. Elm keeps that choice and the latest
+`prefers-color-scheme` value in one typed `Ui.Theme.State`. `Main.Model` stores
+only that canonical state plus the independent device, viewport, and language
+inputs; the effective palette is resolved into `Ui.Env` on demand, so a manual
+choice ignores later OS changes while still remembering the latest system
+scheme for a later `System` choice.
+Startup reads `prefers-color-scheme`, and a live `matchMedia` listener feeds
+later OS changes through the `systemThemeChanged` port. Storage access is
+best-effort: reads and writes are guarded, and unavailable storage falls back
+to the system theme and `en_US` instead of blocking startup. A small inline
+head hint applies the saved or system scheme to the document before first
+paint; CSS `prefers-color-scheme` covers a missing hint, and the static shell
+and web manifest use the light page
+background as their default. Resolved theme changes also set the document
+`color-scheme` and `theme-color` meta so browser chrome follows the app. Boot
+and language changes set the document `lang` attribute to `en-US` or `hi-IN` so
+assistive technology and browser language features follow the selected locale.
 
 The scanner uses ZXing for EAN/UPC detection and stops camera tracks when the
 scan completes or is cancelled.
@@ -638,31 +652,45 @@ landing page. The navigation shows Library for those food and meal routes.
 ### Settings
 
 `Page.Settings.Landing` renders `/settings`, the normal-user account and
-preferences landing page. The normal-user top-bar theme switch and profile menu
+preferences landing page. The normal-user top-bar theme control and profile menu
 were removed; their actions now live here:
 
 - **Access** links to API keys.
-- **Preferences** owns the persisted dark-theme switch and a compact
-  English/Hindi language dropdown. The dropdown shows the current language and
-  closes after a choice. Its selected option uses the blue/neutral field palette
-  with a check, not the teal chip fill; the keyboard-active option gets a
-  neutral fill and an inset brand-blue ring so the two states stay distinct.
-  Phones stack the Language title, description, and full-width dropdown; larger
-  screens keep the title and description beside a fixed-width dropdown so the
-  Theme and Language rows align. The trigger is a select-only combobox: Escape,
-  an outside click, or a second trigger press closes it, arrow/Home/End keys move
-  the active option, Enter/Space chooses it, and focus returns to the trigger
-  after a choice. The menu opens below the trigger, or above it when the trigger
+- **Preferences** owns the persisted System/Light/Dark theme choice and a
+  compact English/Hindi language dropdown. The theme choice is a three-button
+  group with accessible names and a check on the selected button, so the
+  pressed state does not depend on color alone; `System` follows the device
+  scheme while `Light` and `Dark` override it. The dropdown shows the current
+  language and closes after a choice. Its selected option uses the
+  blue/neutral field palette with a check, not the teal chip fill; the
+  keyboard-active option gets a neutral fill and an inset brand-blue ring so
+  the two states stay distinct. Phones stack the Theme and Language titles,
+  descriptions, and full-width controls; larger screens keep each title and
+  description beside a fixed-width control so the rows align. The trigger is a
+  select-only combobox: Escape, an outside click, or a second trigger press
+  closes it, arrow/Home/End keys move the active option, Enter/Space chooses it,
+  and focus returns to the trigger after a choice. The menu opens below the trigger, or above it when the trigger
   is too close to the Phone bottom nav, so the options stay uncovered. Placement
   uses viewport coordinates and is re-measured on resize and scroll while the
   menu is open.
 - **Account** provides the logout action.
 
-The normal-user top bar therefore has no theme switch, language control, or
+The normal-user top bar therefore has no theme choice, language control, or
 profile button. Signed-out login and setup screens keep accessible theme and
-language controls, and admins keep the theme switch plus their account menu
-because they cannot open the normal-user Settings page. The admin account menu
-offers pressed-state language choices and logout only; it has no API keys entry.
+language controls, and admins keep the theme control plus their account menu
+because they cannot open the normal-user Settings page. The top-bar theme
+control is one 44px button showing the saved choice; it opens a labelled menu
+whose selected row carries a check, so the Phone title keeps its width instead
+of competing with three 44px buttons. Escape and a theme choice return focus
+to the compact trigger, as do browser history and layout changes that close the
+menu while it still holds focus. Moving focus out with Tab or another focus
+change dismisses the menu after the browser has moved focus, so the next control
+keeps focus and no later close pulls it back to the trigger. An outside click
+dismisses the menu while still performing the page action under the pointer,
+without pulling focus back; a late click-away notice for the old menu cannot
+close a profile or drawer menu that the same click opened. The admin account
+menu offers pressed-state language choices and logout only; it has no API keys
+entry.
 Admin account-menu language choices use the accessible chip-selection palette,
 and logout uses the outline danger tone. API key list and create screens group
 under the Settings destination; admins continue to see only the admin drawer

@@ -28,6 +28,7 @@ import Ui.Input as UiInput
 import Ui.Page as UiPage
 import Ui.Surface as Surface
 import Ui.Theme as Theme
+import Ui.ThemeChoice
 import Ui.Typography as Typography
 
 
@@ -64,7 +65,7 @@ dismissTransient model =
 
 type Msg
     = ApiKeysClicked
-    | ThemeToggleClicked
+    | ThemePreferenceClicked Theme.Preference
     | LanguageDropdownToggled Language
     | LanguageDropdownClosed
     | LanguageActiveChanged (Maybe Language)
@@ -78,7 +79,7 @@ type Msg
 type OutMsg
     = NoOp
     | Navigate Route
-    | ToggleTheme
+    | SetThemePreference Theme.Preference
     | SetLanguage Language
     | Logout
 
@@ -89,8 +90,8 @@ update msg model =
         ApiKeysClicked ->
             ( model, Cmd.none, Navigate SettingsApiKeys )
 
-        ThemeToggleClicked ->
-            ( model, Cmd.none, ToggleTheme )
+        ThemePreferenceClicked preference ->
+            ( model, Cmd.none, SetThemePreference preference )
 
         LanguageDropdownToggled currentLanguage ->
             if model.languageOpen then
@@ -311,28 +312,61 @@ preferencesSection env model =
                     (I18n.t env.language TidSettingsPreferencesTitle)
                 )
         , body =
-            [ Surface.staticRow
-                { leading = []
-                , title =
-                    Typography.wrappedListItemTitle env.theme
-                        (I18n.t env.language TidSettingsThemeTitle)
-                , subtitle =
-                    [ Typography.mutedBodyParagraph env.theme
-                        (I18n.t env.language TidSettingsThemeDescription)
-                    ]
-                , trailing =
-                    [ UiInput.toggleSwitch env.theme
-                        { label = I18n.t env.language TidCommonUseDarkTheme
-                        , isActive = env.theme.mode == Theme.Dark
-                        , onToggle = ThemeToggleClicked
-                        }
-                    ]
-                }
+            [ themeRow env
             , Surface.hairline env.theme
             , languageRow env model
             ]
         , footer = Nothing
         }
+
+
+themeRow : Env -> Element Msg
+themeRow env =
+    if UiCommon.isSmall env.device then
+        Surface.staticRow
+            { leading = []
+            , title =
+                Typography.wrappedListItemTitle env.theme
+                    (I18n.t env.language TidSettingsThemeTitle)
+            , subtitle =
+                [ Typography.mutedBodyParagraph env.theme
+                    (I18n.t env.language TidSettingsThemeDescription)
+                , Element.el
+                    [ Element.width Element.fill
+                    , Element.paddingEach
+                        { top = DesignTokens.space8
+                        , right = 0
+                        , bottom = 0
+                        , left = 0
+                        }
+                    ]
+                    (themeControl env)
+                ]
+            , trailing = []
+            }
+
+    else
+        Surface.staticRow
+            { leading = []
+            , title =
+                Typography.wrappedListItemTitle env.theme
+                    (I18n.t env.language TidSettingsThemeTitle)
+            , subtitle =
+                [ Typography.mutedBodyParagraph env.theme
+                    (I18n.t env.language TidSettingsThemeDescription)
+                ]
+            , trailing =
+                [ Element.el [ Element.width (Element.px 240) ]
+                    (themeControl env)
+                ]
+            }
+
+
+themeControl : Env -> Element Msg
+themeControl env =
+    Ui.ThemeChoice.view env.theme
+        env.language
+        ThemePreferenceClicked
 
 
 languageDropdownId : String
