@@ -257,9 +257,7 @@ subscriptions model =
 view : Env -> Model -> Element Msg
 view env model =
     UiPage.pageContainer
-        [ Typography.mutedBodyParagraph env.theme
-            (I18n.t env.language TidSettingsDescription)
-        , accessSection env
+        [ accessSection env
         , preferencesSection env model
         , accountSection env
         ]
@@ -329,9 +327,7 @@ themeRow env =
                 Typography.wrappedListItemTitle env.theme
                     (I18n.t env.language TidSettingsThemeTitle)
             , subtitle =
-                [ Typography.mutedBodyParagraph env.theme
-                    (I18n.t env.language TidSettingsThemeDescription)
-                , Element.el
+                [ Element.el
                     [ Element.width Element.fill
                     , Element.paddingEach
                         { top = DesignTokens.space8
@@ -352,9 +348,7 @@ themeRow env =
                 Typography.wrappedListItemTitle env.theme
                     (I18n.t env.language TidSettingsThemeTitle)
             , subtitle =
-                [ Typography.mutedBodyParagraph env.theme
-                    (I18n.t env.language TidSettingsThemeDescription)
-                ]
+                []
             , trailing =
                 [ Element.el [ Element.width (Element.px 240) ]
                     (themeControl env)
@@ -383,9 +377,7 @@ languageRow env model =
                 Typography.wrappedListItemTitle env.theme
                     (I18n.t env.language TidSettingsLanguageTitle)
             , subtitle =
-                [ Typography.mutedBodyParagraph env.theme
-                    (I18n.t env.language TidSettingsLanguageDescription)
-                , Element.el
+                [ Element.el
                     [ Element.width Element.fill
                     , Element.paddingEach
                         { top = DesignTokens.space8
@@ -406,9 +398,7 @@ languageRow env model =
                 Typography.wrappedListItemTitle env.theme
                     (I18n.t env.language TidSettingsLanguageTitle)
             , subtitle =
-                [ Typography.mutedBodyParagraph env.theme
-                    (I18n.t env.language TidSettingsLanguageDescription)
-                ]
+                []
             , trailing =
                 [ Element.el [ Element.width (Element.px 200) ]
                     (languageControl env model)

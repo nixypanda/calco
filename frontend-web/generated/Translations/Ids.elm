@@ -458,11 +458,8 @@ type TranslationId
     | TidSettingsAccountDescription
     | TidSettingsAccountTitle
     | TidSettingsApiKeysSummary
-    | TidSettingsDescription
-    | TidSettingsLanguageDescription
     | TidSettingsLanguageTitle
     | TidSettingsPreferencesTitle
-    | TidSettingsThemeDescription
     | TidSettingsThemeTitle
     | TidSetupDescription
     | TidSetupPasswordMinLength

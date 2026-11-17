@@ -658,16 +658,15 @@ were removed; their actions now live here:
 - **Access** links to API keys.
 - **Preferences** owns the persisted System/Light/Dark theme choice and a
   compact English/Hindi language dropdown. The theme choice is a three-button
-  group with accessible names and a check on the selected button, so the
-  pressed state does not depend on color alone; `System` follows the device
-  scheme while `Light` and `Dark` override it. The dropdown shows the current
-  language and closes after a choice. Its selected option uses the
-  blue/neutral field palette with a check, not the teal chip fill; the
-  keyboard-active option gets a neutral fill and an inset brand-blue ring so
-  the two states stay distinct. Phones stack the Theme and Language titles,
-  descriptions, and full-width controls; larger screens keep each title and
-  description beside a fixed-width control so the rows align. The trigger is a
-  select-only combobox: Escape, an outside click, or a second trigger press
+  group with accessible names, `aria-pressed`, and bold text on the selected
+  button; `System` follows the device scheme while `Light` and `Dark` override
+  it. The dropdown shows the current language and closes after a choice. Its
+  selected option uses the blue/neutral field palette with a check, not the
+  teal chip fill; the keyboard-active option gets a neutral fill and an inset
+  brand-blue ring so the two states stay distinct. Phones stack the Theme and
+  Language titles above their full-width controls; larger screens keep each
+  title beside a fixed-width control so the rows align. The dropdown trigger
+  is a select-only combobox: Escape, an outside click, or a second trigger press
   closes it, arrow/Home/End keys move the active option, Enter/Space chooses it,
   and focus returns to the trigger after a choice. The menu opens below the trigger, or above it when the trigger
   is too close to the Phone bottom nav, so the options stay uncovered. Placement

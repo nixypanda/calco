@@ -1374,20 +1374,11 @@ hiInTranslations tid =
         TidSettingsApiKeysSummary ->
             "स्क्रिप्ट और टूल के लिए कुंजियाँ बनाएँ और रद्द करें।"
 
-        TidSettingsDescription ->
-            "अपना खाता, पहुँच और ऐप प्राथमिकताएँ प्रबंधित करें।"
-
-        TidSettingsLanguageDescription ->
-            "ऐप में उपयोग की जाने वाली भाषा चुनें।"
-
         TidSettingsLanguageTitle ->
             "भाषा"
 
         TidSettingsPreferencesTitle ->
             "प्राथमिकताएँ"
-
-        TidSettingsThemeDescription ->
-            "चुनें कि CalCo कैसा दिखे। सिस्टम आपके डिवाइस की सेटिंग का अनुसरण करता है।"
 
         TidSettingsThemeTitle ->
             "थीम"

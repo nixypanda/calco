@@ -100,5 +100,4 @@ sampleIds =
     , TidDiaryEditGoals
     , TidDiaryManageMealSlots
     , TidLibraryDescription
-    , TidSettingsDescription
     ]

@@ -1374,20 +1374,11 @@ enUsTranslations tid =
         TidSettingsApiKeysSummary ->
             "Create and revoke keys for scripts and tools."
 
-        TidSettingsDescription ->
-            "Manage your account, access, and app preferences."
-
-        TidSettingsLanguageDescription ->
-            "Choose the language used across the app."
-
         TidSettingsLanguageTitle ->
             "Language"
 
         TidSettingsPreferencesTitle ->
             "Preferences"
-
-        TidSettingsThemeDescription ->
-            "Choose how CalCo looks. System follows your device setting."
 
         TidSettingsThemeTitle ->
             "Theme"

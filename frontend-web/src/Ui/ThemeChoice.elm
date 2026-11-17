@@ -10,9 +10,8 @@ module Ui.ThemeChoice exposing
 
 {-| Theme preference controls. Settings uses the labelled three-button group;
 the top bar uses a single compact trigger that opens the same three choices, so
-a Phone title keeps its width. Selected choices always carry a check as a
-non-color cue, including the menu opened from the compact trigger. The Settings
-check sits above the label so it adds no horizontal pressure at narrow widths.
+a Phone title keeps its width. The compact menu marks its selected row with a
+check; the Settings buttons use bold text and a pressed state instead.
 -}
 
 import Element exposing (Element)
@@ -33,7 +32,6 @@ import Ui.DesignTokens
         , radiusCard
         , radiusPill
         , space12
-        , space2
         , space4
         , space8
         )
@@ -112,7 +110,11 @@ option theme language onSelect preference =
             )
         , Font.color foreground
         , Font.size 14
-        , Font.medium
+        , if selected then
+            Font.bold
+
+          else
+            Font.medium
         , uiClass "ui-motion ui-pressable"
         , testId ("theme-choice-" ++ Theme.preferenceToString preference)
         , Element.htmlAttribute (Html.Attributes.title label)
@@ -124,16 +126,8 @@ option theme language onSelect preference =
         ]
         { onPress = Just (onSelect preference)
         , label =
-            Element.column
-                [ Element.width Element.fill
-                , Element.spacing space2
-                , Element.centerX
-                , Element.centerY
-                ]
-                [ selectedCheck theme selected
-                , Element.el [ Element.width Element.fill, Font.center ]
-                    (Element.text label)
-                ]
+            Element.el [ Element.width Element.fill, Font.center ]
+                (Element.text label)
         }
 
 
@@ -350,27 +344,6 @@ menuOption theme language onSelect preference =
 
                 else
                     Nothing
-            }
-        )
-
-
-selectedCheck : Theme -> Bool -> Element msg
-selectedCheck theme selected =
-    Element.el
-        [ Element.width (Element.px 14)
-        , Element.height (Element.px 14)
-        , Element.alpha
-            (if selected then
-                1
-
-             else
-                0
-            )
-        ]
-        (Icon.view
-            { icon = Icon.Check
-            , size = 14
-            , color = theme.chipSelectedFg
             }
         )
 
