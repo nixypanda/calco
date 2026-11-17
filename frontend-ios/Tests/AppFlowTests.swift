@@ -1,0 +1,1528 @@
+import Foundation
+import SwiftUI
+import XCTest
+
+@testable import CalCo
+
+// MARK: - Session / feature doubles for app-flow tests
+//
+// These are deliberately narrow in-memory fakes: no URLSession, database,
+// keychain, or real credentials. They let AppFlowTests drive the real
+// SessionCoordinator and the real AppShellCoordinator composition together.
+//
+// Security invariant: a request that began under an earlier session and
+// completes after a new user has entered the app carries the old generation,
+// so its 401 must not advance the live session generation or invalidate the
+// newer session.
+
+private let appFlowBaseURL = URL(string: "https://calco.example.com")!
+private let appFlowWaitTimeout: TimeInterval = 5
+
+private final class AppFlowSessionService: SessionServicing, @unchecked Sendable {
+    typealias RestoreHandler = @Sendable () async throws -> SessionRestoreOutcome
+    typealias LoginHandler =
+        @Sendable (_ username: String, _ password: String) async throws -> LoginSession
+    typealias LogoutHandler = @Sendable () async throws -> Void
+
+    private let lock = NSLock()
+    private var restoreHandler: RestoreHandler
+    private var loginHandler: LoginHandler
+    private var logoutHandler: LogoutHandler
+    private var restoreCallCount = 0
+    private var loginCallCount = 0
+    private var logoutCallCount = 0
+
+    init(
+        restore: @escaping RestoreHandler = { .unauthenticated(.signedOut) },
+        login: @escaping LoginHandler = { _, _ in
+            throw CalCoAPIError.unauthorized(nil)
+        },
+        logout: @escaping LogoutHandler = {}
+    ) {
+        self.restoreHandler = restore
+        self.loginHandler = login
+        self.logoutHandler = logout
+    }
+
+    var restoreCalls: Int { lock.withLock { restoreCallCount } }
+    var loginCalls: Int { lock.withLock { loginCallCount } }
+    var logoutCalls: Int { lock.withLock { logoutCallCount } }
+
+    func setRestoreHandler(_ handler: @escaping RestoreHandler) {
+        lock.withLock { restoreHandler = handler }
+    }
+
+    func setLoginHandler(_ handler: @escaping LoginHandler) {
+        lock.withLock { loginHandler = handler }
+    }
+
+    func setLogoutHandler(_ handler: @escaping LogoutHandler) {
+        lock.withLock { logoutHandler = handler }
+    }
+
+    func restoreSession() async throws -> SessionRestoreOutcome {
+        let handler = lock.withLock {
+            restoreCallCount += 1
+            return restoreHandler
+        }
+        return try await handler()
+    }
+
+    func login(username: String, password: String) async throws -> LoginSession {
+        let handler = lock.withLock {
+            loginCallCount += 1
+            return loginHandler
+        }
+        return try await handler(username, password)
+    }
+
+    func logout() async throws {
+        let handler = lock.withLock {
+            logoutCallCount += 1
+            return logoutHandler
+        }
+        try await handler()
+    }
+
+    func logout(sessionCookies: [HTTPCookie]) async throws {
+        try await logout()
+    }
+}
+
+private final class AppFlowCookieClearer: SessionCookieClearing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [URL] = []
+
+    func sessionCookies(for baseURL: URL) -> [HTTPCookie] { [] }
+
+    func clearCookies(for baseURL: URL) {
+        lock.withLock { storage.append(baseURL) }
+    }
+
+    var calls: [URL] { lock.withLock { storage } }
+    var count: Int { lock.withLock { storage.count } }
+}
+
+private actor AppFlowDiaryService: DiaryServicing {
+    private var days: [LocalDiaryDate: DiaryDay] = [:]
+    private var configuredError: DiaryServiceError?
+    private var calls: [LocalDiaryDate] = []
+
+    func setDay(_ day: DiaryDay) {
+        days[day.date] = day
+    }
+
+    func setError(_ error: DiaryServiceError?) {
+        configuredError = error
+    }
+
+    func callCount(for date: LocalDiaryDate) -> Int {
+        calls.filter { $0 == date }.count
+    }
+
+    func waitForCallCount(_ date: LocalDiaryDate, atLeast count: Int) async {
+        let deadline = Date().addingTimeInterval(appFlowWaitTimeout)
+        while calls.filter({ $0 == date }).count < count, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertGreaterThanOrEqual(
+            calls.filter { $0 == date }.count,
+            count,
+            "Timed out waiting for \(count) diary fetches on \(date.formatted)"
+        )
+    }
+
+    func fetchDiary(for date: LocalDiaryDate) async throws -> DiaryDay {
+        calls.append(date)
+        if let configuredError {
+            throw configuredError
+        }
+        return days[date] ?? DiaryDay(date: date)
+    }
+}
+
+private final class AppFlowSearchService: FoodSearchServicing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var results: [FoodSearchResult]
+
+    init(results: [FoodSearchResult] = []) {
+        self.results = results
+    }
+
+    func setResults(_ results: [FoodSearchResult]) {
+        lock.withLock { self.results = results }
+    }
+
+    func searchFoods(
+        query: String,
+        scope: FoodSearchScope
+    ) async throws -> [FoodSearchResult] {
+        lock.withLock { results }
+    }
+}
+
+private actor AppFlowFoodDetailService: FoodDetailServicing {
+    private let food: FoodDetail
+    private var holdsNextLog = false
+    private var logStarted = false
+    private var logReleased = false
+    private var logContinuation: CheckedContinuation<Void, Never>?
+    private var requests: [FoodLogCreateRequest] = []
+
+    init(
+        food: FoodDetail = FoodDetail(
+            id: "food-1",
+            name: "Test Food",
+            defaultQuantity: "100",
+            defaultUnit: "g"
+        )
+    ) {
+        self.food = food
+    }
+
+    func holdNextLog() {
+        holdsNextLog = true
+        logStarted = false
+        logReleased = false
+    }
+
+    func waitForLogStart() async {
+        let deadline = Date().addingTimeInterval(appFlowWaitTimeout)
+        while !logStarted, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertTrue(logStarted, "Timed out waiting for the log request to start")
+    }
+
+    func loggedRequests() -> [FoodLogCreateRequest] {
+        requests
+    }
+
+    func releaseLog() {
+        logReleased = true
+        logContinuation?.resume()
+        logContinuation = nil
+    }
+
+    func fetchFoodDetail(id: String) async throws -> FoodDetail {
+        food
+    }
+
+    func fetchUnits() async throws -> [FoodUnit] {
+        [FoodUnit(code: "g", name: "Gram")]
+    }
+
+    func createLog(_ request: FoodLogCreateRequest) async throws -> CreatedFoodLog {
+        requests.append(request)
+        if holdsNextLog {
+            holdsNextLog = false
+            logStarted = true
+            await withCheckedContinuation { continuation in
+                if logReleased {
+                    continuation.resume()
+                } else {
+                    logContinuation = continuation
+                }
+            }
+        }
+        return CreatedFoodLog(id: "created-log", date: request.date, mealSlot: request.mealSlot)
+    }
+}
+
+private func appFlowSession(
+    id: String = "identity-a",
+    username: String = "alice",
+    role: IdentityRole = .user,
+    displayName: String = "Alice"
+) -> LoginSession {
+    LoginSession(
+        identity: AuthIdentity(id: id, username: username, role: role),
+        profile: AuthProfile(id: "profile-\(id)", displayName: displayName)
+    )
+}
+
+private func appFlowUser(
+    from session: LoginSession
+) -> AuthUser {
+    let role: AuthRole
+    switch session.identity.role {
+    case .user: role = .user
+    case .admin: role = .admin
+    case .other: role = .other
+    }
+    return AuthUser(
+        id: session.identity.id,
+        username: session.identity.username,
+        role: role,
+        displayName: session.profile?.displayName
+    )
+}
+
+@MainActor
+final class AppFlowTests: XCTestCase {
+    private let date = LocalDiaryDate(year: 2026, month: 11, day: 17)
+    private let yesterday = LocalDiaryDate(year: 2026, month: 11, day: 16)
+
+    private func makeCoordinator(
+        sessionService: AppFlowSessionService,
+        diaryService: AppFlowDiaryService,
+        cookieClearer: AppFlowCookieClearer,
+        searchService: AppFlowSearchService = AppFlowSearchService(),
+        foodDetailService: AppFlowFoodDetailService = AppFlowFoodDetailService(),
+        todayProvider: (() -> LocalDiaryDate)? = nil
+    ) -> AppShellCoordinator {
+        let client = CalCoAPIClient(baseURL: appFlowBaseURL)
+        let session = SessionCoordinator(
+            service: sessionService,
+            cookieBaseURL: appFlowBaseURL,
+            cookieClearer: cookieClearer
+        )
+        return AppShellCoordinator(
+            client: client,
+            session: session,
+            diaryService: diaryService,
+            searchService: searchService,
+            foodDetailService: foodDetailService,
+            todayProvider: todayProvider ?? { self.date }
+        )
+    }
+
+    private func waitForLoadedDiary(
+        _ coordinator: AppShellCoordinator
+    ) async {
+        await waitUntil {
+            coordinator.diaryViewModel?.state == .loaded(.idle)
+        }
+    }
+
+    private func waitUntil(
+        _ condition: @escaping @MainActor () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(appFlowWaitTimeout)
+        while Date() < deadline {
+            if condition() { return }
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertTrue(condition(), "Timed out waiting for condition")
+    }
+
+    func testAppShellInstantiates() {
+        let shell = AppShell()
+        XCTAssertNotNil(shell)
+    }
+
+    // MARK: - Compact pane plan
+
+    func testCompactPlanUsesStableDiaryRootForInitialState() {
+        let state = NavigationState(date: date)
+
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .compact),
+            .stack(root: .diary, path: [])
+        )
+    }
+
+    func testCompactPlanAddsOnePathEntryPerPushedPane() {
+        var state = NavigationState(date: date)
+
+        state.startLogging(mealSlot: .lunch)
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .compact),
+            .stack(root: .diary, path: [.foodSearch])
+        )
+
+        state.pushFoodDetail(foodID: "food-1")
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .compact),
+            .stack(root: .diary, path: [
+                .foodSearch,
+                .foodDetail(foodID: "food-1"),
+            ])
+        )
+
+        state.pushFoodLog(foodID: "food-1")
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .compact),
+            .stack(root: .diary, path: [
+                .foodSearch,
+                .foodDetail(foodID: "food-1"),
+                .foodLog(foodID: "food-1"),
+            ])
+        )
+    }
+
+    // MARK: - Expanded pane plan
+
+    func testExpandedPlanUsesDiaryAsFullWidthPrimaryWithNoInspector() {
+        let state = NavigationState(date: date)
+
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .expanded),
+            .split(primary: .diary, inspector: nil)
+        )
+    }
+
+    func testExpandedPlanUsesSearchAsFullWidthPrimaryWithNoEmptyDetail() {
+        var state = NavigationState(date: date)
+        state.startLogging(mealSlot: .lunch)
+
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .expanded),
+            .split(primary: .foodSearch, inspector: nil)
+        )
+    }
+
+    func testExpandedPlanShowsSelectedFoodOnlyAsContextualInspector() {
+        var state = NavigationState(date: date)
+        state.startLogging(mealSlot: .lunch)
+        state.pushFoodDetail(foodID: "food-1")
+
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .expanded),
+            .split(
+                primary: .foodSearch,
+                inspector: .foodDetail(foodID: "food-1")
+            )
+        )
+    }
+
+    func testExpandedPlanReturnsToFullWidthSearchAfterClosingDetail() {
+        var state = NavigationState(date: date)
+        state.startLogging(mealSlot: .lunch)
+        state.pushFoodDetail(foodID: "food-1")
+
+        state.back()
+
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .expanded),
+            .split(primary: .foodSearch, inspector: nil)
+        )
+    }
+
+    func testExpandedPlanNeverPlacesDiaryAndSearchInTwoColumns() {
+        var state = NavigationState(date: date)
+
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .expanded),
+            .split(primary: .diary, inspector: nil)
+        )
+
+        state.startLogging(mealSlot: .lunch)
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: state, layout: .expanded),
+            .split(primary: .foodSearch, inspector: nil)
+        )
+    }
+
+    func testSidebarSectionsContainOnlyTopLevelNavigationDestinations() {
+        XCTAssertEqual(AppShellPanePlan.sidebarSections, [.diary, .search])
+    }
+
+    func testPanePlanDoesNotMutateDateOrMealSlotContext() {
+        var state = NavigationState(date: date)
+        state.startLogging(mealSlot: .lateNightSnack)
+        state.pushFoodDetail(foodID: "food-1")
+
+        _ = AppShellPanePlan.plan(for: state, layout: .compact)
+        _ = AppShellPanePlan.plan(for: state, layout: .expanded)
+
+        XCTAssertEqual(state.selectedDate, date)
+        XCTAssertEqual(state.mealSlot, .lateNightSnack)
+    }
+
+    // MARK: - Coordinator layout transitions
+
+    func testShowSearchClosesDetailAndKeepsDateAndMealSlot() {
+        let coordinator = AppShellCoordinator()
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+
+        coordinator.showSearch()
+
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary, .foodSearch])
+        XCTAssertEqual(coordinator.navigationState.selectedDate, date)
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .lunch)
+    }
+
+    func testShowDiaryClearsPushedPanesAndKeepsDateAndMealSlot() {
+        let coordinator = AppShellCoordinator()
+        coordinator.startLogging(slot: .dinner, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .dinner)
+
+        coordinator.showDiary()
+
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary])
+        XCTAssertEqual(coordinator.navigationState.selectedDate, date)
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .dinner)
+    }
+
+    func testOpeningAnotherFoodReplacesContextualDetail() {
+        let coordinator = AppShellCoordinator()
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+
+        coordinator.openFoodDetail("food-2", date: date, mealSlot: .lunch)
+
+        XCTAssertEqual(
+            coordinator.navigationState.paneStack,
+            [.diary, .foodSearch, .foodDetail(foodID: "food-2")]
+        )
+        XCTAssertEqual(coordinator.navigationState.selectedDate, date)
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .lunch)
+    }
+
+    func testBackFromDetailMovesInspectorPlanBackToSearch() {
+        let coordinator = AppShellCoordinator()
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .expanded),
+            .split(
+                primary: .foodSearch,
+                inspector: .foodDetail(foodID: "food-1")
+            )
+        )
+
+        coordinator.back()
+
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .expanded),
+            .split(primary: .foodSearch, inspector: nil)
+        )
+    }
+
+    // MARK: - Compact back and log completion regressions
+
+    func testCompactBackFromDetailReturnsToSearchThenDiaryWithoutBlankRoot() {
+        let coordinator = AppShellCoordinator()
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [
+                .foodSearch,
+                .foodDetail(foodID: "food-1"),
+            ])
+        )
+
+        coordinator.back()
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [.foodSearch])
+        )
+
+        coordinator.back()
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [])
+        )
+    }
+
+    func testLogSuccessDismissesDetailImmediatelyAndKeepsContext() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: AppFlowDiaryService(),
+            cookieClearer: AppFlowCookieClearer()
+        )
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let detail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        await detail.load()
+        detail.amount = "100"
+        detail.unit = "g"
+        detail.mealSlot = .lunch
+
+        await detail.submit()
+
+        XCTAssertEqual(detail.submitState, .succeeded)
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary])
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [])
+        )
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .expanded),
+            .split(primary: .diary, inspector: nil)
+        )
+        XCTAssertEqual(coordinator.navigationState.selectedDate, date)
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .lunch)
+    }
+
+    // MARK: - Session ownership
+
+    func testPreSignedInSessionInjectionInstallsFeatureGraphOnInit() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "a-log", mealSlot: .lunch, title: "Alice lunch")]
+        ))
+        let session = SessionCoordinator(
+            service: sessionService,
+            cookieBaseURL: appFlowBaseURL,
+            cookieClearer: AppFlowCookieClearer()
+        )
+
+        await session.restore()
+        let user = appFlowUser(from: userSession)
+        XCTAssertEqual(session.phase, .signedIn(user))
+
+        let coordinator = AppShellCoordinator(
+            client: CalCoAPIClient(baseURL: appFlowBaseURL),
+            session: session,
+            diaryService: diaryService,
+            searchService: AppFlowSearchService(),
+            foodDetailService: AppFlowFoodDetailService(),
+            todayProvider: { self.date }
+        )
+
+        XCTAssertEqual(coordinator.phase, .signedIn(user))
+        XCTAssertEqual(coordinator.currentUser, user)
+        XCTAssertNotNil(coordinator.diaryViewModel)
+        XCTAssertNotNil(coordinator.searchViewModel)
+        await waitForLoadedDiary(coordinator)
+        XCTAssertEqual(coordinator.diaryViewModel?.logs.map(\.id), ["a-log"])
+    }
+
+    func testStaleFoodLogSuccessAfterUserBLoginCannotReachUserBGraph() async {
+        let firstSession = appFlowSession()
+        let secondSession = appFlowSession(
+            id: "identity-b",
+            username: "bob",
+            displayName: "Bob"
+        )
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(firstSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "a-log", mealSlot: .lunch, title: "Alice lunch")]
+        ))
+        let foodDetailService = AppFlowFoodDetailService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            foodDetailService: foodDetailService
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let firstDiary = coordinator.diaryViewModel else {
+            return XCTFail("Expected the first user's diary")
+        }
+
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let staleDetail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        await staleDetail.load()
+        staleDetail.amount = "100"
+        staleDetail.unit = "g"
+        staleDetail.mealSlot = .lunch
+
+        await foodDetailService.holdNextLog()
+        let staleSubmit = Task { await staleDetail.submit() }
+        await foodDetailService.waitForLogStart()
+        XCTAssertEqual(staleDetail.submitState, .submitting)
+
+        let secondUser = appFlowUser(from: secondSession)
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "b-log", mealSlot: .lunch, title: "Bob lunch")]
+        ))
+        sessionService.setLoginHandler { _, _ in secondSession }
+        let login = coordinator.loginViewModel
+        login.username = "bob"
+        login.password = "pw"
+        await login.submit()
+
+        XCTAssertEqual(coordinator.phase, .signedIn(secondUser))
+        await waitForLoadedDiary(coordinator)
+        guard let secondDiary = coordinator.diaryViewModel else {
+            return XCTFail("Expected the second user's diary")
+        }
+        XCTAssertFalse(firstDiary === secondDiary)
+        XCTAssertEqual(coordinator.currentUser, secondUser)
+        XCTAssertNil(coordinator.foodDetailViewModel(for: "food-1"))
+        XCTAssertTrue(firstDiary.logs.isEmpty)
+
+        coordinator.startLogging(slot: .dinner, date: date)
+        coordinator.openFoodDetail("food-b", date: date, mealSlot: .dinner)
+        let secondUserPaneStack = coordinator.navigationState.paneStack
+        XCTAssertNotNil(coordinator.foodDetailViewModel(for: "food-b"))
+        let fetchesBeforeStaleSuccess = await diaryService.callCount(for: date)
+
+        await foodDetailService.releaseLog()
+        await staleSubmit.value
+        XCTAssertEqual(staleDetail.submitState, .succeeded)
+        for _ in 0..<20 { await Task.yield() }
+
+        let fetchesAfterStaleSuccess = await diaryService.callCount(for: date)
+        XCTAssertEqual(fetchesAfterStaleSuccess, fetchesBeforeStaleSuccess)
+        XCTAssertEqual(coordinator.phase, .signedIn(secondUser))
+        XCTAssertEqual(coordinator.screen, .main(secondUser))
+        XCTAssertEqual(coordinator.currentUser, secondUser)
+        XCTAssertTrue(coordinator.diaryViewModel === secondDiary)
+        XCTAssertEqual(secondDiary.logs.map(\.id), ["b-log"])
+        XCTAssertEqual(coordinator.navigationState.paneStack, secondUserPaneStack)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, date)
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .dinner)
+        XCTAssertNil(coordinator.foodDetailViewModel(for: "food-1"))
+        XCTAssertNotNil(coordinator.foodDetailViewModel(for: "food-b"))
+    }
+
+    func testOfflineSignOutClearsFeatureStateAndCookies() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let cookies = AppFlowCookieClearer()
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "a-log", mealSlot: .lunch, title: "Alice lunch")],
+            goal: DiaryGoalTargets(calorieTarget: 2_000)
+        ))
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: cookies
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+
+        XCTAssertEqual(coordinator.phase, .signedIn(appFlowUser(from: userSession)))
+        XCTAssertEqual(coordinator.currentUser, appFlowUser(from: userSession))
+        XCTAssertEqual(coordinator.diaryViewModel?.logs.map(\.id), ["a-log"])
+
+        sessionService.setLogoutHandler {
+            throw CalCoAPIError.network("offline")
+        }
+        let result = await coordinator.signOut()
+
+        XCTAssertEqual(result, .completedWithServerFailure(.networkUnavailable))
+        XCTAssertEqual(coordinator.phase, .signedOut(.signedOut))
+        XCTAssertEqual(coordinator.screen, .login)
+        XCTAssertNil(coordinator.currentUser)
+        XCTAssertNil(coordinator.diaryViewModel)
+        XCTAssertNil(coordinator.searchViewModel)
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary])
+        XCTAssertEqual(sessionService.logoutCalls, 1)
+        XCTAssertEqual(cookies.calls, [appFlowBaseURL])
+    }
+
+    func testDelayedUnauthorizedFromPreviousUserCannotInvalidateNewSession() async {
+        let firstSession = appFlowSession()
+        let secondSession = appFlowSession(
+            id: "identity-b",
+            username: "bob",
+            displayName: "Bob"
+        )
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(firstSession) }
+        )
+        let cookies = AppFlowCookieClearer()
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "a-log", mealSlot: .lunch, title: "Alice lunch")]
+        ))
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: cookies
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let firstDiary = coordinator.diaryViewModel else {
+            return XCTFail("Expected the first user's diary")
+        }
+
+        sessionService.setLoginHandler { _, _ in secondSession }
+        let login = coordinator.loginViewModel
+        login.username = "bob"
+        login.password = "pw"
+        await login.submit()
+
+        let secondUser = appFlowUser(from: secondSession)
+        XCTAssertEqual(coordinator.phase, .signedIn(secondUser))
+        await waitForLoadedDiary(coordinator)
+        guard let secondDiary = coordinator.diaryViewModel else {
+            return XCTFail("Expected the second user's diary")
+        }
+        XCTAssertFalse(
+            firstDiary === secondDiary,
+            "A new user must get a new diary view model"
+        )
+
+        let generationBeforeStale401 = coordinator.session.sessionGeneration
+        let cookiesBeforeStale401 = cookies.count
+        await diaryService.setError(.unauthorized)
+
+        await firstDiary.refresh()
+
+        XCTAssertEqual(
+            coordinator.session.sessionGeneration,
+            generationBeforeStale401,
+            "A stale 401 must not advance the live session generation"
+        )
+        XCTAssertEqual(coordinator.phase, .signedIn(secondUser))
+        XCTAssertEqual(coordinator.screen, .main(secondUser))
+        XCTAssertTrue(coordinator.diaryViewModel === secondDiary)
+        XCTAssertEqual(coordinator.currentUser, secondUser)
+        XCTAssertEqual(cookies.count, cookiesBeforeStale401)
+    }
+
+    func testCurrentDiary401SignsOutAndClearsCookies() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let cookies = AppFlowCookieClearer()
+        let diaryService = AppFlowDiaryService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: cookies
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+
+        await diaryService.setError(.unauthorized)
+        await diary.refresh()
+
+        XCTAssertEqual(coordinator.phase, .signedOut(.expired))
+        XCTAssertEqual(coordinator.screen, .login)
+        XCTAssertNil(coordinator.currentUser)
+        XCTAssertNil(coordinator.diaryViewModel)
+        XCTAssertNil(coordinator.searchViewModel)
+        XCTAssertEqual(cookies.calls, [appFlowBaseURL])
+    }
+
+    func testAdminSignInIsRejectedThroughSessionCoordinator() async {
+        let adminSession = appFlowSession(
+            id: "identity-admin",
+            username: "root",
+            role: .admin,
+            displayName: "Root"
+        )
+        let sessionService = AppFlowSessionService(
+            login: { _, _ in adminSession }
+        )
+        let cookies = AppFlowCookieClearer()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: AppFlowDiaryService(),
+            cookieClearer: cookies
+        )
+        let admin = appFlowUser(from: adminSession)
+
+        let login = coordinator.loginViewModel
+        login.username = "root"
+        login.password = "pw"
+        await login.submit()
+
+        XCTAssertEqual(login.unsupportedAdmin, admin)
+        XCTAssertEqual(coordinator.session.phase, .unsupportedAccount(admin))
+        XCTAssertEqual(coordinator.screen, .login)
+        XCTAssertNil(coordinator.currentUser)
+        XCTAssertNil(coordinator.diaryViewModel)
+        XCTAssertNil(coordinator.searchViewModel)
+        XCTAssertEqual(cookies.count, 2, "Pre-login cleanup plus rejected-role cleanup")
+    }
+
+    func testRestoreOfflineIsRetryableAndNotSignedOut() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { throw CalCoAPIError.network("offline") }
+        )
+        let cookies = AppFlowCookieClearer()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: AppFlowDiaryService(),
+            cookieClearer: cookies
+        )
+
+        await coordinator.start()
+
+        XCTAssertEqual(
+            coordinator.session.phase,
+            .restoreFailed(.networkUnavailable)
+        )
+        XCTAssertEqual(
+            coordinator.screen,
+            .restoreFailed(.networkUnavailable)
+        )
+        XCTAssertNil(coordinator.currentUser)
+        XCTAssertNil(coordinator.diaryViewModel)
+        XCTAssertEqual(
+            cookies.count,
+            0,
+            "A transport failure must not clear a possibly valid cookie"
+        )
+
+        sessionService.setRestoreHandler { .authenticated(userSession) }
+        await coordinator.retryRestore()
+
+        XCTAssertEqual(coordinator.phase, .signedIn(appFlowUser(from: userSession)))
+        await waitForLoadedDiary(coordinator)
+        XCTAssertNotNil(coordinator.diaryViewModel)
+        XCTAssertEqual(cookies.count, 0)
+    }
+
+    func testLoginTransportFailureIsRetryable() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            login: { _, _ in throw CalCoAPIError.network("offline") }
+        )
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: AppFlowDiaryService(),
+            cookieClearer: AppFlowCookieClearer()
+        )
+        let login = coordinator.loginViewModel
+        login.username = "alice"
+        login.password = "pw"
+
+        await login.submit()
+
+        XCTAssertEqual(
+            login.phase,
+            .failed(.authentication(.networkUnavailable))
+        )
+        XCTAssertEqual(coordinator.screen, .login)
+        XCTAssertNil(coordinator.diaryViewModel)
+
+        sessionService.setLoginHandler { _, _ in userSession }
+        await login.submit()
+
+        XCTAssertEqual(login.phase, .editing)
+        XCTAssertEqual(coordinator.phase, .signedIn(appFlowUser(from: userSession)))
+        await waitForLoadedDiary(coordinator)
+        XCTAssertNotNil(coordinator.diaryViewModel)
+    }
+
+    func testAppShellScreenFailsClosedWithoutConfiguration() {
+        let user = appFlowUser(from: appFlowSession())
+
+        XCTAssertEqual(
+            AppShellScreen(
+                phase: .signedIn(user),
+                configurationError: "No API URL"
+            ),
+            .configurationError("No API URL")
+        )
+    }
+
+    // MARK: - Log success and diary content lifecycle
+
+    func testLogSuccessImmediatelyReturnsToLoadedDiaryAndRefreshesContent() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch")],
+            goal: DiaryGoalTargets(calorieTarget: 2_000)
+        ))
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer()
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        XCTAssertEqual(diary.logs.map(\.id), ["old-log"])
+
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let detail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        await detail.load()
+        XCTAssertEqual(detail.loadState, .loaded)
+        detail.amount = "100"
+        detail.unit = "g"
+        detail.mealSlot = .lunch
+
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [
+                DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch"),
+                DiaryLog(id: "new-log", mealSlot: .lunch, title: "New lunch"),
+            ],
+            goal: DiaryGoalTargets(calorieTarget: 2_000)
+        ))
+
+        await detail.submit()
+        XCTAssertEqual(detail.submitState, .succeeded)
+
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary])
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [])
+        )
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .expanded),
+            .split(primary: .diary, inspector: nil)
+        )
+        XCTAssertEqual(coordinator.navigationState.selectedDate, date)
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .lunch)
+        XCTAssertTrue(
+            coordinator.diaryViewModel === diary,
+            "Log success must keep the same diary view model"
+        )
+        XCTAssertEqual(diary.state, .loaded(.idle))
+        XCTAssertFalse(
+            diary.logs.isEmpty,
+            "The diary must show loaded/refreshing content, never a blank root"
+        )
+
+        await waitUntil {
+            diary.logs.map(\.id).sorted() == ["new-log", "old-log"]
+        }
+        XCTAssertEqual(diary.logs.map(\.id).sorted(), ["new-log", "old-log"])
+        XCTAssertEqual(diary.state, .loaded(.idle))
+        XCTAssertNil(diary.errorMessage)
+    }
+
+    func testBackFromDetailReturnsToSearchThenLoadedDiary() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch")]
+        ))
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer()
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [
+                .foodSearch,
+                .foodDetail(foodID: "food-1"),
+            ])
+        )
+
+        coordinator.back()
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [.foodSearch])
+        )
+        XCTAssertEqual(diary.state, .loaded(.idle))
+        XCTAssertEqual(diary.logs.map(\.id), ["old-log"])
+
+        coordinator.back()
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [])
+        )
+        XCTAssertEqual(diary.state, .loaded(.idle))
+        XCTAssertEqual(diary.logs.map(\.id), ["old-log"])
+        XCTAssertNil(diary.errorMessage)
+    }
+
+    // MARK: - Single authoritative event paths
+
+    func testSignInInstallsExactlyOneFeatureGraph() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer()
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+
+        let user = appFlowUser(from: userSession)
+        XCTAssertEqual(coordinator.currentUser, user)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        let initialFetches = await diaryService.callCount(for: date)
+        XCTAssertEqual(initialFetches, 1)
+
+        coordinator.authFeatureDidSignIn(user)
+        await Task.yield()
+
+        XCTAssertTrue(coordinator.diaryViewModel === diary)
+        let fetchesAfterCallback = await diaryService.callCount(for: date)
+        XCTAssertEqual(fetchesAfterCallback, 1)
+    }
+
+    func testSuccessfulPostCausesExactlyOneNavigationAndOneDiaryRefresh() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch")]
+        ))
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer()
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        let fetchesBeforePost = await diaryService.callCount(for: date)
+
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let detail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        await detail.load()
+        detail.amount = "100"
+        detail.unit = "g"
+        detail.mealSlot = .lunch
+
+        var navigationChanges = 0
+        let cancellable = coordinator.$navigationState
+            .dropFirst()
+            .sink { _ in navigationChanges += 1 }
+
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [
+                DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch"),
+                DiaryLog(id: "new-log", mealSlot: .lunch, title: "New lunch"),
+            ]
+        ))
+
+        await detail.submit()
+        XCTAssertEqual(detail.submitState, .succeeded)
+        XCTAssertEqual(navigationChanges, 1)
+
+        await diaryService.waitForCallCount(date, atLeast: fetchesBeforePost + 1)
+        for _ in 0..<20 { await Task.yield() }
+
+        let fetchesAfterPost = await diaryService.callCount(for: date)
+        XCTAssertEqual(navigationChanges, 1)
+        XCTAssertEqual(fetchesAfterPost, fetchesBeforePost + 1)
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary])
+        XCTAssertEqual(coordinator.diaryViewModel?.logs.map(\.id).sorted(), ["new-log", "old-log"])
+        withExtendedLifetime(cancellable) {}
+    }
+
+    func testSuccessAfterBackRefreshesOriginDiaryWithoutLeavingSearch() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch")]
+        ))
+        let foodDetailService = AppFlowFoodDetailService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            foodDetailService: foodDetailService
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let detail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        await detail.load()
+        detail.amount = "100"
+        detail.unit = "g"
+        detail.mealSlot = .lunch
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [
+                DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch"),
+                DiaryLog(id: "new-log", mealSlot: .lunch, title: "New lunch"),
+            ]
+        ))
+        let fetchesBeforePost = await diaryService.callCount(for: date)
+
+        await foodDetailService.holdNextLog()
+        let submit = Task { await detail.submit() }
+        await foodDetailService.waitForLogStart()
+        XCTAssertEqual(detail.submitState, .submitting)
+
+        coordinator.back()
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary, .foodSearch])
+
+        await foodDetailService.releaseLog()
+        await submit.value
+        XCTAssertEqual(detail.submitState, .succeeded)
+
+        await diaryService.waitForCallCount(date, atLeast: fetchesBeforePost + 1)
+        for _ in 0..<20 { await Task.yield() }
+
+        let fetchesAfterPost = await diaryService.callCount(for: date)
+        XCTAssertEqual(
+            fetchesAfterPost,
+            fetchesBeforePost + 1,
+            "A background success must refresh the origin date exactly once"
+        )
+        XCTAssertTrue(coordinator.diaryViewModel === diary)
+        XCTAssertEqual(diary.logs.map(\.id).sorted(), ["new-log", "old-log"])
+        XCTAssertEqual(
+            coordinator.navigationState.paneStack,
+            [.diary, .foodSearch],
+            "A background success must not pull the user back to the diary"
+        )
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [.foodSearch])
+        )
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .expanded),
+            .split(primary: .foodSearch, inspector: nil)
+        )
+        XCTAssertEqual(coordinator.searchViewModel?.originDate, date)
+        XCTAssertEqual(coordinator.searchViewModel?.originMealSlot, .lunch)
+    }
+
+    func testHistoricalDiaryDateDrivesSearchDetailAndLogDateAndSlot() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: yesterday,
+            logs: [
+                DiaryLog(id: "yesterday-log", mealSlot: .breakfast, title: "Yesterday breakfast"),
+            ]
+        ))
+        let searchService = AppFlowSearchService(results: [
+            FoodSearchResult(id: "food-1", name: "Test Food"),
+        ])
+        let foodDetailService = AppFlowFoodDetailService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            searchService: searchService,
+            foodDetailService: foodDetailService
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+
+        await diary.previousDay()
+        XCTAssertEqual(diary.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary])
+
+        coordinator.showSearch()
+        XCTAssertEqual(coordinator.searchViewModel?.originDate, yesterday)
+        coordinator.showDiary()
+
+        diary.addFood(for: .breakfast)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .breakfast)
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary, .foodSearch])
+        XCTAssertEqual(coordinator.searchViewModel?.originDate, yesterday)
+        XCTAssertEqual(coordinator.searchViewModel?.originMealSlot, .breakfast)
+
+        coordinator.searchViewModel?.search("test")
+        await waitUntil {
+            coordinator.searchViewModel?.results.first?.id == "food-1"
+        }
+        guard let result = coordinator.searchViewModel?.results.first else {
+            return XCTFail("Expected a search result")
+        }
+        coordinator.searchViewModel?.selectResult(result)
+
+        XCTAssertEqual(
+            coordinator.navigationState.paneStack,
+            [.diary, .foodSearch, .foodDetail(foodID: "food-1")]
+        )
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .compact),
+            .stack(root: .diary, path: [
+                .foodSearch,
+                .foodDetail(foodID: "food-1"),
+            ])
+        )
+        XCTAssertEqual(
+            AppShellPanePlan.plan(for: coordinator.navigationState, layout: .expanded),
+            .split(
+                primary: .foodSearch,
+                inspector: .foodDetail(foodID: "food-1")
+            )
+        )
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        guard let detail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        XCTAssertEqual(detail.originDate, yesterday)
+        XCTAssertEqual(detail.originMealSlot, .breakfast)
+
+        await detail.load()
+        detail.amount = "100"
+        detail.unit = "g"
+        detail.mealSlot = .lunch
+        await detail.submit()
+
+        XCTAssertEqual(detail.submitState, .succeeded)
+        let requests = await foodDetailService.loggedRequests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.date, yesterday)
+        XCTAssertEqual(requests.first?.mealSlot, .lunch)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary])
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .lunch)
+    }
+
+    func testLateSuccessWhileViewingAnotherDateKeepsCurrentDiaryUntilRevisit() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [
+                DiaryLog(id: "old-log", mealSlot: .breakfast, title: "Old breakfast"),
+            ]
+        ))
+        await diaryService.setDay(DiaryDay(
+            date: yesterday,
+            logs: [
+                DiaryLog(id: "yesterday-log", mealSlot: .lunch, title: "Yesterday lunch"),
+            ]
+        ))
+        let foodDetailService = AppFlowFoodDetailService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            foodDetailService: foodDetailService
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+
+        coordinator.startLogging(slot: .breakfast, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .breakfast)
+        guard let detail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        await detail.load()
+        detail.amount = "100"
+        detail.unit = "g"
+        detail.mealSlot = .lunch
+
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [
+                DiaryLog(id: "old-log", mealSlot: .breakfast, title: "Old breakfast"),
+                DiaryLog(id: "new-log", mealSlot: .lunch, title: "New lunch"),
+            ]
+        ))
+
+        await foodDetailService.holdNextLog()
+        let submit = Task { await detail.submit() }
+        await foodDetailService.waitForLogStart()
+        XCTAssertEqual(detail.submitState, .submitting)
+
+        coordinator.back()
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary, .foodSearch])
+
+        await diary.selectDate(yesterday)
+        XCTAssertEqual(diary.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.paneStack, [.diary, .foodSearch])
+        XCTAssertEqual(diary.logs.map(\.id), ["yesterday-log"])
+
+        let originFetchesBeforeRelease = await diaryService.callCount(for: date)
+        let currentFetchesBeforeRelease = await diaryService.callCount(for: yesterday)
+
+        await foodDetailService.releaseLog()
+        await submit.value
+        XCTAssertEqual(detail.submitState, .succeeded)
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertEqual(diary.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        XCTAssertEqual(diary.logs.map(\.id), ["yesterday-log"])
+        XCTAssertEqual(diary.state, .loaded(.idle))
+        XCTAssertEqual(
+            coordinator.navigationState.paneStack,
+            [.diary, .foodSearch]
+        )
+        let originFetchesAfterRelease = await diaryService.callCount(for: date)
+        let currentFetchesAfterRelease = await diaryService.callCount(for: yesterday)
+        XCTAssertEqual(
+            originFetchesAfterRelease,
+            originFetchesBeforeRelease,
+            "A background success must not refetch another day's origin"
+        )
+        XCTAssertEqual(
+            currentFetchesAfterRelease,
+            currentFetchesBeforeRelease,
+            "A background success must not fetch the currently viewed day"
+        )
+
+        await diary.selectDate(date)
+        XCTAssertEqual(diary.selectedDate, date)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, date)
+        XCTAssertEqual(diary.logs.map(\.id).sorted(), ["new-log", "old-log"])
+        let originFetchesAfterRevisit = await diaryService.callCount(for: date)
+        XCTAssertEqual(originFetchesAfterRevisit, originFetchesBeforeRelease + 1)
+    }
+
+    func testStaleFoodDetailSuccessCallbackIsIgnored() async {
+        let firstSession = appFlowSession()
+        let secondSession = appFlowSession(
+            id: "identity-b",
+            username: "bob",
+            displayName: "Bob"
+        )
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(firstSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "a-log", mealSlot: .lunch, title: "Alice lunch")]
+        ))
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer()
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let staleDetail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+
+        sessionService.setLoginHandler { _, _ in secondSession }
+        let login = coordinator.loginViewModel
+        login.username = "bob"
+        login.password = "pw"
+        await login.submit()
+
+        let secondUser = appFlowUser(from: secondSession)
+        XCTAssertEqual(coordinator.phase, .signedIn(secondUser))
+        await waitForLoadedDiary(coordinator)
+        guard let secondDiary = coordinator.diaryViewModel else {
+            return XCTFail("Expected the second user's diary")
+        }
+        let fetchesAfterLogin = await diaryService.callCount(for: date)
+
+        coordinator.startLogging(slot: .dinner, date: date)
+        coordinator.openFoodDetail("food-b", date: date, mealSlot: .dinner)
+        let expectedStack = coordinator.navigationState.paneStack
+
+        coordinator.handleFoodDetailSuccess(staleDetail)
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertEqual(coordinator.phase, .signedIn(secondUser))
+        XCTAssertTrue(coordinator.diaryViewModel === secondDiary)
+        XCTAssertEqual(coordinator.navigationState.paneStack, expectedStack)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, date)
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .dinner)
+        let fetchesAfterStaleCallback = await diaryService.callCount(for: date)
+        XCTAssertEqual(fetchesAfterStaleCallback, fetchesAfterLogin)
+        XCTAssertNil(coordinator.foodDetailViewModel(for: "food-1"))
+    }
+
+    func testInjectedFixedTodayProviderUsesFixedDateAndSelectedPreviousDay() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(date: date))
+        await diaryService.setDay(DiaryDay(date: yesterday))
+
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            todayProvider: { self.date }
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+
+        XCTAssertEqual(diary.today, date)
+        XCTAssertEqual(diary.selectedDate, date)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, date)
+
+        await diary.previousDay()
+        XCTAssertEqual(diary.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+    }
+}
