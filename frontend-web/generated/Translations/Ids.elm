@@ -143,7 +143,9 @@ type TranslationId
     | TidCommonSignedInAs String
     | TidCommonStatus
     | TidCommonTapToRefresh
-    | TidCommonUseDarkTheme
+    | TidCommonThemeDark
+    | TidCommonThemeLight
+    | TidCommonThemeSystem
     | TidCommonUsername
     | TidCommonUsernameRequired
     | TidCustomFoodConfirmDelete
@@ -456,11 +458,8 @@ type TranslationId
     | TidSettingsAccountDescription
     | TidSettingsAccountTitle
     | TidSettingsApiKeysSummary
-    | TidSettingsDescription
-    | TidSettingsLanguageDescription
     | TidSettingsLanguageTitle
     | TidSettingsPreferencesTitle
-    | TidSettingsThemeDescription
     | TidSettingsThemeTitle
     | TidSetupDescription
     | TidSetupPasswordMinLength

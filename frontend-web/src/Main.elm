@@ -4,14 +4,18 @@ port module Main exposing
     , Model
     , Msg
     , PageModel
+    , ViewConfig
     , classifyDevice
     , drawerFocusTarget
+    , envForModel
     , logoutStillApplies
     , main
     , normalizeChromeNavigation
     , reclassifyDevice
     , reclassifyViewport
     , rendersOnePane
+    , themeMenuFocusTarget
+    , themeMenuImplicitFocusTarget
     )
 
 import Access
@@ -42,6 +46,7 @@ import Ui.Common as UiCommon exposing (uiClass)
 import Ui.Css as Css
 import Ui.Env as Env exposing (Env)
 import Ui.Theme as Theme exposing (Theme)
+import Ui.ThemeChoice as ThemeChoice
 import Ui.Workspace as Workspace
 import Url exposing (Url)
 import Version
@@ -53,7 +58,12 @@ import View.Chrome
 
 
 type alias Flags =
-    { windowWidth : Int, windowHeight : Int, themeMode : String, language : String }
+    { windowWidth : Int
+    , windowHeight : Int
+    , themeMode : String
+    , systemPrefersDark : Bool
+    , language : String
+    }
 
 
 type alias Model =
@@ -65,8 +75,20 @@ type alias Model =
     , chrome : Chrome.Model
     , loggingOut : Bool
     , logoutGeneration : Int
-    , env : Env
+    , themeState : Theme.State
+    , viewConfig : ViewConfig
     , version : Version.Model
+    }
+
+
+{-| The independent, non-theme inputs to `Ui.Env`. They are stored directly
+instead of inside a resolved env so the effective palette exists only as a
+derived value.
+-}
+type alias ViewConfig =
+    { device : Element.Device
+    , viewport : Env.Viewport
+    , language : Language
     }
 
 
@@ -102,6 +124,19 @@ init flags url key =
     let
         ( versionModel, versionCmd ) =
             Version.init
+
+        themeState : Theme.State
+        themeState =
+            Theme.fromFlags flags.themeMode flags.systemPrefersDark
+
+        viewConfig : ViewConfig
+        viewConfig =
+            { device = classifyDevice flags.windowWidth flags.windowHeight
+            , viewport = Env.viewportForWidth flags.windowWidth
+            , language =
+                parseLanguage flags.language
+                    |> Result.withDefault I18n.defaultLanguage
+            }
     in
     ( { key = key
       , route = Data.Route.fromUrl url
@@ -112,14 +147,8 @@ init flags url key =
       , chrome = Chrome.init
       , loggingOut = False
       , logoutGeneration = 0
-      , env =
-            { theme = Theme.forMode (Theme.modeFromString flags.themeMode)
-            , device = classifyDevice flags.windowWidth flags.windowHeight
-            , viewport = Env.viewportForWidth flags.windowWidth
-            , language =
-                parseLanguage flags.language
-                    |> Result.withDefault I18n.defaultLanguage
-            }
+      , themeState = themeState
+      , viewConfig = viewConfig
       , version = versionModel
       }
     , Cmd.batch
@@ -128,6 +157,20 @@ init flags url key =
         , Cmd.map GotVersionMsg versionCmd
         ]
     )
+
+
+{-| The single projection from canonical model state to the ambient view
+context. `Theme.State` stays authoritative and the effective palette is
+resolved here, so a stored env cannot drift from the saved preference or the
+latest system scheme.
+-}
+envForModel : { model | themeState : Theme.State, viewConfig : ViewConfig } -> Env
+envForModel model =
+    { theme = Theme.forState model.themeState
+    , device = model.viewConfig.device
+    , viewport = model.viewConfig.viewport
+    , language = model.viewConfig.language
+    }
 
 
 
@@ -149,6 +192,7 @@ type Msg
     | GotLocalCtx RawLocalCtx
     | GotBarcodeScannerEvent ScannerEvent
     | GotCopyTextResult CopyTextResult
+    | GotSystemTheme Bool
     | GotChromeMsg Chrome.Msg
     | GotVersionMsg Version.Msg
 
@@ -183,6 +227,7 @@ update msg model =
             , Cmd.batch
                 [ routeCmd
                 , drawerFocusCmd model.chrome nextChrome
+                , themeMenuImplicitFocusCmd model.chrome nextChrome
                 ]
             )
 
@@ -217,30 +262,39 @@ update msg model =
 
         KeyPressed key ->
             if key == "Escape" then
-                stepChromeUpdate (Chrome.update Chrome.EscapePressed model.chrome) model
+                stepChromeUpdate
+                    Chrome.EscapePressed
+                    (Chrome.update Chrome.EscapePressed model.chrome)
+                    model
 
             else
                 ( model, Cmd.none )
 
         WindowResized width height ->
             let
-                nextEnv : Env
-                nextEnv =
-                    reclassifyEnv width height model.env
+                nextViewConfig : ViewConfig
+                nextViewConfig =
+                    reclassifyViewConfig width height model.viewConfig
 
                 nextChrome : Chrome.Model
                 nextChrome =
-                    Chrome.closeOnLayoutChange model.env.device nextEnv.device model.chrome
+                    Chrome.closeOnLayoutChange
+                        model.viewConfig.device
+                        nextViewConfig.device
+                        model.chrome
 
                 focusCmd : Cmd Msg
                 focusCmd =
-                    drawerFocusCmd model.chrome nextChrome
+                    Cmd.batch
+                        [ drawerFocusCmd model.chrome nextChrome
+                        , themeMenuImplicitFocusCmd model.chrome nextChrome
+                        ]
             in
-            if nextEnv == model.env && nextChrome == model.chrome then
+            if nextViewConfig == model.viewConfig && nextChrome == model.chrome then
                 ( model, Cmd.none )
 
             else
-                ( { model | env = nextEnv, chrome = nextChrome }, focusCmd )
+                ( { model | viewConfig = nextViewConfig, chrome = nextChrome }, focusCmd )
 
         GotVersionMsg versionMsg ->
             let
@@ -285,11 +339,23 @@ update msg model =
                 )
                 model
 
+        GotSystemTheme systemPrefersDark ->
+            let
+                nextThemeState : Theme.State
+                nextThemeState =
+                    Theme.setSystemPrefersDark systemPrefersDark model.themeState
+            in
+            if nextThemeState == model.themeState then
+                ( model, Cmd.none )
+
+            else
+                ( { model | themeState = nextThemeState }, Cmd.none )
+
         GotPageMsg pageMsg ->
             stepPageUpdate (Page.update (pageCtx model) pageMsg model.page) model
 
         GotChromeMsg chromeMsg ->
-            stepChromeUpdate (Chrome.update chromeMsg model.chrome) model
+            stepChromeUpdate chromeMsg (Chrome.update chromeMsg model.chrome) model
 
 
 {-| A completion or timer may only tear down the logout that started it:
@@ -350,24 +416,16 @@ reclassifyViewport width current =
         Just next
 
 
-reclassifyEnv : Int -> Int -> Env -> Env
-reclassifyEnv width height env =
-    let
-        withDevice : Env
-        withDevice =
-            case reclassifyDevice width height env.device of
-                Just device ->
-                    Env.withDevice env device
-
-                Nothing ->
-                    env
-    in
-    case reclassifyViewport width withDevice.viewport of
-        Just viewport ->
-            Env.withViewport withDevice viewport
-
-        Nothing ->
-            withDevice
+reclassifyViewConfig : Int -> Int -> ViewConfig -> ViewConfig
+reclassifyViewConfig width height viewConfig =
+    { viewConfig
+        | device =
+            reclassifyDevice width height viewConfig.device
+                |> Maybe.withDefault viewConfig.device
+        , viewport =
+            reclassifyViewport width viewConfig.viewport
+                |> Maybe.withDefault viewConfig.viewport
+    }
 
 
 {-| Classify from width so changing viewport height cannot unexpectedly enable
@@ -397,17 +455,83 @@ classifyDevice width height =
     }
 
 
-stepChromeUpdate : ( Chrome.Model, Chrome.OutMsg ) -> Model -> ( Model, Cmd Msg )
-stepChromeUpdate ( chrome, outMsg ) model =
+stepChromeUpdate : Chrome.Msg -> ( Chrome.Model, Chrome.OutMsg ) -> Model -> ( Model, Cmd Msg )
+stepChromeUpdate chromeMsg ( chrome, outMsg ) model =
     let
         ( nextModel, outCmd ) =
             applyChromeOutMsg outMsg { model | chrome = chrome }
 
         focusCmd : Cmd Msg
         focusCmd =
-            drawerFocusCmd model.chrome chrome
+            chromeFocusCmd chromeMsg model.chrome chrome
     in
     ( nextModel, Cmd.batch [ outCmd, focusCmd ] )
+
+
+chromeFocusCmd : Chrome.Msg -> Chrome.Model -> Chrome.Model -> Cmd Msg
+chromeFocusCmd chromeMsg previous next =
+    case themeMenuFocusTarget chromeMsg previous next of
+        Just id ->
+            focusElement id
+
+        Nothing ->
+            drawerFocusCmd previous next
+
+
+{-| Escape and choosing a preference remove the focused menu row, so focus
+returns to the compact trigger. An outside click or navigation leaves focus
+where the user put it instead of pulling it back into the top bar.
+-}
+themeMenuFocusTarget : Chrome.Msg -> Chrome.Model -> Chrome.Model -> Maybe String
+themeMenuFocusTarget chromeMsg previous next =
+    if
+        Chrome.isThemeMenuOpen previous
+            && not (Chrome.isThemeMenuOpen next)
+            && closesThemeMenuWithFocus chromeMsg
+    then
+        Just ThemeChoice.compactTriggerId
+
+    else
+        Nothing
+
+
+{-| Browser history and a Phone/large-layout switch close chrome without a
+Chrome message. If either removes the open theme menu while it still owns
+focus, put focus back on the compact trigger instead of dropping it on the
+document body. Focus leaving the chooser closes it first, and outside clicks
+arrive as `ThemeMenuClosed` after focus has moved, so neither uses this
+recovery.
+-}
+themeMenuImplicitFocusTarget : Chrome.Model -> Chrome.Model -> Maybe String
+themeMenuImplicitFocusTarget previous next =
+    if Chrome.isThemeMenuOpen previous && not (Chrome.isThemeMenuOpen next) then
+        Just ThemeChoice.compactTriggerId
+
+    else
+        Nothing
+
+
+themeMenuImplicitFocusCmd : Chrome.Model -> Chrome.Model -> Cmd Msg
+themeMenuImplicitFocusCmd previous next =
+    case themeMenuImplicitFocusTarget previous next of
+        Just id ->
+            focusElement id
+
+        Nothing ->
+            Cmd.none
+
+
+closesThemeMenuWithFocus : Chrome.Msg -> Bool
+closesThemeMenuWithFocus chromeMsg =
+    case chromeMsg of
+        Chrome.EscapePressed ->
+            True
+
+        Chrome.ThemePreferenceClicked _ ->
+            True
+
+        _ ->
+            False
 
 
 {-| Focus enters a newly opened drawer and returns to its trigger when the
@@ -470,8 +594,8 @@ applyChromeOutMsg outMsg model =
         Chrome.Logout ->
             beginLogout model
 
-        Chrome.ToggleTheme ->
-            toggleTheme model
+        Chrome.SetThemePreference preference ->
+            setThemePreference preference model
 
         Chrome.SetLanguage language ->
             setLanguage language model
@@ -497,21 +621,30 @@ beginLogout model =
     )
 
 
-toggleTheme : Model -> ( Model, Cmd Msg )
-toggleTheme model =
-    let
-        nextMode : Theme.Mode
-        nextMode =
-            Theme.toggle model.env.theme.mode
-    in
-    ( { model | env = Env.withTheme model.env (Theme.forMode nextMode) }
-    , persistThemeMode (Theme.modeToString nextMode)
-    )
+setThemePreference : Theme.Preference -> Model -> ( Model, Cmd Msg )
+setThemePreference preference model =
+    if preference == Theme.savedPreference model.themeState then
+        ( model, Cmd.none )
+
+    else
+        let
+            nextThemeState : Theme.State
+            nextThemeState =
+                Theme.selectPreference preference model.themeState
+        in
+        ( { model | themeState = nextThemeState }
+        , persistThemeMode (Theme.preferenceToString preference)
+        )
 
 
 setLanguage : Language -> Model -> ( Model, Cmd Msg )
 setLanguage language model =
-    ( { model | env = Env.withLanguage model.env language }
+    let
+        viewConfig : ViewConfig
+        viewConfig =
+            model.viewConfig
+    in
+    ( { model | viewConfig = { viewConfig | language = language } }
     , persistLanguage (I18n.languageCode language)
     )
 
@@ -618,7 +751,7 @@ loadPage resetScroll route model =
 
         scrollCmd : Cmd Msg
         scrollCmd =
-            if resetScroll && rendersOnePane model.env route page then
+            if resetScroll && rendersOnePane (envForModel model) route page then
                 Task.attempt (\_ -> ScrollToTopCompleted) (Browser.Dom.setViewport 0 0)
 
             else
@@ -716,8 +849,8 @@ applyPageOutMsg outMsg model =
         Page.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
-        Page.ToggleTheme ->
-            toggleTheme model
+        Page.SetThemePreference preference ->
+            setThemePreference preference model
 
         Page.SetLanguage language ->
             setLanguage language model
@@ -789,6 +922,10 @@ applyPageOutMsg outMsg model =
 view : Model -> Browser.Document Msg
 view model =
     let
+        env : Env
+        env =
+            envForModel model
+
         session : Session
         session =
             currentSession model
@@ -803,13 +940,13 @@ view model =
 
         modal : Maybe (Element Msg)
         modal =
-            Page.modalView model.env model.page |> Maybe.map (Element.map GotPageMsg)
+            Page.modalView env model.page |> Maybe.map (Element.map GotPageMsg)
 
         updateBanner : Maybe (Element Msg)
         updateBanner =
             if model.version.updateAvailable then
                 Just
-                    (View.Chrome.updateBanner model.env (GotVersionMsg Version.ReloadPageRequested))
+                    (View.Chrome.updateBanner env (GotVersionMsg Version.ReloadPageRequested))
 
             else
                 Nothing
@@ -820,11 +957,11 @@ view model =
             []
             [ Html.text
                 ("html, body { background: "
-                    ++ UiCommon.toCssColor model.env.theme.pageBg
+                    ++ UiCommon.toCssColor env.theme.pageBg
                     ++ "; } :root { background: "
-                    ++ UiCommon.toCssColor model.env.theme.pageBg
+                    ++ UiCommon.toCssColor env.theme.pageBg
                     ++ "; "
-                    ++ Css.themeCssVariables model.env.theme
+                    ++ Css.themeCssVariables env.theme
                     ++ "; }"
                 )
             ]
@@ -834,18 +971,20 @@ view model =
                     { borderColor = Nothing, backgroundColor = Nothing, shadow = Nothing }
                 ]
             }
-            (modalLayoutAttrs modal ++ bottomNavAttrs modal model session chromeSuppressed)
+            (modalLayoutAttrs modal
+                ++ bottomNavAttrs modal env model.route session chromeSuppressed
+            )
           <|
-            uiLayout model.env.theme
+            uiLayout env.theme
                 (modalContentAttrs modal)
-                (Chrome.viewFrame model.env
+                (Chrome.viewFrame env
                     model.chrome
                     session
                     model.route
                     chromeSuppressed
                     pageBusy
                     updateBanner
-                    (pageView model)
+                    (pageView env model)
                     GotChromeMsg
                 )
         ]
@@ -874,17 +1013,18 @@ not shift the page.
 -}
 bottomNavAttrs :
     Maybe (Element Msg)
-    -> Model
+    -> Env
+    -> Route
     -> Session
     -> Bool
     -> List (Element.Attribute Msg)
-bottomNavAttrs modal model session chromeSuppressed =
+bottomNavAttrs modal env route session chromeSuppressed =
     case modal of
         Just _ ->
             []
 
         Nothing ->
-            Chrome.bottomNavLayoutAttrs model.env session model.route chromeSuppressed GotChromeMsg
+            Chrome.bottomNavLayoutAttrs env session route chromeSuppressed GotChromeMsg
 
 
 uiLayout : Theme -> List (Element.Attribute msg) -> Element msg -> Element msg
@@ -913,13 +1053,13 @@ modalLayoutAttrs modal =
             []
 
 
-pageView : Model -> Element Msg
-pageView model =
+pageView : Env -> Model -> Element Msg
+pageView env model =
     if not (isBootstrapped model.bootstrap) then
-        Page.bootShell model.env
+        Page.bootShell env
 
     else
-        Element.map GotPageMsg (Page.view model.env model.route model.page)
+        Element.map GotPageMsg (Page.view env model.route model.page)
 
 
 currentSession : Model -> Session
@@ -972,11 +1112,30 @@ subscriptions model =
         [ localCtxReceived GotLocalCtx
         , barcodeScannerEvent GotBarcodeScannerEvent
         , copyTextResult GotCopyTextResult
+        , systemThemeChanged GotSystemTheme
         , Browser.Events.onResize WindowResized
         , Browser.Events.onKeyDown (Decode.map KeyPressed (Decode.field "key" Decode.string))
+        , themeMenuClickAway model.chrome
         , Sub.map GotVersionMsg Version.subscriptions
         , Sub.map GotPageMsg (Page.paneSubscriptions model.page)
         ]
+
+
+{-| The compact theme menu is a non-modal popover, so a full-screen scrim
+would make the first outside click only dismiss the menu. Listen on the
+document instead: the click still reaches the page action under the pointer,
+then closes the menu without moving focus. The decoder rejects clicks inside
+the trigger or menu, including the opening click that is still bubbling when
+this conditional subscription is installed.
+-}
+themeMenuClickAway : Chrome.Model -> Sub Msg
+themeMenuClickAway chrome =
+    if Chrome.isThemeMenuOpen chrome then
+        Browser.Events.onClick
+            (ThemeChoice.clickAwayDecoder (GotChromeMsg Chrome.ThemeMenuClosed))
+
+    else
+        Sub.none
 
 
 
@@ -1005,6 +1164,9 @@ port copyText : CopyTextRequest -> Cmd msg
 
 
 port copyTextResult : (CopyTextResult -> msg) -> Sub msg
+
+
+port systemThemeChanged : (Bool -> msg) -> Sub msg
 
 
 port persistThemeMode : String -> Cmd msg

@@ -35,7 +35,9 @@ tests =
                 let
                     afterTheme : Click
                     afterTheme =
-                        pageClick Settings (themeToggle EN_US) (pageFor Settings)
+                        pageClick Settings
+                            (themeChoice Theme.DarkMode EN_US)
+                            (pageFor Settings)
 
                     afterLanguageOpen : Click
                     afterLanguageOpen =
@@ -78,7 +80,7 @@ tests =
                         |> List.filterMap identity
                 }
                     |> Expect.equal
-                        { theme = Page.ToggleTheme
+                        { theme = Page.SetThemePreference Theme.DarkMode
                         , language = Page.SetLanguage HI_IN
                         , logout = Page.Logout
                         , apiKeys = Page.Navigate SettingsApiKeys
@@ -314,17 +316,32 @@ tests =
                             |> Query.has [ expanded False ]
                     ]
                     ()
-        , test "preferences reflect the active theme and language with one visible title" <|
+        , test "preferences reflect the saved theme and language with one visible title" <|
             \_ ->
                 let
                     lightEnglish : Query.Single Page.Msg
                     lightEnglish =
                         pageView env Settings (pageFor Settings)
 
+                    systemEnglish : Query.Single Page.Msg
+                    systemEnglish =
+                        pageView
+                            { env
+                                | theme =
+                                    Theme.forState
+                                        (Theme.fromFlags "system" True)
+                            }
+                            Settings
+                            (pageFor Settings)
+
                     darkEnglish : Query.Single Page.Msg
                     darkEnglish =
                         pageView
-                            { env | theme = Theme.forMode Theme.Dark }
+                            { env
+                                | theme =
+                                    Theme.forState
+                                        (Theme.fromFlags "dark" False)
+                            }
                             Settings
                             (pageFor Settings)
 
@@ -335,11 +352,23 @@ tests =
                 Expect.all
                     [ \_ ->
                         lightEnglish
-                            |> Query.find [ themeToggle EN_US ]
+                            |> Query.find [ themeChoice Theme.LightMode EN_US ]
+                            |> Query.has [ pressedChoice True ]
+                    , \_ ->
+                        lightEnglish
+                            |> Query.find [ themeChoice Theme.System EN_US ]
+                            |> Query.has [ pressedChoice False ]
+                    , \_ ->
+                        systemEnglish
+                            |> Query.find [ themeChoice Theme.System EN_US ]
+                            |> Query.has [ pressedChoice True ]
+                    , \_ ->
+                        systemEnglish
+                            |> Query.find [ themeChoice Theme.DarkMode EN_US ]
                             |> Query.has [ pressedChoice False ]
                     , \_ ->
                         darkEnglish
-                            |> Query.find [ themeToggle EN_US ]
+                            |> Query.find [ themeChoice Theme.DarkMode EN_US ]
                             |> Query.has [ pressedChoice True ]
                     , \_ ->
                         lightEnglish
@@ -357,6 +386,13 @@ tests =
                             |> Query.findAll
                                 [ Selector.exactText
                                     (I18n.t EN_US TidSettingsLanguageTitle)
+                                ]
+                            |> Query.count (Expect.equal 1)
+                    , \_ ->
+                        lightEnglish
+                            |> Query.findAll
+                                [ Selector.exactText
+                                    (I18n.t EN_US TidSettingsThemeTitle)
                                 ]
                             |> Query.count (Expect.equal 1)
                     ]
@@ -563,10 +599,26 @@ apply route model =
 -- SELECTORS
 
 
-themeToggle : Language -> Selector
-themeToggle language =
-    Selector.attribute
-        (Attr.attribute "aria-label" (I18n.t language TidCommonUseDarkTheme))
+themeChoice : Theme.Preference -> Language -> Selector
+themeChoice preference language =
+    Selector.all
+        [ Selector.attribute (Attr.attribute "role" "button")
+        , Selector.attribute
+            (Attr.attribute "aria-label"
+                (I18n.t language
+                    (case preference of
+                        Theme.System ->
+                            TidCommonThemeSystem
+
+                        Theme.LightMode ->
+                            TidCommonThemeLight
+
+                        Theme.DarkMode ->
+                            TidCommonThemeDark
+                    )
+                )
+            )
+        ]
 
 
 languageTrigger : Language -> Selector

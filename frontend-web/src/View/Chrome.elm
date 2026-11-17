@@ -33,6 +33,7 @@ import Ui.Icon as Icon exposing (Icon)
 import Ui.Input as UiInput
 import Ui.Surface as Surface
 import Ui.Theme as Theme exposing (Theme)
+import Ui.ThemeChoice
 import Ui.Typography as Typography
 
 
@@ -105,14 +106,19 @@ topBarView :
     -> Route
     -> Bool
     -> Bool
-    -> msg
+    ->
+        { open : Bool
+        , onToggle : msg
+        , onSelect : Theme.Preference -> msg
+        , onClose : msg
+        }
     -> msg
     -> msg
     -> (Language -> msg)
     -> (Route -> msg)
     -> { profileLabel : String, profileMenu : Maybe (Element msg) }
     -> Element msg
-topBarView env session route hidden menuOpen onMenu onProfile onTheme onSetLang onNavigate profile =
+topBarView env session route hidden menuOpen themeMenu onMenu onProfile onLang onNavigate profile =
     let
         chromeShown : Bool
         chromeShown =
@@ -124,12 +130,12 @@ topBarView env session route hidden menuOpen onMenu onProfile onTheme onSetLang 
 
         themeControl : List (Element msg)
         themeControl =
-            if offersThemeSwitch session then
+            if offersThemeChoice session then
                 [ Element.el
                     [ Element.paddingEach
                         { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 }
                     ]
-                    (themeToggle env onTheme)
+                    (themeChoice env themeMenu)
                 ]
 
             else
@@ -138,7 +144,7 @@ topBarView env session route hidden menuOpen onMenu onProfile onTheme onSetLang 
         languageControl : List (Element msg)
         languageControl =
             if offersLanguageSwitch session then
-                [ languageToggle env onSetLang ]
+                [ languageToggle env onLang ]
 
             else
                 []
@@ -169,25 +175,27 @@ topBarView env session route hidden menuOpen onMenu onProfile onTheme onSetLang 
                 ++ profileControl
 
          else
-            [ Element.row [ Element.spacing DesignTokens.space8, Element.centerY ]
+            Element.row
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space8
+                , Element.centerY
+                ]
                 [ Element.image
                     [ Element.width (Element.px 28), Element.height (Element.px 28) ]
                     { src = "/android-chrome-192x192.png", description = "CalCo" }
-                , Typography.pageTitle env.theme "CalCo"
+                , Element.el [ Element.width Element.fill, Element.clip ]
+                    (Typography.pageTitle env.theme "CalCo")
                 ]
-            , Element.el [ Element.width Element.fill ] Element.none
-            ]
-                ++ languageControl
-                ++ themeControl
+                :: (languageControl ++ themeControl)
         )
 
 
-{-| The top bar only offers the theme switch to signed-out auth screens and to
+{-| The top bar only offers the theme choice to signed-out auth screens and to
 admins, who cannot open the normal-user Settings page where the preference now
 lives.
 -}
-offersThemeSwitch : Session -> Bool
-offersThemeSwitch session =
+offersThemeChoice : Session -> Bool
+offersThemeChoice session =
     not (Auth.isAuthenticated session) || Auth.isAdmin session
 
 
@@ -208,13 +216,44 @@ boolString value =
         "false"
 
 
-themeToggle : Env -> msg -> Element msg
-themeToggle env onToggle =
-    UiInput.toggleSwitch env.theme
-        { label = I18n.t env.language TidCommonUseDarkTheme
-        , isActive = env.theme.mode == Theme.Dark
-        , onToggle = onToggle
+themeChoice :
+    Env
+    ->
+        { open : Bool
+        , onToggle : msg
+        , onSelect : Theme.Preference -> msg
+        , onClose : msg
         }
+    -> Element msg
+themeChoice env config =
+    let
+        trigger : Element msg
+        trigger =
+            Ui.ThemeChoice.compactTrigger env.theme
+                env.language
+                { expanded = config.open
+                , onToggle = config.onToggle
+                , onClose = config.onClose
+                }
+
+        menu : Element msg
+        menu =
+            Ui.ThemeChoice.menu env.theme
+                env.language
+                { onSelect = config.onSelect
+                , onClose = config.onClose
+                }
+    in
+    Element.el
+        (if config.open then
+            [ Element.below menu
+            , UiCommon.uiClass "ui-select-anchor ui-select-anchor--open"
+            ]
+
+         else
+            [ UiCommon.uiClass "ui-select-anchor" ]
+        )
+        trigger
 
 
 {-| A compact auth-screen control that names the language it switches to. The

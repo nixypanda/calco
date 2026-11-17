@@ -2,7 +2,7 @@ module Ui.Icon exposing (Icon(..), view)
 
 import Element exposing (Element)
 import Html.Attributes
-import Svg exposing (Svg, circle, line, path, polyline, svg)
+import Svg exposing (Svg, circle, line, path, polyline, rect, svg)
 import Svg.Attributes as SvgA
 import Ui.Common exposing (toCssColor)
 
@@ -26,6 +26,9 @@ type Icon
     | SearchX
     | Calendar
     | Pencil
+    | System
+    | Sun
+    | Moon
 
 
 view : { icon : Icon, size : Int, color : Element.Color } -> Element msg
@@ -153,3 +156,31 @@ shapes icon =
             [ path [ SvgA.d "M12 20h9" ] []
             , path [ SvgA.d "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" ] []
             ]
+
+        System ->
+            [ rect
+                [ SvgA.x "3"
+                , SvgA.y "4"
+                , SvgA.width "18"
+                , SvgA.height "12"
+                , SvgA.rx "2"
+                ]
+                []
+            , line [ SvgA.x1 "8", SvgA.y1 "20", SvgA.x2 "16", SvgA.y2 "20" ] []
+            , line [ SvgA.x1 "12", SvgA.y1 "16", SvgA.x2 "12", SvgA.y2 "20" ] []
+            ]
+
+        Sun ->
+            [ circle [ SvgA.cx "12", SvgA.cy "12", SvgA.r "4" ] []
+            , line [ SvgA.x1 "12", SvgA.y1 "2", SvgA.x2 "12", SvgA.y2 "4" ] []
+            , line [ SvgA.x1 "12", SvgA.y1 "20", SvgA.x2 "12", SvgA.y2 "22" ] []
+            , line [ SvgA.x1 "4.22", SvgA.y1 "4.22", SvgA.x2 "5.64", SvgA.y2 "5.64" ] []
+            , line [ SvgA.x1 "18.36", SvgA.y1 "18.36", SvgA.x2 "19.78", SvgA.y2 "19.78" ] []
+            , line [ SvgA.x1 "2", SvgA.y1 "12", SvgA.x2 "4", SvgA.y2 "12" ] []
+            , line [ SvgA.x1 "20", SvgA.y1 "12", SvgA.x2 "22", SvgA.y2 "12" ] []
+            , line [ SvgA.x1 "4.22", SvgA.y1 "19.78", SvgA.x2 "5.64", SvgA.y2 "18.36" ] []
+            , line [ SvgA.x1 "18.36", SvgA.y1 "5.64", SvgA.x2 "19.78", SvgA.y2 "4.22" ] []
+            ]
+
+        Moon ->
+            [ path [ SvgA.d "M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z" ] [] ]

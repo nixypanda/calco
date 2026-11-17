@@ -21,7 +21,8 @@ import Support.Fuzz as FuzzSupport
 import Test exposing (Test, describe, fuzz, fuzz2, fuzz3, test)
 import Translations.Util exposing (Language(..))
 import Ui.Env as UiEnv exposing (Env, Viewport(..))
-import Ui.Theme as Theme
+import Ui.Theme as Theme exposing (Theme)
+import Ui.ThemeChoice as ThemeChoice
 
 
 tests : Test
@@ -42,6 +43,8 @@ tests =
             , navigationIsUnchangedOtherwise
             ]
         , describe "drawer focus" [ drawerFocusFollowsVisibility ]
+        , describe "theme menu focus" [ themeMenuFocusFollowsExplicitClose ]
+        , describe "environment derivation" [ environmentComesFromCanonicalState ]
         , describe "rendersOnePane" [ renderedPaneLayoutDrivesScrollReset ]
         , describe "logoutStillApplies" [ staleLogoutIsIgnored ]
         ]
@@ -245,6 +248,159 @@ drawerFocusFollowsVisibility =
                 , \_ -> Main.drawerFocusTarget opened opened |> Expect.equal Nothing
                 ]
                 ()
+
+
+{-| Escape and a preference choice remove the focused menu row, so focus must
+return to the compact trigger. Outside clicks, focus leaving the chooser, and
+explicit navigation actions leave focus with whatever the user chose instead.
+Browser history and layout changes have no clicked target to move focus to, so
+they restore the trigger only while the menu is still open; a focus-out close
+happens first and cannot be followed by a later focus pull.
+-}
+themeMenuFocusFollowsExplicitClose : Test
+themeMenuFocusFollowsExplicitClose =
+    test "focus returns for explicit and implicit theme-menu closes" <|
+        \_ ->
+            let
+                opened : Chrome.Model
+                opened =
+                    Chrome.update Chrome.ThemeMenuClicked Chrome.init
+                        |> Tuple.first
+
+                escaped : Chrome.Model
+                escaped =
+                    Chrome.update Chrome.EscapePressed opened
+                        |> Tuple.first
+
+                chosen : Chrome.Model
+                chosen =
+                    Chrome.update
+                        (Chrome.ThemePreferenceClicked Theme.DarkMode)
+                        opened
+                        |> Tuple.first
+
+                dismissed : Chrome.Model
+                dismissed =
+                    Chrome.update Chrome.ThemeMenuClosed opened
+                        |> Tuple.first
+
+                navigated : Chrome.Model
+                navigated =
+                    Chrome.update (Chrome.NavigateClicked Settings) opened
+                        |> Tuple.first
+
+                toggled : Chrome.Model
+                toggled =
+                    Chrome.update Chrome.ThemeMenuClicked opened
+                        |> Tuple.first
+
+                implicitlyClosed : Chrome.Model
+                implicitlyClosed =
+                    Chrome.close opened
+            in
+            Expect.all
+                [ \_ ->
+                    Main.themeMenuFocusTarget Chrome.EscapePressed opened escaped
+                        |> Expect.equal (Just ThemeChoice.compactTriggerId)
+                , \_ ->
+                    Main.themeMenuFocusTarget
+                        (Chrome.ThemePreferenceClicked Theme.DarkMode)
+                        opened
+                        chosen
+                        |> Expect.equal (Just ThemeChoice.compactTriggerId)
+                , \_ ->
+                    Main.themeMenuFocusTarget Chrome.ThemeMenuClosed opened dismissed
+                        |> Expect.equal Nothing
+                , \_ ->
+                    Main.themeMenuFocusTarget
+                        (Chrome.NavigateClicked Settings)
+                        opened
+                        navigated
+                        |> Expect.equal Nothing
+                , \_ ->
+                    Main.themeMenuFocusTarget Chrome.ThemeMenuClicked opened toggled
+                        |> Expect.equal Nothing
+                , \_ ->
+                    Main.themeMenuFocusTarget Chrome.EscapePressed Chrome.init Chrome.init
+                        |> Expect.equal Nothing
+                , \_ ->
+                    Main.themeMenuImplicitFocusTarget opened implicitlyClosed
+                        |> Expect.equal (Just ThemeChoice.compactTriggerId)
+                , \_ ->
+                    Main.themeMenuImplicitFocusTarget Chrome.init opened
+                        |> Expect.equal Nothing
+                , \_ ->
+                    Main.themeMenuImplicitFocusTarget Chrome.init Chrome.init
+                        |> Expect.equal Nothing
+                , \_ ->
+                    -- A focus-out close is already complete, so a later
+                    -- implicit close has nothing to restore.
+                    Main.themeMenuImplicitFocusTarget
+                        dismissed
+                        (Chrome.close dismissed)
+                        |> Expect.equal Nothing
+                ]
+                ()
+
+
+{-| `Ui.Env` is a projection, not stored model state: the palette follows the
+canonical preference plus system scheme, while the independent view inputs pass
+through unchanged.
+-}
+environmentComesFromCanonicalState : Test
+environmentComesFromCanonicalState =
+    test "the env theme and view inputs are derived from canonical state" <|
+        \_ ->
+            let
+                envFor : String -> Bool -> Env
+                envFor rawPreference systemPrefersDark =
+                    Main.envForModel
+                        { themeState =
+                            Theme.fromFlags rawPreference systemPrefersDark
+                        , viewConfig = testViewConfig
+                        }
+
+                systemDark : Theme
+                systemDark =
+                    envFor "system" True |> .theme
+
+                systemLight : Theme
+                systemLight =
+                    envFor "system" False |> .theme
+
+                lightOverride : Theme
+                lightOverride =
+                    envFor "light" True |> .theme
+
+                darkOverride : Theme
+                darkOverride =
+                    envFor "dark" False |> .theme
+
+                env : Env
+                env =
+                    envFor "system" False
+            in
+            Expect.all
+                [ \_ -> systemDark.mode |> Expect.equal Theme.Dark
+                , \_ -> systemLight.mode |> Expect.equal Theme.Light
+                , \_ -> lightOverride.mode |> Expect.equal Theme.Light
+                , \_ -> darkOverride.mode |> Expect.equal Theme.Dark
+                , \_ -> systemDark.preference |> Expect.equal Theme.System
+                , \_ -> lightOverride.preference |> Expect.equal Theme.LightMode
+                , \_ -> darkOverride.preference |> Expect.equal Theme.DarkMode
+                , \_ -> env.device |> Expect.equal testViewConfig.device
+                , \_ -> env.viewport |> Expect.equal testViewConfig.viewport
+                , \_ -> env.language |> Expect.equal testViewConfig.language
+                ]
+                ()
+
+
+testViewConfig : Main.ViewConfig
+testViewConfig =
+    { device = { class = Tablet, orientation = Landscape }
+    , viewport = NarrowViewport
+    , language = HI_IN
+    }
 
 
 {-| The scroll-reset decision follows `Ui.Workspace`'s visibility rule, so the

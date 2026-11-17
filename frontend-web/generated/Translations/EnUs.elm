@@ -429,8 +429,14 @@ enUsTranslations tid =
         TidCommonTapToRefresh ->
             "Tap to refresh"
 
-        TidCommonUseDarkTheme ->
-            "Use dark theme"
+        TidCommonThemeDark ->
+            "Dark"
+
+        TidCommonThemeLight ->
+            "Light"
+
+        TidCommonThemeSystem ->
+            "System"
 
         TidCommonUsername ->
             "Username"
@@ -1368,23 +1374,14 @@ enUsTranslations tid =
         TidSettingsApiKeysSummary ->
             "Create and revoke keys for scripts and tools."
 
-        TidSettingsDescription ->
-            "Manage your account, access, and app preferences."
-
-        TidSettingsLanguageDescription ->
-            "Choose the language used across the app."
-
         TidSettingsLanguageTitle ->
             "Language"
 
         TidSettingsPreferencesTitle ->
             "Preferences"
 
-        TidSettingsThemeDescription ->
-            "Use a darker color scheme."
-
         TidSettingsThemeTitle ->
-            "Dark theme"
+            "Theme"
 
         TidSetupDescription ->
             "Create the admin account to get started."

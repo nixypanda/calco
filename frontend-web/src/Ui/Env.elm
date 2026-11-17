@@ -2,15 +2,14 @@ module Ui.Env exposing
     ( Env
     , Viewport(..)
     , viewportForWidth
-    , withDevice
-    , withLanguage
-    , withTheme
-    , withViewport
     )
 
 {-| The ambient view context threaded through the whole view layer: the active
-theme, the classified device, the coarse viewport category, and the active
-language.
+resolved theme (palette plus saved preference), the classified device, the
+coarse viewport category, and the active language.
+
+`Env` is derived from canonical app state on demand rather than stored in
+`Main.Model`, so the effective palette cannot drift from the saved theme state.
 
 These values are global, read-only from a view's perspective, and needed by
 nearly every screen, so they travel together as one record instead of separate
@@ -60,26 +59,3 @@ type alias Env =
     , viewport : Viewport
     , language : Language
     }
-
-
-{-| Elm only allows record update on a bare variable, so `{ model.env | ... }`
-is a syntax error. These helpers keep the field updates at one place.
--}
-withTheme : Env -> Theme -> Env
-withTheme env theme =
-    { env | theme = theme }
-
-
-withDevice : Env -> Device -> Env
-withDevice env device =
-    { env | device = device }
-
-
-withViewport : Env -> Viewport -> Env
-withViewport env viewport =
-    { env | viewport = viewport }
-
-
-withLanguage : Env -> Language -> Env
-withLanguage env language =
-    { env | language = language }

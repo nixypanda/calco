@@ -12,7 +12,7 @@ if ("scrollRestoration" in window.history) {
 }
 
 const preferenceDefaults = {
-    themeMode: "light",
+    themeMode: "system",
     language: "en_US",
 };
 
@@ -45,19 +45,73 @@ function applyDocumentLanguage(language) {
         documentLanguages[language] || documentLanguages[preferenceDefaults.language];
 }
 
-const storedThemeMode = readPreference("themeMode");
+// "system" follows the OS; explicit light/dark values keep overriding it. The
+// colors mirror Ui.Theme's page backgrounds so the browser-owned page chrome
+// and theme-color meta do not flash a different shade before Elm renders.
+const browserThemeColors = {
+    light: "#f4f6f8",
+    dark: "#12141a",
+};
+const darkModeQuery =
+    typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-color-scheme: dark)")
+        : null;
+let currentThemePreference = readPreference("themeMode");
+
+function systemPrefersDark() {
+    return darkModeQuery ? darkModeQuery.matches : false;
+}
+
+function browserThemeMode(preference) {
+    if (preference === "light" || preference === "dark") {
+        return preference;
+    }
+    return systemPrefersDark() ? "dark" : "light";
+}
+
+function applyBrowserTheme(preference) {
+    const mode = browserThemeMode(preference);
+    const color = browserThemeColors[mode];
+    document.documentElement.dataset.theme = mode;
+    document.documentElement.style.colorScheme = mode;
+    document.documentElement.style.backgroundColor = color;
+    if (document.body) {
+        document.body.style.backgroundColor = color;
+    }
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) {
+        themeColor.setAttribute("content", color);
+    }
+}
+
 const storedLanguage = readPreference("language");
 applyDocumentLanguage(storedLanguage);
+applyBrowserTheme(currentThemePreference);
 
 const app = Elm.Main.init({
     node: document.getElementById("root"),
     flags: {
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
-        themeMode: storedThemeMode,
+        themeMode: currentThemePreference,
+        systemPrefersDark: systemPrefersDark(),
         language: storedLanguage,
     },
 });
+
+function handleSystemThemeChange() {
+    applyBrowserTheme(currentThemePreference);
+    app.ports.systemThemeChanged.send(systemPrefersDark());
+}
+
+if (darkModeQuery) {
+    if (typeof darkModeQuery.addEventListener === "function") {
+        darkModeQuery.addEventListener("change", handleSystemThemeChange);
+    } else if (typeof darkModeQuery.addListener === "function") {
+        // Older Safari versions only expose the deprecated listener API.
+        darkModeQuery.addListener(handleSystemThemeChange);
+    }
+}
 
 // Browser integration ports: Elm owns app state and asks JavaScript for the
 // few browser effects it cannot perform directly.
@@ -121,7 +175,9 @@ document.addEventListener("visibilitychange", () => {
 });
 
 app.ports.persistThemeMode.subscribe((mode) => {
+    currentThemePreference = mode;
     writePreference("themeMode", mode);
+    applyBrowserTheme(mode);
 });
 
 app.ports.persistLanguage.subscribe((language) => {
