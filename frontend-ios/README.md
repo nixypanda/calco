@@ -25,6 +25,90 @@ Open the project in the right Xcode with:
 open -a /Applications/Xcode.app frontend-ios/CalCo.xcodeproj
 ```
 
+## Development commands (`just`)
+
+From the repository root (inside `nix develop` as usual):
+
+| Recipe | What it does |
+| :--- | :--- |
+| `just dev-frontend-web` | Web frontend (Vite) on `localhost:1234` |
+| `just dev-frontend` | Old name for the web server (alias of `dev-frontend-web`) |
+| `just dev` | PostgreSQL + backend + **web** frontend, as before |
+| `just dev-frontend-ios LABEL` | Build Debug `CalCo`, install/launch on the chosen iPhone simulator |
+| `just dev-frontend-ipados LABEL` | Same on the chosen iPad simulator |
+| `just dev-frontend-macos` | Build Debug `CalCo` natively for macOS and open the app |
+
+Labels are exact, with no "closest model" fallback:
+
+| Recipe | Label | Simulator name |
+| :--- | :--- | :--- |
+| `dev-frontend-ios` | `mini` | `iPhone 13 mini` |
+| `dev-frontend-ios` | `18-pro` | `iPhone 18 Pro` |
+| `dev-frontend-ios` | `duo` | `iPhone Duo` |
+| `dev-frontend-ipados` | `mini` | `iPad mini (A17 Pro)` |
+| `dev-frontend-ipados` | `air` | `iPad Air 11-inch (M4)` |
+
+An unknown label, or a label whose simulator is not installed, exits with a
+clear error and the list of installed simulators for that platform only
+(iPhones for `dev-frontend-ios`, iPads for `dev-frontend-ipados`). The installed
+Xcode 26.6 has no `iPhone 18 Pro` or `iPhone Duo`: `18-pro` and `duo` are
+**not** silently mapped to another model (in particular, not to
+`iPhone 17 Pro`). To use one of them, install the matching Xcode/runtime and
+point the recipes at it:
+
+```bash
+CALCO_XCODE_DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer \
+    just dev-frontend-ios 18-pro
+```
+
+Native recipes never start PostgreSQL or the backend. The `Debug` app talks to
+`http://localhost:3001`, so start it separately with `just dev-backend` (plus
+`just db-up` / `just migrate-backend` when needed). The isolated E2E app is a
+different build — `CalCo-E2E` / `Test` configuration on
+`http://127.0.0.1:3002` — and is not launched by these recipes; see
+[Tests](#tests).
+
+Simulator safety and overrides:
+
+- Devices are resolved dynamically from `xcrun simctl list devices -j`; no
+  UDIDs are hardcoded.
+- Duplicate names resolve deterministically: a unique booted match wins,
+  otherwise the lowest UDID is chosen and printed. If several matches are
+  booted, the recipe asks you to pin one.
+- Set `CALCO_IOS_SIM_UDID=<UDID>` to pin an exact simulator.
+- The recipes never `erase` or `shutdown` a simulator. An already-booted
+  device (your `iPhone 13 mini`) is installed/launched as-is; only a shutdown
+  target is booted. The matching Simulator window is then brought forward.
+- `CALCO_DEV_IOS_DRY_RUN=1` resolves the target and prints the exact commands
+  without booting, installing, launching, or opening anything — useful for
+  checking a label or override safely. Dry-run is **read-only with respect to
+  simulator state**, but it still queries the installed device list via
+  `xcrun simctl list devices -j` (or the saved JSON below) so resolution is
+  real. It never changes a device.
+  Only explicit truthy values enable it: `1`, `true`, `yes` or `on`
+  (case-insensitive). `0`, `false`, `no`, `off`, an empty value and an unset
+  variable all mean **execute** — the normal recipe path. The `--dry-run`
+  flag works too and overrides a false environment value.
+- `CALCO_SIMCTL_JSON=FILE` resolves against a saved `simctl list devices -j`
+  payload instead of calling simctl (used by the script tests). A missing or
+  malformed file produces a friendly `CALCO_SIMCTL_JSON` usage error, not a
+  traceback.
+- All Apple tools use an explicit `DEVELOPER_DIR` (the default above, or
+  `CALCO_XCODE_DEVELOPER_DIR`) and run in a cleaned environment: the Nix
+  shell's `xcrun`, `SDKROOT`, `NIX_*`, `LD_*` and other SDK/linker flags are
+  dropped, while `HOME`, `TMPDIR` and code-signing settings are preserved.
+  Signing-related variables are kept by **name** (`CODE_SIGN*`,
+  `PROVISIONING_*`, `KEYCHAIN*`, plus `DEVELOPMENT_TEAM`), which covers
+  `CODE_SIGN_STYLE` and `OTHER_CODE_SIGN_FLAGS`. Their values are copied
+  straight into the Apple-tool environment and are never printed — not even
+  in dry-run output.
+
+Check the helper in isolation (no simulator state changes):
+
+```bash
+just test-ios-scripts
+```
+
 ## Build commands
 
 Run from the repository root (or `cd frontend-ios` and drop the `frontend-ios/`
