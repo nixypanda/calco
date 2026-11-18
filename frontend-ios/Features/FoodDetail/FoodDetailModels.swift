@@ -102,6 +102,14 @@ public struct FoodLogCreateRequest: Equatable, Sendable {
     public let amount: String
     public let unit: String
     public let notes: String?
+    /// Stable identifier for retrying the same logical create. Reuse it only
+    /// while every other field is unchanged.
+    public let idempotencyKey: String?
+    /// Exact encoded body retained by the durable submission journal. When set,
+    /// the adapter must send these bytes without re-encoding.
+    public let encodedBody: Data?
+    /// Server the encoded body belongs to; retries are refused elsewhere.
+    public let baseURLString: String?
 
     public init(
         date: LocalDiaryDate,
@@ -110,7 +118,10 @@ public struct FoodLogCreateRequest: Equatable, Sendable {
         foodID: String,
         amount: String,
         unit: String,
-        notes: String? = nil
+        notes: String? = nil,
+        idempotencyKey: String? = nil,
+        encodedBody: Data? = nil,
+        baseURLString: String? = nil
     ) {
         self.date = date
         self.timeZone = timeZone
@@ -119,6 +130,39 @@ public struct FoodLogCreateRequest: Equatable, Sendable {
         self.amount = amount
         self.unit = unit
         self.notes = notes
+        self.idempotencyKey = idempotencyKey
+        self.encodedBody = encodedBody
+        self.baseURLString = baseURLString
+    }
+
+    public func withIdempotencyKey(_ key: String?) -> FoodLogCreateRequest {
+        FoodLogCreateRequest(
+            date: date,
+            timeZone: timeZone,
+            mealSlot: mealSlot,
+            foodID: foodID,
+            amount: amount,
+            unit: unit,
+            notes: notes,
+            idempotencyKey: key,
+            encodedBody: key == idempotencyKey ? encodedBody : nil,
+            baseURLString: key == idempotencyKey ? baseURLString : nil
+        )
+    }
+
+    public func withEncodedBody(_ body: Data) -> FoodLogCreateRequest {
+        FoodLogCreateRequest(
+            date: date,
+            timeZone: timeZone,
+            mealSlot: mealSlot,
+            foodID: foodID,
+            amount: amount,
+            unit: unit,
+            notes: notes,
+            idempotencyKey: idempotencyKey,
+            encodedBody: body,
+            baseURLString: baseURLString
+        )
     }
 }
 
@@ -126,17 +170,31 @@ public struct CreatedFoodLog: Equatable, Sendable {
     public let id: String?
     public let date: LocalDiaryDate
     public let mealSlot: MealSlot?
+    /// True when the server replayed an existing log with HTTP 200.
+    public let replayed: Bool
 
-    public init(id: String? = nil, date: LocalDiaryDate, mealSlot: MealSlot? = nil) {
+    public init(
+        id: String? = nil,
+        date: LocalDiaryDate,
+        mealSlot: MealSlot? = nil,
+        replayed: Bool = false
+    ) {
         self.id = id
         self.date = date
         self.mealSlot = mealSlot
+        self.replayed = replayed
     }
 }
 
 public enum FoodDetailServiceError: Error, Equatable, Sendable {
     case unauthorized
+    /// Definitive rejection: the request was not applied.
     case failed(String)
+    /// Transport/server ambiguity: the request may have been applied.
+    case uncertain(String)
+    /// The server rejected the idempotency key with a different request.
+    case conflict(String)
+    case rateLimited(retryAfterSeconds: Int?)
 }
 
 // MARK: - Helpers
@@ -203,8 +261,10 @@ public func foodDetailErrorMessage(_ error: Error) -> String {
         switch serviceError {
         case .unauthorized:
             return String(localized: "foodDetail.error.sessionExpired")
-        case .failed(let message):
+        case .failed(let message), .uncertain(let message), .conflict(let message):
             return message
+        case .rateLimited:
+            return String(localized: "foodDetail.error.rateLimited")
         }
     }
     return (error as NSError).localizedDescription

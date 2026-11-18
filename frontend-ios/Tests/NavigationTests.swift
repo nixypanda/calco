@@ -126,6 +126,32 @@ final class NavigationTests: XCTestCase {
 
     // MARK: - Layout
 
+    func testWidthBasedLayoutKeepsNarrowRegularWidthCompact() {
+        XCTAssertEqual(
+            AppShellLayout.resolve(isCompactSizeClass: false, width: 744),
+            .compact,
+            "iPad mini portrait cannot fit a usable sidebar plus inspector split"
+        )
+        XCTAssertEqual(
+            AppShellLayout.resolve(isCompactSizeClass: false, width: 820),
+            .compact
+        )
+        XCTAssertEqual(
+            AppShellLayout.resolve(isCompactSizeClass: false, width: 1_024),
+            .expanded
+        )
+        XCTAssertEqual(
+            AppShellLayout.resolve(isCompactSizeClass: true, width: 1_366),
+            .compact,
+            "A compact size class always wins over width"
+        )
+        XCTAssertEqual(
+            AppShellLayout.resolve(isCompactSizeClass: false, width: 0),
+            .expanded,
+            "Keep the existing split before GeometryReader reports a width"
+        )
+    }
+
     func testCompactShowsOnlyTheTopPane() {
         var state = NavigationState(date: date)
 

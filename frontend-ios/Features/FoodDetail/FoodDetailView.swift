@@ -1,8 +1,21 @@
 import SwiftUI
 
+private enum FoodDetailConfirmation: Identifiable {
+    case newSubmission(PendingLogSubmission)
+    case discard(PendingLogSubmission)
+
+    var id: String {
+        switch self {
+        case .newSubmission(let entry): return "new-\(entry.id)"
+        case .discard(let entry): return "discard-\(entry.id)"
+        }
+    }
+}
+
 public struct FoodDetailView: View {
     @ObservedObject private var viewModel: FoodDetailViewModel
     @FocusState private var focusedField: LogFormField?
+    @State private var confirmation: FoodDetailConfirmation?
 
     public init(viewModel: FoodDetailViewModel) {
         self.viewModel = viewModel
@@ -15,17 +28,7 @@ public struct FoodDetailView: View {
                 ProgressView(String(localized: "foodDetail.loading"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
-                VStack(spacing: 16) {
-                    Text(message)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                    Button(String(localized: "foodDetail.retry")) {
-                        Task { await viewModel.load() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                failedView(message)
             case .loaded:
                 loadedView
                     .scrollDismissesKeyboard(.interactively)
@@ -36,10 +39,143 @@ public struct FoodDetailView: View {
         .task {
             if viewModel.food == nil {
                 await viewModel.load()
+            } else {
+                viewModel.refreshRecoveryEntries()
+            }
+        }
+        .alert(item: $confirmation) { confirmation in
+            switch confirmation {
+            case .newSubmission:
+                return Alert(
+                    title: Text(String(localized: "foodDetail.pending.newSubmission.confirmTitle")),
+                    message: Text(String(localized: "foodDetail.pending.newSubmission.confirmMessage")),
+                    primaryButton: .destructive(
+                        Text(String(localized: "foodDetail.pending.newSubmission.confirmAction"))
+                    ) {
+                        Task { await viewModel.confirmCreateNewSubmission() }
+                    },
+                    secondaryButton: .cancel(
+                        Text(String(localized: "foodDetail.pending.cancel"))
+                    )
+                )
+            case .discard:
+                return Alert(
+                    title: Text(String(localized: "foodDetail.pending.discard.confirmTitle")),
+                    message: Text(String(localized: "foodDetail.pending.discard.confirmMessage")),
+                    primaryButton: .destructive(
+                        Text(String(localized: "foodDetail.pending.discard.confirmAction"))
+                    ) {
+                        if case .discard(let entry) = confirmation {
+                            viewModel.discardPending(entry)
+                        }
+                    },
+                    secondaryButton: .cancel(
+                        Text(String(localized: "foodDetail.pending.cancel"))
+                    )
+                )
             }
         }
     }
 
+    private func failedView(_ message: String) -> some View {
+        Form {
+            Section {
+                VStack(spacing: 16) {
+                    Text(message)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                    Button(String(localized: "foodDetail.retry")) {
+                        Task { await viewModel.load() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            }
+
+            // A food fetch failure must not strand an unresolved submission.
+            pendingRecoverySections
+        }
+    }
+
+    @ViewBuilder
+    private func pendingRecoveryRow(
+        _ pending: PendingLogSubmission
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label {
+                Text(String(localized: "foodDetail.pending.title"))
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "clock.arrow.circlepath")
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(pending.draft.amount) \(pending.draft.unit)")
+                Text(pending.draft.date.formatted)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.footnote)
+
+            if pending.state == .conflicted {
+                Text(String(localized: "foodDetail.pending.conflicted"))
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(role: .destructive) {
+                    confirmation = .discard(pending)
+                } label: {
+                    Text(String(localized: "foodDetail.pending.discard"))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isBusy)
+                .accessibilityIdentifier("foodDetail.pending.discard")
+            } else {
+                Button {
+                    Task { await viewModel.retryPending(pending) }
+                } label: {
+                    Text(String(localized: "foodDetail.pending.retry"))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isBusy)
+                .accessibilityIdentifier("foodDetail.pending.retry")
+            }
+
+            HStack {
+                Button(String(localized: "foodDetail.pending.checkDiary")) {
+                    viewModel.checkDiary()
+                }
+                .accessibilityIdentifier("foodDetail.pending.checkDiary")
+
+                Spacer()
+
+                Button(String(localized: "foodDetail.pending.later")) {
+                    viewModel.dismissPendingNotice()
+                }
+                .accessibilityIdentifier("foodDetail.pending.later")
+            }
+            .font(.footnote)
+        }
+    }
+
+    @ViewBuilder
+    private var pendingRecoverySections: some View {
+        if !viewModel.visiblePendingSubmissions.isEmpty {
+            Section {
+                ForEach(viewModel.visiblePendingSubmissions) { pending in
+                    pendingRecoveryRow(pending)
+                }
+            } header: {
+                Text(String(localized: "foodDetail.pending.recoveryTitle"))
+            }
+            .accessibilityIdentifier("foodDetail.pending.notice")
+        }
+    }
 
     private var loadedView: some View {
         Form {
@@ -71,8 +207,12 @@ public struct FoodDetailView: View {
                 notes: notesBinding,
                 focusedField: $focusedField,
                 validationMessage: viewModel.amountValidationMessage,
-                isSubmitting: viewModel.isSubmitting
+                // Once logged, this form's draft is final. Reusing the form
+                // would invite editing a submission that already succeeded.
+                isSubmitting: !viewModel.isFormEditable
             )
+
+            pendingRecoverySections
 
             if let preview = viewModel.nutritionPreview, !preview.isEmpty {
                 Section {
@@ -110,6 +250,42 @@ public struct FoodDetailView: View {
 
     private var submitBar: some View {
         VStack(spacing: 8) {
+            if let pending = viewModel.newSubmissionConfirmation {
+                HStack(spacing: 8) {
+                    if pending.state != .conflicted {
+                        Button(String(localized: "foodDetail.pending.retry")) {
+                            Task { await viewModel.retryPending(pending) }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(viewModel.isBusy)
+                        .accessibilityIdentifier("foodDetail.pending.resolve.retry")
+                    }
+
+                    Button(role: .destructive) {
+                        confirmation = .newSubmission(pending)
+                    } label: {
+                        Text(String(localized: "foodDetail.pending.newSubmission"))
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isBusy)
+                    .accessibilityIdentifier("foodDetail.pending.resolve.new")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let message = viewModel.submitWarningMessage {
+                Label {
+                    Text(message)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "clock.badge.exclamationmark")
+                }
+                .font(.footnote)
+                .foregroundStyle(.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("foodDetail.submit.warning")
+            }
+
             if let message = viewModel.submitErrorMessage {
                 Label {
                     Text(message)
@@ -140,7 +316,7 @@ public struct FoodDetailView: View {
                     Task { await viewModel.submit() }
                 } label: {
                     HStack(spacing: 8) {
-                        if viewModel.isSubmitting {
+                        if viewModel.isBusy {
                             ProgressView()
                                 .accessibilityHidden(true)
                             Text(String(localized: "foodDetail.logging"))
@@ -153,9 +329,9 @@ public struct FoodDetailView: View {
                     .padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isSubmitting)
+                .disabled(viewModel.isBusy)
                 .accessibilityIdentifier("foodDetail.submit")
-                .accessibilityLabel(viewModel.isSubmitting ? String(localized: "foodDetail.logging") : String(localized: "foodDetail.log"))
+                .accessibilityLabel(viewModel.isBusy ? String(localized: "foodDetail.logging") : String(localized: "foodDetail.log"))
             }
         }
         .padding(.horizontal)

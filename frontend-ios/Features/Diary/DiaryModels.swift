@@ -10,6 +10,15 @@ public struct DiaryLog: Equatable, Identifiable, Sendable {
     public let carbsG: Double
     public let fatG: Double
 
+    // Full log fields retained so a tap can open the editor without a refetch.
+    // Defaults keep hand-built fixtures (tests, previews) source-compatible.
+    public let quantity: NutritionQuantity?
+    public let notes: String?
+    public let brand: String?
+    /// Backend item identity retained so deletion can match journal entries
+    /// that may have created this log. Nil for legacy/hand-built fixtures.
+    public let itemReference: ItemReference?
+
     public init(
         id: String,
         mealSlot: MealSlot? = nil,
@@ -17,7 +26,11 @@ public struct DiaryLog: Equatable, Identifiable, Sendable {
         calories: Double = 0,
         proteinG: Double = 0,
         carbsG: Double = 0,
-        fatG: Double = 0
+        fatG: Double = 0,
+        quantity: NutritionQuantity? = nil,
+        notes: String? = nil,
+        brand: String? = nil,
+        itemReference: ItemReference? = nil
     ) {
         self.id = id
         self.mealSlot = mealSlot
@@ -26,6 +39,15 @@ public struct DiaryLog: Equatable, Identifiable, Sendable {
         self.proteinG = proteinG
         self.carbsG = carbsG
         self.fatG = fatG
+        self.quantity = quantity
+        self.notes = notes
+        self.brand = brand
+        self.itemReference = itemReference
+    }
+
+    public var productID: String? {
+        guard let itemReference, itemReference.itemType == .product else { return nil }
+        return itemReference.id
     }
 }
 
@@ -115,6 +137,22 @@ public enum DiaryServiceError: Error, Equatable, Sendable {
 
 public protocol DiaryServicing: Sendable {
     func fetchDiary(for date: LocalDiaryDate) async throws -> DiaryDay
+
+    // Log editing. Default implementations keep simpler fakes source-compatible;
+    // the real adapter implements all of them.
+    func getLog(id: String) async throws -> DiaryLog
+    func fetchUnits() async throws -> [FoodUnit]
+    func updateLog(id: String, request: UpdateLogRequest) async throws -> DiaryLog
+    func deleteLog(id: String) async throws
+}
+
+public extension DiaryServicing {
+    func getLog(id: String) async throws -> DiaryLog { throw DiaryServiceError.unknown }
+    func fetchUnits() async throws -> [FoodUnit] { [] }
+    func updateLog(id: String, request: UpdateLogRequest) async throws -> DiaryLog {
+        throw DiaryServiceError.unknown
+    }
+    func deleteLog(id: String) async throws { throw DiaryServiceError.unknown }
 }
 
 
@@ -196,6 +234,94 @@ public enum DiaryValueFormat {
     }
 }
 
+public enum DiaryMacroDisplayMode: String, Equatable, Sendable {
+    case grams
+    case percent
+}
+
+public enum DiaryMacroKind: String, Sendable {
+    case protein
+    case carbs
+    case fat
+
+    /// Compact glyph used where horizontal space is tight (narrow phones).
+    public var shortLabel: String {
+        switch self {
+        case .protein: return "P"
+        case .carbs: return "C"
+        case .fat: return "F"
+        }
+    }
+
+    /// Full localized name used in wide layouts and always for VoiceOver.
+    public var fullLabel: String {
+        switch self {
+        case .protein: return String(localized: "diary.macro.protein")
+        case .carbs: return String(localized: "diary.macro.carbs")
+        case .fat: return String(localized: "diary.macro.fat")
+        }
+    }
+
+    /// VoiceOver label that always includes both the full nutrient name and
+    /// the displayed value, even when the visual column uses a short glyph.
+    public func voiceOverLabel(
+        progress: DiaryGoalProgress,
+        mode: DiaryMacroDisplayMode
+    ) -> String {
+        "\(fullLabel), \(DiaryMacroDisplay.text(for: progress, mode: mode))"
+    }
+}
+
+public enum DiaryMutationKind: String, Equatable, Sendable {
+    case saved
+    case deleted
+}
+
+public struct DiaryMutationNotice: Equatable, Sendable {
+    public let kind: DiaryMutationKind
+    public let title: String
+    /// Non-zero when deleting the log also disabled attempts that could have
+    /// recreated it. The notice then explains why retry is no longer offered.
+    public let blockedPendingCount: Int
+
+    public init(
+        kind: DiaryMutationKind,
+        title: String,
+        blockedPendingCount: Int = 0
+    ) {
+        self.kind = kind
+        self.title = title
+        self.blockedPendingCount = blockedPendingCount
+    }
+
+    public var message: String {
+        switch kind {
+        case .saved:
+            return String(localized: "diary.mutation.saved")
+        case .deleted:
+            guard blockedPendingCount > 0 else {
+                return String(localized: "diary.mutation.deleted")
+            }
+            return String(
+                format: String(localized: "diary.mutation.deleted.blockedPending"),
+                blockedPendingCount
+            )
+        }
+    }
+}
+
+public enum DiaryMacroDisplay {
+    public static func text(for progress: DiaryGoalProgress, mode: DiaryMacroDisplayMode) -> String {
+        switch mode {
+        case .grams:
+            return "\(progress.summary) g"
+        case .percent:
+            guard let fraction = progress.fraction else { return "—" }
+            return "\(Int((fraction * 100).rounded()))%"
+        }
+    }
+}
+
 public struct DiaryGoalProgress: Equatable, Sendable {
     public let current: Double
     public let target: Double
@@ -271,5 +397,38 @@ extension LocalDiaryDate: Comparable {
         if lhs.year != rhs.year { return lhs.year < rhs.year }
         if lhs.month != rhs.month { return lhs.month < rhs.month }
         return lhs.day < rhs.day
+    }
+}
+
+// MARK: - Calendar picker bridge
+//
+// Date-only values are represented at local noon so daylight-saving transitions
+// cannot shift the day when a `DatePicker` hands a `Date` back.
+
+public enum DiaryDateConversion {
+    public static func date(from day: LocalDiaryDate, calendar: Calendar = diaryCalendar) -> Date? {
+        let components = DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: day.year,
+            month: day.month,
+            day: day.day,
+            hour: 12
+        )
+        return components.date
+    }
+
+    public static func day(from date: Date, calendar: Calendar = diaryCalendar) -> LocalDiaryDate? {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        guard let year = components.year, let month = components.month, let day = components.day else {
+            return nil
+        }
+        return LocalDiaryDate(year: year, month: month, day: day)
+    }
+
+    public static var diaryCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar
     }
 }

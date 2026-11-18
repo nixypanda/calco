@@ -10,7 +10,11 @@ enum CalCoStoreMapping {
             calories: log.calories,
             proteinG: log.proteinG,
             carbsG: log.carbsG,
-            fatG: log.fatG
+            fatG: log.fatG,
+            quantity: log.quantity,
+            notes: log.notes,
+            brand: log.itemBrand,
+            itemReference: log.itemReference
         )
     }
 
@@ -132,6 +136,39 @@ enum CalCoStoreMapping {
             return .failed(payload.message)
         case .invalidURL, .invalidResponse, .decoding, .encoding:
             return .failed("The server response could not be read.")
+        }
+    }
+
+    static func foodLogSubmitError(from error: Error) -> FoodDetailServiceError {
+        if let featureError = error as? FoodDetailServiceError {
+            return featureError
+        }
+        guard let apiError = error as? CalCoAPIError else {
+            return .uncertain(error.localizedDescription)
+        }
+
+        switch apiError {
+        case .unauthorized:
+            return .unauthorized
+        case .rateLimited(let retryAfter):
+            return .rateLimited(retryAfterSeconds: retryAfter)
+        case .badStatus(let statusCode, let payload):
+            let message = nonEmpty(payload.message)
+                ?? "The server could not complete the request."
+            switch statusCode {
+            case 409:
+                return .conflict(message)
+            case 408, 300..<400, 500...:
+                return .uncertain(message)
+            case 400..<500:
+                return .failed(message)
+            default:
+                return .uncertain(message)
+            }
+        case .timeout, .network, .cancelled, .invalidResponse, .decoding:
+            return .uncertain("Network unavailable. Check your connection and try again.")
+        case .invalidURL, .encoding:
+            return .failed(String(localized: "foodDetail.error.saveFailed"))
         }
     }
 

@@ -221,22 +221,22 @@
         }
       }
     },
-    "auth.session.signedOut.message" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You have been signed out. Sign in again to continue."
-          }
-        }
-      }
-    },
     "auth.session.signInAgain" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sign In Again"
+          }
+        }
+      }
+    },
+    "auth.session.signedOut.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have been signed out. Sign in again to continue."
           }
         }
       }
@@ -271,12 +271,302 @@
         }
       }
     },
+    "diary.calendar" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Date"
+          }
+        }
+      }
+    },
     "diary.calories" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Calories"
+          }
+        }
+      }
+    },
+    "diary.common.cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "diary.common.dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "diary.common.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Again"
+          }
+        }
+      }
+    },
+    "diary.datePicker.done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "diary.datePicker.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select Date"
+          }
+        }
+      }
+    },
+    "diary.editor.back" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        }
+      }
+    },
+    "diary.editor.delete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Food"
+          }
+        }
+      }
+    },
+    "diary.editor.delete.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this food? This cannot be undone."
+          }
+        }
+      }
+    },
+    "diary.editor.delete.confirmWithPending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this food? An earlier attempt for the same food and date is unresolved. Deleting disables retrying that saved attempt on this device."
+          }
+        }
+      }
+    },
+    "diary.editor.delete.confirm.action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+    "diary.editor.delete.accountUnavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CalCo couldn't verify pending retries, so the log was not deleted. Sign in again, then retry."
+          }
+        }
+      }
+    },
+    "diary.editor.delete.blockedFallback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CalCo couldn't safely block pending retries, so the log was not deleted. Try again."
+          }
+        }
+      }
+    },
+    "diary.editor.delete.cancelled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The delete was cancelled, so the log was not removed. Try again."
+          }
+        }
+      }
+    },
+    "diary.editor.delete.cancelledWithBarrier" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The delete was cancelled, so the log was not removed. Pending retries for this food and date are disabled on this device. Check the diary before trying again."
+          }
+        }
+      }
+    },
+    "diary.editor.delete.failedWithBarrier" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The log was not deleted. %@ Pending retries for this food and date are disabled on this device. Check the diary, then try deleting again if needed."
+          }
+        }
+      }
+    },
+    "diary.editor.delete.journalUnavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CalCo can't read the pending-save journal, so the log was not deleted. Restart CalCo and try again."
+          }
+        }
+      }
+    },
+    "diary.editor.delete.liveSubmission" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A save for this food and date is still in progress. Wait for it to finish, then delete."
+          }
+        }
+      }
+    },
+    "diary.editor.delete.persistenceFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CalCo couldn't block pending retries, so the log was not deleted. Try again; if this keeps happening, restart CalCo."
+          }
+        }
+      }
+    },
+    "diary.editor.deleted" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleted"
+          }
+        }
+      }
+    },
+    "diary.editor.discard.action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard changes"
+          }
+        }
+      }
+    },
+    "diary.editor.discard.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your edits to this log have not been saved. Discard them?"
+          }
+        }
+      }
+    },
+    "diary.editor.discard.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard unsaved changes?"
+          }
+        }
+      }
+    },
+    "diary.editor.keyboardDone" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "diary.editor.save" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        }
+      }
+    },
+    "diary.editor.saved" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved"
+          }
+        }
+      }
+    },
+    "diary.editor.saving" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saving…"
+          }
+        }
+      }
+    },
+    "diary.editor.deleting" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting…"
+          }
+        }
+      }
+    },
+    "diary.editor.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Food"
           }
         }
       }
@@ -321,12 +611,102 @@
         }
       }
     },
+    "diary.macro.carbs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carbs"
+          }
+        }
+      }
+    },
+    "diary.macro.fat" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fat"
+          }
+        }
+      }
+    },
+    "diary.macro.protein" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protein"
+          }
+        }
+      }
+    },
+    "diary.macroMode.grams" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grams"
+          }
+        }
+      }
+    },
+    "diary.macroMode.label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Macro units"
+          }
+        }
+      }
+    },
+    "diary.macroMode.percent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Percent"
+          }
+        }
+      }
+    },
     "diary.macros" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Protein, carbs and fat"
+          }
+        }
+      }
+    },
+    "diary.mutation.deleted" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food deleted"
+          }
+        }
+      }
+    },
+    "diary.mutation.deleted.blockedPending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food deleted. %lld pending attempt(s) for it can no longer be retried on this device."
+          }
+        }
+      }
+    },
+    "diary.mutation.saved" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food saved"
           }
         }
       }
@@ -411,6 +791,66 @@
         }
       }
     },
+    "foodDetail.error.amountInvalid" : {
+      "foodDetail.error.conflict" : {
+        "foodDetail.error.differentServer" : {
+          "foodDetail.error.notesTooLong" : {
+            "foodDetail.error.rateLimited" : {
+              "foodDetail.error.saveFailed" : {
+                "localizations" : {
+                  "en" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "CalCo could not save this attempt safely, so it was not sent. Try again."
+                    }
+                  }
+                }
+              },
+              "localizations" : {
+                "en" : {
+                  "stringUnit" : {
+                    "state" : "translated",
+                    "value" : "Too many attempts. Try again later."
+                  }
+                }
+              }
+            },
+            "localizations" : {
+              "en" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "These notes are too long to save safely. Shorten them and try again."
+                }
+              }
+            }
+          },
+          "localizations" : {
+            "en" : {
+              "stringUnit" : {
+                "state" : "translated",
+                "value" : "This pending save belongs to a different CalCo server and cannot be retried here."
+              }
+            }
+          }
+        },
+        "localizations" : {
+          "en" : {
+            "stringUnit" : {
+              "state" : "translated",
+              "value" : "This save conflicts with an earlier attempt. Check your diary before logging again."
+            }
+          }
+        }
+      },
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid amount greater than zero."
+          }
+        }
+      }
+    },
     "foodDetail.error.amountRequired" : {
       "localizations" : {
         "en" : {
@@ -421,22 +861,82 @@
         }
       }
     },
-    "foodDetail.error.amountInvalid" : {
+    "foodDetail.error.conflict" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enter a valid amount greater than zero."
+            "value" : "This save conflicts with an earlier attempt. Check your diary before logging again."
+          }
+        }
+      }
+    },
+    "foodDetail.error.differentServer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This pending save belongs to a different CalCo server and cannot be retried here."
+          }
+        }
+      }
+    },
+    "foodDetail.error.notesTooLong" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These notes are too long to save safely. Shorten them and try again."
+          }
+        }
+      }
+    },
+    "foodDetail.error.rateLimited" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many attempts. Try again later."
+          }
+        }
+      }
+    },
+    "foodDetail.error.saveFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CalCo could not save this attempt safely, so it was not sent. Try again."
           }
         }
       }
     },
     "foodDetail.error.sessionExpired" : {
+      "foodDetail.error.uncertain" : {
+        "localizations" : {
+          "en" : {
+            "stringUnit" : {
+              "state" : "translated",
+              "value" : "CalCo couldn't confirm this save. Retrying is safe; if it already reached CalCo you won't get a duplicate."
+            }
+          }
+        }
+      },
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your session has expired. Sign in again to log this food."
+          }
+        }
+      }
+    },
+    "foodDetail.error.uncertain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CalCo couldn't confirm this save. Retrying is safe; if it already reached CalCo you won't get a duplicate."
           }
         }
       }
@@ -562,11 +1062,161 @@
       }
     },
     "foodDetail.nutritionPreview" : {
+      "foodDetail.pending.banner" : {
+        "foodDetail.pending.checkDiary" : {
+          "foodDetail.pending.conflicted" : {
+            "foodDetail.pending.later" : {
+              "foodDetail.pending.retry" : {
+                "foodDetail.pending.review" : {
+                  "foodDetail.pending.title" : {
+                    "localizations" : {
+                      "en" : {
+                        "stringUnit" : {
+                          "state" : "translated",
+                          "value" : "An earlier attempt to log this food may not have been saved."
+                        }
+                      }
+                    }
+                  },
+                  "localizations" : {
+                    "en" : {
+                      "stringUnit" : {
+                        "state" : "translated",
+                        "value" : "Review"
+                      }
+                    }
+                  }
+                },
+                "localizations" : {
+                  "en" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "Retry earlier attempt"
+                    }
+                  }
+                }
+              },
+              "localizations" : {
+                "en" : {
+                  "stringUnit" : {
+                    "state" : "translated",
+                    "value" : "Not now"
+                  }
+                }
+              }
+            },
+            "localizations" : {
+              "en" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "This earlier attempt conflicts with another save. Check your diary."
+                }
+              }
+            }
+          },
+          "localizations" : {
+            "en" : {
+              "stringUnit" : {
+                "state" : "translated",
+                "value" : "Check diary"
+              }
+            }
+          }
+        },
+        "localizations" : {
+          "en" : {
+            "stringUnit" : {
+              "state" : "translated",
+              "value" : "An earlier food log may not have been saved."
+            }
+          }
+        }
+      },
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nutrition"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.banner" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An earlier food log may not have been saved."
+          }
+        }
+      }
+    },
+    "foodDetail.pending.checkDiary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check diary"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.conflicted" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This earlier attempt conflicts with another save. Check your diary."
+          }
+        }
+      }
+    },
+    "foodDetail.pending.invalidated" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A delete was started for this food on this date. Retrying this earlier attempt is disabled because it could recreate a log you removed."
+          }
+        }
+      }
+    },
+    "foodDetail.pending.later" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not now"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry earlier attempt"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.review" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An earlier attempt to log this food may not have been saved."
           }
         }
       }
@@ -677,6 +1327,146 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Search"
+          }
+        }
+      }
+    },
+    "foodDetail.error.journalUnavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CalCo can't read the pending-save journal, so nothing was sent. Restart CalCo before logging again."
+          }
+        }
+      }
+    },
+    "foodDetail.pending.recoveryTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending log attempts"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.newSubmission" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log as new…"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.newSubmission.confirmTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create a new log?"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.newSubmission.confirmMessage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An earlier attempt with these details is still unresolved. Creating a new log can add a duplicate entry to your diary."
+          }
+        }
+      }
+    },
+    "foodDetail.pending.newSubmission.confirmAction" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create new log"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.discard" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard attempt…"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.discard.confirmTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard this conflict?"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.discard.confirmMessage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This removes only the unresolved local record. Check your diary first; CalCo will not delete any log already saved."
+          }
+        }
+      }
+    },
+    "foodDetail.pending.discard.confirmAction" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard record"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.reviewAll" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review all"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.dismissBanner" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss pending log notice"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.banner.count" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld log attempts need attention."
           }
         }
       }

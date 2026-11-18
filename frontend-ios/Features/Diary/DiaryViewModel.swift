@@ -18,6 +18,8 @@ public final class DiaryViewModel: ObservableObject {
     @Published public private(set) var logs: [DiaryLog] = []
     @Published public private(set) var goal: DiaryGoalTargets = DiaryGoalTargets()
     @Published public private(set) var enabledSlots: Set<MealSlot> = Set(MealSlot.allCases)
+    @Published public private(set) var macroMode: DiaryMacroDisplayMode = .grams
+    @Published public private(set) var mutationNotice: DiaryMutationNotice?
 
     @Published public private(set) var completedFetchCount: Int = 0
 
@@ -48,11 +50,19 @@ public final class DiaryViewModel: ObservableObject {
     public let service: DiaryServicing
     public var onAddFood: ((MealSlot, LocalDiaryDate) -> Void)?
     public var onDateChange: ((LocalDiaryDate) -> Void)?
+    public var onOpenLogEditor: ((String, LocalDiaryDate) -> Void)?
 
     private let todayProvider: () -> LocalDiaryDate
     private let onSessionExpired: () -> Void
 
     private var currentToken: Int = 0
+    /// Authoritative local rows from successful PUT responses. A refetch that
+    /// still returns an older row must not silently revert the saved value.
+    private var savedLogOverrides: [LocalDiaryDate: [String: DiaryLog]] = [:]
+    /// Recently deleted IDs guard against an older in-flight fetch reopening a
+    /// row after DELETE succeeded. A later fetch that no longer contains the ID
+    /// retires the tombstone.
+    private var deletedLogIDs: [LocalDiaryDate: Set<String>] = [:]
 
     public init(
         service: DiaryServicing,
@@ -61,6 +71,7 @@ public final class DiaryViewModel: ObservableObject {
         todayProvider: (() -> LocalDiaryDate)? = nil,
         onAddFood: ((MealSlot, LocalDiaryDate) -> Void)? = nil,
         onDateChange: ((LocalDiaryDate) -> Void)? = nil,
+        onOpenLogEditor: ((String, LocalDiaryDate) -> Void)? = nil,
         onSessionExpired: @escaping () -> Void = {}
     ) {
         self.service = service
@@ -69,6 +80,7 @@ public final class DiaryViewModel: ObservableObject {
         self.todayProvider = todayProvider ?? { LocalDiaryDate.diaryToday() }
         self.onAddFood = onAddFood
         self.onDateChange = onDateChange
+        self.onOpenLogEditor = onOpenLogEditor
         self.onSessionExpired = onSessionExpired
     }
 
@@ -95,7 +107,7 @@ public final class DiaryViewModel: ObservableObject {
         do {
             let day = try await service.fetchDiary(for: date)
             guard token == currentToken, selectedDate == date else { return }
-            logs = day.logs
+            logs = resolvedLogs(from: day.logs, for: date)
             goal = day.goal
             enabledSlots = day.prefs.enabledSlots
             state = .loaded(.idle)
@@ -151,6 +163,7 @@ public final class DiaryViewModel: ObservableObject {
             return
         }
 
+        mutationNotice = nil
         selectedDate = clamped
         clearContent()
         state = .loading
@@ -159,23 +172,35 @@ public final class DiaryViewModel: ObservableObject {
 
     public func refreshToday() async {
         let newToday = todayProvider()
-        guard newToday != today else { return }
-
         let wasViewingToday = selectedDate == today
-        today = newToday
 
-        guard wasViewingToday || selectedDate > newToday else { return }
-        selectedDate = newToday
-        guard !isSessionExpired else { return }
+        if newToday != today {
+            today = newToday
 
-        clearContent()
-        state = .loading
-        await load(for: newToday, preservingContent: false)
+            if wasViewingToday || selectedDate > newToday {
+                mutationNotice = nil
+                selectedDate = newToday
+                guard !isSessionExpired else { return }
+
+                clearContent()
+                state = .loading
+                await load(for: newToday, preservingContent: false)
+            }
+            return
+        }
+
+        // Same-day foreground return: refresh quietly so a log changed on
+        // another device appears without waiting for a manual pull.
+        guard wasViewingToday else { return }
+        await refresh()
     }
 
     public func resetForSessionChange() {
         currentToken += 1
         clearContent()
+        mutationNotice = nil
+        savedLogOverrides.removeAll()
+        deletedLogIDs.removeAll()
         state = .loading
 
         let newToday = todayProvider()
@@ -186,6 +211,92 @@ public final class DiaryViewModel: ObservableObject {
     public func addFood(for slot: MealSlot) {
         guard !isSessionExpired else { return }
         onAddFood?(slot, selectedDate)
+    }
+
+    public func log(withID id: String) -> DiaryLog? {
+        logs.first { $0.id == id }
+    }
+
+    /// Applies a successful PUT response immediately. This is the local source
+    /// of truth until a later fetch returns the same values.
+    public func applySavedLog(
+        _ log: DiaryLog,
+        replacing originalID: String,
+        on date: LocalDiaryDate
+    ) {
+        let effectiveID = log.id.isEmpty ? originalID : log.id
+        var overrides = savedLogOverrides[date] ?? [:]
+        overrides.removeValue(forKey: originalID)
+        overrides[effectiveID] = log
+        savedLogOverrides[date] = overrides
+        deletedLogIDs[date]?.remove(effectiveID)
+
+        guard date == selectedDate else { return }
+        if let index = logs.firstIndex(where: {
+            $0.id == originalID || $0.id == effectiveID
+        }) {
+            logs[index] = log
+        } else {
+            logs.append(log)
+        }
+    }
+
+    /// Applies a successful DELETE immediately and remembers a tombstone so a
+    /// stale fetch cannot reopen the row before the next refetch.
+    public func applyDeletedLog(logID: String, on date: LocalDiaryDate) {
+        savedLogOverrides[date]?.removeValue(forKey: logID)
+        if savedLogOverrides[date]?.isEmpty == true {
+            savedLogOverrides[date] = nil
+        }
+        deletedLogIDs[date, default: []].insert(logID)
+        guard date == selectedDate else { return }
+        logs.removeAll { $0.id == logID }
+    }
+
+    private func resolvedLogs(
+        from fetched: [DiaryLog],
+        for date: LocalDiaryDate
+    ) -> [DiaryLog] {
+        let fetchedIDs = Set(fetched.map(\.id))
+        var overrides = savedLogOverrides[date] ?? [:]
+        overrides = overrides.filter { fetchedIDs.contains($0.key) }
+        savedLogOverrides[date] = overrides.isEmpty ? nil : overrides
+
+        let tombstones = deletedLogIDs[date] ?? []
+        let stillStale = tombstones.intersection(fetchedIDs)
+        deletedLogIDs[date] = stillStale.isEmpty ? nil : stillStale
+
+        return fetched
+            .filter { !tombstones.contains($0.id) }
+            .map { row in
+                guard let saved = overrides[row.id] else { return row }
+                if saved == row {
+                    overrides.removeValue(forKey: row.id)
+                    savedLogOverrides[date] = overrides.isEmpty ? nil : overrides
+                    return row
+                }
+                return saved
+            }
+    }
+
+    public func openLogEditor(logID: String) {
+        guard !isSessionExpired else { return }
+        guard log(withID: logID) != nil else { return }
+        onOpenLogEditor?(logID, selectedDate)
+    }
+
+    public func setMacroMode(_ mode: DiaryMacroDisplayMode) {
+        guard macroMode != mode else { return }
+        macroMode = mode
+    }
+
+    public func showMutationNotice(_ notice: DiaryMutationNotice) {
+        mutationNotice = notice
+    }
+
+    public func clearMutationNotice() {
+        guard mutationNotice != nil else { return }
+        mutationNotice = nil
     }
 
     public var groupedSections: [DiarySection] {
@@ -249,6 +360,7 @@ public final class DiaryViewModel: ObservableObject {
     private func expireSession() {
         currentToken += 1
         clearContent()
+        mutationNotice = nil
         state = .sessionExpired
         onSessionExpired()
     }

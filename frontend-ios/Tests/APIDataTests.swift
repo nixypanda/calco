@@ -728,7 +728,8 @@ final class APIDataTests: XCTestCase {
             mealSlot: .lunch,
             item: ItemReference(itemType: .product, id: "food-1"),
             quantity: NutritionQuantity(amount: "150", unit: "g"),
-            notes: nil
+            notes: nil,
+            idempotencyKey: "b6b1f5a4-3c2e-4a7e-9f6d-1a2b3c4d5e6f"
         )
         let data = try JSONEncoder().encode(request)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -737,6 +738,11 @@ final class APIDataTests: XCTestCase {
         XCTAssertEqual(object["device_timezone"] as? String, "Europe/Paris")
         XCTAssertEqual(object["meal_slot"] as? String, "lunch")
         XCTAssertTrue(object["notes"] is NSNull)
+        XCTAssertEqual(
+            object["idempotency_key"] as? String,
+            "b6b1f5a4-3c2e-4a7e-9f6d-1a2b3c4d5e6f"
+        )
+        XCTAssertNil(object["idempotency-key"])
 
         let item = try XCTUnwrap(object["item"] as? [String: Any])
         XCTAssertEqual(item["type"] as? String, "product")
@@ -747,7 +753,7 @@ final class APIDataTests: XCTestCase {
         XCTAssertEqual(quantity["unit"] as? String, "g")
     }
 
-    func testCreateLogOmitsNilMealSlotAndTimezone() throws {
+    func testCreateLogOmitsNilMealSlotTimezoneAndIdempotencyKey() throws {
         let request = CreateLogRequest(
             logDate: date,
             deviceTimeZone: nil,
@@ -760,6 +766,7 @@ final class APIDataTests: XCTestCase {
 
         XCTAssertNil(object["meal_slot"])
         XCTAssertNil(object["device_timezone"])
+        XCTAssertNil(object["idempotency_key"])
         XCTAssertTrue(object["notes"] is NSNull)
     }
 }

@@ -27,24 +27,43 @@ public struct CalCoFoodDetailServiceAdapter: FoodDetailServicing {
     }
 
     public func createLog(_ request: FoodLogCreateRequest) async throws -> CreatedFoodLog {
-        let body = CreateLogRequest(
-            logDate: request.date,
-            deviceTimeZone: request.timeZone,
-            mealSlot: request.mealSlot,
-            productID: request.foodID,
-            quantity: NutritionQuantity(amount: request.amount, unit: request.unit),
-            notes: request.notes
-        )
+        let body: Data
+        if let encoded = request.encodedBody {
+            if let expectedBaseURL = request.baseURLString {
+                guard expectedBaseURL == client.configuration.baseURL.absoluteString else {
+                    throw FoodDetailServiceError.failed(
+                        String(localized: "foodDetail.error.differentServer")
+                    )
+                }
+            }
+            body = encoded
+        } else {
+            let legacy = CreateLogRequest(
+                logDate: request.date,
+                deviceTimeZone: request.timeZone,
+                mealSlot: request.mealSlot,
+                productID: request.foodID,
+                quantity: NutritionQuantity(amount: request.amount, unit: request.unit),
+                notes: request.notes,
+                idempotencyKey: request.idempotencyKey
+            )
+            do {
+                body = try client.encodeBody(legacy)
+            } catch {
+                throw CalCoStoreMapping.foodLogSubmitError(from: error)
+            }
+        }
 
         do {
-            let log = try await client.createLog(body)
+            let (log, statusCode) = try await client.createLogRaw(body)
             return CreatedFoodLog(
                 id: log.id,
                 date: log.logDate,
-                mealSlot: log.mealSlot
+                mealSlot: log.mealSlot,
+                replayed: statusCode == 200
             )
         } catch {
-            throw CalCoStoreMapping.foodDetailError(from: error)
+            throw CalCoStoreMapping.foodLogSubmitError(from: error)
         }
     }
 }

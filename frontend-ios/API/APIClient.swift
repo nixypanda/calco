@@ -198,7 +198,22 @@ public struct CalCoAPIClient: @unchecked Sendable {
         _ request: URLRequest,
         as _: Response.Type
     ) async throws -> Response {
-        let data = try await perform(request)
+        let (data, _) = try await performWithStatus(request)
+        return try decode(data, as: Response.self)
+    }
+
+    func sendWithStatus<Response: Decodable>(
+        _ request: URLRequest,
+        as _: Response.Type
+    ) async throws -> (Response, Int) {
+        let (data, statusCode) = try await performWithStatus(request)
+        return (try decode(data, as: Response.self), statusCode)
+    }
+
+    private func decode<Response: Decodable>(
+        _ data: Data,
+        as _: Response.Type
+    ) throws -> Response {
         guard !data.isEmpty else {
             throw CalCoAPIError.decoding("Expected a response body")
         }
@@ -243,6 +258,14 @@ public struct CalCoAPIClient: @unchecked Sendable {
     }
 
     private func perform(_ request: URLRequest, using transport: URLSession? = nil) async throws -> Data {
+        let (data, _) = try await performWithStatus(request, using: transport)
+        return data
+    }
+
+    private func performWithStatus(
+        _ request: URLRequest,
+        using transport: URLSession? = nil
+    ) async throws -> (Data, Int) {
         let data: Data
         let response: URLResponse
         do {
@@ -290,7 +313,7 @@ public struct CalCoAPIClient: @unchecked Sendable {
             )
         }
 
-        return data
+        return (data, http.statusCode)
     }
 
     private static func errorPayload(from data: Data) -> APIErrorPayload? {

@@ -77,6 +77,7 @@ public enum Pane: Equatable, Hashable, Codable, Sendable {
     case foodSearch
     case foodDetail(foodID: String)
     case foodLog(foodID: String)
+    case logEditor(logID: String)
 }
 
 public enum PaneRole: String, Codable, Hashable, Sendable {
@@ -97,6 +98,28 @@ public struct VisiblePane: Equatable, Hashable, Sendable {
 public enum PaneLayout: Equatable, Hashable, Sendable {
     case compact
     case expanded
+}
+
+/// Chooses the pane presentation from the actual available width, not only the
+/// size class. iPad mini portrait and narrow macOS windows report a regular
+/// size class but cannot fit a usable three-column split.
+public enum AppShellLayout {
+    public static let expandedMinimumWidth: Double = 900
+
+    public static func resolve(
+        isCompactSizeClass: Bool,
+        width: Double
+    ) -> PaneLayout {
+        if isCompactSizeClass {
+            return .compact
+        }
+        guard width > 0 else {
+            // Before GeometryReader reports a size, keep the established split
+            // so the first frame does not flash a compact stack.
+            return .expanded
+        }
+        return width < expandedMinimumWidth ? .compact : .expanded
+    }
 }
 
 public enum PrimarySection: Equatable, Hashable, Sendable {
@@ -152,9 +175,16 @@ public struct NavigationState: Equatable, Codable, Sendable {
 
     public var hasDetail: Bool { panesStorage.count > 1 }
 
+    public var editingLogID: String? {
+        switch activePane {
+        case .logEditor(let logID): return logID
+        default: return nil
+        }
+    }
+
     public var primarySection: PrimarySection {
         switch activePane {
-        case .diary: return .diary
+        case .diary, .logEditor: return .diary
         case .foodSearch, .foodDetail, .foodLog: return .search
         }
     }
@@ -212,6 +242,13 @@ public struct NavigationState: Equatable, Codable, Sendable {
 
     public mutating func pushFoodLog(foodID: String) {
         panesStorage.append(.foodLog(foodID: foodID))
+    }
+
+    /// Opens the log editor over the diary without touching the selected date,
+    /// so backing out returns to the same day the log was tapped from.
+    public mutating func openLogEditor(logID: String) {
+        guard activePane != .logEditor(logID: logID) else { return }
+        panesStorage = [.diary, .logEditor(logID: logID)]
     }
 
     @discardableResult

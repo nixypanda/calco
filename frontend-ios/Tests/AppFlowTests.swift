@@ -107,6 +107,7 @@ private actor AppFlowDiaryService: DiaryServicing {
     private var days: [LocalDiaryDate: DiaryDay] = [:]
     private var configuredError: DiaryServiceError?
     private var calls: [LocalDiaryDate] = []
+    private var deletedLogIDs: Set<String> = []
 
     func setDay(_ day: DiaryDay) {
         days[day.date] = day
@@ -137,7 +138,17 @@ private actor AppFlowDiaryService: DiaryServicing {
         if let configuredError {
             throw configuredError
         }
-        return days[date] ?? DiaryDay(date: date)
+        let day = days[date] ?? DiaryDay(date: date)
+        return DiaryDay(
+            date: day.date,
+            logs: day.logs.filter { !deletedLogIDs.contains($0.id) },
+            goal: day.goal,
+            prefs: day.prefs
+        )
+    }
+
+    func deleteLog(id: String) async throws {
+        deletedLogIDs.insert(id)
     }
 }
 
@@ -168,6 +179,8 @@ private actor AppFlowFoodDetailService: FoodDetailServicing {
     private var logReleased = false
     private var logContinuation: CheckedContinuation<Void, Never>?
     private var requests: [FoodLogCreateRequest] = []
+    private var createError: FoodDetailServiceError?
+    private var createdLogID = "created-log"
 
     init(
         food: FoodDetail = FoodDetail(
@@ -198,6 +211,14 @@ private actor AppFlowFoodDetailService: FoodDetailServicing {
         requests
     }
 
+    func setCreateError(_ error: FoodDetailServiceError?) {
+        createError = error
+    }
+
+    func setCreatedLogID(_ id: String) {
+        createdLogID = id
+    }
+
     func releaseLog() {
         logReleased = true
         logContinuation?.resume()
@@ -225,7 +246,10 @@ private actor AppFlowFoodDetailService: FoodDetailServicing {
                 }
             }
         }
-        return CreatedFoodLog(id: "created-log", date: request.date, mealSlot: request.mealSlot)
+        if let createError {
+            throw createError
+        }
+        return CreatedFoodLog(id: createdLogID, date: request.date, mealSlot: request.mealSlot)
     }
 }
 
@@ -263,12 +287,96 @@ final class AppFlowTests: XCTestCase {
     private let date = LocalDiaryDate(year: 2026, month: 11, day: 17)
     private let yesterday = LocalDiaryDate(year: 2026, month: 11, day: 16)
 
+    private func makeIsolatedSubmissionStore() -> LogSubmissionStore {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("calco-appflow-default-store-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        return LogSubmissionStore(
+            persistence: FileLogSubmissionPersistence(directoryURL: directory)
+        )
+    }
+
+    @discardableResult
+    private func seedSubmission(
+        in store: LogSubmissionStore,
+        accountID: String,
+        foodID: String,
+        foodName: String = "Test Food",
+        amount: String,
+        mealSlot: MealSlot = .lunch,
+        state: LogSubmissionState = .uncertain
+    ) throws -> PendingLogSubmission {
+        let prepared = try LogCreateRequestBuilder.prepare(
+            foodID: foodID,
+            foodName: foodName,
+            date: date,
+            mealSlot: mealSlot,
+            amount: amount,
+            unit: "g",
+            notes: nil,
+            timeZoneIdentifier: "Asia/Kolkata",
+            baseURL: appFlowBaseURL,
+            idempotencyKey: UUID().uuidString.lowercased()
+        )
+        let entry = try store.reserve(
+            accountID: accountID,
+            foodName: foodName,
+            draft: prepared.draft,
+            request: prepared.request,
+            body: prepared.body
+        )
+        switch state {
+        case .uncertain:
+            try store.markUncertain(
+                id: entry.id,
+                accountID: accountID,
+                status: nil,
+                message: "offline"
+            )
+        case .conflicted:
+            try store.markConflicted(
+                id: entry.id,
+                accountID: accountID,
+                message: "conflict"
+            )
+        case .succeeded:
+            try store.markSucceeded(
+                id: entry.id,
+                accountID: accountID,
+                logID: "seeded-log",
+                date: date,
+                mealSlot: mealSlot,
+                replayed: false
+            )
+        case .rejected:
+            try store.markRejected(
+                id: entry.id,
+                accountID: accountID,
+                status: 400,
+                message: "rejected"
+            )
+        case .inFlight:
+            try store.markInFlight(id: entry.id, accountID: accountID)
+        case .invalidated:
+            _ = try store.invalidateUnresolved(
+                accountID: accountID,
+                foodID: foodID,
+                date: date,
+                reason: "deleted"
+            )
+        }
+        return store.entry(id: entry.id, accountID: accountID) ?? entry
+    }
+
     private func makeCoordinator(
         sessionService: AppFlowSessionService,
         diaryService: AppFlowDiaryService,
         cookieClearer: AppFlowCookieClearer,
         searchService: AppFlowSearchService = AppFlowSearchService(),
         foodDetailService: AppFlowFoodDetailService = AppFlowFoodDetailService(),
+        logSubmissionStore: LogSubmissionStore? = nil,
         todayProvider: (() -> LocalDiaryDate)? = nil
     ) -> AppShellCoordinator {
         let client = CalCoAPIClient(baseURL: appFlowBaseURL)
@@ -283,6 +391,7 @@ final class AppFlowTests: XCTestCase {
             diaryService: diaryService,
             searchService: searchService,
             foodDetailService: foodDetailService,
+            logSubmissionStore: logSubmissionStore ?? makeIsolatedSubmissionStore(),
             todayProvider: todayProvider ?? { self.date }
         )
     }
@@ -309,6 +418,29 @@ final class AppFlowTests: XCTestCase {
     func testAppShellInstantiates() {
         let shell = AppShell()
         XCTAssertNotNil(shell)
+    }
+
+    func testAppShellWindowsShareOneSubmissionStore() {
+        func makeWindowCoordinator() -> AppShellCoordinator {
+            let session = SessionCoordinator(
+                service: AppFlowSessionService(),
+                cookieBaseURL: appFlowBaseURL,
+                cookieClearer: AppFlowCookieClearer()
+            )
+            return AppShellCoordinator(
+                client: CalCoAPIClient(baseURL: appFlowBaseURL),
+                session: session,
+                diaryService: AppFlowDiaryService(),
+                searchService: AppFlowSearchService(),
+                foodDetailService: AppFlowFoodDetailService(),
+                todayProvider: { self.date }
+            )
+        }
+
+        let first = makeWindowCoordinator()
+        let second = makeWindowCoordinator()
+        XCTAssertTrue(first.logSubmissionStore === second.logSubmissionStore)
+        XCTAssertTrue(first.logSubmissionStore === LogSubmissionStore.shared)
     }
 
     // MARK: - Compact pane plan
@@ -1236,6 +1368,487 @@ final class AppFlowTests: XCTestCase {
         )
         XCTAssertEqual(coordinator.searchViewModel?.originDate, date)
         XCTAssertEqual(coordinator.searchViewModel?.originMealSlot, .lunch)
+    }
+
+    func testLateSuccessAfterBackPersistsOnceAndRefreshesDiaryWithoutDuplicate() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch")]
+        ))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("calco-appflow-store-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let store = LogSubmissionStore(
+            persistence: FileLogSubmissionPersistence(directoryURL: directory)
+        )
+        let foodDetailService = AppFlowFoodDetailService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            foodDetailService: foodDetailService,
+            logSubmissionStore: store
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let detail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        await detail.load()
+        detail.amountChanged("100")
+        detail.unitChanged("g")
+        detail.mealSlotChanged(.lunch)
+
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [
+                DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch"),
+                DiaryLog(id: "new-log", mealSlot: .lunch, title: "New lunch"),
+            ]
+        ))
+        let fetchesBeforePost = await diaryService.callCount(for: date)
+
+        await foodDetailService.holdNextLog()
+        let submit = Task { await detail.submit() }
+        await foodDetailService.waitForLogStart()
+        coordinator.back()
+        await foodDetailService.releaseLog()
+        await submit.value
+
+        await diaryService.waitForCallCount(date, atLeast: fetchesBeforePost + 1)
+        for _ in 0..<20 { await Task.yield() }
+        let fetchesAfterSuccess = await diaryService.callCount(for: date)
+        XCTAssertEqual(fetchesAfterSuccess, fetchesBeforePost + 1)
+        XCTAssertEqual(coordinator.diaryViewModel?.logs.map(\.id).sorted(), ["new-log", "old-log"])
+        XCTAssertTrue(store.attentionEntries(accountID: userSession.identity.id).isEmpty)
+        XCTAssertEqual(
+            store.entries(accountID: userSession.identity.id).filter {
+                $0.state == .succeeded
+            }.count,
+            1
+        )
+
+        coordinator.handleFoodDetailSuccess(detail)
+        for _ in 0..<20 { await Task.yield() }
+        let fetchesAfterDuplicateCallback = await diaryService.callCount(for: date)
+        XCTAssertEqual(
+            fetchesAfterDuplicateCallback,
+            fetchesAfterSuccess,
+            "A repeated success callback must not refresh or notify twice"
+        )
+    }
+
+    func testRelaunchSurfacePendingSubmissionAndReviewOpensDetail() async throws {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(date: date))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("calco-relaunch-banner-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let store = LogSubmissionStore(
+            persistence: FileLogSubmissionPersistence(directoryURL: directory)
+        )
+        let prepared = try LogCreateRequestBuilder.prepare(
+            foodID: "food-1",
+            foodName: "Test Food",
+            date: date,
+            mealSlot: .lunch,
+            amount: "150",
+            unit: "g",
+            notes: nil,
+            timeZoneIdentifier: "Asia/Kolkata",
+            baseURL: appFlowBaseURL,
+            idempotencyKey: "b6b1f5a4-3c2e-4a7e-9f6d-1a2b3c4d5e6f"
+        )
+        let entry = try store.reserve(
+            accountID: userSession.identity.id,
+            foodName: "Test Food",
+            draft: prepared.draft,
+            request: prepared.request,
+            body: prepared.body
+        )
+
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            logSubmissionStore: store
+        )
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+
+        XCTAssertEqual(coordinator.pendingSubmission?.id, entry.id)
+        XCTAssertEqual(coordinator.pendingSubmissions.map(\.id), [entry.id])
+        coordinator.reviewPendingSubmission()
+        XCTAssertEqual(
+            coordinator.navigationState.paneStack,
+            [.diary, .foodSearch, .foodDetail(foodID: "food-1")]
+        )
+    }
+
+    func testReopeningSameContextWhileInFlightKeepsLiveViewModel() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(date: date))
+        let foodDetailService = AppFlowFoodDetailService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            foodDetailService: foodDetailService
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let detail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        await detail.load()
+        detail.amount = "100"
+        detail.unit = "g"
+
+        await foodDetailService.holdNextLog()
+        let submit = Task { await detail.submit() }
+        await foodDetailService.waitForLogStart()
+        XCTAssertEqual(detail.submitState, .submitting)
+
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+
+        XCTAssertTrue(
+            coordinator.foodDetailViewModel(for: "food-1") === detail,
+            "Re-opening the same in-flight context must not replace its view model"
+        )
+        XCTAssertEqual(detail.submitState, .submitting)
+
+        await foodDetailService.releaseLog()
+        await submit.value
+        XCTAssertEqual(detail.submitState, .succeeded)
+    }
+
+    func testLateSuccessFromReplacedDetailDoesNotCloseEditsAndStillRefreshesDiary() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch")]
+        ))
+        let foodDetailService = AppFlowFoodDetailService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            foodDetailService: foodDetailService
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let oldDetail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected the first detail view model")
+        }
+        await oldDetail.load()
+        oldDetail.amount = "100"
+        oldDetail.unit = "g"
+
+        await foodDetailService.holdNextLog()
+        let oldSubmit = Task { await oldDetail.submit() }
+        await foodDetailService.waitForLogStart()
+
+        // A different meal slot is a different logical context, so this
+        // intentionally replaces the live detail with its own draft.
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .dinner)
+        guard let replacement = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a replacement detail view model")
+        }
+        XCTAssertFalse(replacement === oldDetail)
+        await replacement.load()
+        replacement.amount = "7"
+        replacement.unit = "g"
+        replacement.mealSlot = .dinner
+
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [
+                DiaryLog(id: "old-log", mealSlot: .lunch, title: "Old lunch"),
+                DiaryLog(id: "new-log", mealSlot: .lunch, title: "New lunch"),
+            ]
+        ))
+        let fetchesBeforeRelease = await diaryService.callCount(for: date)
+
+        await foodDetailService.releaseLog()
+        await oldSubmit.value
+        XCTAssertEqual(oldDetail.submitState, .succeeded)
+        await diaryService.waitForCallCount(date, atLeast: fetchesBeforeRelease + 1)
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertTrue(
+            coordinator.foodDetailViewModel(for: "food-1") === replacement,
+            "A late callback must not replace the current detail"
+        )
+        XCTAssertEqual(replacement.amount, "7", "The replacement's edits must survive")
+        XCTAssertEqual(
+            coordinator.navigationState.paneStack,
+            [.diary, .foodSearch, .foodDetail(foodID: "food-1")],
+            "A late callback must not close the replacement detail"
+        )
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .dinner)
+        let fetchesAfterRelease = await diaryService.callCount(for: date)
+        XCTAssertEqual(
+            fetchesAfterRelease,
+            fetchesBeforeRelease + 1,
+            "The old success must still refresh the origin diary once"
+        )
+    }
+
+    func testBannerCountsAllRecoveryEntriesButNotLiveInFlightAndCanDismiss() async throws {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(date: date))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("calco-banner-multi-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let store = LogSubmissionStore(
+            persistence: FileLogSubmissionPersistence(directoryURL: directory)
+        )
+        let first = try seedSubmission(
+            in: store,
+            accountID: userSession.identity.id,
+            foodID: "food-1",
+            amount: "10"
+        )
+        let second = try seedSubmission(
+            in: store,
+            accountID: userSession.identity.id,
+            foodID: "food-2",
+            amount: "20"
+        )
+        let live = try seedSubmission(
+            in: store,
+            accountID: userSession.identity.id,
+            foodID: "food-3",
+            amount: "30",
+            state: .inFlight
+        )
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            logSubmissionStore: store
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+
+        XCTAssertEqual(
+            Set(coordinator.pendingSubmissions.map(\.id)),
+            [first.id, second.id]
+        )
+        XCTAssertFalse(
+            coordinator.pendingSubmissions.contains { $0.id == live.id },
+            "A live in-flight attempt must not be presented as stale attention"
+        )
+
+        coordinator.reviewPendingSubmission(second)
+        XCTAssertEqual(
+            coordinator.navigationState.paneStack.last,
+            .foodDetail(foodID: "food-2")
+        )
+
+        coordinator.dismissPendingSubmissionBanner()
+        XCTAssertNil(coordinator.pendingSubmission)
+        XCTAssertTrue(coordinator.pendingSubmissions.isEmpty)
+
+        let third = try seedSubmission(
+            in: store,
+            accountID: userSession.identity.id,
+            foodID: "food-4",
+            amount: "40"
+        )
+        await waitUntil {
+            coordinator.pendingSubmission?.id == third.id
+        }
+        XCTAssertEqual(
+            coordinator.pendingSubmissions.map(\.id),
+            [third.id],
+            "Dismissal applies only to entries the user already saw"
+        )
+    }
+
+    func testConflictedBannerEntryIsResolvedOnlyByExplicitDiscard() async throws {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(date: date))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("calco-banner-conflict-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let store = LogSubmissionStore(
+            persistence: FileLogSubmissionPersistence(directoryURL: directory)
+        )
+        let conflicted = try seedSubmission(
+            in: store,
+            accountID: userSession.identity.id,
+            foodID: "food-1",
+            amount: "10",
+            state: .conflicted
+        )
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            logSubmissionStore: store
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        XCTAssertEqual(coordinator.pendingSubmission?.state, .conflicted)
+        XCTAssertEqual(
+            store.attentionEntries(accountID: userSession.identity.id).map(\.id),
+            [conflicted.id],
+            "Opening the banner must not resolve the conflict implicitly"
+        )
+
+        XCTAssertTrue(coordinator.discardPendingSubmission(conflicted))
+        XCTAssertTrue(store.attentionEntries(accountID: userSession.identity.id).isEmpty)
+    }
+
+    func testDeletingFoundAmbiguousLogInvalidatesRetryAndCannotResurrect() async throws {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(date: date))
+        let foodDetailService = AppFlowFoodDetailService()
+        await foodDetailService.setCreateError(.uncertain("timeout"))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("calco-delete-pending-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let store = LogSubmissionStore(
+            persistence: FileLogSubmissionPersistence(directoryURL: directory)
+        )
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            foodDetailService: foodDetailService,
+            logSubmissionStore: store
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        coordinator.startLogging(slot: .lunch, date: date)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        guard let detail = coordinator.foodDetailViewModel(for: "food-1") else {
+            return XCTFail("Expected a food detail view model")
+        }
+        await detail.load()
+        detail.amount = "150"
+        detail.unit = "g"
+        detail.mealSlot = .lunch
+        await detail.submit()
+
+        XCTAssertEqual(detail.submitState, .uncertain("timeout"))
+        let pending = try XCTUnwrap(
+            store.attentionEntries(accountID: userSession.identity.id).first
+        )
+        XCTAssertEqual(pending.state, .uncertain)
+
+        // The user finds the ambiguous log in the diary and deletes it.
+        let foundLog = DiaryLog(
+            id: "created-log",
+            mealSlot: .lunch,
+            title: "Test Food",
+            quantity: NutritionQuantity(amount: "150", unit: "g"),
+            itemReference: ItemReference(itemType: .product, id: "food-1")
+        )
+        await diaryService.setDay(DiaryDay(date: date, logs: [foundLog]))
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        await diary.refresh()
+        XCTAssertEqual(diary.logs.map(\.id), ["created-log"])
+
+        coordinator.openLogEditor(logID: "created-log", date: date)
+        guard let editor = coordinator.logEditorViewModel(for: "created-log") else {
+            return XCTFail("Expected a log editor")
+        }
+        XCTAssertEqual(editor.productID, "food-1")
+        XCTAssertEqual(
+            editor.deleteConfirmationMessage,
+            String(localized: "diary.editor.delete.confirmWithPending"),
+            "Deleting a found ambiguous log must warn before disabling retry"
+        )
+        await editor.delete()
+        XCTAssertEqual(editor.state, .deleted)
+
+        let invalidated = try XCTUnwrap(
+            store.entry(id: pending.id, accountID: userSession.identity.id)
+        )
+        XCTAssertEqual(invalidated.state, .invalidated)
+        XCTAssertNil(invalidated.body)
+        XCTAssertEqual(
+            invalidated.lastMessage,
+            String(localized: "foodDetail.pending.invalidated")
+        )
+        XCTAssertTrue(
+            store.attentionEntries(accountID: userSession.identity.id).isEmpty,
+            "A deleted log must not leave a retry banner"
+        )
+        XCTAssertNil(coordinator.pendingSubmission)
+        XCTAssertTrue(detail.visiblePendingSubmissions.isEmpty)
+
+        await waitUntil { diary.mutationNotice?.kind == .deleted }
+        XCTAssertEqual(diary.mutationNotice?.blockedPendingCount, 1)
+
+        // Even a stale in-memory retry reference must not send the old key.
+        await foodDetailService.setCreateError(nil)
+        await detail.retryPending(pending)
+        let calls = await foodDetailService.loggedRequests()
+        XCTAssertEqual(
+            calls.count,
+            1,
+            "Retry after deleting the found log must not send the idempotency key again"
+        )
+        XCTAssertEqual(
+            detail.submitErrorMessage,
+            String(localized: "foodDetail.pending.invalidated")
+        )
     }
 
     func testHistoricalDiaryDateDrivesSearchDetailAndLogDateAndSlot() async {

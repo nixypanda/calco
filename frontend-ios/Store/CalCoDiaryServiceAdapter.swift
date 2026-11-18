@@ -43,4 +43,38 @@ public struct CalCoDiaryServiceAdapter: DiaryServicing {
             throw CalCoStoreMapping.diaryError(from: error)
         }
     }
+
+    public func getLog(id: String) async throws -> DiaryLog {
+        do {
+            return CalCoStoreMapping.diaryLog(from: try await client.getLog(id: id))
+        } catch {
+            throw CalCoStoreMapping.diaryError(from: error)
+        }
+    }
+
+    public func fetchUnits() async throws -> [FoodUnit] {
+        do {
+            return try await client.listUnits().map(CalCoStoreMapping.foodUnit(from:))
+        } catch {
+            throw CalCoStoreMapping.diaryError(from: error)
+        }
+    }
+
+    public func updateLog(id: String, request: UpdateLogRequest) async throws -> DiaryLog {
+        do {
+            return CalCoStoreMapping.diaryLog(
+                from: try await client.updateLog(id: id, body: request)
+            )
+        } catch {
+            throw CalCoStoreMapping.diaryError(from: error)
+        }
+    }
+
+    public func deleteLog(id: String) async throws {
+        do {
+            try await client.deleteLog(id: id)
+        } catch {
+            throw CalCoStoreMapping.diaryError(from: error)
+        }
+    }
 }

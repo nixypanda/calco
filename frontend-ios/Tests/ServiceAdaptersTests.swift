@@ -544,6 +544,7 @@ final class ServiceAdaptersTests: XCTestCase {
     }
 
     func testCreateLogPreservesDateTimezoneSlotNotesAndMapsResponse() async throws {
+        let idempotencyKey = "b6b1f5a4-3c2e-4a7e-9f6d-1a2b3c4d5e6f"
         let recorder = AdapterRequestRecorder()
         AdapterURLProtocol.setHandler { request in
             recorder.record(request)
@@ -570,7 +571,8 @@ final class ServiceAdaptersTests: XCTestCase {
             foodID: "food-1",
             amount: "150",
             unit: "g",
-            notes: "note"
+            notes: "note",
+            idempotencyKey: idempotencyKey
         )
         let created = try await CalCoFoodDetailServiceAdapter(client: makeClient())
             .createLog(request)
@@ -589,6 +591,8 @@ final class ServiceAdaptersTests: XCTestCase {
         XCTAssertEqual(object["device_timezone"] as? String, "America/New_York")
         XCTAssertEqual(object["meal_slot"] as? String, "lunch")
         XCTAssertEqual(object["notes"] as? String, "note")
+        XCTAssertEqual(object["idempotency_key"] as? String, idempotencyKey)
+        XCTAssertNil(object["idempotency-key"])
 
         let item = try XCTUnwrap(object["item"] as? [String: Any])
         XCTAssertEqual(item["type"] as? String, "product")
@@ -624,5 +628,149 @@ final class ServiceAdaptersTests: XCTestCase {
         } catch let error as FoodDetailServiceError {
             XCTAssertEqual(error, .unauthorized)
         }
+    }
+
+    private func createdLogJSON() -> String {
+        """
+        {
+          "id": "log-9",
+          "log_date": "2026-11-17",
+          "device_timezone": "America/New_York",
+          "meal_slot": "lunch",
+          "item": {"type": "product", "id": "food-1", "name": "Oats"},
+          "quantity": {"amount": "150", "unit": "g"},
+          "nutrients": [],
+          "notes": "Café"
+        }
+        """
+    }
+
+    private func preparedRequest(
+        notes: String,
+        baseURL: String = "http://127.0.0.1:3002"
+    ) throws -> FoodLogCreateRequest {
+        let prepared = try LogCreateRequestBuilder.prepare(
+            foodID: "food-1",
+            foodName: "Oats",
+            date: date,
+            mealSlot: .lunch,
+            amount: "150",
+            unit: "g",
+            notes: notes,
+            timeZoneIdentifier: "America/New_York",
+            baseURL: URL(string: baseURL)!,
+            idempotencyKey: "b6b1f5a4-3c2e-4a7e-9f6d-1a2b3c4d5e6f"
+        )
+        return prepared.request
+    }
+
+    func testCreateLogSendsPreparedBodyVerbatimIncludingNFDNotes() async throws {
+        let recorder = AdapterRequestRecorder()
+        AdapterURLProtocol.setHandler { request in
+            recorder.record(request)
+            return self.json(self.createdLogJSON(), statusCode: 201)
+        }
+        let request = try preparedRequest(notes: "Cafe\u{301}")
+
+        _ = try await CalCoFoodDetailServiceAdapter(client: makeClient())
+            .createLog(request)
+
+        let urlRequest = try XCTUnwrap(recorder.requests.first)
+        XCTAssertEqual(try bodyData(from: urlRequest), request.encodedBody)
+    }
+
+    func testCreateLog201IsNotReplayedAnd200IsReplayed() async throws {
+        let recorder = AdapterRequestRecorder()
+        var statusCode = 201
+        AdapterURLProtocol.setHandler { request in
+            recorder.record(request)
+            return self.json(self.createdLogJSON(), statusCode: statusCode)
+        }
+        let request = try preparedRequest(notes: "Café")
+        let adapter = CalCoFoodDetailServiceAdapter(client: makeClient())
+
+        let created = try await adapter.createLog(request)
+        XCTAssertFalse(created.replayed)
+
+        statusCode = 200
+        let replayed = try await adapter.createLog(request)
+        XCTAssertTrue(replayed.replayed)
+        XCTAssertEqual(recorder.requests.count, 2)
+    }
+
+    func testCreateLog409MapsConflict() async throws {
+        AdapterURLProtocol.setHandler { _ in
+            self.json(
+                self.errorJSON(code: "conflict", message: "key was already used"),
+                statusCode: 409
+            )
+        }
+
+        do {
+            _ = try await CalCoFoodDetailServiceAdapter(client: makeClient())
+                .createLog(try preparedRequest(notes: "Café"))
+            XCTFail("Expected a conflict error")
+        } catch let error as FoodDetailServiceError {
+            XCTAssertEqual(error, .conflict("key was already used"))
+        }
+    }
+
+    func testCreateLogServerAndRequestTimeoutErrorsMapUncertain() async throws {
+        for statusCode in [408, 500, 503] {
+            AdapterURLProtocol.setHandler { _ in
+                self.json(
+                    self.errorJSON(code: "unknown", message: "try later"),
+                    statusCode: statusCode
+                )
+            }
+            do {
+                _ = try await CalCoFoodDetailServiceAdapter(client: makeClient())
+                    .createLog(try preparedRequest(notes: "Café"))
+                XCTFail("Expected an uncertain error")
+            } catch let error as FoodDetailServiceError {
+                XCTAssertEqual(error, .uncertain("try later"))
+            }
+        }
+    }
+
+    func testCreateLogTransportTimeoutMapsUncertain() async throws {
+        AdapterURLProtocol.setHandler { _ in
+            .init(error: URLError(.timedOut))
+        }
+
+        do {
+            _ = try await CalCoFoodDetailServiceAdapter(client: makeClient())
+                .createLog(try preparedRequest(notes: "Café"))
+            XCTFail("Expected an uncertain error")
+        } catch let error as FoodDetailServiceError {
+            guard case .uncertain = error else {
+                return XCTFail("Expected an uncertain error, got \(error)")
+            }
+        }
+    }
+
+    func testCreateLogRefusesChangedBaseURLWithoutSending() async throws {
+        let recorder = AdapterRequestRecorder()
+        AdapterURLProtocol.setHandler { request in
+            recorder.record(request)
+            return self.json(self.createdLogJSON(), statusCode: 201)
+        }
+        let request = try preparedRequest(
+            notes: "Café",
+            baseURL: "https://another.example.com"
+        )
+
+        do {
+            _ = try await CalCoFoodDetailServiceAdapter(client: makeClient())
+                .createLog(request)
+            XCTFail("Expected the changed server to be refused")
+        } catch let error as FoodDetailServiceError {
+            guard case .failed(let message) = error else {
+                return XCTFail("Expected a definitive failure, got \(error)")
+            }
+            XCTAssertFalse(message.isEmpty)
+        }
+
+        XCTAssertTrue(recorder.requests.isEmpty)
     }
 }

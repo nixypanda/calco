@@ -340,6 +340,88 @@ final class DiaryTests: XCTestCase {
         XCTAssertEqual(calls.last, nextDay)
     }
 
+    func testForegroundRefreshRefetchesSameToday() async {
+        let service = FakeDiaryService()
+        await service.setDay(DiaryDay(
+            date: today,
+            logs: [DiaryLog(id: "one", title: "One")]
+        ))
+        let vm = DiaryViewModel(
+            service: service,
+            today: today,
+            todayProvider: { self.today }
+        )
+        await vm.load()
+        let callsBefore = await service.callCount(for: today)
+
+        await service.setDay(DiaryDay(
+            date: today,
+            logs: [DiaryLog(id: "two", title: "Two")]
+        ))
+        await vm.refreshToday()
+
+        XCTAssertEqual(vm.selectedDate, today)
+        XCTAssertEqual(vm.logs.map(\.id), ["two"])
+        let callsAfter = await service.callCount(for: today)
+        XCTAssertEqual(callsAfter, callsBefore + 1)
+    }
+
+    func testSavedOverrideSurvivesStaleRefetch() async {
+        let service = FakeDiaryService()
+        let old = DiaryLog(
+            id: "log-1",
+            title: "Oats",
+            quantity: NutritionQuantity(amount: "150", unit: "g")
+        )
+        await service.setDay(DiaryDay(date: today, logs: [old]))
+        let vm = DiaryViewModel(service: service, today: today)
+        await vm.load()
+        XCTAssertEqual(vm.log(withID: "log-1")?.quantity?.amount, "150")
+
+        let saved = DiaryLog(
+            id: "log-1",
+            mealSlot: .lunch,
+            title: "Oats",
+            quantity: NutritionQuantity(amount: "200", unit: "g"),
+            notes: "saved"
+        )
+        vm.applySavedLog(saved, replacing: "log-1", on: today)
+        XCTAssertEqual(vm.log(withID: "log-1")?.quantity?.amount, "200")
+
+        // A refetch that still returns the pre-PUT row must not revert it.
+        await vm.refresh()
+        XCTAssertEqual(vm.log(withID: "log-1")?.quantity?.amount, "200")
+        XCTAssertEqual(vm.log(withID: "log-1")?.notes, "saved")
+
+        // Once the server catches up, the local override retires naturally.
+        await service.setDay(DiaryDay(date: today, logs: [saved]))
+        await vm.refresh()
+        XCTAssertEqual(vm.log(withID: "log-1")?.quantity?.amount, "200")
+    }
+
+    func testDeletedLogTombstoneBlocksStaleRefetch() async {
+        let service = FakeDiaryService()
+        let old = DiaryLog(id: "log-1", title: "Oats")
+        await service.setDay(DiaryDay(date: today, logs: [old]))
+        let vm = DiaryViewModel(service: service, today: today)
+        await vm.load()
+        XCTAssertEqual(vm.logs.map(\.id), ["log-1"])
+
+        vm.applyDeletedLog(logID: "log-1", on: today)
+        XCTAssertTrue(vm.logs.isEmpty)
+
+        // An older in-flight GET can still contain the deleted row.
+        await vm.refresh()
+        XCTAssertTrue(
+            vm.logs.isEmpty,
+            "A stale refetch must not reopen a log after DELETE succeeded"
+        )
+
+        await service.setDay(DiaryDay(date: today, logs: []))
+        await vm.refresh()
+        XCTAssertTrue(vm.logs.isEmpty)
+    }
+
     func testMidnightRolloverKeepsHistoricalSelection() async {
         let nextDay = today.addingDays(1)
         let service = FakeDiaryService()

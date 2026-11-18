@@ -14,6 +14,15 @@ import SwiftUI
 
 // MARK: - Coordinator
 
+public enum EditorDiscardRequest: Equatable, Sendable {
+    case back
+    case openLogEditor(logID: String, date: LocalDiaryDate)
+    case showDiary
+    case showSearch
+    case startLogging(slot: MealSlot, date: LocalDiaryDate)
+    case openFoodDetail(foodID: String, date: LocalDiaryDate, mealSlot: MealSlot?)
+}
+
 @MainActor
 public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinating {
     public let client: CalCoAPIClient
@@ -21,15 +30,28 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     public let diaryService: any DiaryServicing
     public let searchService: any FoodSearchServicing
     public let foodDetailService: any FoodDetailServicing
+    public let logSubmissionStore: LogSubmissionStore
     public let todayProvider: () -> LocalDiaryDate
 
     public let configurationError: String?
 
     @Published public var navigationState: NavigationState
+    @Published public private(set) var pendingSubmission: PendingLogSubmission?
+    /// All recoverable entries in most-recent-first order. The banner shows a
+    /// count and lets the user review each entry instead of hiding all but one.
+    @Published public private(set) var pendingSubmissions: [PendingLogSubmission] = []
+    /// Set when a dirty editor would otherwise be closed, replaced, or left
+    /// behind. The shell asks for explicit discard confirmation.
+    @Published public private(set) var pendingEditorDiscard: EditorDiscardRequest?
     @Published private var featureGraph: FeatureGraph = .absent
 
     private var cancellables: Set<AnyCancellable> = []
-    private var deliveredFoodDetailSuccesses: [String: ObjectIdentifier] = [:]
+    private var deliveredSubmissionIDs: Set<String> = []
+    /// Dismissal applies to the exact entry version the user saw. Any state
+    /// change (for example a new conflict) makes it visible again.
+    private var dismissedSubmissions: [String: Date] = [:]
+    /// Bounded by log ID rather than growing once per editor instance.
+    private var deliveredLogEditorSuccesses: [String: ObjectIdentifier] = [:]
 
     public var currentUser: AuthUser? { featureGraph.readyState?.user }
     public var diaryViewModel: DiaryViewModel? { featureGraph.readyState?.diary }
@@ -47,6 +69,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         diaryService: (any DiaryServicing)? = nil,
         searchService: (any FoodSearchServicing)? = nil,
         foodDetailService: (any FoodDetailServicing)? = nil,
+        logSubmissionStore: LogSubmissionStore? = nil,
         todayProvider: (() -> LocalDiaryDate)? = nil
     ) {
         let resolvedClient: CalCoAPIClient
@@ -77,6 +100,10 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         self.searchService = searchService ?? CalCoFoodSearchServiceAdapter(client: resolvedClient)
         self.foodDetailService = foodDetailService
             ?? CalCoFoodDetailServiceAdapter(client: resolvedClient)
+        // Every WindowGroup scene gets its own coordinator, but all windows
+        // must share one journal cache so a live POST in one window blocks a
+        // delete in another. Tests can still inject an isolated store.
+        self.logSubmissionStore = logSubmissionStore ?? .shared
         self.todayProvider = resolvedTodayProvider
         self.navigationState = NavigationState(date: resolvedTodayProvider())
 
@@ -87,6 +114,12 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         resolvedSession.$phase
             .sink { [weak self] phase in
                 self?.synchronizeFeatureGraph(with: phase)
+            }
+            .store(in: &cancellables)
+
+        self.logSubmissionStore.$revision
+            .sink { [weak self] _ in
+                self?.refreshPendingSubmission()
             }
             .store(in: &cancellables)
 
@@ -153,6 +186,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             let diary: DiaryViewModel
             let search: SearchViewModel
             var foodDetails: [String: FoodDetailViewModel]
+            var logEditors: [String: LogEditorViewModel]
         }
 
         case absent
@@ -164,10 +198,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         }
     }
 
-    private final class FoodDetailSuccessIdentity {
-        weak var viewModel: FoodDetailViewModel?
-    }
-
     private func synchronizeFeatureGraph(with phase: SessionCoordinator.Phase) {
         guard case .signedIn(let user) = phase else { return }
         installFeatureGraph(for: user)
@@ -176,7 +206,12 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     private func resetSessionScopedState() {
         let previous = featureGraph
         featureGraph = .absent
-        deliveredFoodDetailSuccesses.removeAll()
+        deliveredSubmissionIDs.removeAll()
+        deliveredLogEditorSuccesses.removeAll()
+        dismissedSubmissions.removeAll()
+        pendingSubmission = nil
+        pendingSubmissions = []
+        pendingEditorDiscard = nil
         previous.readyState?.diary.resetForSessionChange()
         previous.readyState?.search.invalidateSession()
         navigationState = NavigationState(date: todayProvider())
@@ -192,9 +227,14 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
 
         let previous = featureGraph
         featureGraph = .absent
-        deliveredFoodDetailSuccesses.removeAll()
+        deliveredSubmissionIDs.removeAll()
+        deliveredLogEditorSuccesses.removeAll()
+        dismissedSubmissions.removeAll()
         previous.readyState?.diary.resetForSessionChange()
         previous.readyState?.search.invalidateSession()
+        pendingSubmission = nil
+        pendingSubmissions = []
+        pendingEditorDiscard = nil
 
         let today = todayProvider()
         navigationState = NavigationState(date: today)
@@ -216,6 +256,9 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
                     date,
                     generation: generation
                 )
+            },
+            onOpenLogEditor: { [weak self] logID, date in
+                self?.openLogEditor(logID: logID, date: date, generation: generation)
             },
             onSessionExpired: { [weak self] in
                 self?.handleSessionExpired(generation: generation)
@@ -244,8 +287,10 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             generation: generation,
             diary: diaryVM,
             search: searchVM,
-            foodDetails: [:]
+            foodDetails: [:],
+            logEditors: [:]
         ))
+        refreshPendingSubmission()
 
         Task { [weak self] in
             guard let self, self.isCurrent(generation) else { return }
@@ -297,6 +342,13 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     // MARK: - Signed-in orchestration
 
     public func startLogging(slot: MealSlot, date: LocalDiaryDate) {
+        guard !requestDiscardIfNeeded(for: .startLogging(slot: slot, date: date)) else {
+            return
+        }
+        performStartLogging(slot: slot, date: date)
+    }
+
+    private func performStartLogging(slot: MealSlot, date: LocalDiaryDate) {
         var state = navigationState
         state.selectDate(date)
         state.startLogging(mealSlot: slot)
@@ -305,6 +357,19 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     }
 
     public func openFoodDetail(_ foodID: String, date: LocalDiaryDate, mealSlot: MealSlot?) {
+        guard !requestDiscardIfNeeded(
+            for: .openFoodDetail(foodID: foodID, date: date, mealSlot: mealSlot)
+        ) else {
+            return
+        }
+        performOpenFoodDetail(foodID, date: date, mealSlot: mealSlot)
+    }
+
+    private func performOpenFoodDetail(
+        _ foodID: String,
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?
+    ) {
         var state = navigationState
         state.showDetail(foodID: foodID, date: date, mealSlot: mealSlot)
         navigationState = state
@@ -313,42 +378,403 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         guard var ready = featureGraph.readyState,
               ready.generation == session.sessionGeneration else { return }
         let generation = ready.generation
+
+        // Re-tapping the same row while its log is in flight must not replace
+        // the live view model (and lose its callback/recovery state).
+        if let existing = ready.foodDetails[foodID],
+           existing.originDate == date,
+           existing.originMealSlot == mealSlot,
+           existing.isBusy {
+            return
+        }
+
         let identity = FoodDetailSuccessIdentity()
         let viewModel = FoodDetailViewModel(
             foodID: foodID,
             originDate: date,
             originMealSlot: mealSlot,
             service: foodDetailService,
-            onSuccess: { [weak self, identity] _, _ in
-                guard let self,
-                      let viewModel = identity.viewModel else { return }
-                self.handleFoodDetailSuccess(
-                    viewModel,
-                    expectedGeneration: generation
-                )
-            },
             onSessionExpired: { [weak self] in
                 self?.handleSessionExpired(generation: generation)
-            }
+            },
+            onSubmissionSuccess: { [weak self, identity] success in
+                guard let source = identity.viewModel else { return }
+                self?.handleFoodDetailSuccess(
+                    success,
+                    expectedGeneration: generation,
+                    source: source
+                )
+            },
+            onCheckDiary: { [weak self] diaryDate in
+                self?.showDiary(
+                    date: diaryDate,
+                    generation: generation
+                )
+            },
+            accountID: ready.user.id,
+            baseURL: client.configuration.baseURL,
+            submissionStore: logSubmissionStore
         )
         identity.viewModel = viewModel
-        deliveredFoodDetailSuccesses.removeValue(forKey: foodID)
         ready.foodDetails[foodID] = viewModel
         featureGraph = .ready(ready)
+    }
+
+    private final class FoodDetailSuccessIdentity {
+        weak var viewModel: FoodDetailViewModel?
     }
 
     public func foodDetailViewModel(for foodID: String) -> FoodDetailViewModel? {
         featureGraph.readyState?.foodDetails[foodID]
     }
 
+    // MARK: - Log editor
+
+    private final class LogEditorSuccessIdentity {
+        weak var viewModel: LogEditorViewModel?
+    }
+
+    public func logEditorViewModel(for logID: String) -> LogEditorViewModel? {
+        featureGraph.readyState?.logEditors[logID]
+    }
+
+    public func openLogEditor(logID: String, date: LocalDiaryDate) {
+        guard let ready = featureGraph.readyState,
+              ready.generation == session.sessionGeneration else { return }
+        openLogEditor(logID: logID, date: date, generation: ready.generation)
+    }
+
+    private func openLogEditor(logID: String, date: LocalDiaryDate, generation: UInt64) {
+        guard isCurrent(generation),
+              let ready = featureGraph.readyState,
+              let log = ready.diary.log(withID: logID) else { return }
+
+        // Tapping the same row must preserve its editor in every state,
+        // including while a PUT is in flight. Only terminal editors are
+        // replaced by a fresh edit session.
+        if let existing = ready.logEditors[logID], existing.date == date,
+           !existing.isTerminal {
+            var currentState = navigationState
+            if currentState.activePane != .logEditor(logID: logID) {
+                currentState.openLogEditor(logID: logID)
+                navigationState = currentState
+            }
+            return
+        }
+
+        // A saving/deleting editor must stay visible until the operation
+        // resolves, even when the user taps a different diary row.
+        if let active = activeEditor, active.isBusy {
+            return
+        }
+
+        // Switching directly from a dirty editor to another row must not throw
+        // away the first row's edits without an explicit decision.
+        if let active = activeDirtyEditor,
+           active.logID != logID,
+           requestDiscardIfNeeded(for: .openLogEditor(logID: logID, date: date)) {
+            return
+        }
+
+        performOpenLogEditor(log, logID: logID, date: date, generation: generation)
+    }
+
+    private func performOpenLogEditor(
+        _ log: DiaryLog,
+        logID: String,
+        date: LocalDiaryDate,
+        generation: UInt64
+    ) {
+        guard isCurrent(generation),
+              let ready = featureGraph.readyState else { return }
+
+        let editor = LogEditorViewModel(
+            log: log,
+            date: date,
+            service: diaryService,
+            accountID: ready.user.id,
+            submissionStore: logSubmissionStore,
+            matchingPendingCount: { [weak self] in
+                guard let self,
+                      let productID = log.productID else {
+                    return 0
+                }
+                return self.logSubmissionStore.unresolved(
+                    accountID: ready.user.id,
+                    foodID: productID,
+                    date: date
+                ).count
+            }
+        )
+        let identity = LogEditorSuccessIdentity()
+        identity.viewModel = editor
+
+        editor.onSaved = { [weak self, identity] editedDate in
+            guard let self, let editor = identity.viewModel else { return }
+            self.handleLogEditorMutation(
+                editor,
+                date: editedDate,
+                kind: .saved,
+                generation: generation
+            )
+        }
+        editor.onDeleted = { [weak self, identity] editedDate in
+            guard let self, let editor = identity.viewModel else { return }
+            self.handleLogEditorMutation(
+                editor,
+                date: editedDate,
+                kind: .deleted,
+                generation: generation
+            )
+        }
+        editor.onSessionExpired = { [weak self] in
+            self?.handleSessionExpired(generation: generation)
+        }
+
+        var updated = ready
+        updated.logEditors[logID] = editor
+        featureGraph = .ready(updated)
+
+        var state = navigationState
+        state.openLogEditor(logID: logID)
+        navigationState = state
+    }
+
+    private func handleLogEditorMutation(
+        _ viewModel: LogEditorViewModel,
+        date: LocalDiaryDate,
+        kind: DiaryMutationKind,
+        generation: UInt64
+    ) {
+        guard isCurrent(generation),
+              let ready = featureGraph.readyState,
+              ready.logEditors[viewModel.logID] === viewModel else { return }
+
+        let identifier = ObjectIdentifier(viewModel)
+        guard deliveredLogEditorSuccesses[viewModel.logID] != identifier else { return }
+        deliveredLogEditorSuccesses[viewModel.logID] = identifier
+        pendingEditorDiscard = nil
+
+        var blockedPendingCount = 0
+        if kind == .deleted {
+            // The PUT/DELETE response is authoritative. Apply it locally before
+            // any refetch so an older in-flight GET cannot reopen stale values.
+            ready.diary.applyDeletedLog(logID: viewModel.logID, on: date)
+            // The editor durably blocked matching journal entries before it
+            // sent DELETE, using the account captured when it was opened.
+            blockedPendingCount = viewModel.blockedPendingCount
+        } else if kind == .saved, let saved = viewModel.lastSavedLog {
+            ready.diary.applySavedLog(
+                saved,
+                replacing: viewModel.logID,
+                on: date
+            )
+        }
+
+        var state = navigationState
+        let wasActiveEditor = state.activePane == .logEditor(logID: viewModel.logID)
+        if wasActiveEditor {
+            _ = state.back()
+            navigationState = state
+        }
+
+        let title = viewModel.title
+        Task { [weak self] in
+            guard let self,
+                  let current = self.featureGraph.readyState,
+                  current.generation == generation,
+                  generation == self.session.sessionGeneration else { return }
+            let diary = current.diary
+            guard diary.selectedDate == date else {
+                // A late success after the user moved to another day must
+                // never pull their current date back to the edited log.
+                return
+            }
+            await diary.refresh()
+            guard self.diaryViewModel === diary, diary.selectedDate == date else {
+                return
+            }
+            diary.showMutationNotice(
+                DiaryMutationNotice(
+                    kind: kind,
+                    title: title,
+                    blockedPendingCount: blockedPendingCount
+                )
+            )
+        }
+    }
+
+    private var activeEditor: LogEditorViewModel? {
+        guard case .logEditor(let logID) = navigationState.activePane else {
+            return nil
+        }
+        return featureGraph.readyState?.logEditors[logID]
+    }
+
+    private var activeDirtyEditor: LogEditorViewModel? {
+        guard let editor = activeEditor, editor.hasUnsavedChanges else {
+            return nil
+        }
+        return editor
+    }
+
+    /// Returns true when the action was deferred or blocked instead of being
+    /// performed. A saving/deleting editor cannot be discarded or navigated
+    /// away from, even if it was dirty when the request began.
+    @discardableResult
+    private func requestDiscardIfNeeded(for request: EditorDiscardRequest) -> Bool {
+        guard let editor = activeEditor else { return false }
+        if editor.isBusy { return true }
+        guard editor.hasUnsavedChanges else { return false }
+        pendingEditorDiscard = request
+        return true
+    }
+
+    public func requestBack() {
+        guard !requestDiscardIfNeeded(for: .back) else { return }
+        back()
+    }
+
+    public func confirmDiscardEditorChanges() {
+        guard let request = pendingEditorDiscard else { return }
+        guard let editor = activeEditor, !editor.isBusy else {
+            pendingEditorDiscard = nil
+            return
+        }
+        pendingEditorDiscard = nil
+        // Remove the dirty editor before navigating. Keeping it in the graph
+        // would let a later tap reopen the same discarded values.
+        discardActiveEditor()
+        switch request {
+        case .back:
+            back()
+        case .openLogEditor(let logID, let date):
+            guard let ready = featureGraph.readyState,
+                  ready.generation == session.sessionGeneration,
+                  let log = ready.diary.log(withID: logID) else { return }
+            performOpenLogEditor(
+                log,
+                logID: logID,
+                date: date,
+                generation: ready.generation
+            )
+        case .showDiary:
+            performShowDiary()
+        case .showSearch:
+            performShowSearch()
+        case .startLogging(let slot, let date):
+            performStartLogging(slot: slot, date: date)
+        case .openFoodDetail(let foodID, let date, let mealSlot):
+            performOpenFoodDetail(foodID, date: date, mealSlot: mealSlot)
+        }
+    }
+
+    private func discardActiveEditor() {
+        guard case .logEditor(let logID) = navigationState.activePane,
+              var ready = featureGraph.readyState,
+              ready.generation == session.sessionGeneration else { return }
+        ready.logEditors.removeValue(forKey: logID)
+        featureGraph = .ready(ready)
+        deliveredLogEditorSuccesses.removeValue(forKey: logID)
+    }
+
+    public func cancelDiscardEditorChanges() {
+        pendingEditorDiscard = nil
+    }
+
     public func showDiary() {
+        guard !requestDiscardIfNeeded(for: .showDiary) else { return }
+        performShowDiary()
+    }
+
+    private func performShowDiary() {
         var state = navigationState
         state.finishLogging()
         navigationState = state
         searchViewModel?.clearSelection()
     }
 
+    private func showDiary(date: LocalDiaryDate, generation: UInt64) {
+        guard isCurrent(generation) else { return }
+        var state = navigationState
+        state.selectDate(date)
+        navigationState = state
+        searchViewModel?.clearSelection()
+        searchViewModel?.updateContext(date: date, mealSlot: state.mealSlot)
+
+        Task { [weak self] in
+            guard let self,
+                  let current = self.featureGraph.readyState,
+                  current.generation == generation,
+                  generation == self.session.sessionGeneration else { return }
+            let diary = current.diary
+            if diary.selectedDate == date {
+                await diary.refresh()
+            } else {
+                await diary.selectDate(date)
+            }
+        }
+    }
+
+    public func reviewPendingSubmission() {
+        guard let pendingSubmission else { return }
+        reviewPendingSubmission(pendingSubmission)
+    }
+
+    public func reviewPendingSubmission(_ pending: PendingLogSubmission) {
+        guard pending.accountID == currentUser?.id else { return }
+        openFoodDetail(
+            pending.draft.foodID,
+            date: pending.draft.date,
+            mealSlot: pending.draft.mealSlot
+        )
+    }
+
+    /// Hides the global banner for the entries it currently shows. This is a
+    /// UI preference only; the journal and inline recovery remain untouched.
+    public func dismissPendingSubmissionBanner() {
+        for pending in pendingSubmissions {
+            dismissedSubmissions[pending.id] = pending.updatedAt
+        }
+        refreshPendingSubmission()
+    }
+
+    /// Explicitly resolves a definitively conflicted journal row. The caller
+    /// must obtain confirmation before invoking it.
+    @discardableResult
+    public func discardPendingSubmission(_ pending: PendingLogSubmission) -> Bool {
+        guard pending.accountID == currentUser?.id,
+              pending.state == .conflicted
+        else { return false }
+        do {
+            try logSubmissionStore.remove(id: pending.id, accountID: pending.accountID)
+        } catch {
+            return false
+        }
+        dismissedSubmissions.removeValue(forKey: pending.id)
+        refreshPendingSubmission()
+        return true
+    }
+
+    private func refreshPendingSubmission() {
+        guard let user = currentUser else {
+            pendingSubmissions = []
+            pendingSubmission = nil
+            return
+        }
+        let visible = logSubmissionStore
+            .attentionEntries(accountID: user.id)
+            .filter { dismissedSubmissions[$0.id] != $0.updatedAt }
+        pendingSubmissions = visible
+        pendingSubmission = visible.first
+    }
+
     public func showSearch() {
+        guard !requestDiscardIfNeeded(for: .showSearch) else { return }
+        performShowSearch()
+    }
+
+    private func performShowSearch() {
         var state = navigationState
         while state.hasDetail {
             _ = state.back()
@@ -363,7 +789,9 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
 
     public func back() {
         var state = navigationState
-        let wasShowingFoodDetail = state.activePane.contextualFoodPane != nil
+        // Only a *food* detail owns search selection. The log editor is also an
+        // inspector pane but has nothing to do with the search flow.
+        let wasShowingFoodDetail = state.activePane.contextualFoodID != nil
         guard state.back() else { return }
         navigationState = state
         if wasShowingFoodDetail {
@@ -375,33 +803,45 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     func handleFoodDetailSuccess(_ viewModel: FoodDetailViewModel) {
         guard let ready = featureGraph.readyState,
               ready.generation == session.sessionGeneration else { return }
+        let success = viewModel.lastSubmissionSuccess ?? FoodLogSubmissionSuccess(
+            submissionID: "legacy-\(viewModel.foodID)-\(viewModel.originDate.formatted)",
+            accountID: viewModel.accountID,
+            foodID: viewModel.foodID,
+            foodName: viewModel.food?.name ?? viewModel.foodID,
+            date: viewModel.originDate,
+            mealSlot: viewModel.mealSlot,
+            logID: nil,
+            replayed: false
+        )
         handleFoodDetailSuccess(
-            viewModel,
-            expectedGeneration: ready.generation
+            success,
+            expectedGeneration: ready.generation,
+            source: viewModel
         )
     }
 
     private func handleFoodDetailSuccess(
-        _ viewModel: FoodDetailViewModel,
-        expectedGeneration: UInt64
+        _ success: FoodLogSubmissionSuccess,
+        expectedGeneration: UInt64,
+        source: FoodDetailViewModel?
     ) {
         guard expectedGeneration == session.sessionGeneration,
               let ready = featureGraph.readyState,
               ready.generation == expectedGeneration,
-              ready.foodDetails[viewModel.foodID] === viewModel
+              success.accountID == ready.user.id,
+              deliveredSubmissionIDs.insert(success.submissionID).inserted
         else { return }
 
-        let identifier = ObjectIdentifier(viewModel)
-        guard deliveredFoodDetailSuccesses[viewModel.foodID] != identifier else {
-            return
-        }
-        deliveredFoodDetailSuccesses[viewModel.foodID] = identifier
-
         let generation = ready.generation
-        let originDate = viewModel.originDate
-        let mealSlot = viewModel.mealSlot
-        let isActiveDetail = navigationState.activePane.contextualFoodID
-            == viewModel.foodID
+        let originDate = success.date
+        let mealSlot = success.mealSlot
+        // A late callback from a replaced detail may refresh the diary, but it
+        // must not navigate away from the replacement the user is editing.
+        let isCurrentSource = source.map {
+            ready.foodDetails[success.foodID] === $0
+        } ?? true
+        let isActiveDetail = isCurrentSource
+            && navigationState.activePane.contextualFoodID == success.foodID
             && navigationState.selectedDate == originDate
 
         if isActiveDetail {
@@ -589,7 +1029,7 @@ enum AppShellPanePlan: Equatable {
 private extension Pane {
     var contextualFoodPane: Pane? {
         switch self {
-        case .foodDetail, .foodLog:
+        case .foodDetail, .foodLog, .logEditor:
             return self
         case .diary, .foodSearch:
             return nil
@@ -600,7 +1040,7 @@ private extension Pane {
         switch self {
         case .foodDetail(let foodID), .foodLog(let foodID):
             return foodID
-        case .diary, .foodSearch:
+        case .diary, .foodSearch, .logEditor:
             return nil
         }
     }
@@ -611,6 +1051,7 @@ private extension Pane {
 public struct AppShell: View {
     @StateObject private var coordinator: AppShellCoordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var pendingBannerDiscard: PendingLogSubmission?
 
     public init() {
         _coordinator = StateObject(wrappedValue: AppShellCoordinator())
@@ -710,11 +1151,144 @@ public struct AppShell: View {
 
     @ViewBuilder
     private var signedInShell: some View {
-        if horizontalSizeClass == .compact {
-            compactShell
-        } else {
-            expandedShell
+        GeometryReader { proxy in
+            let layout = AppShellLayout.resolve(
+                isCompactSizeClass: horizontalSizeClass == .compact,
+                width: Double(proxy.size.width)
+            )
+            VStack(spacing: 0) {
+                if let pending = coordinator.pendingSubmission {
+                    pendingSubmissionBanner(pending)
+                }
+                if layout == .compact {
+                    compactShell
+                } else {
+                    expandedShell
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .alert(item: $pendingBannerDiscard) { pending in
+            Alert(
+                title: Text(String(localized: "foodDetail.pending.discard.confirmTitle")),
+                message: Text(String(localized: "foodDetail.pending.discard.confirmMessage")),
+                primaryButton: .destructive(
+                    Text(String(localized: "foodDetail.pending.discard.confirmAction"))
+                ) {
+                    coordinator.discardPendingSubmission(pending)
+                },
+                secondaryButton: .cancel(
+                    Text(String(localized: "foodDetail.pending.cancel"))
+                )
+            )
+        }
+        .confirmationDialog(
+            String(localized: "diary.editor.discard.title"),
+            isPresented: discardConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "diary.editor.discard.action"), role: .destructive) {
+                coordinator.confirmDiscardEditorChanges()
+            }
+            .accessibilityIdentifier("diary.editor.discard.confirm")
+            Button(String(localized: "diary.common.cancel"), role: .cancel) {
+                coordinator.cancelDiscardEditorChanges()
+            }
+        } message: {
+            Text(String(localized: "diary.editor.discard.message"))
+        }
+    }
+
+    private var discardConfirmationPresented: Binding<Bool> {
+        Binding(
+            get: { coordinator.pendingEditorDiscard != nil },
+            set: { isPresented in
+                if !isPresented {
+                    coordinator.cancelDiscardEditorChanges()
+                }
+            }
+        )
+    }
+
+    private func pendingSubmissionBanner(
+        _ pending: PendingLogSubmission
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(bannerTitle(count: coordinator.pendingSubmissions.count))
+                        .font(.footnote.weight(.semibold))
+                    Text("\(pending.foodName) · \(pending.draft.date.formatted)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+
+                if coordinator.pendingSubmissions.count > 1 {
+                    Menu {
+                        ForEach(coordinator.pendingSubmissions) { entry in
+                            Button {
+                                coordinator.reviewPendingSubmission(entry)
+                            } label: {
+                                Text("\(entry.foodName) · \(entry.draft.date.formatted)")
+                            }
+                        }
+                    } label: {
+                        Text(String(localized: "foodDetail.pending.reviewAll"))
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .accessibilityIdentifier("foodDetail.pending.reviewAll")
+                }
+
+                Button(String(localized: "foodDetail.pending.review")) {
+                    coordinator.reviewPendingSubmission(pending)
+                }
+                .font(.footnote.weight(.semibold))
+                .accessibilityIdentifier("foodDetail.pending.review")
+
+                Button {
+                    coordinator.dismissPendingSubmissionBanner()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "foodDetail.pending.dismissBanner"))
+                .accessibilityIdentifier("foodDetail.pending.dismiss")
+            }
+
+            if pending.state == .conflicted {
+                HStack(spacing: 8) {
+                    Text(String(localized: "foodDetail.pending.conflicted"))
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Button(String(localized: "foodDetail.pending.discard")) {
+                        pendingBannerDiscard = pending
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .accessibilityIdentifier("foodDetail.pending.banner.discard")
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .accessibilityIdentifier("foodDetail.pending.banner")
+    }
+
+    private func bannerTitle(count: Int) -> String {
+        if count <= 1 {
+            return String(localized: "foodDetail.pending.banner")
+        }
+        return String(
+            format: String(localized: "foodDetail.pending.banner.count"),
+            count
+        )
     }
 
     // MARK: Compact
@@ -728,10 +1302,51 @@ public struct AppShell: View {
             paneView(plan.rootPane)
                 .toolbar { signOutToolbar }
                 .navigationDestination(for: Pane.self) { pane in
-                    paneView(pane)
-                        .toolbar { signOutToolbar }
+                    compactDestination(pane)
                 }
         }
+    }
+
+    @ViewBuilder
+    private func compactDestination(_ pane: Pane) -> some View {
+        let isLogEditor = isLogEditorPane(pane)
+        paneView(pane)
+            // Replace the system back gesture/button consistently on iOS and
+            // macOS compact windows. Otherwise a system back action can bypass
+            // the dirty/busy editor guard.
+            .navigationBarBackButtonHidden(isLogEditor)
+            .toolbar {
+                signOutToolbar
+                if isLogEditor {
+                    ToolbarItem(placement: editorBackPlacement) {
+                        editorBackButton
+                    }
+                }
+            }
+    }
+
+    private func isLogEditorPane(_ pane: Pane) -> Bool {
+        if case .logEditor = pane {
+            return true
+        }
+        return false
+    }
+
+    private var editorBackPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
+
+    private var editorBackButton: some View {
+        Button {
+            coordinator.requestBack()
+        } label: {
+            Label(String(localized: "diary.editor.back"), systemImage: "chevron.left")
+        }
+        .accessibilityIdentifier("diary.editor.back")
     }
 
     private var compactPath: Binding<[Pane]> {
@@ -751,7 +1366,7 @@ public struct AppShell: View {
                       Array(currentPath.prefix(newPath.count)) == newPath
                 else { return }
                 for _ in 0..<(currentPath.count - newPath.count) {
-                    coordinator.back()
+                    coordinator.requestBack()
                 }
             }
         )
@@ -821,7 +1436,7 @@ public struct AppShell: View {
                 guard !isPresented,
                       coordinator.navigationState.activePane.contextualFoodPane != nil
                 else { return }
-                coordinator.back()
+                coordinator.requestBack()
             }
         )
     }
@@ -834,7 +1449,7 @@ public struct AppShell: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Close") {
-                                coordinator.back()
+                                coordinator.requestBack()
                             }
                         }
                     }
@@ -887,6 +1502,12 @@ public struct AppShell: View {
         case .foodDetail(let foodID), .foodLog(let foodID):
             if let vm = coordinator.foodDetailViewModel(for: foodID) {
                 FoodDetailView(viewModel: vm)
+            } else {
+                ProgressView()
+            }
+        case .logEditor(let logID):
+            if let vm = coordinator.logEditorViewModel(for: logID) {
+                LogEditorView(viewModel: vm)
             } else {
                 ProgressView()
             }

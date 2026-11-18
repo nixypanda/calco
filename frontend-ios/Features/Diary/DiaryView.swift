@@ -5,8 +5,13 @@ public struct DiaryView: View {
     @ObservedObject private var viewModel: DiaryViewModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var isDatePickerPresented = false
 
     private var usesAccessibilityLayout: Bool { dynamicTypeSize.isAccessibilitySize }
+    private var usesExpandedMacroLabels: Bool {
+        usesAccessibilityLayout || horizontalSizeClass != .compact
+    }
 
     public init(viewModel: DiaryViewModel) {
         self.viewModel = viewModel
@@ -28,10 +33,20 @@ public struct DiaryView: View {
         .navigationTitle(viewModel.selectedDate.diaryDisplayTitle())
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                calendarButton
                 refreshButton
                 previousButton
                 nextButton
             }
+        }
+        .sheet(isPresented: $isDatePickerPresented) {
+            DiaryDatePickerView(
+                selection: viewModel.selectedDate,
+                today: viewModel.today,
+                onSelect: { date in
+                    await viewModel.selectDate(date)
+                }
+            )
         }
         .task {
             await viewModel.load()
@@ -43,6 +58,18 @@ public struct DiaryView: View {
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             Task { await viewModel.refreshToday() }
         }
+    }
+
+    private var calendarButton: some View {
+        Button {
+            isDatePickerPresented = true
+        } label: {
+            Image(systemName: "calendar")
+        }
+        .disabled(viewModel.isSessionExpired)
+        .accessibilityLabel(String(localized: "diary.calendar"))
+        .accessibilityIdentifier("diary.calendar")
+        .help(String(localized: "diary.calendar"))
     }
 
 
@@ -136,6 +163,7 @@ public struct DiaryView: View {
         List {
             summarySection
             refreshErrorSection
+            mutationNoticeSection
             ForEach(viewModel.groupedSections) { section in
                 Section {
                     if section.logs.isEmpty {
@@ -143,9 +171,23 @@ public struct DiaryView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(section.logs) { log in
-                            Text(log.title)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .accessibilityIdentifier("diary.log.\(log.id)")
+                            Button {
+                                viewModel.openLogEditor(logID: log.id)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(log.title)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    if let quantity = log.quantity {
+                                        Text(quantity.described)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel.isSessionExpired)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("diary.log.\(log.id)")
                         }
                     }
                     if let slot = section.slot {
@@ -182,6 +224,8 @@ public struct DiaryView: View {
                 Text(String(localized: "diary.macros"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                macroModePicker
 
                 macroColumns
 
@@ -230,19 +274,33 @@ public struct DiaryView: View {
         .accessibilityIdentifier("diary.summary.calories")
     }
 
+    private var macroModePicker: some View {
+        Picker(String(localized: "diary.macroMode.label"), selection: Binding(
+            get: { viewModel.macroMode },
+            set: { viewModel.setMacroMode($0) }
+        )) {
+            Text(String(localized: "diary.macroMode.grams")).tag(DiaryMacroDisplayMode.grams)
+            Text(String(localized: "diary.macroMode.percent")).tag(DiaryMacroDisplayMode.percent)
+        }
+        .pickerStyle(.segmented)
+        // No accessibilityLabel override: the segmented control supplies its
+        // own selected-value semantics for VoiceOver.
+        .accessibilityIdentifier("diary.summary.macroMode")
+    }
+
     @ViewBuilder
     private var macroColumns: some View {
         if usesAccessibilityLayout {
             VStack(alignment: .leading, spacing: 12) {
-                macroColumn("P", progress: viewModel.proteinProgress, identifier: "diary.summary.protein")
-                macroColumn("C", progress: viewModel.carbsProgress, identifier: "diary.summary.carbs")
-                macroColumn("F", progress: viewModel.fatProgress, identifier: "diary.summary.fat")
+                macroColumn(.protein, progress: viewModel.proteinProgress, identifier: "diary.summary.protein")
+                macroColumn(.carbs, progress: viewModel.carbsProgress, identifier: "diary.summary.carbs")
+                macroColumn(.fat, progress: viewModel.fatProgress, identifier: "diary.summary.fat")
             }
         } else {
             HStack(alignment: .top, spacing: 8) {
-                macroColumn("P", progress: viewModel.proteinProgress, identifier: "diary.summary.protein")
-                macroColumn("C", progress: viewModel.carbsProgress, identifier: "diary.summary.carbs")
-                macroColumn("F", progress: viewModel.fatProgress, identifier: "diary.summary.fat")
+                macroColumn(.protein, progress: viewModel.proteinProgress, identifier: "diary.summary.protein")
+                macroColumn(.carbs, progress: viewModel.carbsProgress, identifier: "diary.summary.carbs")
+                macroColumn(.fat, progress: viewModel.fatProgress, identifier: "diary.summary.fat")
             }
         }
     }
@@ -260,20 +318,50 @@ public struct DiaryView: View {
     }
 
     private func macroColumn(
-        _ label: String,
+        _ kind: DiaryMacroKind,
         progress: DiaryGoalProgress,
         identifier: String
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label)
+            Text(usesExpandedMacroLabels ? kind.fullLabel : kind.shortLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("\(progress.summary) g")
+            Text(DiaryMacroDisplay.text(for: progress, mode: viewModel.macroMode))
                 .font(.subheadline)
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: usesAccessibilityLayout ? nil : .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            kind.voiceOverLabel(progress: progress, mode: viewModel.macroMode)
+        )
         .accessibilityIdentifier(identifier)
+    }
+
+    @ViewBuilder
+    private var mutationNoticeSection: some View {
+        if let notice = viewModel.mutationNotice {
+            Section {
+                HStack(spacing: 10) {
+                    Label(notice.message, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.footnote)
+                    Spacer(minLength: 8)
+                    Button {
+                        viewModel.clearMutationNotice()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "diary.common.dismiss"))
+                    .accessibilityIdentifier("diary.mutationNotice.dismiss")
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("diary.mutationNotice")
+            .accessibilityValue(notice.title)
+        }
     }
 }

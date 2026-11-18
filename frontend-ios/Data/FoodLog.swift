@@ -287,6 +287,8 @@ public struct CreateLogRequest: Encodable, Equatable, Sendable {
     public let item: ItemReference
     public let quantity: NutritionQuantity
     public let notes: String?
+    /// Optional single-create retry key sent as `idempotency_key`. Omitted when nil.
+    public let idempotencyKey: String?
 
     public init(
         logDate: LocalDiaryDate,
@@ -294,7 +296,8 @@ public struct CreateLogRequest: Encodable, Equatable, Sendable {
         mealSlot: MealSlot? = nil,
         item: ItemReference,
         quantity: NutritionQuantity,
-        notes: String? = nil
+        notes: String? = nil,
+        idempotencyKey: String? = nil
     ) {
         self.logDate = logDate
         self.deviceTimeZone = deviceTimeZone
@@ -302,6 +305,7 @@ public struct CreateLogRequest: Encodable, Equatable, Sendable {
         self.item = item
         self.quantity = quantity
         self.notes = notes
+        self.idempotencyKey = idempotencyKey
     }
 
     public init(
@@ -310,7 +314,8 @@ public struct CreateLogRequest: Encodable, Equatable, Sendable {
         mealSlot: MealSlot? = nil,
         productID: String,
         quantity: NutritionQuantity,
-        notes: String? = nil
+        notes: String? = nil,
+        idempotencyKey: String? = nil
     ) {
         self.init(
             logDate: logDate,
@@ -318,7 +323,8 @@ public struct CreateLogRequest: Encodable, Equatable, Sendable {
             mealSlot: mealSlot,
             item: ItemReference(itemType: .product, id: productID),
             quantity: quantity,
-            notes: notes
+            notes: notes,
+            idempotencyKey: idempotencyKey
         )
     }
 
@@ -329,6 +335,7 @@ public struct CreateLogRequest: Encodable, Equatable, Sendable {
         case item
         case quantity
         case notes
+        case idempotencyKey = "idempotency_key"
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -343,5 +350,6 @@ public struct CreateLogRequest: Encodable, Equatable, Sendable {
         } else {
             try container.encodeNil(forKey: .notes)
         }
+        try container.encodeIfPresent(idempotencyKey, forKey: .idempotencyKey)
     }
 }
