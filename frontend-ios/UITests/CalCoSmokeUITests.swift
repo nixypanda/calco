@@ -13,8 +13,14 @@ import UIKit
 
 enum CalCoE2E {
     static let appBundleIdentifier = "dev.calco.CalCo.Test"
-    static let baseURL = "http://127.0.0.1:3002"
+    static let defaultBaseURL = "http://127.0.0.1:3002"
+    static let baseURLEnvironmentKey = "CALCO_E2E_BASE_URL"
+    static let appBaseURLEnvironmentKey = "CALCO_API_BASE_URL"
     static let credentialsEnvironmentKey = "CALCO_E2E_CREDENTIALS_JSON"
+
+    struct ConfigurationError: Error, CustomStringConvertible {
+        let description: String
+    }
 
     static let supportsSecurePasswordEntry: Bool = {
 #if os(iOS) && targetEnvironment(simulator)
@@ -48,10 +54,56 @@ enum CalCoE2E {
         return Credentials(username: username, password: password)
     }
 
-    static func makeApp() -> XCUIApplication {
+    static func makeApp(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> XCUIApplication {
+        let baseURL = try resolvedBaseURL(environment: environment)
         let app = XCUIApplication(bundleIdentifier: appBundleIdentifier)
-        app.launchEnvironment["CALCO_API_BASE_URL"] = baseURL
+        app.launchEnvironment[appBaseURLEnvironmentKey] = baseURL.absoluteString
         return app
+    }
+
+    /// The default isolated Test app backend is loopback port 3002. A runner may
+    /// inject another isolated backend, but only on an explicit loopback host:
+    /// credential-bearing tests must never be pointed at a LAN or Internet URL.
+    static func resolvedBaseURL(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> URL {
+        guard let override = environment[baseURLEnvironmentKey] else {
+            return URL(string: defaultBaseURL)!
+        }
+        let trimmed = override.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.contains(where: { $0.isWhitespace }),
+              let url = validatedBaseURL(trimmed) else {
+            throw ConfigurationError(
+                description: "\(baseURLEnvironmentKey) must be an explicit loopback "
+                    + "http(s) base URL without user info, a query, or a fragment. "
+                    + "Allowed hosts: localhost, 127.0.0.1, ::1."
+            )
+        }
+        return url
+    }
+
+    /// Validates before any app launch or credential use. This intentionally
+    /// rejects remote and LAN hosts even when they use HTTPS.
+    static func validatedBaseURL(_ raw: String) -> URL? {
+        guard let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host?.lowercased(),
+              isLoopbackHost(host),
+              url.user == nil,
+              url.password == nil,
+              url.query == nil,
+              url.fragment == nil else {
+            return nil
+        }
+        return url
+    }
+
+    private static func isLoopbackHost(_ host: String) -> Bool {
+        host == "localhost" || host == "127.0.0.1" || host == "::1"
     }
 
     static func waitUntil(
@@ -140,6 +192,36 @@ enum CalCoE2E {
         submit.tap()
     }
 
+    /// iOS can ask whether the app may paste from another process. Approving
+    /// that system prompt still uses the secure pasteboard path and never types
+    /// the password; declining means the test skips as before.
+    private static func approvePastePromptIfPresent(in app: XCUIApplication) {
+        let candidates = [
+            app,
+            XCUIApplication(bundleIdentifier: "com.apple.springboard"),
+        ]
+        for candidate in candidates {
+            let alert = candidate.alerts.firstMatch
+            guard alert.waitForExistence(timeout: 2) else { continue }
+            for label in ["Allow Paste", "Paste", "Allow"] {
+                let button = alert.buttons[label]
+                if button.exists, button.isHittable {
+                    button.tap()
+                    return
+                }
+            }
+        }
+
+        // Some iOS 26 builds expose a keyboard assistant paste control instead
+        // of a permission alert. It still uses the secure pasteboard path.
+        let assistant = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "assistantPaste")
+        ).firstMatch
+        if assistant.waitForExistence(timeout: 2), assistant.isHittable {
+            assistant.tap()
+        }
+    }
+
     static func pastePassword(
         _ password: String,
         into field: XCUIElement,
@@ -165,6 +247,7 @@ enum CalCoE2E {
         pasteboard.items = []
         pasteboard.string = password
         field.typeKey("v", modifierFlags: .command)
+        approvePastePromptIfPresent(in: app)
         let pasted = waitUntil(timeout: 10) {
             let value = field.value as? String ?? ""
             return !value.isEmpty && value != before
@@ -197,7 +280,7 @@ final class CalCoSmokeUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app = CalCoE2E.makeApp()
+        app = try CalCoE2E.makeApp()
     }
 
     override func tearDownWithError() throws {
@@ -226,6 +309,34 @@ final class CalCoSmokeUITests: XCTestCase {
             )
             return
         }
+    }
+
+    func testE2EBaseURLOverridePolicy() throws {
+        XCTAssertEqual(
+            try CalCoE2E.resolvedBaseURL(environment: [:]).absoluteString,
+            CalCoE2E.defaultBaseURL
+        )
+        XCTAssertEqual(
+            try CalCoE2E.resolvedBaseURL(
+                environment: [CalCoE2E.baseURLEnvironmentKey: "http://127.0.0.1:3902"]
+            ).port,
+            3902
+        )
+        XCTAssertNotNil(CalCoE2E.validatedBaseURL("http://localhost:3902"))
+        XCTAssertNotNil(CalCoE2E.validatedBaseURL("http://[::1]:3902"))
+        XCTAssertNotNil(CalCoE2E.validatedBaseURL("https://127.0.0.1:3902"))
+        XCTAssertNil(CalCoE2E.validatedBaseURL("http://192.168.1.10:3902"))
+        XCTAssertNil(CalCoE2E.validatedBaseURL("https://example.com"))
+        XCTAssertNil(CalCoE2E.validatedBaseURL("https://localhost.example.com"))
+        XCTAssertNil(CalCoE2E.validatedBaseURL("http://127.0.0.1.example.com:3902"))
+        XCTAssertNil(CalCoE2E.validatedBaseURL("ftp://127.0.0.1:3902"))
+        XCTAssertNil(CalCoE2E.validatedBaseURL("http://user:pass@127.0.0.1:3902"))
+        XCTAssertNil(CalCoE2E.validatedBaseURL("http://127.0.0.1:3902?next=https://example.com"))
+        XCTAssertThrowsError(
+            try CalCoE2E.resolvedBaseURL(
+                environment: [CalCoE2E.baseURLEnvironmentKey: "https://example.com"]
+            )
+        )
     }
 
     func testSignInWhenCredentialsAvailable() throws {

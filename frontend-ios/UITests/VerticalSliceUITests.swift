@@ -91,7 +91,7 @@ final class VerticalSliceUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app = CalCoE2E.makeApp()
+        app = try CalCoE2E.makeApp()
     }
 
     override func tearDownWithError() throws {

@@ -283,13 +283,19 @@ framework to `CalCoTests` and change the auth tests' import then.
 `UITests/` is a synchronized folder for the `CalCoUITests` UI-test target. It is
 a black-box target (no `@testable import`) driven by stable accessibility
 identifiers such as `auth.login.*`, `search.field`, `search.result.*`,
-`diary.addFood.*`, `diary.summary.calories`, `diary.log.*` and
-`foodDetail.*`. It is wired into the shared **`CalCo-E2E`** scheme only — the
-`CalCo` scheme is unchanged.
+`diary.addFood.*`, `diary.summary.calories`, `diary.log.*`,
+`diary.settings`, `settings.*` and `foodDetail.*`. It is wired into the shared
+**`CalCo-E2E`** scheme only — the `CalCo` scheme is unchanged.
 
-The app under test is always the isolated **`dev.calco.CalCo.Test`** bundle
-against **`http://127.0.0.1:3002`**. It never targets the `Debug` app or the
-development backend on `localhost:3001`.
+The app under test is always the isolated **`dev.calco.CalCo.Test`** bundle.
+Its default backend is **`http://127.0.0.1:3002`**; a runner may inject
+`CALCO_E2E_BASE_URL` to use another isolated stack. This override exists solely
+for the user-approved isolated live E2E backend; it is not a general
+remote-backend feature. The helper accepts only `localhost`, `127.0.0.1`, or
+`::1` over http(s), with no user info, query, or fragment. A LAN or Internet
+URL is rejected before the app launches, so credentials are never directed at
+an arbitrary remote host. It never targets the `Debug` app or the development
+backend on `localhost:3001`.
 
 Build the app and both test bundles for the simulator:
 
@@ -382,12 +388,19 @@ with open(xctestrun, "rb") as handle:
     data = plistlib.load(handle)
 data["CalCoUITests"]["EnvironmentVariables"]["CALCO_E2E_CREDENTIALS_JSON"] = \
     json.dumps(credentials)
+# Optional: another loopback-only isolated stack. Defaults to 3002 when absent.
+# data["CalCoUITests"]["EnvironmentVariables"]["CALCO_E2E_BASE_URL"] = \
+#     "http://127.0.0.1:3902"
 with open(xctestrun, "wb") as handle:
     plistlib.dump(data, handle, fmt=plistlib.FMT_BINARY)
 PY
 ```
 
-Run both credentialed tests with that private xctestrun:
+`CALCO_E2E_BASE_URL` belongs only in the `CalCoUITests` runner environment.
+The test helper validates it before launching the app and passes it to the app
+as `CALCO_API_BASE_URL`. Never put credentials in the URL, query, or a scheme.
+
+Run the credentialed tests with that private xctestrun:
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
@@ -395,9 +408,39 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
   -destination 'platform=iOS Simulator,name=iPhone 17e' \
   -only-testing:CalCoUITests/CalCoSmokeUITests/testSignInWhenCredentialsAvailable \
   -only-testing:CalCoUITests/VerticalSliceUITests/testLogE2ETestFoodFromSelectedDayDiary \
+  -only-testing:CalCoUITests/SettingsUITests/testHistoricalDateRetentionGoalAndSlotSettings \
   -resultBundlePath "$PRIVATE_RUN/result.xcresult" \
   test-without-building 2>&1 | tee "$PRIVATE_RUN/run.log"
 ```
+
+`SettingsUITests` expects an isolated fixture with a historical diary date and
+a separate today goal. The checked-in defaults use the seed's 2026-11-17
+historical date, 2026-11-19 today, baseline 2140/160/240/60, and a disabled
+late-night slot that retains a historical log. A regenerated fixture can set
+these nonsecret runner environment values:
+
+```text
+CALCO_E2E_FIXTURE_TODAY=YYYY-MM-DD
+CALCO_E2E_FIXTURE_HISTORICAL_DATE=YYYY-MM-DD
+CALCO_E2E_FIXTURE_BREAKFAST_LOG_ID=<uuid>
+CALCO_E2E_FIXTURE_LATE_NIGHT_LOG_ID=<uuid>
+CALCO_E2E_FIXTURE_BASELINE_GOAL=2140,160,240,60
+CALCO_E2E_FIXTURE_EDITED_GOAL=2180,160,250,60
+CALCO_E2E_FIXTURE_HISTORICAL_CALORIES=1629
+CALCO_E2E_FIXTURE_HISTORICAL_GOAL=2100
+```
+
+`CALCO_E2E_FIXTURE_TODAY` must match the app's device-local today; otherwise
+the computed fixture-day navigation and today-goal assertions intentionally
+fail. If the date variables are omitted, the checked-in defaults are accepted
+only on 2026-11-19; the test fails its prerequisite with a reseed/config
+message on another date.
+
+The test asserts the disabled late-night historical log is already visible
+under native retained-log semantics. It best-effort restores the initially
+read goal and dinner-slot state from `tearDown`, including after an assertion
+aborts the journey. If cleanup cannot run because the app or session is gone,
+reset the isolated fixture before rerunning.
 
 Before trusting the result, scan the result bundle and build log for the exact
 password and its eight-character prefix. The scan prints counts only:
