@@ -59,6 +59,24 @@ public final class DiaryViewModel: ObservableObject {
     /// Authoritative local rows from successful PUT responses. A refetch that
     /// still returns an older row must not silently revert the saved value.
     private var savedLogOverrides: [LocalDiaryDate: [String: DiaryLog]] = [:]
+    /// Settings saves can land while a date load is still in flight. The load
+    /// token cannot be invalidated without leaving `.loading` stuck, so keep
+    /// local wins until a fetch actually returns the saved value.
+    private struct PendingGoalOverride {
+        let targets: DiaryGoalTargets
+        let date: LocalDiaryDate
+        /// The one diary fetch that was in flight when the settings save
+        /// landed. Future refreshes must accept authoritative server state.
+        let token: Int
+    }
+
+    private struct PendingPreferencesOverride {
+        let preferences: DiaryPrefs
+        let token: Int
+    }
+
+    private var pendingGoalOverride: PendingGoalOverride?
+    private var pendingPreferencesOverride: PendingPreferencesOverride?
     /// Recently deleted IDs guard against an older in-flight fetch reopening a
     /// row after DELETE succeeded. A later fetch that no longer contains the ID
     /// retires the tombstone.
@@ -97,6 +115,9 @@ public final class DiaryViewModel: ObservableObject {
         guard !isSessionExpired else { return }
         guard date == selectedDate else { return }
 
+        // Overrides only protect the fetch that was already in flight when a
+        // settings save happened. A new load is a fresh authoritative read.
+        clearPendingOverrides()
         let token = nextToken()
         if preservingContent && hasLoadedContent {
             state = .loaded(.refreshing)
@@ -108,12 +129,26 @@ public final class DiaryViewModel: ObservableObject {
             let day = try await service.fetchDiary(for: date)
             guard token == currentToken, selectedDate == date else { return }
             logs = resolvedLogs(from: day.logs, for: date)
-            goal = day.goal
-            enabledSlots = day.prefs.enabledSlots
+            let goalOverride = pendingGoalOverride
+            let preferencesOverride = pendingPreferencesOverride
+            pendingGoalOverride = nil
+            pendingPreferencesOverride = nil
+            if let goalOverride, goalOverride.token == token, goalOverride.date == date {
+                goal = goalOverride.targets
+            } else {
+                goal = day.goal
+            }
+            if let preferencesOverride, preferencesOverride.token == token {
+                enabledSlots = preferencesOverride.preferences.enabledSlots
+            } else {
+                enabledSlots = day.prefs.enabledSlots
+            }
             state = .loaded(.idle)
             completedFetchCount += 1
         } catch {
             guard token == currentToken, selectedDate == date else { return }
+            if pendingGoalOverride?.token == token { pendingGoalOverride = nil }
+            if pendingPreferencesOverride?.token == token { pendingPreferencesOverride = nil }
 
             if Task.isCancelled || isCancelledDiaryError(error) {
                 if hasLoadedContent {
@@ -239,6 +274,43 @@ public final class DiaryViewModel: ObservableObject {
         } else {
             logs.append(log)
         }
+    }
+
+    /// Applies a saved goal only when the selected diary day is the day the
+    /// backend saved (device-local today). Historical days keep the goal that
+    /// was effective for them, and the selected date never changes here.
+    public func applySavedGoal(_ targets: DiaryGoalTargets, effectiveOn date: LocalDiaryDate) {
+        guard !isSessionExpired, selectedDate == date else { return }
+        if case .loading = state {
+            // Protect only this already-in-flight fetch. The next load starts
+            // with authoritative server state.
+            pendingGoalOverride = PendingGoalOverride(
+                targets: targets,
+                date: date,
+                token: currentToken
+            )
+        } else {
+            // A loaded/refreshing screen can be fenced directly; no future
+            // refresh may be masked by an old local value.
+            fenceStaleDiaryFetch()
+        }
+        goal = targets
+    }
+
+    /// Applies saved meal-slot preferences without refetching or changing the
+    /// date. Logs already loaded for now-hidden slots remain in `logs` and
+    /// still render through `groupedSections`.
+    public func applySavedPreferences(_ preferences: DiaryPrefs) {
+        guard !isSessionExpired, !preferences.enabledSlots.isEmpty else { return }
+        if case .loading = state {
+            pendingPreferencesOverride = PendingPreferencesOverride(
+                preferences: preferences,
+                token: currentToken
+            )
+        } else {
+            fenceStaleDiaryFetch()
+        }
+        enabledSlots = preferences.enabledSlots
     }
 
     /// Applies a successful DELETE immediately and remembers a tombstone so a
@@ -369,6 +441,28 @@ public final class DiaryViewModel: ObservableObject {
         logs = []
         goal = DiaryGoalTargets()
         enabledSlots = Set(MealSlot.allCases)
+        clearPendingOverrides()
+    }
+
+    private func clearPendingOverrides() {
+        pendingGoalOverride = nil
+        pendingPreferencesOverride = nil
+    }
+
+    /// A settings save is an authoritative local update. Invalidate any diary
+    /// fetch that started before it so a late response cannot clobber the new
+    /// goal or enabled-slot set. Only loaded states are fenced; a fresh date
+    /// load is not turned into a permanently stuck loading state.
+    private func fenceStaleDiaryFetch() {
+        switch state {
+        case .loaded(.refreshing):
+            currentToken += 1
+            state = .loaded(.idle)
+        case .loaded:
+            currentToken += 1
+        case .loading, .failed, .sessionExpired:
+            break
+        }
     }
 
     private func nextToken() -> Int {

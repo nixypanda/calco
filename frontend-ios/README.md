@@ -246,17 +246,22 @@ locales or extra String Catalog tables.
 
 Keys currently defined: `CalCo`, `Native app scaffold`, and all static
 `String(localized:)` call-site keys under `auth.*`, `diary.*`, `foodDetail.*`
-(including `foodDetail.mealSlot.*`) and `search.*`, including error keys such as
+(including `foodDetail.mealSlot.*`), `settings.*` (goals, slots, status,
+discard, keyboard and errors), and `search.*`, including error keys such as
 `diary.error.network`, `diary.error.sessionExpired`, `diary.refresh`,
 `diary.sessionExpired.title`, `foodDetail.error.*` and `search.error.generic`.
 
-The catalog has no format specifiers (`%@`, `%d`, etc.), so no plural or number
-variations are defined; Xcode/String Catalogs default to a single translation
-and Swift's default number formatting applies to any interpolated values. If a
-feature introduces a count-based format string, add its plural variations in
-the String Catalog rather than concatenating numbers in code. Interpolated
-`Text("\(value) …")` strings are not catalog keys and must be reworked by the
-owning feature if they need localization.
+The catalog currently has these format strings:
+`diary.editor.delete.failedWithBarrier` (`%@`),
+`diary.mutation.deleted.blockedPending` (`%lld`),
+`settings.goals.status.savedFrom` (`%@`, the localized effective date), and
+`foodDetail.pending.banner.count` (`%lld`). They have single English
+translations and no plural/number variations; `settings.goals.status.savedFrom`
+uses `String(format:)` with an already-formatted date. If a feature introduces
+a count-based format string, add its plural variations in the String Catalog
+rather than concatenating numbers in code. Interpolated `Text("\(value) …")`
+strings are not catalog keys and must be reworked by the owning feature if they
+need localization.
 
 ## Tests
 

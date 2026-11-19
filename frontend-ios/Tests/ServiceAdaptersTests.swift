@@ -773,4 +773,249 @@ final class ServiceAdaptersTests: XCTestCase {
 
         XCTAssertTrue(recorder.requests.isEmpty)
     }
+
+    func testSettingsAdapterLoadsTodayGoalAndCanonicalPreferences() async throws {
+        let recorder = AdapterRequestRecorder()
+        AdapterURLProtocol.setHandler { request in
+            recorder.record(request)
+            switch request.url?.path {
+            case "/api/goal":
+                return self.json(
+                    """
+                    {
+                      "requested_date": "2026-11-17",
+                      "effective_from": "2026-11-01",
+                      "source": "saved",
+                      "calorie_target": "2140",
+                      "protein_target_g": "160",
+                      "carbs_target_g": "240",
+                      "fat_target_g": "60"
+                    }
+                    """
+                )
+            case "/api/diary-preferences":
+                return self.json(#"{"enabled_meal_slots": ["dinner", "breakfast"]}"#)
+            default:
+                return .init(statusCode: 404)
+            }
+        }
+
+        let adapter = CalCoSettingsServiceAdapter(client: makeClient())
+        let goal = try await adapter.fetchGoal(on: date)
+        let preferences = try await adapter.fetchDiaryPreferences()
+
+        XCTAssertEqual(goal.requestedDate, date)
+        XCTAssertEqual(goal.effectiveFrom, LocalDiaryDate(year: 2026, month: 11, day: 1))
+        XCTAssertEqual(goal.targets.calorieTarget, 2_140)
+        XCTAssertEqual(goal.targets.proteinTargetG, 160)
+        XCTAssertEqual(goal.targets.carbsTargetG, 240)
+        XCTAssertEqual(goal.targets.fatTargetG, 60)
+        XCTAssertEqual(preferences.enabledSlots, [.breakfast, .dinner])
+
+        let goalRequest = try XCTUnwrap(
+            recorder.requests.first(where: { $0.url?.path == "/api/goal" })
+        )
+        XCTAssertEqual(goalRequest.httpMethod, "GET")
+        XCTAssertEqual(queryValue(goalRequest, name: "date"), "2026-11-17")
+    }
+
+    func testSettingsAdapterSavesGoalAndPreferenceContract() async throws {
+        let recorder = AdapterRequestRecorder()
+        AdapterURLProtocol.setHandler { request in
+            recorder.record(request)
+            switch request.url?.path {
+            case "/api/goal":
+                return self.json(
+                    """
+                    {
+                      "requested_date": "2026-11-17",
+                      "effective_from": "2026-11-17",
+                      "source": "saved",
+                      "calorie_target": "2150",
+                      "protein_target_g": "170",
+                      "carbs_target_g": "210",
+                      "fat_target_g": "70"
+                    }
+                    """
+                )
+            case "/api/diary-preferences":
+                return self.json(#"{"enabled_meal_slots": ["breakfast", "dinner"]}"#)
+            default:
+                return .init(statusCode: 404)
+            }
+        }
+
+        let adapter = CalCoSettingsServiceAdapter(client: makeClient())
+        let savedGoal = try await adapter.saveGoal(SaveGoalRequest(
+            localDate: date,
+            deviceTimeZone: "Asia/Kolkata",
+            targets: GoalTargets(
+                calorieTarget: 2_150,
+                proteinTargetG: 170,
+                carbsTargetG: 210,
+                fatTargetG: 70
+            )
+        ))
+        let savedPreferences = try await adapter.updateDiaryPreferences(
+            DiaryPreferences(enabledMealSlots: [.breakfast, .dinner])
+        )
+
+        XCTAssertEqual(savedGoal.effectiveFrom, date)
+        XCTAssertEqual(savedPreferences.enabledMealSlots, [.breakfast, .dinner])
+
+        let goalRequest = try XCTUnwrap(
+            recorder.requests.first(where: { $0.url?.path == "/api/goal" })
+        )
+        XCTAssertEqual(goalRequest.httpMethod, "PUT")
+        let goalBody = try XCTUnwrap(bodyData(from: goalRequest))
+        let goalObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: goalBody) as? [String: Any]
+        )
+        XCTAssertEqual(goalObject["local_date"] as? String, "2026-11-17")
+        XCTAssertEqual(goalObject["device_timezone"] as? String, "Asia/Kolkata")
+        XCTAssertEqual((goalObject["calorie_target"] as? NSNumber)?.doubleValue, 2_150)
+        XCTAssertEqual((goalObject["protein_target_g"] as? NSNumber)?.doubleValue, 170)
+        XCTAssertEqual((goalObject["carbs_target_g"] as? NSNumber)?.doubleValue, 210)
+        XCTAssertEqual((goalObject["fat_target_g"] as? NSNumber)?.doubleValue, 70)
+
+        let prefsRequest = try XCTUnwrap(
+            recorder.requests.first(where: { $0.url?.path == "/api/diary-preferences" })
+        )
+        XCTAssertEqual(prefsRequest.httpMethod, "PUT")
+        let prefsBody = try XCTUnwrap(bodyData(from: prefsRequest))
+        let prefsObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: prefsBody) as? [String: Any]
+        )
+        XCTAssertEqual(prefsObject["enabled_meal_slots"] as? [String], ["breakfast", "dinner"])
+    }
+
+    func testSettingsAdapterMapsDefinitiveRejectionAndUnauthorizedSeparately() async throws {
+        AdapterURLProtocol.setHandler { _ in
+            self.json(
+                self.errorJSON(code: "validation", message: "invalid targets"),
+                statusCode: 400
+            )
+        }
+        do {
+            _ = try await CalCoSettingsServiceAdapter(client: makeClient()).saveGoal(
+                SaveGoalRequest(
+                    localDate: date,
+                    deviceTimeZone: "Asia/Kolkata",
+                    targets: GoalTargets(
+                        calorieTarget: 2_100,
+                        proteinTargetG: 150,
+                        carbsTargetG: 240,
+                        fatTargetG: 60
+                    )
+                )
+            )
+            XCTFail("Expected a rejection")
+        } catch let error as DiarySettingsServiceError {
+            XCTAssertEqual(error, .rejected("invalid targets"))
+        }
+
+        AdapterURLProtocol.setHandler { _ in
+            self.json(
+                self.errorJSON(code: "session_expired", message: "Session expired"),
+                statusCode: 401
+            )
+        }
+        do {
+            _ = try await CalCoSettingsServiceAdapter(client: makeClient())
+                .fetchDiaryPreferences()
+            XCTFail("Expected an unauthorized error")
+        } catch let error as DiarySettingsServiceError {
+            XCTAssertEqual(error, .unauthorized)
+        }
+    }
+
+    func testSettingsAdapterPreservesCancellationAndLocalizesRateAndServerFallbacks() async throws {
+        AdapterURLProtocol.setHandler { _ in .init(error: URLError(.cancelled)) }
+        do {
+            _ = try await CalCoSettingsServiceAdapter(client: makeClient())
+                .fetchDiaryPreferences()
+            XCTFail("Expected cancellation")
+        } catch let error as DiarySettingsServiceError {
+            XCTAssertEqual(error, .cancelled)
+        }
+
+        AdapterURLProtocol.setHandler { _ in
+            self.json(self.errorJSON(code: "rate_limited", message: "slow down"), statusCode: 429)
+        }
+        do {
+            _ = try await CalCoSettingsServiceAdapter(client: makeClient())
+                .saveGoal(SaveGoalRequest(
+                    localDate: date,
+                    deviceTimeZone: "Asia/Kolkata",
+                    targets: GoalTargets(
+                        calorieTarget: 2_100,
+                        proteinTargetG: 150,
+                        carbsTargetG: 240,
+                        fatTargetG: 60
+                    )
+                ))
+            XCTFail("Expected a rate-limit rejection")
+        } catch let error as DiarySettingsServiceError {
+            XCTAssertEqual(error, .rejected(String(localized: "settings.error.rateLimited")))
+        }
+
+        AdapterURLProtocol.setHandler { _ in
+            self.json(
+                self.errorJSON(code: "unknown", message: "   "),
+                statusCode: 503
+            )
+        }
+        do {
+            _ = try await CalCoSettingsServiceAdapter(client: makeClient())
+                .fetchGoal(on: date)
+            XCTFail("Expected a server error")
+        } catch let error as DiarySettingsServiceError {
+            XCTAssertEqual(error, .server(String(localized: "settings.error.server")))
+        }
+
+        XCTAssertTrue(isAmbiguousDiarySettingsError(DiarySettingsServiceError.cancelled))
+        XCTAssertFalse(isAmbiguousDiarySettingsError(DiarySettingsServiceError.rejected("no")))
+    }
+
+    func testSettingsAdapterSendsExactScaleFiveDecimalGoalBody() async throws {
+        let recorder = AdapterRequestRecorder()
+        AdapterURLProtocol.setHandler { request in
+            recorder.record(request)
+            return self.json(
+                """
+                {
+                  "requested_date": "2026-11-17",
+                  "effective_from": "2026-11-17",
+                  "source": "saved",
+                  "calorie_target": "2102.66673",
+                  "protein_target_g": "150.12345",
+                  "carbs_target_g": "240.54321",
+                  "fat_target_g": "60.00001"
+                }
+                """
+            )
+        }
+        let exact = GoalTargetsDecimal(
+            calorieTarget: Decimal(string: "2102.66673")!,
+            proteinTargetG: Decimal(string: "150.12345")!,
+            carbsTargetG: Decimal(string: "240.54321")!,
+            fatTargetG: Decimal(string: "60.00001")!
+        )
+
+        _ = try await CalCoSettingsServiceAdapter(client: makeClient()).saveGoal(
+            SaveGoalRequest(
+                localDate: date,
+                deviceTimeZone: "Asia/Kolkata",
+                exactTargets: exact
+            )
+        )
+
+        let request = try XCTUnwrap(recorder.requests.first)
+        let body = try XCTUnwrap(bodyData(from: request))
+        let raw = String(decoding: body, as: UTF8.self)
+        XCTAssertTrue(raw.contains("\"calorie_target\":2102.66673"))
+        XCTAssertTrue(raw.contains("\"protein_target_g\":150.12345"))
+        XCTAssertTrue(raw.contains("\"carbs_target_g\":240.54321"))
+        XCTAssertTrue(raw.contains("\"fat_target_g\":60.00001"))
+    }
 }

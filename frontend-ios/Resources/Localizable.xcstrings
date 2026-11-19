@@ -1331,6 +1331,426 @@
         }
       }
     },
+    "settings.cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "settings.discard.action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard Changes"
+          }
+        }
+      }
+    },
+    "settings.discard.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your unsaved settings changes will be lost."
+          }
+        }
+      }
+    },
+    "settings.discard.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard changes?"
+          }
+        }
+      }
+    },
+    "settings.error.generic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not save settings. Please try again."
+          }
+        }
+      }
+    },
+    "settings.goals.calories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calories (kcal)"
+          }
+        }
+      }
+    },
+    "settings.goals.carbs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carbs (g)"
+          }
+        }
+      }
+    },
+    "settings.goals.error.caloriesPositive" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calories must be greater than zero."
+          }
+        }
+      }
+    },
+    "settings.goals.error.formula" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calories must equal protein × 4 + carbs × 4 + fat × 9."
+          }
+        }
+      }
+    },
+    "settings.goals.error.invalidNumbers" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter valid numbers for calories, protein, carbs, and fat."
+          }
+        }
+      }
+    },
+    "settings.goals.error.macrosNonNegative" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protein, carbs, and fat cannot be negative."
+          }
+        }
+      }
+    },
+    "settings.goals.error.reconcileFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CalCo could not confirm whether the goal was saved. Check the saved goal before trying again."
+          }
+        }
+      }
+    },
+    "settings.goals.error.reconciled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server did not apply the last change. Your edits are still here; review and save again."
+          }
+        }
+      }
+    },
+    "settings.goals.error.reconciledChanged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The saved goal changed on the server. Review the current targets before saving again."
+          }
+        }
+      }
+    },
+    "settings.goals.fat" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fat (g)"
+          }
+        }
+      }
+    },
+    "settings.goals.formula" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calories must equal protein × 4 + carbs × 4 + fat × 9."
+          }
+        }
+      }
+    },
+    "settings.goals.historicalNote" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goal changes apply from today; earlier diary days keep the goal that was effective for them."
+          }
+        }
+      }
+    },
+    "settings.goals.protein" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protein (g)"
+          }
+        }
+      }
+    },
+    "settings.goals.reconcile" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check Saved Goal"
+          }
+        }
+      }
+    },
+    "settings.goals.save" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Goals"
+          }
+        }
+      }
+    },
+    "settings.goals.status.default" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default targets are in use."
+          }
+        }
+      }
+    },
+    "settings.goals.status.savedFrom" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved targets have applied since %@."
+          }
+        }
+      }
+    },
+    "settings.goals.status.savedToday" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved targets apply from today."
+          }
+        }
+      }
+    },
+    "settings.goals.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daily Goals"
+          }
+        }
+      }
+    },
+    "settings.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading settings…"
+          }
+        }
+      }
+    },
+    "settings.open" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diary Settings"
+          }
+        }
+      }
+    },
+    "settings.saved" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved"
+          }
+        }
+      }
+    },
+    "settings.slots.description" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose at least one meal slot to show in your diary. Logs in hidden slots remain saved."
+          }
+        }
+      }
+    },
+    "settings.slots.error.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select at least one meal slot."
+          }
+        }
+      }
+    },
+    "settings.slots.error.reconcileFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CalCo could not confirm whether meal slots were saved. Check the saved slots before trying again."
+          }
+        }
+      }
+    },
+    "settings.slots.error.reconciled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server did not apply the last change. Your selection is still here; review and save again."
+          }
+        }
+      }
+    },
+    "settings.slots.error.reconciledChanged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The saved meal slots changed on the server. Review the current selection before saving again."
+          }
+        }
+      }
+    },
+    "settings.slots.reconcile" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check Saved Meal Slots"
+          }
+        }
+      }
+    },
+    "settings.slots.save" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Meal Slots"
+          }
+        }
+      }
+    },
+    "settings.slots.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meal Slots"
+          }
+        }
+      }
+    },
+    "settings.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diary Settings"
+          }
+        }
+      }
+    },
+    "settings.error.cancelled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The request was cancelled. Please try again."
+          }
+        }
+      }
+    },
+    "settings.error.rateLimited" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many requests. Please try again later."
+          }
+        }
+      }
+    },
+    "settings.error.server" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server could not complete the request."
+          }
+        }
+      }
+    },
+    "settings.goals.error.unsupported" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This goal uses a value the app cannot edit safely. Change the targets to values up to 1,000,000,000 with at most five decimal places."
+          }
+        }
+      }
+    },
+    "settings.goals.error.dayChanged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The date changed before saving. Review today's goals, then save again."
+          }
+        }
+      }
+    },
+    "settings.goals.reviewDay" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review Today's Goal"
+          }
+        }
+      }
+    },
     "foodDetail.error.journalUnavailable" : {
       "localizations" : {
         "en" : {

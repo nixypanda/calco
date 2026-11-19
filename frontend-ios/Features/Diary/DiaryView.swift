@@ -8,13 +8,19 @@ public struct DiaryView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isDatePickerPresented = false
 
+    private let onOpenSettings: () -> Void
+
     private var usesAccessibilityLayout: Bool { dynamicTypeSize.isAccessibilitySize }
     private var usesExpandedMacroLabels: Bool {
         usesAccessibilityLayout || horizontalSizeClass != .compact
     }
 
-    public init(viewModel: DiaryViewModel) {
+    public init(
+        viewModel: DiaryViewModel,
+        onOpenSettings: @escaping () -> Void = {}
+    ) {
         self.viewModel = viewModel
+        self.onOpenSettings = onOpenSettings
     }
 
     public var body: some View {
@@ -32,6 +38,9 @@ public struct DiaryView: View {
         }
         .navigationTitle(viewModel.selectedDate.diaryDisplayTitle())
         .toolbar {
+            ToolbarItem(placement: settingsPlacement) {
+                settingsButton
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 calendarButton
                 refreshButton
@@ -58,6 +67,26 @@ public struct DiaryView: View {
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             Task { await viewModel.refreshToday() }
         }
+    }
+
+    private var settingsPlacement: ToolbarItemPlacement {
+#if os(iOS)
+        .topBarLeading
+#else
+        .navigation
+#endif
+    }
+
+    private var settingsButton: some View {
+        Button {
+            onOpenSettings()
+        } label: {
+            Image(systemName: "gearshape")
+        }
+        .disabled(viewModel.isSessionExpired || viewModel.state == .loading)
+        .accessibilityLabel(String(localized: "settings.open"))
+        .accessibilityIdentifier("diary.settings")
+        .help(String(localized: "settings.open"))
     }
 
     private var calendarButton: some View {

@@ -30,12 +30,14 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     public let diaryService: any DiaryServicing
     public let searchService: any FoodSearchServicing
     public let foodDetailService: any FoodDetailServicing
+    public let settingsService: any DiarySettingsServicing
     public let logSubmissionStore: LogSubmissionStore
     public let todayProvider: () -> LocalDiaryDate
 
     public let configurationError: String?
 
     @Published public var navigationState: NavigationState
+    @Published public private(set) var settingsViewModel: DiarySettingsViewModel?
     @Published public private(set) var pendingSubmission: PendingLogSubmission?
     /// All recoverable entries in most-recent-first order. The banner shows a
     /// count and lets the user review each entry instead of hiding all but one.
@@ -69,6 +71,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         diaryService: (any DiaryServicing)? = nil,
         searchService: (any FoodSearchServicing)? = nil,
         foodDetailService: (any FoodDetailServicing)? = nil,
+        settingsService: (any DiarySettingsServicing)? = nil,
         logSubmissionStore: LogSubmissionStore? = nil,
         todayProvider: (() -> LocalDiaryDate)? = nil
     ) {
@@ -100,6 +103,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         self.searchService = searchService ?? CalCoFoodSearchServiceAdapter(client: resolvedClient)
         self.foodDetailService = foodDetailService
             ?? CalCoFoodDetailServiceAdapter(client: resolvedClient)
+        self.settingsService = settingsService
+            ?? CalCoSettingsServiceAdapter(client: resolvedClient)
         // Every WindowGroup scene gets its own coordinator, but all windows
         // must share one journal cache so a live POST in one window blocks a
         // delete in another. Tests can still inject an isolated store.
@@ -209,6 +214,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         deliveredSubmissionIDs.removeAll()
         deliveredLogEditorSuccesses.removeAll()
         dismissedSubmissions.removeAll()
+        settingsViewModel = nil
         pendingSubmission = nil
         pendingSubmissions = []
         pendingEditorDiscard = nil
@@ -232,6 +238,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         dismissedSubmissions.removeAll()
         previous.readyState?.diary.resetForSessionChange()
         previous.readyState?.search.invalidateSession()
+        settingsViewModel = nil
         pendingSubmission = nil
         pendingSubmissions = []
         pendingEditorDiscard = nil
@@ -716,6 +723,95 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         }
     }
 
+    // MARK: - Settings
+
+    public func showSettings() {
+        guard let ready = featureGraph.readyState,
+              ready.generation == session.sessionGeneration,
+              ready.diary.state != .loading else { return }
+        // Re-tapping the toolbar while the sheet is open must preserve the
+        // current draft rather than replace the view model.
+        guard settingsViewModel == nil else { return }
+
+        let generation = ready.generation
+        let viewModel = DiarySettingsViewModel(
+            service: settingsService,
+            accountID: ready.user.id,
+            todayProvider: todayProvider
+        )
+        let settingsID = viewModel.id
+        viewModel.onGoalSaved = { [weak self] snapshot in
+            self?.handleSettingsGoalSaved(
+                snapshot,
+                settingsID: settingsID,
+                generation: generation
+            )
+        }
+        viewModel.onPreferencesSaved = { [weak self] preferences in
+            self?.handleSettingsPreferencesSaved(
+                preferences,
+                settingsID: settingsID,
+                generation: generation
+            )
+        }
+        viewModel.onSessionExpired = { [weak self] in
+            self?.handleSettingsSessionExpired(settingsID: settingsID, generation: generation)
+        }
+        settingsViewModel = viewModel
+        Task { await viewModel.loadIfNeeded() }
+    }
+
+    /// The sheet and toolbar both route here. A dirty draft or an in-flight
+    /// save keeps the sheet open; the view presents confirmation for dirty
+    /// back/swipe/Escape-style dismissals.
+    public func dismissSettings() {
+        guard let viewModel = settingsViewModel else { return }
+        guard viewModel.requestDismissal() else { return }
+        settingsViewModel = nil
+    }
+
+    private func handleSettingsGoalSaved(
+        _ snapshot: GoalSnapshot,
+        settingsID: UUID,
+        generation: UInt64
+    ) {
+        guard isCurrent(generation),
+              let ready = featureGraph.readyState,
+              settingsViewModel?.id == settingsID,
+              settingsViewModel?.accountID == ready.user.id else { return }
+        ready.diary.applySavedGoal(
+            CalCoStoreMapping.diaryGoal(from: snapshot),
+            effectiveOn: snapshot.requestedDate
+        )
+    }
+
+    private func handleSettingsPreferencesSaved(
+        _ preferences: DiaryPreferences,
+        settingsID: UUID,
+        generation: UInt64
+    ) {
+        guard isCurrent(generation),
+              let ready = featureGraph.readyState,
+              settingsViewModel?.id == settingsID,
+              settingsViewModel?.accountID == ready.user.id else { return }
+        let prefs = CalCoStoreMapping.diaryPrefs(from: preferences)
+        ready.diary.applySavedPreferences(prefs)
+
+        // The date is preserved; only a now-disabled contextual meal slot is
+        // cleared, and search inherits that updated context.
+        if let slot = navigationState.mealSlot, !prefs.isEnabled(slot) {
+            var state = navigationState
+            state.setMealSlot(nil)
+            navigationState = state
+            searchViewModel?.updateContext(date: state.selectedDate, mealSlot: nil)
+        }
+    }
+
+    private func handleSettingsSessionExpired(settingsID: UUID, generation: UInt64) {
+        guard settingsViewModel?.id == settingsID else { return }
+        handleSessionExpired(generation: generation)
+    }
+
     public func reviewPendingSubmission() {
         guard let pendingSubmission else { return }
         reviewPendingSubmission(pendingSubmission)
@@ -1168,6 +1264,12 @@ public struct AppShell: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .sheet(item: settingsSheetBinding) { settings in
+            DiarySettingsView(
+                viewModel: settings,
+                onClose: { coordinator.dismissSettings() }
+            )
+        }
         .alert(item: $pendingBannerDiscard) { pending in
             Alert(
                 title: Text(String(localized: "foodDetail.pending.discard.confirmTitle")),
@@ -1197,6 +1299,17 @@ public struct AppShell: View {
         } message: {
             Text(String(localized: "diary.editor.discard.message"))
         }
+    }
+
+    private var settingsSheetBinding: Binding<DiarySettingsViewModel?> {
+        Binding(
+            get: { coordinator.settingsViewModel },
+            set: { newValue in
+                if newValue == nil {
+                    coordinator.dismissSettings()
+                }
+            }
+        )
     }
 
     private var discardConfirmationPresented: Binding<Bool> {
@@ -1489,7 +1602,10 @@ public struct AppShell: View {
         switch pane {
         case .diary:
             if let vm = coordinator.diaryViewModel {
-                DiaryView(viewModel: vm)
+                DiaryView(
+                    viewModel: vm,
+                    onOpenSettings: { coordinator.showSettings() }
+                )
             } else {
                 ProgressView()
             }

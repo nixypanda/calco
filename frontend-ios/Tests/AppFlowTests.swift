@@ -172,6 +172,68 @@ private final class AppFlowSearchService: FoodSearchServicing, @unchecked Sendab
     }
 }
 
+private final class AppFlowSettingsService: DiarySettingsServicing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var goal: GoalSnapshot
+    private var preferences: DiaryPreferences
+    private var goalRequests: [LocalDiaryDate] = []
+    private var savedGoals: [SaveGoalRequest] = []
+    private var savedPreferences: [DiaryPreferences] = []
+
+    init(
+        goal: GoalSnapshot,
+        preferences: DiaryPreferences
+    ) {
+        self.goal = goal
+        self.preferences = preferences
+    }
+
+    func setGoal(_ value: GoalSnapshot) {
+        lock.withLock { goal = value }
+    }
+
+    func setPreferences(_ value: DiaryPreferences) {
+        lock.withLock { preferences = value }
+    }
+
+    func goalRequestDates() -> [LocalDiaryDate] { lock.withLock { goalRequests } }
+    func goalSaveRequests() -> [SaveGoalRequest] { lock.withLock { savedGoals } }
+    func preferenceSaveRequests() -> [DiaryPreferences] { lock.withLock { savedPreferences } }
+
+    func fetchGoal(on date: LocalDiaryDate) async throws -> GoalSnapshot {
+        lock.withLock {
+            goalRequests.append(date)
+            return goal
+        }
+    }
+
+    func saveGoal(_ request: SaveGoalRequest) async throws -> GoalSnapshot {
+        lock.withLock {
+            savedGoals.append(request)
+            let saved = GoalSnapshot(
+                requestedDate: request.localDate,
+                effectiveFrom: request.localDate,
+                source: .saved,
+                targets: request.targets
+            )
+            goal = saved
+            return saved
+        }
+    }
+
+    func fetchDiaryPreferences() async throws -> DiaryPreferences {
+        lock.withLock { preferences }
+    }
+
+    func updateDiaryPreferences(_ value: DiaryPreferences) async throws -> DiaryPreferences {
+        lock.withLock {
+            savedPreferences.append(value)
+            preferences = value
+            return value
+        }
+    }
+}
+
 private actor AppFlowFoodDetailService: FoodDetailServicing {
     private let food: FoodDetail
     private var holdsNextLog = false
@@ -376,6 +438,7 @@ final class AppFlowTests: XCTestCase {
         cookieClearer: AppFlowCookieClearer,
         searchService: AppFlowSearchService = AppFlowSearchService(),
         foodDetailService: AppFlowFoodDetailService = AppFlowFoodDetailService(),
+        settingsService: AppFlowSettingsService? = nil,
         logSubmissionStore: LogSubmissionStore? = nil,
         todayProvider: (() -> LocalDiaryDate)? = nil
     ) -> AppShellCoordinator {
@@ -391,6 +454,20 @@ final class AppFlowTests: XCTestCase {
             diaryService: diaryService,
             searchService: searchService,
             foodDetailService: foodDetailService,
+            settingsService: settingsService ?? AppFlowSettingsService(
+                goal: GoalSnapshot(
+                    requestedDate: date,
+                    effectiveFrom: nil,
+                    source: .default,
+                    targets: GoalTargets(
+                        calorieTarget: 2_100,
+                        proteinTargetG: 150,
+                        carbsTargetG: 240,
+                        fatTargetG: 60
+                    )
+                ),
+                preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases))
+            ),
             logSubmissionStore: logSubmissionStore ?? makeIsolatedSubmissionStore(),
             todayProvider: todayProvider ?? { self.date }
         )
@@ -401,6 +478,17 @@ final class AppFlowTests: XCTestCase {
     ) async {
         await waitUntil {
             coordinator.diaryViewModel?.state == .loaded(.idle)
+        }
+    }
+
+    private func waitForSettingsLoaded(
+        _ coordinator: AppShellCoordinator
+    ) async {
+        await waitUntil {
+            guard let settings = coordinator.settingsViewModel else { return false }
+            guard case .loaded = settings.goalState else { return false }
+            guard case .loaded = settings.preferencesState else { return false }
+            return true
         }
     }
 
@@ -2137,5 +2225,249 @@ final class AppFlowTests: XCTestCase {
         await diary.previousDay()
         XCTAssertEqual(diary.selectedDate, yesterday)
         XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+    }
+
+    func testSettingsPreserveSelectedDateAndKeepDisabledSlotLogs() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            logs: [],
+            goal: DiaryGoalTargets(calorieTarget: 2_140),
+            prefs: DiaryPrefs(enabledSlots: [.breakfast, .lunch])
+        ))
+        await diaryService.setDay(DiaryDay(
+            date: yesterday,
+            logs: [
+                DiaryLog(id: "breakfast-log", mealSlot: .breakfast, title: "Oats"),
+                DiaryLog(id: "lunch-log", mealSlot: .lunch, title: "Soup"),
+            ],
+            goal: DiaryGoalTargets(calorieTarget: 2_100),
+            prefs: DiaryPrefs(enabledSlots: [.breakfast, .lunch])
+        ))
+        let settingsService = AppFlowSettingsService(
+            goal: GoalSnapshot(
+                requestedDate: date,
+                effectiveFrom: nil,
+                source: .default,
+                targets: GoalTargets(
+                    calorieTarget: 2_100,
+                    proteinTargetG: 150,
+                    carbsTargetG: 240,
+                    fatTargetG: 60
+                )
+            ),
+            preferences: DiaryPreferences(enabledSlots: [.breakfast, .lunch])
+        )
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            settingsService: settingsService
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        await diary.selectDate(yesterday)
+        XCTAssertEqual(diary.selectedDate, yesterday)
+
+        coordinator.showSettings()
+        await waitForSettingsLoaded(coordinator)
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        XCTAssertEqual(settings.accountID, userSession.identity.id)
+        XCTAssertEqual(diary.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        var contextState = coordinator.navigationState
+        contextState.setMealSlot(.breakfast)
+        coordinator.navigationState = contextState
+        coordinator.searchViewModel?.updateContext(date: yesterday, mealSlot: .breakfast)
+        let goalDates = settingsService.goalRequestDates()
+        XCTAssertEqual(goalDates, [date], "Settings always load the device-local today goal")
+
+        settings.toggleSlot(.breakfast, enabled: false)
+        await settings.savePreferences()
+
+        XCTAssertEqual(diary.enabledSlots, [.lunch])
+        XCTAssertNil(coordinator.navigationState.mealSlot)
+        XCTAssertNil(coordinator.searchViewModel?.originMealSlot)
+        XCTAssertEqual(coordinator.searchViewModel?.originDate, yesterday)
+        XCTAssertEqual(diary.logs.map(\.id).sorted(), ["breakfast-log", "lunch-log"])
+        XCTAssertTrue(diary.groupedSections.contains {
+            $0.slot == .breakfast && !$0.logs.isEmpty
+        })
+        XCTAssertEqual(diary.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        XCTAssertEqual(settingsService.preferenceSaveRequests().first?.enabledMealSlots, [.lunch])
+
+        coordinator.dismissSettings()
+        XCTAssertNil(coordinator.settingsViewModel)
+        XCTAssertEqual(diary.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+    }
+
+    func testSettingsGoalSaveAppliesTodayButNotHistoricalDiaryGoal() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        let historicalGoal = DiaryGoalTargets(calorieTarget: 2_100)
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            goal: DiaryGoalTargets(calorieTarget: 2_140),
+            prefs: DiaryPrefs(enabledSlots: [.lunch])
+        ))
+        await diaryService.setDay(DiaryDay(
+            date: yesterday,
+            goal: historicalGoal,
+            prefs: DiaryPrefs(enabledSlots: [.lunch])
+        ))
+        let settingsService = AppFlowSettingsService(
+            goal: GoalSnapshot(
+                requestedDate: date,
+                effectiveFrom: nil,
+                source: .default,
+                targets: GoalTargets(
+                    calorieTarget: 2_140,
+                    proteinTargetG: 160,
+                    carbsTargetG: 240,
+                    fatTargetG: 60
+                )
+            ),
+            preferences: DiaryPreferences(enabledSlots: [.lunch])
+        )
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            settingsService: settingsService
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+
+        coordinator.showSettings()
+        await waitForSettingsLoaded(coordinator)
+        guard let todaySettings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        todaySettings.calorieTarget = "2150"
+        todaySettings.proteinTargetG = "170"
+        todaySettings.carbsTargetG = "210"
+        todaySettings.fatTargetG = "70"
+        await todaySettings.saveGoals()
+
+        XCTAssertEqual(diary.goal.calorieTarget, 2_150)
+        XCTAssertEqual(diary.selectedDate, date)
+        coordinator.dismissSettings()
+
+        await diary.selectDate(yesterday)
+        XCTAssertEqual(diary.goal, historicalGoal)
+        coordinator.showSettings()
+        await waitForSettingsLoaded(coordinator)
+        guard let historicalSettings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        historicalSettings.calorieTarget = "2290"
+        historicalSettings.proteinTargetG = "160"
+        historicalSettings.carbsTargetG = "255"
+        historicalSettings.fatTargetG = "70"
+        await historicalSettings.saveGoals()
+
+        XCTAssertEqual(diary.selectedDate, yesterday)
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        XCTAssertEqual(diary.goal, historicalGoal)
+        XCTAssertEqual(settingsService.goalSaveRequests().count, 2)
+    }
+
+    func testSupersededSettingsViewModelCannotApplyLateSaveCallback() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        let baselineGoal = DiaryGoalTargets(calorieTarget: 2_100)
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            goal: baselineGoal,
+            prefs: DiaryPrefs(enabledSlots: [.lunch])
+        ))
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer()
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        coordinator.showSettings()
+        await waitForSettingsLoaded(coordinator)
+        guard let oldSettings = coordinator.settingsViewModel else {
+            return XCTFail("Expected the first settings view model")
+        }
+        coordinator.dismissSettings()
+        XCTAssertNil(coordinator.settingsViewModel)
+
+        coordinator.showSettings()
+        await waitForSettingsLoaded(coordinator)
+        guard let newSettings = coordinator.settingsViewModel else {
+            return XCTFail("Expected the replacement settings view model")
+        }
+        XCTAssertFalse(oldSettings.id == newSettings.id)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        let before = diary.goal
+
+        oldSettings.onGoalSaved?(
+            GoalSnapshot(
+                requestedDate: date,
+                effectiveFrom: date,
+                source: .saved,
+                targets: GoalTargets(
+                    calorieTarget: 2_300,
+                    proteinTargetG: 200,
+                    carbsTargetG: 225,
+                    fatTargetG: 50
+                )
+            )
+        )
+
+        XCTAssertEqual(diary.goal, before)
+    }
+
+    func testSettingsViewModelIsClearedOnSignOut() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(date: date))
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer()
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        coordinator.showSettings()
+        await waitForSettingsLoaded(coordinator)
+        XCTAssertNotNil(coordinator.settingsViewModel)
+
+        await coordinator.signOut()
+
+        XCTAssertNil(coordinator.settingsViewModel)
     }
 }

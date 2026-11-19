@@ -270,6 +270,112 @@ final class DiaryTests: XCTestCase {
         XCTAssertEqual(vm.state, .loaded(.idle))
     }
 
+    func testSettingsSaveDuringHeldLoadingWinsAndLeavesLoadedState() async {
+        let service = FakeDiaryService()
+        let oldGoal = DiaryGoalTargets(calorieTarget: 2_100)
+        await service.setDay(DiaryDay(
+            date: today,
+            logs: [DiaryLog(id: "old", title: "Old")],
+            goal: oldGoal,
+            prefs: DiaryPrefs(enabledSlots: [.breakfast, .lunch])
+        ))
+        await service.hold(today)
+        let vm = DiaryViewModel(service: service, today: today)
+        let load = Task { @MainActor in await vm.load() }
+        await service.waitForCall(today)
+
+        let savedGoal = DiaryGoalTargets(calorieTarget: 2_200)
+        vm.applySavedGoal(savedGoal, effectiveOn: today)
+        vm.applySavedPreferences(DiaryPrefs(enabledSlots: [.dinner]))
+        XCTAssertEqual(vm.goal, savedGoal)
+        XCTAssertEqual(vm.enabledSlots, [.dinner])
+
+        await service.release(today)
+        await load.value
+
+        XCTAssertEqual(vm.state, .loaded(.idle))
+        XCTAssertEqual(vm.goal, savedGoal)
+        XCTAssertEqual(vm.enabledSlots, [.dinner])
+        XCTAssertEqual(vm.logs.map(\.id), ["old"])
+    }
+
+    func testLatestSettingsOverrideWinsAcrossHeldLoadAndSubsequentRefresh() async {
+        let service = FakeDiaryService()
+        await service.setDay(DiaryDay(
+            date: today,
+            logs: [DiaryLog(id: "day-log", title: "Day")],
+            goal: DiaryGoalTargets(calorieTarget: 2_100),
+            prefs: DiaryPrefs(enabledSlots: [.breakfast, .lunch])
+        ))
+        await service.hold(today)
+        let vm = DiaryViewModel(service: service, today: today)
+        let load = Task { @MainActor in await vm.load() }
+        await service.waitForCall(today)
+
+        let saveAGoal = DiaryGoalTargets(calorieTarget: 2_150)
+        let saveAPrefs = DiaryPrefs(enabledSlots: [.dinner])
+        vm.applySavedGoal(saveAGoal, effectiveOn: today)
+        vm.applySavedPreferences(saveAPrefs)
+
+        await service.release(today)
+        await load.value
+        XCTAssertEqual(vm.goal, saveAGoal)
+        XCTAssertEqual(vm.enabledSlots, [.dinner])
+        XCTAssertEqual(vm.state, .loaded(.idle))
+
+        let saveBGoal = DiaryGoalTargets(calorieTarget: 2_200)
+        let saveBPrefs = DiaryPrefs(enabledSlots: [.snack])
+        vm.applySavedGoal(saveBGoal, effectiveOn: today)
+        vm.applySavedPreferences(saveBPrefs)
+
+        // A different client wins later. The next refresh must show server C,
+        // not indefinitely mask it with B.
+        let serverCGoal = DiaryGoalTargets(calorieTarget: 2_300)
+        let serverCPrefs = DiaryPrefs(enabledSlots: [.lateNightSnack])
+        await service.setDay(DiaryDay(
+            date: today,
+            logs: [DiaryLog(id: "day-log", title: "Day")],
+            goal: serverCGoal,
+            prefs: serverCPrefs
+        ))
+        await vm.refresh()
+
+        XCTAssertEqual(vm.goal, serverCGoal)
+        XCTAssertEqual(vm.enabledSlots, [.lateNightSnack])
+
+        await vm.refresh()
+        XCTAssertEqual(vm.goal, serverCGoal)
+        XCTAssertEqual(vm.enabledSlots, [.lateNightSnack])
+    }
+
+    func testDirectLoadedSettingsSaveDoesNotMaskLaterServerRefresh() async {
+        let service = FakeDiaryService()
+        await service.setDay(DiaryDay(
+            date: today,
+            goal: DiaryGoalTargets(calorieTarget: 2_100),
+            prefs: DiaryPrefs(enabledSlots: [.breakfast])
+        ))
+        let vm = DiaryViewModel(service: service, today: today)
+        await vm.load()
+
+        vm.applySavedGoal(DiaryGoalTargets(calorieTarget: 2_200), effectiveOn: today)
+        vm.applySavedPreferences(DiaryPrefs(enabledSlots: [.lunch]))
+        XCTAssertEqual(vm.goal.calorieTarget, 2_200)
+        XCTAssertEqual(vm.enabledSlots, [.lunch])
+
+        let serverGoal = DiaryGoalTargets(calorieTarget: 2_300)
+        let serverPrefs = DiaryPrefs(enabledSlots: [.dinner])
+        await service.setDay(DiaryDay(
+            date: today,
+            goal: serverGoal,
+            prefs: serverPrefs
+        ))
+        await vm.refresh()
+
+        XCTAssertEqual(vm.goal, serverGoal)
+        XCTAssertEqual(vm.enabledSlots, [.dinner])
+    }
+
     func testResetForSessionChangeClearsContentAndInvalidatesInflightLoad() async {
         let service = FakeDiaryService()
         await service.setDay(DiaryDay(
