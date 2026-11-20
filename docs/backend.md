@@ -693,50 +693,187 @@ item.type = product
 item.type = meal
 ```
 
-#### Idempotent Log Creation
+#### Durable Idempotent Log Creation
 
-Apply `20261115000001_food_log_idempotency.sql` before starting the updated
-backend; it adds two nullable columns to `food_logs`. The NixOS deployment runs
-migrations before the backend, while local development uses
-`just migrate-backend`.
-The migration also accepts an `idempotency_key` column from an earlier local
-trial; those rows have no original-request fingerprint and return `409` if the
-key is retried. Do not infer an original fingerprint from an edited log.
+Every log create requires a top-level `idempotency_key`:
 
-`POST /logs` accepts an optional `idempotency_key`. Omitting it, or sending
-`null`, preserves the existing non-idempotent behavior. A supplied key must be 1
+- `POST /logs` creates one product or meal log.
+- `POST /logs/ad-hoc` creates one ad-hoc log.
+- `POST /logs/batch` creates one ordered batch and accepts the key beside
+  `items`, never inside an item.
+
+Omitting the key, sending `null`, sending a non-string JSON value, or sending
+an invalid string key is `400 validation` and writes nothing. A key must be 1
 to 128 characters, must not be blank, and must not contain control characters.
-Keys are scoped to the authenticated user profile and are never returned in log
-responses.
+Keys are scoped to the authenticated user profile and are never returned in
+log responses. An item-level key in a batch, including an explicit `null` or a
+non-string value, is a validation error.
+
+There is no unkeyed create fallback at HTTP, application, or repository level.
+The request DTOs deserialize the key directly into `IdempotencyKey`; malformed
+JSON is translated from the extractor rejection into the normal `400 validation`
+envelope instead of leaking a framework `422`. The application command types
+always carry an `IdempotencyKey`, and `FoodLogRepo` has no standalone food-log
+create method; the only creation path is the operation journal transaction.
 
 - The first successful create returns `201 Created`.
-- A retry with the same key and the same normalized create input returns
-  `200 OK` with the existing log.
-- Reusing the key with a different create input returns `409 conflict`.
-- Deleting the log deletes its key, so a delayed retry with the same key and
-  input can create a new log with `201 Created`.
+- A retry with the same key, logging route, and normalized input returns
+  `200 OK` with the operation's logs in their original order.
+- Reusing the key with a different normalized payload, a different batch order,
+  or a different logging route returns `409 conflict`.
+- If any log created by the operation has since been deleted, replay returns
+  `409 conflict` and creates nothing. Use a new key for a new intentional
+  submission.
+- A malformed or incomplete operation returns `409 conflict` and creates
+  nothing. This includes zero child links, duplicate links, a child count that
+  differs from the stored `log_count`, a linked log owned by another user, an
+  invalid operation kind, or a linked log that can no longer be loaded.
+- Validation, ownership, catalog, and persistence failures do not reserve the
+  key. The operation row, every ordered child link, every food log, and every
+  nutrient snapshot share one transaction. A failed batch leaves no partial
+  rows and the key remains usable for a corrected retry.
 
-`food_logs.idempotency_key` and `food_logs.request_fingerprint` store the
-original key and a SHA-256 fingerprint of the validated create request: log
-date, meal slot, normalized device timezone, item type and ID, normalized
-quantity amount, exact quantity unit code, and notes. Notes and keys are
-compared byte-for-byte rather than Unicode-normalized. The database constrains
-the key to 1 to 128 characters and the fingerprint to 64 lowercase hex
-characters.
+The operation journal is the sole owner of the key and request fingerprint.
+Food logs do not store either value. The durable
+`food_log_create_operations` and `food_log_create_operation_logs` tables store
+the key, a validated lowercase SHA-256 request fingerprint, the operation kind,
+the expected log count, and the ordered log IDs. Replay reads the current stored
+log rows, not a stored response snapshot: later edits are visible, and nutrient
+snapshots are not recalculated. Log lookups are scoped by the authenticated user
+in PostgreSQL, and replay rechecks every returned log's owner.
 
-The fingerprint does not store resolved catalog names or nutrient snapshots, so
-later log edits and catalog changes do not change it. Updates preserve the
-stored key and fingerprint. The key, fingerprint, food log, and nutrient
-snapshots are written atomically by the existing `FoodLogRepo::create`
-transaction. Reads of a food log and its nutrient snapshots use one
-repeatable-read transaction, so a replay cannot combine a row from before an
-update or delete with snapshots from after it.
+`RequestFingerprint` only accepts a 64-character lowercase hexadecimal digest,
+and fingerprints are produced by hashing the canonical request bytes. The
+repository accepts one `FoodLogCreateOperationWrite` aggregate that owns both
+the operation and its food-log rows; child IDs are derived from that row slice
+and every row owner must match the operation user. There is no separate
+operation/log-slice write API that could persist a count, order, owner, or
+child-ID mismatch.
 
-Concurrent retries rely on the partial unique index on
-`(user_id, idempotency_key)`. When a retry loses the insert race, it reads the
-winning log and replays it or returns a conflict. `POST /logs/batch` does not
-support idempotency keys; supplying one, including an explicit `null`, is a
-validation error rather than a silently ignored field.
+Child rows deliberately have no foreign key to `food_logs`, so deleting a log
+leaves a tombstone instead of silently shrinking the operation. The unique index
+on `(user_id, idempotency_key)` serializes concurrent retries across all three
+routes; the losing request reads the winning operation and replays it or returns
+a conflict. Duplicate insertion uses an explicit `ON CONFLICT` target instead of
+matching an operator-visible index name, so a renamed equivalent unique index
+keeps the same replay behavior. Single and ad-hoc operations require exactly one
+child; batch operations require 1 to 50 children. A database shape constraint
+enforces that relationship.
+
+Operation rows, keys, and child links are permanent for the lifetime of the user
+profile. There is no TTL, pruning job, admin cleanup, or log-deletion path that
+removes a key or an individual child link. Deleting a user profile cascades the
+operation and all child links together. A future retention protocol must replace
+the tombstone mechanism before any cleanup is allowed to delete these rows.
+
+Fingerprints cover log date, meal slot, normalized device timezone, item type
+and ID, normalized quantity amount, exact quantity unit code, and notes. Ad-hoc
+fingerprints add the trimmed name and brand, normalized quantity, and nutrients
+sorted by code. Batch fingerprints hash the ordered list of item create inputs.
+Notes and keys are compared byte-for-byte rather than Unicode-normalized. The
+fingerprint deliberately does not store resolved catalog names or nutrient
+snapshots, so log edits and catalog changes do not change it.
+
+#### Log Create Migrations And Startup
+
+The final schema has no legacy key or fingerprint columns on `food_logs`.
+Migration history is:
+
+- `20261115000001_food_log_idempotency.sql` is historical. It added the old
+  nullable columns and index on `food_logs`. Do not edit an applied migration
+  file; SQLx validates its checksum.
+- `20261119000000_food_log_create_operations.sql` is the historical first
+  journal migration. Keep it byte-for-byte if it was ever applied.
+- `20261119000001_food_log_create_operations_log_count.sql` is the historical
+  additive `log_count` upgrade for that first journal.
+- `20261120000000_food_log_create_operations.sql` creates or upgrades the
+  durable journal idempotently. It is safe whether or not either historical
+  journal migration was applied, adds and backfills `log_count` when needed.
+- `20261120000001_drop_food_log_legacy_idempotency.sql` moves keys still present
+  on surviving legacy log rows into the journal and drops the legacy columns and
+  index. It takes `ACCESS EXCLUSIVE` on `food_logs` before reading the candidate
+  snapshot, so an in-flight old writer cannot commit a keyed row between the
+  snapshot and the column drop. Drain old backends before running it anyway:
+  the lock serializes in-flight statements, then old binaries either finish
+  before the drop or fail cleanly against the new schema.
+- `20261121000001_food_log_create_operation_shape.sql` follows the meal
+  quantity constraints migration at `20261121000000`; the two migrations touch
+  disjoint tables. It adds the explicit single/ad-hoc exactly-one and batch
+  1-to-50 shape constraint. It first aborts the migration if an existing
+  operation violates the shape; it never guesses a repair. The older
+  log-count-only constraint is subsumed and removed.
+
+Run migrations explicitly before starting the backend:
+
+```bash
+just migrate-backend
+```
+
+`build_app_state` validates the required journal schema before the router is
+served. Readiness requires all of the following:
+
+- The required columns exist with their exact PostgreSQL types and `NOT NULL`
+  where applicable: operation ID/user/key/fingerprint/kind/count/created time,
+  child operation/log/position, and the `food_logs` ID/user columns.
+- The operation primary key, user/key unique index, child primary key, and
+  child operation/log unique index have the required key columns and are valid,
+  ready, live, and immediate (non-deferrable). A deferrable unique index on an
+  `ON CONFLICT` arbiter column fails readiness even when an immediate index also
+  exists, because it can make keyed inserts fail at runtime. The validator
+  accepts an equivalent renamed unique index.
+- The operation user foreign key and child operation foreign key match the
+  canonical migration definitions exactly, are valid, and cascade on
+  profile/operation deletion; child `food_log_id` has no foreign key to
+  `food_logs`.
+- Key length, fingerprint format, operation kind, operation shape, and child
+  position check constraints match the canonical validated definitions exactly.
+  Readiness compares normalized `pg_get_expr` output, not token substrings, so a
+  weaker check that merely mentions the same columns or operators is rejected.
+- Neither legacy key nor fingerprint column remains on `food_logs`.
+
+Canonical comparisons use the PostgreSQL 16 `pg_get_expr` and
+`pg_get_constraintdef` output produced by the migrations, normalized only for
+whitespace. A logically equivalent but textually different check or foreign-key
+constraint is intentionally rejected; recreate the canonical constraint instead
+of relying on a hand-written variant.
+
+A failure produces `database schema is incompatible` with instructions to run
+migrations. The backend never runs migrations and never serves a partially
+upgraded database. `/health` and `/version` are liveness/version endpoints only;
+clients must not use them to negotiate log create behavior.
+
+Upgrade behavior:
+
+- Fresh install: run the full migration chain; the journal is created and the
+  legacy columns are removed.
+- Existing install with legacy keyed logs: surviving keys are transferred to
+  the journal before the columns are dropped. A key whose log was already
+  deleted before this migration cannot be reconstructed, and no API claims
+  otherwise.
+- Existing install that recorded a pre-`log_count` journal: the operation
+  journal migration derives the count from existing child links and aborts on
+  a zero or oversized operation rather than guessing. The later shape migration
+  performs the same fail-closed check for kind/count pairs.
+- Supported upgrade sources are fresh databases, databases following the
+  published main migration order through
+  `20261115000001_food_log_idempotency.sql`, and databases that recorded only
+  the earlier `20261119000000`/`20261119000001` journal chain. The historical
+  `20261119000000` and `20261119000001` files remain byte-for-byte for checksum
+  compatibility; do not renumber, edit, or splice only a subset of the chain.
+  Databases bootstrapped from an unpublished intermediate migration set are not
+  a supported baseline.
+- `20261120000001_drop_food_log_legacy_idempotency.sql` was amended before
+  merge to take the `ACCESS EXCLUSIVE` lock. A database that applied an earlier
+  revision of that unpublished file has a different SQLx checksum and is not a
+  supported baseline. Recreate it from the published main baseline, the
+  supported `190` journal chain, or a fresh database; do not edit
+  `_sqlx_migrations`. No production or shared database is known to have applied
+  the pre-merge revision; only ephemeral test databases have.
+- An install with an edited published historical migration checksum must be
+  reconciled explicitly. Do not reset SQLx history or delete/recreate the
+  journal to force an upgrade.
+
+Do not add TTL or cleanup code that deletes keys or individual links.
 
 ### Nutrition Details
 
@@ -969,15 +1106,21 @@ Important tables:
 - Auth: `identities`, `user_profiles`, `sessions`, `api_keys`,
   `auth_audit_events`
 - Catalog: `products`, `product_nutrients`, `product_servings`, `nutrients`, `units`
-- Logs: `food_logs`, `food_log_nutrients`
+- Logs: `food_logs`, `food_log_nutrients`, `food_log_create_operations`,
+  `food_log_create_operation_logs`
 - Meals: `meals`, `meal_components`
 - Goals: `goal_target_versions`
 - Diary preferences: `diary_preferences`
 - Imports: `imports`, `staging_products`, `staging_product_nutrients`, `staging_product_servings`, `import_errors`
 
-`food_logs` stores an optional idempotency key and request fingerprint directly
-on the log. A partial unique index on `(user_id, idempotency_key)` enforces
-per-profile key uniqueness for keyed logs, and deleting the log frees the key.
+`food_log_create_operations` is the durable replay record for every log create
+route. Its unique index on `(user_id, idempotency_key)` spans single, ad-hoc, and
+batch operations. `log_count` records the expected number of child links, and a
+shape constraint requires exactly one child for single/ad-hoc operations and
+between 1 and 50 for batch operations. Child rows retain ordered log IDs after
+log deletion so a late retry cannot recreate a removed log. `food_logs` stores
+no key or fingerprint columns. Operation and child rows are retained
+indefinitely; only deleting the owning profile cascades the whole journal.
 
 Catalog search fetches storage-filtered candidate rows (scope and category
 filters) from the repository. Matching and ranking are pure Rust in

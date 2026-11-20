@@ -627,7 +627,8 @@ async fn bearer_key_owner_wins_over_cookie_and_read_key_stays_read_only(pool: Pg
         "log_date": "2026-06-04",
         "meal_slot": "lunch",
         "item": { "type": "product", "id": product_id },
-        "quantity": { "amount": 10, "unit": "g" }
+        "quantity": { "amount": 10, "unit": "g" },
+        "idempotency_key": "api-key-read-write-rejected"
     }))
     .unwrap();
     let request = Request::builder()

@@ -24,7 +24,7 @@ Personal API keys provide:
   and owner checks.
 - A required `X-CalCo-Account-ID` assertion that binds every account-scoped
   request to the authenticated profile.
-- Optional idempotency keys on `POST /api/logs` for safe create retries.
+- Required idempotency keys on every log create route for safe retries.
 
 Current limitations:
 
@@ -213,7 +213,8 @@ curl -sS -X POST "$CALCO_BASE_URL/api/logs" \
     "log_date": "2026-10-26",
     "meal_slot": "lunch",
     "item": { "type": "product", "id": "<product-id>" },
-    "quantity": { "amount": 150, "unit": "g" }
+    "quantity": { "amount": 150, "unit": "g" },
+    "idempotency_key": "lunch-2026-10-26-product-id-1"
   }'
 ```
 
@@ -317,10 +318,11 @@ the same non-empty component objects. If the requested meal log/preview quantity
 itself cannot be converted, they return `409 meal_quantity_not_convertible` with
 the offending `quantity` and a typed `reason`.
 
-### Safe Log Create Retries
+### Durable Log Create Retries
 
-Scripts can make `POST /api/logs` retry-safe by supplying an optional
-`idempotency_key`:
+Every log create requires a top-level `idempotency_key`. This applies to
+`POST /api/logs`, `POST /api/logs/ad-hoc`, and `POST /api/logs/batch`. There is
+no unkeyed fallback.
 
 ```bash
 curl -sS -X POST "$CALCO_BASE_URL/api/logs" \
@@ -336,21 +338,51 @@ curl -sS -X POST "$CALCO_BASE_URL/api/logs" \
   }'
 ```
 
+For a batch, put one key beside `items`:
+
+```json
+{
+  "idempotency_key": "breakfast-2026-10-26-1",
+  "items": [
+    {
+      "log_date": "2026-10-26",
+      "meal_slot": "breakfast",
+      "item": { "type": "product", "id": "<product-id>" },
+      "quantity": { "amount": 70, "unit": "g" }
+    }
+  ]
+}
+```
+
 Keys are 1 to 128 characters, must not be blank, and reject control characters.
-They are scoped to your profile, may be reused by another user, and are never
-included in responses. The server stores a SHA-256 fingerprint of the validated
-request on the log. The first create returns `201 Created`. Retrying the same
-validated input with the same key returns `200 OK` and the existing log, even if
-that log was edited later or its catalog item changed. Reusing the key with a
-different input returns `409 conflict`.
+Omitting the key, sending `null`, sending a non-string JSON value, or sending an
+invalid string value returns `400 validation` and writes nothing. Keys are
+scoped to your profile, may be reused by another user, and are never included
+in responses. A key on an individual batch item, including an explicit `null`
+or a non-string value, is a validation error.
 
-Deleting the log also deletes its key. A delayed retry with the same key and
-input after a successful delete creates a new log with `201 Created`, so do not
-rely on a key to detect a delete that happened between retries.
+The first successful create returns `201 Created`. Retrying the same key,
+logging route, and normalized input returns `200 OK` with the operation's logs
+in their original order. The response reads the current stored log rows, not a
+stored snapshot: later edits are visible, and stored nutrient snapshots are not
+recalculated. Reusing the key with a different payload, a different batch order,
+or a different logging route returns `409 conflict`.
 
-`POST /api/logs/batch` does not accept idempotency keys. Supplying
-`idempotency_key` in a batch item, including an explicit `null`, is a validation
-error; it is not silently ignored.
+Deleting a journal-backed created log does not free its key. A delayed replay
+returns `409 conflict` and creates nothing. This guarantee covers operations
+recorded by the durable journal. A key whose only legacy log was deleted before
+the journal migration has no recoverable operation; the server does not guess
+or reconstruct it, so a retry with that key can create a new log. Use a new key
+for a new intentional submission. A malformed or incomplete operation also
+returns `409 conflict` and never returns an empty or partial success. This
+includes a stored fingerprint that is not a valid lowercase SHA-256 digest.
+Operation rows and child links are retained indefinitely for the life of the
+profile. There is no cleanup window after which a key becomes reusable.
+
+Log create retries do not require a capability probe or version negotiation.
+The routes are always keyed in this API contract; do not infer behavior from
+`/api/health` or `/api/version`. If the server starts against an incompatible
+database, it fails before serving rather than exposing an unkeyed path.
 
 ## Revocation
 
@@ -425,7 +457,7 @@ product change. Do not rely on API-key scopes to provide that isolation.
 | `400` | `invalid_account_header` | `X-CalCo-Account-ID` was blank, malformed, non-UUID, non-UTF-8, or supplied more than once. |
 | `401` | `session_account_changed` | `X-CalCo-Account-ID` does not match the authenticated cookie/API-key profile. The response does not disclose either profile ID. |
 | `404` | `api_key_not_found` | A key-management route referenced a key that does not exist for this user. |
-| `409` | `conflict` | A log `idempotency_key` was reused with a different request. |
+| `409` | `conflict` | A log `idempotency_key` was reused with a changed payload, changed batch order, different logging route, a deleted operation log, or a malformed/incomplete operation. |
 | `409` | `unavailable_components` | A meal preview or meal-based log references products or component quantities that can no longer be used. The error lists `meal_id` and the non-empty unavailable components with typed reasons; repair the meal or use another meal. |
 | `409` | `meal_quantity_not_convertible` | The requested meal log/preview quantity cannot be converted to grams. The error lists `meal_id`, `quantity`, and reason `quantity_not_convertible`. |
 | `409` | `api_key_limit_reached` | The account is at its soft limit of 10 active keys; revoke an unused key and retry. |

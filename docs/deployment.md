@@ -212,6 +212,34 @@ has a sane default except `DATABASE_URL` (set by the module).
 The module does **not** configure a reverse proxy, TLS, or open firewall
 ports — that's the consumer's job.
 
+### Journal Migration Ordering
+
+Run the complete migration chain in version order. Do not apply only a subset,
+renumber migrations, or edit published historical files; SQLx checksums a
+migration once it has been recorded.
+
+The log-journal cleanup migration (`20261120000001`) takes an
+`ACCESS EXCLUSIVE` lock on `food_logs` before it snapshots surviving legacy
+keys, then drops the duplicate key/fingerprint columns in the same transaction.
+Stop and drain old backend instances before running migrations on an upgrade.
+The lock serializes in-flight old writers so they either commit before the
+snapshot or fail cleanly on the dropped columns; it cannot make an old binary
+compatible with the new schema. Start the new backend only after migrations
+complete. The backend validates the full journal shape, types, nullability,
+keys, constraints, and indexes before serving.
+
+That cleanup migration was amended before merge to take the lock. A database
+that applied an earlier revision of that unpublished
+file has a different SQLx checksum and is not a supported upgrade baseline.
+Recreate such an environment from the published main baseline, the supported
+`190` journal chain, or a fresh database; do not edit `_sqlx_migrations`.
+Supported sources are fresh databases, databases following the published main
+chain through `20261115000001_food_log_idempotency.sql`, and databases that
+recorded only the earlier `20261119000000`/`20261119000001` journal chain. A
+database bootstrapped from an unpublished intermediate subset is not a
+supported baseline. No production or shared database is known to have applied
+the pre-merge revision; only ephemeral test databases have.
+
 ## Backups
 
 The NixOS module enables nightly PostgreSQL backups through

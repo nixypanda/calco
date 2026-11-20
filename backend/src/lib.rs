@@ -42,6 +42,8 @@ pub struct AppState {
 }
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
+    crate::journal::food_log::infra::validate_schema(&pool).await?;
+
     let auth = AuthModule::build(
         &pool,
         SessionCookieConfig {
