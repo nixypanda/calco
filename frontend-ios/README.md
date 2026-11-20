@@ -3,11 +3,55 @@
 A native SwiftUI client for CalCo, targeting **iOS 26, iPadOS 26 and macOS 26**.
 It uses only Apple frameworks (SwiftUI, Foundation, XCTest); there are no
 Swift Package or third-party dependencies. UI uses native SwiftUI styling with
-no custom design system.
+Apple-default appearance and English-only copy.
 
-This directory currently contains the Xcode scaffold, the app entry point,
-build configuration and resources. Domain/API/feature implementation lives in
-the shared source directories and is owned by the feature implementors.
+The normal-user workflows are implemented under the shared source directories:
+diary and durable food logging, Library, Meals, Nutrition Details, reviewed AI
+drafting, and personal API-key management. The sections below describe the
+implemented paths and the safety/rollout rules that make them usable. See
+[Status and acceptance](#status-and-acceptance) before treating any result as a
+release decision.
+
+## Status and acceptance
+
+As of 2026-11-20, implementation is complete; mini and iPad UI are verified,
+Mac unit is verified while Mac UI is blocked by explicit user decision, and
+iPhone Duo is unavailable. The project is not fully accepted across all device
+classes.
+
+- Native unit baseline: **751 current test methods; 751 passed, 0 failures,
+  0 skipped** after the iOS toolbar fix on both the exact iPhone 13 mini
+  (`90964888-D59F-41EC-8DA2-419C829F3A71`) and iPad Air 11-inch (M4)
+  (`C9CE77F1-89E8-4DF5-B101-871105BCED9B`). Native Mac production also passed
+  **751/751** with the one-line pasteboard compile fix applied; that is an actual
+  run, not a diagnostic. The Mac branch was unchanged by the iOS-only Library
+  fix. No new unit tests were added for the toolbar fix, so the unit count
+  remains 751. Independent runtime results and artifacts/logs are retained.
+- **iPhone 13 mini UI: 26/26 passed, 0 failed, 0 skipped, 0 expected failures**
+  on the exact iPhone 13 mini at 375 x 812 points. The current verified build
+  covers enabled AI custom-food and ad-hoc drafting with explicit review and no
+  write until save, full Meals CRUD including degraded/missing-component repair
+  and delete, Library full CRUD with save-and-log, and accessibility XXXL.
+- **iPad Air 11-inch (M4) portable UI: 7/7 passed, 0 failed, 0 skipped, 0
+  expected failures** on the exact UDID above.
+- **Mac UI is blocked by explicit user decision.** The runner executed **0 app
+  tests** and failed initialization with a macOS automation timeout
+  (`Timed out while enabling automation mode`); this is one system/runner
+  failure, not one failed product test. No OS privacy/TCC setting was changed
+  and no retry is planned.
+- **iPhone Duo is unavailable**: the exact device/type is absent from Xcode
+  26.6 and no substitute was used.
+- Backend: **330 unit tests green; 4 additional ignored existing baseline tests
+  remain visible; 86 integration tests green**, independently reported.
+  The operation migrations `20261119000000` and `20261119000001` remain
+  **unapplied in the app database**.
+- Camera/photo capture and image-based AI drafting remain deferred product
+  decisions and are not exposed in the native UI.
+
+`docs/native-completion-qa.md` owns the mini QA record.
+`docs/native-device-acceptance.md` is owned by the portable acceptance work. No
+final all-device acceptance is claimed here. Latest result-bundle filenames are
+listed in those two documents.
 
 ## Requirements
 
@@ -50,11 +94,12 @@ Labels are exact, with no "closest model" fallback:
 
 An unknown label, or a label whose simulator is not installed, exits with a
 clear error and the list of installed simulators for that platform only
-(iPhones for `dev-frontend-ios`, iPads for `dev-frontend-ipados`). The installed
-Xcode 26.6 has no `iPhone 18 Pro` or `iPhone Duo`: `18-pro` and `duo` are
-**not** silently mapped to another model (in particular, not to
-`iPhone 17 Pro`). To use one of them, install the matching Xcode/runtime and
-point the recipes at it:
+(iPhones for `dev-frontend-ios`, iPads for `dev-frontend-ipados`). Labels are
+never silently mapped to another model. The exact iPhone Duo device/type is
+absent from Xcode 26.6; it is unavailable and no substitute is allowed. The
+iPad Air portable UI gate passed 7/7; Mac UI remains blocked by explicit user
+decision, so no Mac UI pass is claimed. To use a label that is not installed,
+install the matching Xcode/runtime and point the recipes at it:
 
 ```bash
 CALCO_XCODE_DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer \
@@ -153,8 +198,13 @@ no team.
 | Path | Owner | Contents |
 | :--- | :--- | :--- |
 | `App/CalCoApp.swift` | scaffold (reserved) | The only `@main` entry point |
-| `App/` (other files) | app implementor | Navigation / wiring |
-| `API/`, `Data/`, `Store/`, `Features/` | feature implementors | Network, models, state, features |
+| `App/` (other files) | app implementor | Navigation, feature sheets, session-scoped wiring |
+| `API/`, `Data/`, `Store/`, `Features/` | shared feature implementation | Network, models, adapters, state, views |
+| `Features/Library/` | feature implementation | Custom-food list/editor/detail, ad-hoc logging, create reconciliation |
+| `Features/Meals/` | feature implementation | Meal list/editor/detail/flow and portion logging |
+| `Features/NutritionDetails/` | feature implementation | Selected-day nutrient report |
+| `Features/Assistant/` | feature implementation | Server-gated, text-only reviewed AI drafting |
+| `Features/AccountSettings/` | feature implementation | Personal API-key list/create/revoke and one-time secret flow |
 | `Components/`, `Views/` | shared | Reusable UI |
 | `Resources/` | scaffold | `Localizable.xcstrings` |
 | `Tests/` | shared | Unit tests |
@@ -168,6 +218,163 @@ added under `App/`, `API/`, `Data/`, `Store/`, `Features/`, `Components/`,
 under `Tests/` into `CalCoTests`, **without editing `project.pbxproj`**. Nested
 subdirectories are included too. Do not add a second `@main`; keep the app
 entry point in `App/CalCoApp.swift`.
+
+## Implemented workflows
+
+Feature sheets are presented over the current diary context. Opening Settings,
+Library, Meals, Nutrition Details, or AI drafting does not change the selected
+diary date or meal slot. Historical dates and retained logs remain available.
+
+### Diary and fast logging
+
+- Diary supports previous/next/calendar date navigation, goal and macro display,
+  log opening/editing, and confirmed deletion. Disabling a meal slot hides its
+  add action but keeps historical logs visible; selecting a historical date does
+  not get reset by Settings or a feature sheet.
+- Search exposes **All**, **History**, **Custom**, and **Barcode** modes. Empty
+  All/History views show server-ranked recents for the selected date and slot;
+  categories come from `/api/foods/categories`.
+- Food detail prefills the last-used amount/unit without overwriting later user
+  edits, with a visible fallback when the unit is unavailable.
+- Recents provide quantity chips, one-tap quick-add, and multi-select batch
+  review. Empty eligible diary slots offer **Log latest** with the server's
+  30-day lookback and a review of the source date/items.
+- Manual barcode lookup preserves leading zeroes and can open a matching food,
+  a custom-food draft, or the text AI drafting flow when no product is found.
+
+### Library, Meals, and Nutrition Details
+
+- **Library** lists, creates, edits, and deletes custom foods with validated
+  per-100 g nutrients, explicit units, optional servings, and confirmations.
+  Existing diary snapshots are not rewritten when a custom food changes.
+- Library also provides one-off ad-hoc logging and **Save food and log**. An
+  uncertain custom-food create is reconciled against the refreshed library; it
+  is never blindly retried and the returned food is reused for a log retry.
+- The iOS Library **Add** action is a native menu
+  (`.menuStyle(.button)`, `.buttonStyle(.plain)`,
+  `.frame(width: 44, height: 44)`, `.fixedSize()`, and
+  `.contentShape(Rectangle())`). It keeps a 44 x 44 accessibility frame. The Mac
+  branch is unchanged.
+- **Meals** lists, creates, edits, and deletes meals with product-only
+  components, quantities/units, notes, and total recipe quantity. Meal detail
+  shows server-calculated portion nutrition and logs the portion on the selected
+  date and meal slot. A deleted component produces a degraded list/detail with no
+  false preview or log action; the user can repair the recipe and then delete it
+  with confirmation. Recipe edits do not rewrite existing log snapshots.
+- **Nutrition Details** opens for the selected diary day and shows server
+  nutrient totals, units, reference amounts, meaningful progress, coverage
+  warnings, expandable guidance, and reference/source context. Unknown values
+  remain distinct from zero, and the report is never derived from current food
+  data.
+- **AI food drafting** is enabled only when
+  `/api/ai/food-assistant/status` reports the assistant as available. Drafting is
+  text-only, supports custom-food and ad-hoc purposes, and always requires
+  explicit review in a separate editor before any save or log. An accepted draft
+  writes nothing by itself. Even if the server reports image support, the native
+  UI exposes no image picker or image upload.
+- **Account Settings → API Keys** lists, creates, and revokes personal keys with
+  supported read/read-write scopes, optional expiry, and an active-key limit.
+  A new secret is shown once in memory, can be deliberately copied, and is
+  never persisted, logged, or included in diagnostics. An uncertain create
+  refreshes metadata and uses a durable non-secret intent instead of retrying
+  the create blindly.
+
+Camera barcode scanning and image-based AI drafting are **not implemented** and
+no camera/photo permission is requested. Manual barcode lookup and text AI
+drafting are shipped. No camera, photo, assistant-image, admin, browser-theme, or
+additional-language scope is implied by the current client.
+
+## Data safety, retry behavior, and server rollout
+
+### Account, session, and selected-day boundaries
+
+- Feature state is scoped to the signed-in account and session generation;
+  stale responses or unauthorized results from an earlier session cannot
+  publish into a newer session. Journal records are account-scoped, and each
+  send is bound to an account, generation, and API origin before it starts.
+- The auth/root client remains unbound for login, restore, and logout. Each
+  signed-in feature graph gets an immutable client bound to the session user's
+  **user-profile UUID**; protected requests send
+  `X-CalCo-Account-ID: <user_profiles.id>`. This UUID is distinct from the
+  identity ID used as the local journal scope. A missing profile fails closed;
+  legacy operations whose account binding cannot be verified stay
+  reconciliation-only and are never replayed.
+- The shared session authority owns the cookie session and session generation.
+  Feature adapters are constructed from the bound client in production, and
+  injected production services are rejected rather than allowed to bypass the
+  authority binding.
+- The shared write-ahead journal (`Store/LogSubmissionStore.swift`,
+  `Store/LogSubmissionService.swift`) is account-scoped, bounded, and
+  coordinated across windows. It persists the exact HTTP body and idempotency
+  key before sending. If the journal is unreadable, the client fails closed
+  rather than overwriting it or sending from memory.
+- A deleted log creates a deletion barrier for unresolved operations that could
+  recreate it. A new intentional submission always gets a new key, even for the
+  same food, amount, date, and slot.
+
+### Journal format and recovery
+
+- Current journal schema v2 stores typed product, meal, ad-hoc, and ordered batch
+  submissions with their original route, key, body, account, and, where
+  verified, capability provenance.
+- Replays resend the stored bytes and key. Server replay returns the operation's
+  current log rows in original order; it is not a stored response snapshot.
+  Later edits remain visible, and nutrition snapshots remain those stored on the
+  log rows.
+- Legacy or pre-v2 journal entries created before version-2 capability was
+  verified are migrated to **reconciliation-only** and never replayed. Their
+  bodies are cleared so an unverifiable entry cannot be replayed; a key deleted
+  before the operation journal existed cannot be reconstructed.
+- Single-product recovery keeps the detailed food-detail path; batch, meal, and
+  ad-hoc recovery use the shared pending-review sheet. Conflicted, invalidated,
+  missing-body, and reconciliation-only entries cannot be replayed; discard is
+  explicit and destructive.
+
+### Capability gate and 503 behavior
+
+- Keyed single, ad-hoc, and batch creation is gated by authenticated
+  `GET /api/capabilities` (`API/CapabilitiesAPI.swift`,
+  `Data/Capabilities.swift`). The client requires
+  `log_creation_idempotency.version >= 2`, route support, top-level batch key
+  location, `deleted_operation_replay = "conflict"`, and the exact
+  `request_account_binding = "x-calco-account-id"` flag. A missing or unknown
+  binding value fails closed.
+- A missing route (`404`), an older `version < 2`, or an unready journal fails
+  closed for keyed creation/retry. Do not infer this capability from `/health`
+  or `/version`.
+- A capability probe `503`/other transient 5xx or transport failure is not
+  version 0. Retry later and keep the pending operation's exact body and key;
+  do not mark it reconciliation-only and do not clear it.
+- Confirmed replay after a deleted log is a `409 conflict`: the operation's
+  tombstone is permanent and a replay must never recreate the deleted log.
+
+### Server-first migrations and rollout
+
+Apply migrations and deploy the matching backend before enabling keyed native
+ad-hoc/batch submissions. The required order is:
+
+1. `20261115000001_food_log_idempotency.sql` — base key/fingerprint columns.
+2. `20261119000000_food_log_create_operations.sql` — baseline durable operation
+   journal and backfill of existing keyed single logs.
+3. `20261119000001_food_log_create_operations_log_count.sql` — additive
+   `log_count` install/validation and permanent-retention constraints. It does
+   not rewrite or drop existing keys or tombstones.
+
+As of 2026-11-20, `20261119000000_food_log_create_operations.sql` and
+`20261119000001_food_log_create_operations_log_count.sql` remain **unapplied in
+the app database**. This documentation update did not apply migrations.
+
+Run migrations explicitly with `just migrate-backend` (local) or the deployment
+migration step before starting the backend. Never edit applied migration
+checksums, drop/recreate the operation tables, or delete `_sqlx_migrations`
+history. After deployment, verify `GET /api/capabilities` reports version 2
+before clients resume keyed batch/ad-hoc retries.
+
+Operation rows and ordered child links are **permanent for the lifetime of the
+user profile**. There is no TTL, pruning job, admin cleanup, or log-deletion
+path that frees a key or link. A future retention policy must replace the
+tombstone mechanism before deleting anything. See `docs/backend.md` for the
+full contract.
 
 ## API base URL configuration
 
@@ -210,10 +417,12 @@ Release must be HTTPS. Do not add an ATS exception to
 first, then falls back to the `CALCOAPIBaseURL` baked into Info.plist. Feature
 code should use that value instead of hard-coding a host. Set the environment
 variable in Xcode's Run/Test scheme (Arguments → Environment Variables) or in
-the test host environment for E2E runs. No credentials are stored in this
-scaffold, and the override does not relax Release ATS: a non-loopback HTTP host
-still needs a Debug/Test-only exception in `Info-Debug.plist` /
-`Info-Test.plist`.
+the test host environment for E2E runs. Session cookies use the shared
+`URLSession` cookie store; a newly created API-key secret exists only in memory
+and is not written to source, config, defaults, files, logs, or diagnostics.
+Never include a secret in screenshots, fixtures, or documentation. The override
+does not relax Release ATS: a non-loopback HTTP host still needs a Debug/Test-only
+exception in `Info-Debug.plist` / `Info-Test.plist`.
 
 ## Simulator vs. real device
 
@@ -244,24 +453,15 @@ Keep keys in alphabetical order in the single catalog — that keeps merges
 simple when several feature agents add keys concurrently. Do not create extra
 locales or extra String Catalog tables.
 
-Keys currently defined: `CalCo`, `Native app scaffold`, and all static
-`String(localized:)` call-site keys under `auth.*`, `diary.*`, `foodDetail.*`
-(including `foodDetail.mealSlot.*`), `settings.*` (goals, slots, status,
-discard, keyboard and errors), and `search.*`, including error keys such as
-`diary.error.network`, `diary.error.sessionExpired`, `diary.refresh`,
-`diary.sessionExpired.title`, `foodDetail.error.*` and `search.error.generic`.
+Keys are grouped under `app.*`, `auth.*`, `diary.*`, `foodDetail.*`,
+`settings.*`, `search.*`, `submission.*`, `journal.*`, `library.*`, `meals.*`,
+`nutrition.*`, `assistant.*`, and `apiKeys.*`, plus the app display name.
+Search the catalog before adding a key rather than duplicating copy.
 
-The catalog currently has these format strings:
-`diary.editor.delete.failedWithBarrier` (`%@`),
-`diary.mutation.deleted.blockedPending` (`%lld`),
-`settings.goals.status.savedFrom` (`%@`, the localized effective date), and
-`foodDetail.pending.banner.count` (`%lld`). They have single English
-translations and no plural/number variations; `settings.goals.status.savedFrom`
-uses `String(format:)` with an already-formatted date. If a feature introduces
-a count-based format string, add its plural variations in the String Catalog
-rather than concatenating numbers in code. Interpolated `Text("\(value) …")`
-strings are not catalog keys and must be reworked by the owning feature if they
-need localization.
+Several entries use format placeholders such as `%@` and `%lld`.
+`nutrition.coverage.includedCount` uses English plural variations. Add plural
+variations for any new count-based string instead of concatenating grammar in
+Swift, and keep all user-visible copy in this single English catalog.
 
 ## Tests
 
