@@ -1,4 +1,15 @@
+use rust_decimal::Decimal;
+use uuid::Uuid;
+
 use crate::catalog::error::CatalogError;
+
+#[derive(Debug, Clone)]
+pub struct MissingMealComponent {
+    pub component_id: Uuid,
+    pub product_id: Uuid,
+    pub quantity_amount: Decimal,
+    pub quantity_unit: String,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum JournalError {
@@ -10,6 +21,11 @@ pub enum JournalError {
     Validation(String),
     #[error("conflict: {0}")]
     Conflict(String),
+    #[error("meal {meal_id} has missing components")]
+    MissingMealComponents {
+        meal_id: Uuid,
+        components: Vec<MissingMealComponent>,
+    },
     #[error("idempotency key already exists")]
     DuplicateIdempotencyKey,
     #[error("database: {0}")]

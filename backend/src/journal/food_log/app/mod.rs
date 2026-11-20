@@ -3,8 +3,8 @@ mod services;
 
 pub use history::{FoodLogDaySummary, FoodLogHistoryService, LatestSlotLogs};
 pub use services::{
-    FoodLogCreateOutcome, FoodLogQueryPort, FoodLogService, LogAdHocFoodInput, LogFoodInput,
-    UpdateFoodInput,
+    FoodLogBatchCreateOutcome, FoodLogCreateOutcome, FoodLogQueryPort, FoodLogService,
+    LogAdHocFoodInput, LogFoodInput, UpdateFoodInput,
 };
 
 #[cfg(test)]

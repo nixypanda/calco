@@ -63,6 +63,113 @@ impl IdempotencyKey {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoodLogOperationKind {
+    Single,
+    AdHoc,
+    Batch,
+}
+
+impl FoodLogOperationKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Single => "single",
+            Self::AdHoc => "ad_hoc",
+            Self::Batch => "batch",
+        }
+    }
+}
+
+/// Durable record of one keyed create operation. It outlives the logs it
+/// created so a late retry can never turn a deleted log back into a new row.
+#[derive(Debug, Clone)]
+pub struct FoodLogCreateOperation {
+    id: Uuid,
+    user_id: Uuid,
+    idempotency_key: IdempotencyKey,
+    request_fingerprint: String,
+    kind: FoodLogOperationKind,
+    log_count: usize,
+    log_ids: Vec<FoodLogId>,
+    created_at: DateTime<Utc>,
+}
+
+impl FoodLogCreateOperation {
+    pub fn new(
+        user_id: Uuid,
+        idempotency_key: IdempotencyKey,
+        request_fingerprint: String,
+        kind: FoodLogOperationKind,
+        log_ids: Vec<FoodLogId>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            user_id,
+            idempotency_key,
+            request_fingerprint,
+            kind,
+            log_count: log_ids.len(),
+            log_ids,
+            created_at: Utc::now(),
+        }
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    pub fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    pub fn idempotency_key(&self) -> &IdempotencyKey {
+        &self.idempotency_key
+    }
+
+    pub fn request_fingerprint(&self) -> &str {
+        &self.request_fingerprint
+    }
+
+    pub fn kind(&self) -> FoodLogOperationKind {
+        self.kind
+    }
+
+    pub fn log_count(&self) -> usize {
+        self.log_count
+    }
+
+    pub fn log_ids(&self) -> &[FoodLogId] {
+        &self.log_ids
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn restore(
+        id: Uuid,
+        user_id: Uuid,
+        idempotency_key: IdempotencyKey,
+        request_fingerprint: String,
+        kind: FoodLogOperationKind,
+        log_count: usize,
+        log_ids: Vec<FoodLogId>,
+        created_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id,
+            user_id,
+            idempotency_key,
+            request_fingerprint,
+            kind,
+            log_count,
+            log_ids,
+            created_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MealSlot {
     Breakfast,
@@ -690,12 +797,22 @@ pub use crate::journal::error::JournalError;
 pub trait FoodLogRepo: Send + Sync {
     async fn create(&self, log: &FoodLog) -> Result<(), JournalError>;
     async fn create_many(&self, logs: &[FoodLog]) -> Result<(), JournalError>;
+    async fn create_operation(
+        &self,
+        operation: &FoodLogCreateOperation,
+        logs: &[FoodLog],
+    ) -> Result<(), JournalError>;
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, JournalError>;
-    async fn find_by_user_and_key(
+    async fn find_operation_by_user_and_key(
         &self,
         user_id: Uuid,
         idempotency_key: &IdempotencyKey,
-    ) -> Result<Option<FoodLog>, JournalError>;
+    ) -> Result<Option<FoodLogCreateOperation>, JournalError>;
+    async fn list_by_ids(
+        &self,
+        user_id: Uuid,
+        ids: &[FoodLogId],
+    ) -> Result<Vec<FoodLog>, JournalError>;
     async fn list_by_user_and_date(
         &self,
         user_id: Uuid,

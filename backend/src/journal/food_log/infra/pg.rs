@@ -38,6 +38,26 @@ enum FoodLogs {
 }
 
 #[derive(Iden)]
+enum FoodLogCreateOperations {
+    Table,
+    Id,
+    UserId,
+    IdempotencyKey,
+    RequestFingerprint,
+    OperationKind,
+    LogCount,
+    CreatedAt,
+}
+
+#[derive(Iden)]
+enum FoodLogCreateOperationLogs {
+    Table,
+    OperationId,
+    FoodLogId,
+    Position,
+}
+
+#[derive(Iden)]
 enum FoodLogNutrients {
     Table,
     FoodLogId,
@@ -208,15 +228,90 @@ fn food_log_delete_statement(id: Uuid) -> DeleteStatement {
         .to_owned()
 }
 
-fn food_log_find_by_user_and_key_statement(
-    user_id: Uuid,
-    idempotency_key: &str,
-) -> SelectStatement {
+fn food_log_list_by_ids_statement(user_id: Uuid, ids: Vec<Uuid>) -> SelectStatement {
     Query::select()
         .columns(food_log_columns())
         .from(FoodLogs::Table)
         .and_where(Expr::col(FoodLogs::UserId).eq(user_id))
-        .and_where(Expr::col(FoodLogs::IdempotencyKey).eq(idempotency_key))
+        .and_where(Expr::col(FoodLogs::Id).eq_any(ids))
+        .to_owned()
+}
+
+fn food_log_create_operation_insert_statement(
+    operation: &FoodLogCreateOperation,
+) -> InsertStatement {
+    Query::insert()
+        .into_table(FoodLogCreateOperations::Table)
+        .columns([
+            FoodLogCreateOperations::Id,
+            FoodLogCreateOperations::UserId,
+            FoodLogCreateOperations::IdempotencyKey,
+            FoodLogCreateOperations::RequestFingerprint,
+            FoodLogCreateOperations::OperationKind,
+            FoodLogCreateOperations::LogCount,
+            FoodLogCreateOperations::CreatedAt,
+        ])
+        .values_panic([
+            operation.id().into(),
+            operation.user_id().into(),
+            operation.idempotency_key().as_str().into(),
+            operation.request_fingerprint().into(),
+            operation.kind().as_str().into(),
+            (operation.log_count() as i32).into(),
+            operation.created_at().into(),
+        ])
+        .to_owned()
+}
+
+fn food_log_create_operation_log_insert_statement(
+    operation: &FoodLogCreateOperation,
+) -> InsertStatement {
+    let mut statement = Query::insert();
+    statement
+        .into_table(FoodLogCreateOperationLogs::Table)
+        .columns([
+            FoodLogCreateOperationLogs::OperationId,
+            FoodLogCreateOperationLogs::FoodLogId,
+            FoodLogCreateOperationLogs::Position,
+        ]);
+
+    for (position, food_log_id) in operation.log_ids().iter().enumerate() {
+        statement.values_panic([
+            operation.id().into(),
+            food_log_id.0.into(),
+            (position as i32).into(),
+        ]);
+    }
+
+    statement.to_owned()
+}
+
+fn food_log_create_operation_find_by_user_and_key_statement(
+    user_id: Uuid,
+    idempotency_key: &str,
+) -> SelectStatement {
+    Query::select()
+        .columns([
+            FoodLogCreateOperations::Id,
+            FoodLogCreateOperations::UserId,
+            FoodLogCreateOperations::IdempotencyKey,
+            FoodLogCreateOperations::RequestFingerprint,
+            FoodLogCreateOperations::OperationKind,
+            FoodLogCreateOperations::LogCount,
+            FoodLogCreateOperations::CreatedAt,
+        ])
+        .from(FoodLogCreateOperations::Table)
+        .and_where(Expr::col(FoodLogCreateOperations::UserId).eq(user_id))
+        .and_where(Expr::col(FoodLogCreateOperations::IdempotencyKey).eq(idempotency_key))
+        .to_owned()
+}
+
+fn food_log_create_operation_log_ids_statement(operation_id: Uuid) -> SelectStatement {
+    Query::select()
+        .column(FoodLogCreateOperationLogs::FoodLogId)
+        .from(FoodLogCreateOperationLogs::Table)
+        .and_where(Expr::col(FoodLogCreateOperationLogs::OperationId).eq(operation_id))
+        .order_by(FoodLogCreateOperationLogs::Position, Order::Asc)
         .to_owned()
 }
 
@@ -231,6 +326,18 @@ fn map_food_log_insert_error(error: sqlx::Error) -> JournalError {
     if let sqlx::Error::Database(database_error) = &error
         && database_error.code().as_deref() == Some("23505")
         && database_error.constraint() == Some("food_logs_user_idempotency_key_idx")
+    {
+        return JournalError::DuplicateIdempotencyKey;
+    }
+
+    JournalError::Database(error)
+}
+
+fn map_food_log_create_operation_insert_error(error: sqlx::Error) -> JournalError {
+    if let sqlx::Error::Database(database_error) = &error
+        && database_error.code().as_deref() == Some("23505")
+        && database_error.constraint()
+            == Some("food_log_create_operations_user_idempotency_key_idx")
     {
         return JournalError::DuplicateIdempotencyKey;
     }
@@ -433,6 +540,38 @@ fn push_date_bound(query: &mut SelectStatement, bound: &Bound<NaiveDate>, is_sta
     }
 }
 
+fn food_log_create_operation_row_to_operation(
+    row: FoodLogCreateOperationRow,
+    log_ids: Vec<FoodLogId>,
+) -> Result<FoodLogCreateOperation, JournalError> {
+    let kind = match row.operation_kind.as_str() {
+        "single" => FoodLogOperationKind::Single,
+        "ad_hoc" => FoodLogOperationKind::AdHoc,
+        "batch" => FoodLogOperationKind::Batch,
+        _ => return Err(invalid_persisted_operation_conflict()),
+    };
+    if !(1..=50).contains(&row.log_count) {
+        return Err(invalid_persisted_operation_conflict());
+    }
+    let idempotency_key = IdempotencyKey::new(row.idempotency_key)
+        .map_err(|_| invalid_persisted_operation_conflict())?;
+
+    Ok(FoodLogCreateOperation::restore(
+        row.id,
+        row.user_id,
+        idempotency_key,
+        row.request_fingerprint,
+        kind,
+        row.log_count as usize,
+        log_ids,
+        row.created_at,
+    ))
+}
+
+fn invalid_persisted_operation_conflict() -> JournalError {
+    JournalError::Conflict("idempotency_key refers to an invalid operation; use a new key".into())
+}
+
 fn food_log_row_to_food_log(
     row: FoodLogRow,
     snapshots: Vec<FoodLogNutrientSnapshot>,
@@ -493,20 +632,98 @@ impl FoodLogRepo for PgFoodLogRepo {
         Ok(())
     }
 
+    async fn create_operation(
+        &self,
+        operation: &FoodLogCreateOperation,
+        logs: &[FoodLog],
+    ) -> Result<(), JournalError> {
+        let mut tx = self.pool.begin().await?;
+
+        let (sql, values) =
+            food_log_create_operation_insert_statement(operation).build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_food_log_create_operation_insert_error)?;
+
+        let (sql, values) = food_log_create_operation_log_insert_statement(operation)
+            .build_sqlx(PostgresQueryBuilder);
+        sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+            .execute(&mut *tx)
+            .await?;
+
+        for log in logs {
+            insert_food_log(&mut tx, log).await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, JournalError> {
         self.find_one(food_log_find_by_id_statement(id.0)).await
     }
 
-    async fn find_by_user_and_key(
+    async fn find_operation_by_user_and_key(
         &self,
         user_id: Uuid,
         idempotency_key: &IdempotencyKey,
-    ) -> Result<Option<FoodLog>, JournalError> {
-        self.find_one(food_log_find_by_user_and_key_statement(
+    ) -> Result<Option<FoodLogCreateOperation>, JournalError> {
+        let mut tx = begin_read_snapshot(&self.pool).await?;
+        let (sql, values) = food_log_create_operation_find_by_user_and_key_statement(
             user_id,
             idempotency_key.as_str(),
-        ))
-        .await
+        )
+        .build_sqlx(PostgresQueryBuilder);
+        let row = sqlx::query_as_with::<_, FoodLogCreateOperationRow, _>(
+            sqlx::AssertSqlSafe(sql.as_str()),
+            values,
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let result = match row {
+            Some(row) => {
+                let (sql, values) = food_log_create_operation_log_ids_statement(row.id)
+                    .build_sqlx(PostgresQueryBuilder);
+                let log_ids = sqlx::query_scalar_with::<_, Uuid, _>(
+                    sqlx::AssertSqlSafe(sql.as_str()),
+                    values,
+                )
+                .fetch_all(&mut *tx)
+                .await?
+                .into_iter()
+                .map(FoodLogId)
+                .collect();
+                Some(food_log_create_operation_row_to_operation(row, log_ids)?)
+            }
+            None => None,
+        };
+
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    async fn list_by_ids(
+        &self,
+        user_id: Uuid,
+        ids: &[FoodLogId],
+    ) -> Result<Vec<FoodLog>, JournalError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut tx = begin_read_snapshot(&self.pool).await?;
+        let ids = ids.iter().map(|id| id.0).collect();
+        let (sql, values) =
+            food_log_list_by_ids_statement(user_id, ids).build_sqlx(PostgresQueryBuilder);
+        let rows =
+            sqlx::query_as_with::<_, FoodLogRow, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
+                .fetch_all(&mut *tx)
+                .await?;
+        let result = rows_to_food_logs(&mut tx, rows).await?;
+        tx.commit().await?;
+        Ok(result)
     }
 
     async fn list_by_user_and_date(
@@ -596,6 +813,17 @@ struct FoodLogRow {
     request_fingerprint: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct FoodLogCreateOperationRow {
+    id: Uuid,
+    user_id: Uuid,
+    idempotency_key: String,
+    request_fingerprint: String,
+    operation_kind: String,
+    log_count: i32,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow)]

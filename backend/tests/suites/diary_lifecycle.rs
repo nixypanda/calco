@@ -424,7 +424,7 @@ async fn keyed_log_replay_normalizes_and_keeps_the_original_fingerprint(pool: Pg
 }
 
 #[sqlx::test]
-async fn deleted_keyed_log_frees_the_idempotency_key(pool: PgPool) {
+async fn deleted_keyed_log_stays_deleted_when_replayed(pool: PgPool) {
     let router = app(pool).await;
     let (_admin, user) = bootstrap_and_user(&router).await;
     let product_id = seed_product(&router, &user).await;
@@ -444,16 +444,32 @@ async fn deleted_keyed_log_frees_the_idempotency_key(pool: PgPool) {
     let (status, _) = get_status(&router, &format!("/api/logs/{log_id}"), &user).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
-    // Deleting the log also deletes its key. A delayed retry can therefore
-    // create a fresh log, but it must not resurrect the deleted one.
-    let recreated: Value =
-        post_json(&router, "/api/logs", &user, &payload, StatusCode::CREATED).await;
-    let recreated_id = recreated["id"].as_str().unwrap();
-    assert_ne!(recreated_id, log_id.as_str());
+    // The durable operation row outlives the log, so a delayed retry cannot
+    // recreate the record the user deleted.
+    let replay: Value =
+        post_json(&router, "/api/logs", &user, &payload, StatusCode::CONFLICT).await;
+    assert_eq!(replay["error"]["code"], "conflict");
+    assert!(
+        logs_on(&router, &user, "2026-06-04").await.is_empty(),
+        "replaying a deleted operation must not append a replacement log"
+    );
+
+    // A new intentional submission uses a new key and is allowed.
+    let mut new_payload = payload;
+    new_payload["idempotency_key"] = json!("diary-replacement-key");
+    let recreated: Value = post_json(
+        &router,
+        "/api/logs",
+        &user,
+        &new_payload,
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_ne!(recreated["id"].as_str().unwrap(), log_id);
 
     let listed = logs_on(&router, &user, "2026-06-04").await;
     assert_eq!(listed.len(), 1);
-    assert_eq!(listed[0]["id"], recreated_id);
+    assert_eq!(listed[0]["id"], recreated["id"]);
 }
 
 #[sqlx::test]
@@ -653,4 +669,40 @@ async fn batch_log_creation_rejects_item_idempotency_keys(pool: PgPool) {
     .await;
     assert_eq!(created["items"].as_array().unwrap().len(), 2);
     assert_eq!(logs_on(&router, &user, "2026-06-07").await.len(), 2);
+}
+
+#[sqlx::test]
+async fn latest_slots_and_daily_list_preserve_notes(pool: PgPool) {
+    let router = app(pool).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+    let product_id = seed_product(&router, &user).await;
+
+    let created: Value = post_json(
+        &router,
+        "/api/logs",
+        &user,
+        &json!({
+            "log_date": "2026-06-01",
+            "meal_slot": "breakfast",
+            "item": { "type": "product", "id": product_id },
+            "quantity": { "amount": 150, "unit": "g" },
+            "notes": "latest note"
+        }),
+        StatusCode::CREATED,
+    )
+    .await;
+    let log_id = created["id"].as_str().unwrap().to_string();
+    assert_eq!(created["notes"], "latest note");
+
+    let latest: Value = get_json(&router, "/api/logs/latest-slots?before=2026-06-02", &user).await;
+    let latest_item = &latest["slots"][0]["items"][0];
+    assert_eq!(latest_item["id"], log_id);
+    assert_eq!(
+        latest_item["notes"], "latest note",
+        "/logs/latest-slots must use the full LogResponse, including notes"
+    );
+
+    let listed = logs_on(&router, &user, "2026-06-01").await;
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0]["notes"], "latest note");
 }
