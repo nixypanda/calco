@@ -124,36 +124,30 @@ final class LogHistoryContractTests: XCTestCase {
         XCTAssertEqual(items[1]["type"] as? String, "meal")
     }
 
-    func testSingleBodyPutsOneTopLevelKeyAndNoItemKey() throws {
+    func testSingleBodyHasNoIdempotencyKey() throws {
         let draft = makeDraft(item: .product(id: "food-1"))
-        let prepared = try LogSubmissionRequestBuilder.prepare(
-            drafts: [draft],
-            baseURL: baseURL,
-            idempotencyKey: "key-1"
-        )
+        let prepared = try LogSubmissionRequestBuilder.prepare(drafts: [draft])
         XCTAssertEqual(prepared.route, .single)
         XCTAssertEqual(prepared.request.requestPath, "/api/logs")
         let root = try object(prepared.request.body)
-        XCTAssertEqual(root["idempotency_key"] as? String, "key-1")
+        XCTAssertNil(root["idempotency_key"])
         let item = try XCTUnwrap(root["item"] as? [String: Any])
         XCTAssertNil(item["idempotency_key"])
         XCTAssertEqual(root["log_date"] as? String, "2026-11-17")
         XCTAssertEqual(root["device_timezone"] as? String, "Europe/Paris")
     }
 
-    func testBatchBodyKeepsOrderAndOnlyTopLevelKey() throws {
+    func testBatchBodyKeepsOrderAndHasNoKeys() throws {
         let prepared = try LogSubmissionRequestBuilder.prepare(
             drafts: [
                 makeDraft(item: .product(id: "food-1"), amount: "50"),
                 makeDraft(item: .meal(id: "meal-1"), amount: "1"),
-            ],
-            baseURL: baseURL,
-            idempotencyKey: "batch-key"
+            ]
         )
         XCTAssertEqual(prepared.route, .batch)
         XCTAssertEqual(prepared.request.requestPath, "/api/logs/batch")
         let root = try object(prepared.request.body)
-        XCTAssertEqual(root["idempotency_key"] as? String, "batch-key")
+        XCTAssertNil(root["idempotency_key"])
         let items = try XCTUnwrap(root["items"] as? [[String: Any]])
         XCTAssertEqual(items.count, 2)
         XCTAssertNil(items[0]["idempotency_key"])
@@ -172,7 +166,7 @@ final class LogHistoryContractTests: XCTestCase {
         )
     }
 
-    func testAdHocBodyUsesTopLevelKeyAndNutrients() throws {
+    func testAdHocBodyHasNutrientsAndNoKey() throws {
         let draft = LogSubmissionDraft(
             item: .adHoc(name: "Toast", brand: "Bakery"),
             date: date,
@@ -185,42 +179,35 @@ final class LogHistoryContractTests: XCTestCase {
                 NutrientAmountValue(code: "ENERGY_KCAL", amount: "80", unit: "kcal")
             ]
         )
-        let prepared = try LogSubmissionRequestBuilder.prepare(
-            drafts: [draft],
-            baseURL: baseURL,
-            idempotencyKey: "ad-hoc-key"
-        )
+        let prepared = try LogSubmissionRequestBuilder.prepare(drafts: [draft])
         XCTAssertEqual(prepared.route, .adHoc)
         XCTAssertEqual(prepared.request.requestPath, "/api/logs/ad-hoc")
         let root = try object(prepared.request.body)
-        XCTAssertEqual(root["idempotency_key"] as? String, "ad-hoc-key")
+        XCTAssertNil(root["idempotency_key"])
         XCTAssertEqual(root["name"] as? String, "Toast")
         XCTAssertEqual(root["brand"] as? String, "Bakery")
         XCTAssertNil(root["item"])
         XCTAssertEqual((root["nutrients"] as? [[String: Any]])?.count, 1)
     }
 
-    func testBuilderRejectsBlankControlAndOversizedKeysAndTooManyDrafts() {
+    func testBuilderRejectsEmptyInvalidAndTooManyDrafts() {
         let draft = makeDraft(item: .product(id: "food-1"))
-        for key in ["   ", "bad\nkey", String(repeating: "k", count: 129)] {
-            XCTAssertThrowsError(
-                try LogSubmissionRequestBuilder.prepare(
-                    drafts: [draft],
-                    baseURL: baseURL,
-                    idempotencyKey: key
-                )
-            ) { error in
-                XCTAssertEqual(error as? LogCreateRequestBuilderError, .invalidKey)
-            }
+        XCTAssertThrowsError(
+            try LogSubmissionRequestBuilder.prepare(drafts: [])
+        ) { error in
+            XCTAssertEqual(error as? LogCreateRequestBuilderError, .invalidItem)
+        }
+        XCTAssertThrowsError(
+            try LogSubmissionRequestBuilder.prepare(
+                drafts: [makeDraft(item: .product(id: "food-1"), amount: "0")]
+            )
+        ) { error in
+            XCTAssertEqual(error as? LogCreateRequestBuilderError, .invalidItem)
         }
 
         let tooMany = Array(repeating: draft, count: 51)
         XCTAssertThrowsError(
-            try LogSubmissionRequestBuilder.prepare(
-                drafts: tooMany,
-                baseURL: baseURL,
-                idempotencyKey: "key"
-            )
+            try LogSubmissionRequestBuilder.prepare(drafts: tooMany)
         ) { error in
             XCTAssertEqual(error as? LogCreateRequestBuilderError, .invalidItem)
         }
@@ -235,16 +222,14 @@ final class LogHistoryContractTests: XCTestCase {
             unit: "serving",
             notes: nil,
             timeZone: "Europe/Paris",
-            nutrients: []
+            nutrients: [
+                NutrientAmountValue(code: "ENERGY_KCAL", amount: "80", unit: "kcal")
+            ]
         )
         let product = makeDraft(item: .product(id: "food-1"))
         for drafts in [[adHoc, adHoc], [adHoc, product], [product, adHoc]] {
             XCTAssertThrowsError(
-                try LogSubmissionRequestBuilder.prepare(
-                    drafts: drafts,
-                    baseURL: baseURL,
-                    idempotencyKey: "key"
-                )
+                try LogSubmissionRequestBuilder.prepare(drafts: drafts)
             ) { error in
                 XCTAssertEqual(error as? LogCreateRequestBuilderError, .invalidItem)
             }

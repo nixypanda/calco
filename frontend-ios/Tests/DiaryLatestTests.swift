@@ -100,7 +100,7 @@ final class DiaryLatestTests: XCTestCase {
         )?
         let viewModel = makeViewModel(service: service) { drafts, names, summary, completion in
             submitted = (drafts, names, summary)
-            completion(.success(logs: [], replayed: false))
+            completion(.success([]))
         }
 
         await viewModel.load()
@@ -256,7 +256,7 @@ final class DiaryLatestTests: XCTestCase {
         var submissions = 0
         let viewModel = makeViewModel(service: service) { _, _, _, completion in
             submissions += 1
-            completion(.success(logs: [], replayed: false))
+            completion(.success([]))
         }
 
         await viewModel.load()

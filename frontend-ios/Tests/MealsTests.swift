@@ -178,58 +178,12 @@ private actor FakeMealsService: MealsServicing {
     }
 }
 
-private final class FakeMealReconciliationPersistence:
-    MealCreateReconciliationPersisting,
-    @unchecked Sendable
-{
-    private let lock = NSLock()
-    private var storage: [String: Data] = [:]
-    private var failSave = false
-
-    func setFailSave(_ value: Bool) {
-        lock.lock()
-        failSave = value
-        lock.unlock()
-    }
-
-    func setRawData(_ data: Data?, accountID: String) {
-        lock.lock()
-        storage[accountID] = data
-        lock.unlock()
-    }
-
-    func load(accountID: String) throws -> Data? {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage[accountID]
-    }
-
-    func save(_ data: Data, accountID: String) throws {
-        lock.lock()
-        defer { lock.unlock() }
-        if failSave { throw CocoaError(.fileWriteUnknown) }
-        storage[accountID] = data
-    }
-
-    func remove(accountID: String) throws {
-        lock.lock()
-        storage.removeValue(forKey: accountID)
-        lock.unlock()
-    }
-
-    func quarantine(accountID: String, reason: String) {
-        lock.lock()
-        storage.removeValue(forKey: accountID)
-        lock.unlock()
-    }
-}
-
 private final class MealLogRecorder {
     var drafts: [LogSubmissionDraft] = []
     var itemNames: [String] = []
     var summaries: [String] = []
     var calls = 0
-    var result: LogSubmissionServiceResult = .success(logs: [], replayed: false)
+    var result: LogSubmissionServiceResult = .success([])
 
     var handler: LogSubmissionHandler {
         { [weak self] drafts, itemNames, summary, completion in
@@ -289,7 +243,6 @@ final class MealsTests: XCTestCase {
     private func editorViewModel(
         mode: MealEditorMode,
         service: FakeMealsService,
-        persistence: FakeMealReconciliationPersistence = .init(),
         accountID: String = "account-1",
         searchDebounceNanoseconds: UInt64 = 300_000_000,
         onSessionExpired: @escaping () -> Void = {},
@@ -299,9 +252,6 @@ final class MealsTests: XCTestCase {
             mode: mode,
             accountID: accountID,
             service: service,
-            reconciliationStore: MealCreateReconciliationStore(
-                persistence: persistence
-            ),
             onSessionExpired: onSessionExpired,
             onSaved: onSaved,
             searchDebounceNanoseconds: searchDebounceNanoseconds
@@ -804,7 +754,7 @@ final class MealsTests: XCTestCase {
         XCTAssertEqual(requests.count, 1)
     }
 
-    func testUncertainCreateBlocksBlindRetry() async {
+    func testUncertainCreateShowsOrdinaryErrorAndAllowsExplicitRetry() async {
         let service = FakeMealsService()
         await service.setCreateResult(.failure(.network))
         let viewModel = editorViewModel(mode: .create, service: service)
@@ -814,318 +764,23 @@ final class MealsTests: XCTestCase {
         viewModel.componentAmountChanged(rowID: 1, amount: "50")
 
         await viewModel.save()
-        await viewModel.save()
 
-        XCTAssertTrue(viewModel.saveUncertain)
-        XCTAssertTrue(viewModel.isSaveBlocked)
+        XCTAssertFalse(viewModel.didSave)
+        XCTAssertFalse(viewModel.isSaveBlocked)
         XCTAssertEqual(
             viewModel.saveErrorMessage,
-            String(localized: "meals.error.createUncertain")
+            String(
+                localized: "meals.editor.createUncertain",
+                defaultValue: "CalCo couldn't confirm whether this meal was saved. Refresh the list before trying again."
+            )
         )
-        let requests = await service.recordedCreateRequests()
-        XCTAssertEqual(requests.count, 1)
-    }
-
-    func testUncertainCreatePersistsAcrossReopenAndBlocksNewCreate() async {
-        let service = FakeMealsService()
-        await service.setCreateResult(.failure(.network))
-        let persistence = FakeMealReconciliationPersistence()
-        let first = editorViewModel(
-            mode: .create,
-            service: service,
-            persistence: persistence
-        )
-        await first.load()
-        first.name = "Meal"
-        first.selectProduct(rowID: 1, product: MealProduct(id: "oats", name: "Oats"))
-        first.componentAmountChanged(rowID: 1, amount: "50")
-        await first.save()
-        XCTAssertNotNil(first.reconciliationAttempt)
 
         await service.setCreateResult(.success(makeMeal(id: "meal-new")))
-        let reopened = editorViewModel(
-            mode: .create,
-            service: service,
-            persistence: persistence
-        )
-        await reopened.load()
-        XCTAssertNotNil(reopened.reconciliationAttempt)
-        XCTAssertTrue(reopened.isSaveBlocked)
-
-        reopened.name = "Meal"
-        reopened.selectProduct(
-            rowID: 1,
-            product: MealProduct(id: "oats", name: "Oats")
-        )
-        reopened.componentAmountChanged(rowID: 1, amount: "50")
-        await reopened.save()
-
-        let requests = await service.recordedCreateRequests()
-        XCTAssertEqual(requests.count, 1, "Reopen must not send a second POST")
-    }
-
-    func testReconciledServerMealClearsDurableIntent() async {
-        let service = FakeMealsService()
-        await service.setCreateResult(.failure(.network))
-        let persistence = FakeMealReconciliationPersistence()
-        let first = editorViewModel(
-            mode: .create,
-            service: service,
-            persistence: persistence
-        )
-        await first.load()
-        first.name = "Meal"
-        first.selectProduct(rowID: 1, product: MealProduct(id: "oats", name: "Oats"))
-        first.componentAmountChanged(rowID: 1, amount: "50")
-        await first.save()
-
-        let recovered = makeMeal(
-            id: "meal-recovered",
-            name: "Meal",
-            notes: nil,
-            total: nil,
-            componentProducts: ["oats"],
-            componentAmounts: ["50"]
-        )
-        await service.setListResult(.success([recovered]))
-        var saved: [Meal] = []
-        let reopened = editorViewModel(
-            mode: .create,
-            service: service,
-            persistence: persistence,
-            onSaved: { saved.append($0) }
-        )
-        await reopened.load()
-        await waitUntil {
-            reopened.reconciliationCandidates.map(\.id) == ["meal-recovered"]
-        }
-
-        reopened.useReconciledMeal(recovered)
-
-        XCTAssertNil(reopened.reconciliationAttempt)
-        XCTAssertFalse(reopened.saveUncertain)
-        XCTAssertTrue(reopened.didSave)
-        XCTAssertEqual(saved.map(\.id), ["meal-recovered"])
-        let stored = try? MealCreateReconciliationStore(
-            persistence: persistence
-        ).attempt(accountID: "account-1")
-        XCTAssertNil(stored ?? nil)
-    }
-
-    func testDiscardReconciliationRequiresExplicitActionThenAllowsNewCreate() async {
-        let service = FakeMealsService()
-        await service.setCreateResult(.failure(.network))
-        let persistence = FakeMealReconciliationPersistence()
-        let first = editorViewModel(
-            mode: .create,
-            service: service,
-            persistence: persistence
-        )
-        await first.load()
-        first.name = "Meal"
-        first.selectProduct(rowID: 1, product: MealProduct(id: "oats", name: "Oats"))
-        first.componentAmountChanged(rowID: 1, amount: "50")
-        await first.save()
-
-        await service.setCreateResult(.success(makeMeal(id: "meal-new")))
-        let reopened = editorViewModel(
-            mode: .create,
-            service: service,
-            persistence: persistence
-        )
-        await reopened.load()
-        reopened.discardReconciliation()
-        XCTAssertNil(reopened.reconciliationAttempt)
-        XCTAssertFalse(reopened.isSaveBlocked)
-
-        reopened.name = "Meal"
-        reopened.selectProduct(
-            rowID: 1,
-            product: MealProduct(id: "oats", name: "Oats")
-        )
-        reopened.componentAmountChanged(rowID: 1, amount: "50")
-        await reopened.save()
+        await viewModel.save()
 
         let requests = await service.recordedCreateRequests()
         XCTAssertEqual(requests.count, 2)
-        XCTAssertTrue(reopened.didSave)
-    }
-
-    func testUnreadableReconciliationStoreBlocksPostUntilReset() async {
-        let service = FakeMealsService()
-        await service.setCreateResult(.success(makeMeal(id: "meal-new")))
-        let persistence = FakeMealReconciliationPersistence()
-        persistence.setRawData(Data("not-json".utf8), accountID: "account-1")
-        let viewModel = editorViewModel(
-            mode: .create,
-            service: service,
-            persistence: persistence
-        )
-        await viewModel.load()
-        XCTAssertTrue(viewModel.reconciliationUnreadable)
-        viewModel.name = "Meal"
-        viewModel.selectProduct(
-            rowID: 1,
-            product: MealProduct(id: "oats", name: "Oats")
-        )
-        viewModel.componentAmountChanged(rowID: 1, amount: "50")
-
-        await viewModel.save()
-        var requests = await service.recordedCreateRequests()
-        XCTAssertTrue(requests.isEmpty)
-
-        viewModel.resetUnreadableReconciliation()
-        await viewModel.save()
-        requests = await service.recordedCreateRequests()
-        XCTAssertEqual(requests.count, 1)
-    }
-
-    func testReconciliationMatchingRequiresNewExactMeal() {
-        let request = MealWriteRequest(
-            name: "Porridge",
-            notes: "Morning",
-            totalQuantity: NutritionQuantity(amount: "250", unit: "g"),
-            components: [
-                MealComponentWriteRequest(
-                    productID: "oats",
-                    quantity: NutritionQuantity(amount: "50.0", unit: "g")
-                )
-            ]
-        )
-        let attempt = MealCreateAttempt(
-            accountID: "account-1",
-            request: request,
-            baselineMealIDs: ["old-meal"]
-        )
-        let old = makeMeal(
-            id: "old-meal",
-            name: "Porridge",
-            notes: "Morning",
-            total: NutritionQuantity(amount: "250", unit: "g"),
-            componentProducts: ["oats"],
-            componentAmounts: ["50"]
-        )
-        let changed = makeMeal(
-            id: "changed-meal",
-            name: "Porridge",
-            notes: "Morning",
-            total: NutritionQuantity(amount: "250", unit: "g"),
-            componentProducts: ["oats"],
-            componentAmounts: ["60"]
-        )
-        let exact = makeMeal(
-            id: "new-meal",
-            name: "Porridge",
-            notes: "Morning",
-            total: NutritionQuantity(amount: "250.00", unit: "g"),
-            componentProducts: ["oats"],
-            componentAmounts: ["50.000"]
-        )
-
-        let matches = attempt.matches(in: [old, changed, exact])
-        XCTAssertEqual(matches.map(\.id), ["new-meal"])
-    }
-
-    func testConcurrentCreateReservationsKeepOneAttempt() throws {
-        let persistence = FakeMealReconciliationPersistence()
-        let store = MealCreateReconciliationStore(persistence: persistence)
-        let request = MealWriteRequest(
-            name: "Meal",
-            components: [
-                MealComponentWriteRequest(
-                    productID: "oats",
-                    quantity: NutritionQuantity(amount: "50", unit: "g")
-                )
-            ]
-        )
-        let first = MealCreateAttempt(
-            accountID: "account-1",
-            request: request,
-            baselineMealIDs: []
-        )
-        let second = MealCreateAttempt(
-            accountID: "account-1",
-            request: request,
-            baselineMealIDs: []
-        )
-
-        XCTAssertEqual(try store.reserve(first).id, first.id)
-        XCTAssertEqual(try store.reserve(second).id, first.id)
-        XCTAssertEqual(try store.attempt(accountID: "account-1")?.id, first.id)
-    }
-
-    func testMealCreateReconciliationIsAccountScoped() throws {
-        let persistence = FakeMealReconciliationPersistence()
-        let store = MealCreateReconciliationStore(persistence: persistence)
-        let request = MealWriteRequest(
-            name: "Meal",
-            components: [
-                MealComponentWriteRequest(
-                    productID: "oats",
-                    quantity: NutritionQuantity(amount: "50", unit: "g")
-                )
-            ]
-        )
-        let attempt = MealCreateAttempt(
-            accountID: "account-a",
-            request: request,
-            baselineMealIDs: []
-        )
-        try store.save(attempt)
-
-        XCTAssertEqual(try store.attempt(accountID: "account-a"), attempt)
-        XCTAssertNil(try store.attempt(accountID: "account-b"))
-    }
-
-    func testMissingAccountFailsClosedWithoutCreate() async {
-        let service = FakeMealsService()
-        await service.setCreateResult(.success(makeMeal(id: "meal-new")))
-        let viewModel = editorViewModel(
-            mode: .create,
-            service: service,
-            accountID: ""
-        )
-        await viewModel.load()
-        XCTAssertTrue(viewModel.reconciliationUnreadable)
-        viewModel.name = "Meal"
-        viewModel.selectProduct(
-            rowID: 1,
-            product: MealProduct(id: "oats", name: "Oats")
-        )
-        viewModel.componentAmountChanged(rowID: 1, amount: "50")
-
-        await viewModel.save()
-
-        let requests = await service.recordedCreateRequests()
-        XCTAssertTrue(requests.isEmpty)
-    }
-
-    func testReconciliationStoreWriteFailureBlocksPost() async {
-        let service = FakeMealsService()
-        let persistence = FakeMealReconciliationPersistence()
-        persistence.setFailSave(true)
-        let viewModel = editorViewModel(
-            mode: .create,
-            service: service,
-            persistence: persistence
-        )
-        await viewModel.load()
-        viewModel.name = "Meal"
-        viewModel.selectProduct(
-            rowID: 1,
-            product: MealProduct(id: "oats", name: "Oats")
-        )
-        viewModel.componentAmountChanged(rowID: 1, amount: "50")
-
-        await viewModel.save()
-
-        let requests = await service.recordedCreateRequests()
-        XCTAssertTrue(requests.isEmpty, "No create may be sent without a durable intent")
-        XCTAssertEqual(
-            viewModel.saveErrorMessage,
-            String(localized: "meals.reconcile.storeUnavailable")
-        )
-        XCTAssertTrue(viewModel.isSaveBlocked)
+        XCTAssertTrue(viewModel.didSave)
     }
 
     func testEditorValidationBlocksSave() async {

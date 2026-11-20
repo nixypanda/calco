@@ -53,7 +53,6 @@ IPAD_DESTINATION = (
 )
 FIXTURE_MARKER = "native-completion-qa"
 FIXTURE_PROFILE_ID = "22222222-2222-4222-8222-222222222222"
-ACCOUNT_HEADER = "X-CalCo-Account-ID"
 APPLE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 SIGNING_NAME_MARKERS = (
     "CODE_SIGN",
@@ -100,7 +99,7 @@ def apple_env(developer_dir: str) -> dict[str, str]:
 
 
 def validate_fixture_health(payload: object) -> dict:
-    """Validate the live QA fixture identity/binding contract."""
+    """Validate the live QA fixture identity contract."""
     if not isinstance(payload, dict):
         raise DriverError("fixture health was not a JSON object")
     if payload.get("fixture") != FIXTURE_MARKER:
@@ -110,8 +109,6 @@ def validate_fixture_health(payload: object) -> dict:
         )
     if payload.get("profile_id") != FIXTURE_PROFILE_ID:
         raise DriverError("fixture profile UUID does not match the contract")
-    if payload.get("account_header") != ACCOUNT_HEADER:
-        raise DriverError("fixture account-binding header does not match")
     identity = payload.get("identity_id")
     if not isinstance(identity, str):
         raise DriverError("fixture has no identity UUID")
@@ -166,8 +163,6 @@ def wait_for_ready(
                 )
             if payload.get("profile_id") != FIXTURE_PROFILE_ID:
                 raise DriverError("fixture ready marker profile UUID is wrong")
-            if payload.get("account_header") != ACCOUNT_HEADER:
-                raise DriverError("fixture ready marker account header is wrong")
             identity = payload.get("identity_id")
             try:
                 if uuid.UUID(str(identity)) == uuid.UUID(FIXTURE_PROFILE_ID):

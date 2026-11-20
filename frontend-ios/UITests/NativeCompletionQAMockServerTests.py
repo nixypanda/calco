@@ -51,7 +51,7 @@ class MockContractTests(unittest.TestCase):
         method: str,
         path: str,
         body: dict | None = None,
-        account_id: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> tuple[int, dict, object]:
         data = None if body is None else json.dumps(body).encode()
         return self.request_raw(
@@ -59,7 +59,7 @@ class MockContractTests(unittest.TestCase):
             path,
             data,
             "application/json" if data is not None else None,
-            account_id,
+            headers,
         )
 
     def request_raw(
@@ -68,16 +68,16 @@ class MockContractTests(unittest.TestCase):
         path: str,
         data: bytes | None,
         content_type: str | None,
-        account_id: str | None,
+        headers: dict[str, str] | None = None,
     ) -> tuple[int, dict, object]:
         request = urllib.request.Request(self.base + path, data=data, method=method)
         request.add_header("Accept", "application/json")
         if content_type is not None:
             request.add_header("Content-Type", content_type)
+        for name, value in (headers or {}).items():
+            request.add_header(name, value)
         if self.cookie:
             request.add_header("Cookie", self.cookie)
-        if account_id is not None:
-            request.add_header(mock.ACCOUNT_HEADER, account_id)
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
                 raw = response.read()
@@ -116,8 +116,16 @@ class MockContractTests(unittest.TestCase):
             "/api/ai/custom-food/draft",
             body,
             f"multipart/form-data; boundary={boundary}",
-            mock.FIXTURE_PROFILE_ID,
         )
+
+    def login(self) -> None:
+        login = self.request(
+            "POST",
+            "/api/auth/login",
+            {"username": mock.FIXTURE_USERNAME, "password": mock.FIXTURE_PASSWORD},
+        )
+        self.assertEqual(login[0], 200)
+        self.cookie = login[2].headers["Set-Cookie"].split(";", 1)[0]
 
     def test_session_identity_and_profile_are_distinct_valid_uuids(self) -> None:
         status, payload, _ = self.request("GET", "/api/auth/session")
@@ -129,48 +137,34 @@ class MockContractTests(unittest.TestCase):
         uuid.UUID(profile)
         self.assertEqual(profile, mock.FIXTURE_PROFILE_ID)
 
-    def test_capability_exposes_binding_and_accepts_matching_profile(self) -> None:
-        status, payload, _ = self.request(
-            "GET",
-            "/api/capabilities",
-            account_id=mock.FIXTURE_PROFILE_ID,
-        )
-        self.assertEqual(status, 200)
-        capability = payload["log_creation_idempotency"]
-        self.assertEqual(capability["request_account_binding"], "x-calco-account-id")
-        self.assertEqual(capability["version"], 2)
-        self.assertEqual(self.server.state.bound_request_count, 1)
-        self.assertEqual(self.server.state.unbound_protected_request_count, 0)
-
-    def test_protected_request_with_wrong_profile_is_session_account_changed(self) -> None:
-        wrong = str(uuid.uuid4())
-        status, payload, _ = self.request(
-            "GET",
-            "/api/goal",
-            account_id=wrong,
-        )
+    def test_protected_route_requires_session_cookie(self) -> None:
+        saved = self.cookie
+        self.cookie = ""
+        try:
+            status, payload, _ = self.request("GET", "/api/goal")
+        finally:
+            self.cookie = saved
         self.assertEqual(status, 401)
-        self.assertEqual(payload["error"]["code"], "session_account_changed")
-
-    def test_protected_request_with_malformed_header_is_rejected(self) -> None:
-        status, payload, _ = self.request(
-            "GET",
-            "/api/goal",
-            account_id="not-a-uuid",
-        )
-        self.assertEqual(status, 400)
-        self.assertEqual(payload["error"]["code"], "invalid_account_header")
-
-    def test_legacy_missing_header_is_still_allowed(self) -> None:
+        self.assertEqual(payload["error"]["code"], "unauthorized")
         status, _, _ = self.request("GET", "/api/goal")
         self.assertEqual(status, 200)
 
-    def test_nutrient_catalog_has_all_four_required_definitions(self) -> None:
+    def test_capabilities_endpoint_is_absent(self) -> None:
+        status, payload, _ = self.request("GET", "/api/capabilities")
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"]["code"], "not_found")
+
+    def test_legacy_account_binding_header_is_rejected(self) -> None:
         status, payload, _ = self.request(
             "GET",
-            "/api/nutrients",
-            account_id=mock.FIXTURE_PROFILE_ID,
+            "/api/goal",
+            headers={mock.LEGACY_ACCOUNT_HEADER: mock.FIXTURE_PROFILE_ID},
         )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "unexpected_account_header")
+
+    def test_nutrient_catalog_has_all_four_required_definitions(self) -> None:
+        status, payload, _ = self.request("GET", "/api/nutrients")
         self.assertEqual(status, 200)
         rows = {row["code"]: row for row in payload["items"]}
         expected = {
@@ -202,14 +196,12 @@ class MockContractTests(unittest.TestCase):
             "POST",
             "/api/foods/custom",
             body,
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 201)
         food_id = payload["id"]
         status, detail, _ = self.request(
             "GET",
             f"/api/foods/{food_id}",
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 200)
         self.assertEqual(detail["name"], "Contract Custom Food")
@@ -228,7 +220,6 @@ class MockContractTests(unittest.TestCase):
         status, _, _ = self.request(
             "DELETE",
             f"/api/foods/custom/{food_id}",
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 204)
         state = self.request("GET", "/__qa/state")[1]
@@ -240,7 +231,6 @@ class MockContractTests(unittest.TestCase):
         status, payload, _ = self.request(
             "GET",
             "/api/ai/food-assistant/status",
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 200)
         self.assertFalse(payload["enabled"])
@@ -251,17 +241,10 @@ class MockContractTests(unittest.TestCase):
             {"today": "2026-11-19", "assistant_enabled": True},
         )
         self.assertEqual(reset[0], 200)
-        login = self.request(
-            "POST",
-            "/api/auth/login",
-            {"username": mock.FIXTURE_USERNAME, "password": mock.FIXTURE_PASSWORD},
-        )
-        self.assertEqual(login[0], 200)
-        self.cookie = login[2].headers["Set-Cookie"].split(";", 1)[0]
+        self.login()
         status, payload, _ = self.request(
             "GET",
             "/api/ai/food-assistant/status",
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 200)
         self.assertTrue(payload["enabled"])
@@ -301,7 +284,7 @@ class MockContractTests(unittest.TestCase):
         self.assertEqual(state["custom_food_create_count"], 0)
         self.assertEqual(state["log_post_attempts"], 0)
 
-    def test_meal_crud_and_missing_components_are_faithful(self) -> None:
+    def test_meal_crud_is_faithful(self) -> None:
         body = {
             "name": "Contract Meal",
             "notes": "contract notes",
@@ -317,81 +300,41 @@ class MockContractTests(unittest.TestCase):
             "POST",
             "/api/meals",
             body,
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 201)
         meal_id = meal["id"]
         self.assertEqual(meal["name"], "Contract Meal")
-        self.assertFalse(meal["has_missing_components"])
+        self.assertNotIn("has_missing_components", meal)
         status, detail, _ = self.request(
             "GET",
             f"/api/meals/{meal_id}",
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 200)
         self.assertEqual(detail["notes"], "contract notes")
         status, preview, _ = self.request(
             "GET",
             f"/api/meals/{meal_id}/nutrients?amount=100&unit=g",
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 200)
         self.assertEqual(preview["meal_id"], meal_id)
 
-        self.assertEqual(
-            self.request("POST", "/__qa/remove-food", {"id": "qa-apple"})[0],
-            200,
-        )
-        status, degraded, _ = self.request(
-            "GET",
-            f"/api/meals/{meal_id}",
-            account_id=mock.FIXTURE_PROFILE_ID,
-        )
-        self.assertEqual(status, 200)
-        self.assertTrue(degraded["has_missing_components"])
-        self.assertTrue(degraded["components"][0]["missing"])
-        status, error, _ = self.request(
-            "GET",
-            f"/api/meals/{meal_id}/nutrients?amount=100&unit=g",
-            account_id=mock.FIXTURE_PROFILE_ID,
-        )
-        self.assertEqual(status, 409)
-        self.assertEqual(error["error"]["code"], "missing_components")
-
-        status, error, _ = self.request(
-            "POST",
-            "/api/meals",
-            body,
-            account_id=mock.FIXTURE_PROFILE_ID,
-        )
-        self.assertEqual(status, 409)
-        self.assertEqual(error["error"]["code"], "missing_components")
-
         repaired = dict(body)
-        repaired["components"] = [
-            {
-                "item": {"type": "product", "id": "qa-pear"},
-                "quantity": {"amount": "100", "unit": "g"},
-            }
-        ]
+        repaired["notes"] = "updated contract notes"
         status, updated, _ = self.request(
             "PUT",
             f"/api/meals/{meal_id}",
             repaired,
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 200)
-        self.assertFalse(updated["has_missing_components"])
+        self.assertEqual(updated["notes"], "updated contract notes")
         status, preview, _ = self.request(
             "GET",
             f"/api/meals/{meal_id}/nutrients?amount=100&unit=g",
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 200)
         status, _, _ = self.request(
             "DELETE",
             f"/api/meals/{meal_id}",
-            account_id=mock.FIXTURE_PROFILE_ID,
         )
         self.assertEqual(status, 204)
         state = self.request("GET", "/__qa/state")[1]
@@ -400,27 +343,92 @@ class MockContractTests(unittest.TestCase):
         self.assertEqual(state["meal_delete_count"], 1)
         self.assertEqual(state["meal_count"], 1)
 
-    def test_login_session_logout_ignore_account_binding_header(self) -> None:
-        # Login is the bootstrap path and has no expected profile header yet.
-        status, _, _ = self.request(
+    def test_normal_log_create_batch_and_ad_hoc_are_unkeyed(self) -> None:
+        log_body = {
+            "log_date": "2026-11-19",
+            "meal_slot": "breakfast",
+            "item": {"type": "product", "id": "qa-apple"},
+            "quantity": {"amount": "100", "unit": "g"},
+        }
+        status, created, _ = self.request("POST", "/api/logs", log_body)
+        self.assertEqual(status, 201)
+        self.assertEqual(created["item"]["id"], "qa-apple")
+        status, batch, _ = self.request(
             "POST",
-            "/api/auth/login",
-            {"username": mock.FIXTURE_USERNAME, "password": mock.FIXTURE_PASSWORD},
-            account_id="not-a-uuid",
+            "/api/logs/batch",
+            {
+                "items": [
+                    log_body,
+                    {
+                        **log_body,
+                        "meal_slot": "lunch",
+                        "item": {"type": "product", "id": "qa-pear"},
+                    },
+                ]
+            },
         )
-        self.assertEqual(status, 200)
-        status, _, _ = self.request(
+        self.assertEqual(status, 201)
+        self.assertEqual(len(batch["items"]), 2)
+        status, ad_hoc, _ = self.request(
+            "POST",
+            "/api/logs/ad-hoc",
+            {
+                "log_date": "2026-11-19",
+                "meal_slot": "snack",
+                "name": "Contract ad hoc",
+                "quantity": {"amount": "1", "unit": "serving"},
+                "nutrients": [
+                    {"code": "ENERGY_KCAL", "amount": "50", "unit": "kcal"}
+                ],
+            },
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(ad_hoc["item"]["type"], "ad_hoc")
+        state = self.request("GET", "/__qa/state")[1]
+        self.assertEqual(state["log_post_attempts"], 3)
+        self.assertEqual(state["log_count"], 12)
+        self.assertNotIn("idempotency_keys", state)
+
+    def test_fail_once_returns_ordinary_503_then_accepts_resubmission(self) -> None:
+        reset = self.request(
+            "POST",
+            "/__qa/reset",
+            {"today": "2026-11-19", "log_post": "fail_once"},
+        )
+        self.assertEqual(reset[0], 200)
+        self.login()
+        log_body = {
+            "log_date": "2026-11-19",
+            "meal_slot": "breakfast",
+            "item": {"type": "product", "id": "qa-apple"},
+            "quantity": {"amount": "100", "unit": "g"},
+        }
+        status, payload, _ = self.request("POST", "/api/logs", log_body)
+        self.assertEqual(status, 503)
+        self.assertEqual(payload["error"]["code"], "temporarily_unavailable")
+        after_failure = self.request("GET", "/__qa/state")[1]
+        self.assertEqual(after_failure["log_post_attempts"], 1)
+        self.assertEqual(after_failure["log_count"], 8)
+
+        status, created, _ = self.request("POST", "/api/logs", log_body)
+        self.assertEqual(status, 201)
+        self.assertTrue(created["id"].startswith("new-log-"))
+        final = self.request("GET", "/__qa/state")[1]
+        self.assertEqual(final["log_post_attempts"], 2)
+        self.assertEqual(final["log_count"], 9)
+
+    def test_login_session_logout_use_cookie_session(self) -> None:
+        status, payload, _ = self.request(
             "GET",
             "/api/auth/session",
-            account_id="not-a-uuid",
         )
         self.assertEqual(status, 200)
-        status, _, _ = self.request(
-            "POST",
-            "/api/auth/logout",
-            account_id="not-a-uuid",
-        )
+        self.assertEqual(payload["identity"]["username"], mock.FIXTURE_USERNAME)
+        status, _, _ = self.request("POST", "/api/auth/logout")
         self.assertEqual(status, 204)
+        status, payload, _ = self.request("GET", "/api/auth/session")
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"]["code"], "not_found")
 
 
 if __name__ == "__main__":

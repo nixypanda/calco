@@ -1,5 +1,5 @@
-// Meal detail: recipe contents, server-calculated portion nutrition, journal
-// logging, editing, and confirmed deletion.
+// Meal detail: recipe contents, server-calculated portion nutrition, logging,
+// editing, and confirmed deletion.
 
 import SwiftUI
 
@@ -342,14 +342,6 @@ public struct MealDetailView: View {
             if let message = viewModel.logErrorMessage {
                 inlineMessage(message, systemImage: "exclamationmark.triangle.fill", color: .red)
                     .accessibilityIdentifier("meals.detail.log.error")
-            }
-
-            if viewModel.canReviewPendingLog {
-                Button(String(localized: "foodDetail.pending.review")) {
-                    viewModel.reviewPendingLog()
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("meals.detail.pendingReview")
             }
 
             if viewModel.didLog {

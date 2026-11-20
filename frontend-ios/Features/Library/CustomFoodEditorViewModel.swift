@@ -1,6 +1,6 @@
-// Custom-food create/edit view model with durable uncertain-create
-// reconciliation. Only the edit flow supports servings/default portions;
-// creation intentionally omits them, matching the web's create form.
+// Custom-food create/edit view model. Only the edit flow supports
+// servings/default portions; creation intentionally omits them, matching the
+// web's create form. Creates are ordinary non-replayed requests.
 
 import Combine
 import Foundation
@@ -38,13 +38,6 @@ public final class CustomFoodEditorViewModel: ObservableObject {
     @Published public private(set) var isSaving = false
     @Published public private(set) var submitError: String?
     @Published public private(set) var savedFoodID: String?
-    @Published public private(set) var savedLogIntent: CustomFoodLogIntent?
-    @Published public private(set) var savedLogState: SavedFoodLogState = .none
-    @Published public private(set) var reconciliationAttempt: CustomFoodCreateAttempt?
-    @Published public private(set) var reconciliationCandidates: [CustomFood] = []
-    @Published public private(set) var reconciliationMessage: String?
-    @Published public private(set) var isRefreshingReconciliation = false
-    @Published public private(set) var isReconciliationStoreBlocked = false
     @Published public private(set) var barcodeNotice: String?
     @Published public private(set) var isDirty = false
     @Published public var hasAttemptedSubmit = false
@@ -61,58 +54,32 @@ public final class CustomFoodEditorViewModel: ObservableObject {
     public let accountID: String
 
     private let service: any LibraryServicing
-    private let submissionService: any LibraryLogSubmitting
-    private let engine: CustomFoodReconciliationEngine
-    private let reconciliationStore: CustomFoodReconciliationStore
-    private let baseURL: URL?
-    private let timeZoneProvider: () -> String
     private let onSaved: (String) -> Void
-    private let onLogged: (LocalDiaryDate, MealSlot?) -> Void
     private let onSessionExpired: () -> Void
-    private let onReviewPending: () -> Void
     private let initialAssistantDraft: AssistantReviewedDraft?
     private let initialBarcode: String?
 
     private var isApplyingInitialValues = false
     private var hasAppliedInitialAssistantDraft = false
     private var hasAppliedInitialBarcode = false
-    private var savedFoodName: String?
-    private var savedLogAttemptID: String?
     private var loadGeneration = 0
 
     public init(
         mode: CustomFoodEditorMode,
         service: any LibraryServicing,
-        submissionService: any LibraryLogSubmitting,
-        reconciliationStore: CustomFoodReconciliationStore,
         accountID: String,
-        baseURL: URL? = nil,
-        timeZoneProvider: @escaping () -> String = { TimeZone.current.identifier },
         onSaved: @escaping (String) -> Void = { _ in },
-        onLogged: @escaping (LocalDiaryDate, MealSlot?) -> Void = { _, _ in },
         onSessionExpired: @escaping () -> Void = {},
-        onReviewPending: @escaping () -> Void = {},
         assistantDraft: AssistantReviewedDraft? = nil,
         initialBarcode: String? = nil
     ) {
         self.mode = mode
         self.service = service
-        self.submissionService = submissionService
-        self.reconciliationStore = reconciliationStore
         self.accountID = accountID
-        self.baseURL = baseURL
-        self.timeZoneProvider = timeZoneProvider
         self.onSaved = onSaved
-        self.onLogged = onLogged
         self.onSessionExpired = onSessionExpired
-        self.onReviewPending = onReviewPending
         self.initialAssistantDraft = assistantDraft
         self.initialBarcode = initialBarcode
-        self.engine = CustomFoodReconciliationEngine(
-            service: service,
-            store: reconciliationStore,
-            accountID: accountID
-        )
         self.nutrientEditor = NutrientEditorState(definitions: [])
     }
 
@@ -122,25 +89,17 @@ public final class CustomFoodEditorViewModel: ObservableObject {
         mode.isCreate ? "library.editor.create.title" : "library.editor.edit.title"
     }
 
-    public var isBusy: Bool {
-        isSaving || savedLogState == .logging || isRefreshingReconciliation
-    }
+    public var isBusy: Bool { isSaving }
 
     public var isFormEditable: Bool {
         if case .loaded = loadState {
-            return !isBusy && savedFoodID == nil && reconciliationAttempt == nil
+            return !isBusy && savedFoodID == nil
         }
         return false
     }
 
     public var hasUnsavedChanges: Bool {
-        isDirty && savedFoodID == nil && reconciliationAttempt == nil && !isBusy
-    }
-
-    public var isReconciling: Bool { reconciliationAttempt != nil }
-
-    public var hasRetainedLogIntent: Bool {
-        savedFoodID != nil && savedLogIntent != nil
+        isDirty && savedFoodID == nil && !isBusy
     }
 
     public var canSubmit: Bool {
@@ -152,45 +111,6 @@ public final class CustomFoodEditorViewModel: ObservableObject {
         let generation = loadGeneration
         loadState = .loading
         submitError = nil
-        isReconciliationStoreBlocked = false
-        if mode.isCreate {
-            do {
-                if let attempt = try engine.loadAttempt() {
-                    if let foodID = attempt.foodID, let intent = attempt.logIntent {
-                        savedFoodID = foodID
-                        savedFoodName = attempt.displayName
-                        savedLogIntent = intent
-                        savedLogAttemptID = attempt.id
-                        savedLogState = .retryable(
-                            message: attempt.message.isEmpty
-                                ? String(localized: "library.log.resumeMessage")
-                                : attempt.message
-                        )
-                        isDirty = false
-                        reconciliationAttempt = nil
-                        reconciliationCandidates = []
-                        reconciliationMessage = nil
-                        loadState = .loaded
-                        return
-                    }
-                    if attempt.foodID != nil, attempt.logIntent == nil {
-                        try? engine.completeLogHandoff(attemptID: attempt.id)
-                    } else {
-                        reconciliationAttempt = attempt
-                        reconciliationCandidates = []
-                        reconciliationMessage = nil
-                        loadState = .loaded
-                        await refreshReconciliationCandidates()
-                        return
-                    }
-                }
-            } catch {
-                isReconciliationStoreBlocked = true
-                loadState = .failed(String(localized: "library.reconcile.storeUnavailable"))
-                return
-            }
-        }
-
         do {
             let definitions = try await service.nutrientDefinitions()
             var food: CustomFood?
@@ -291,245 +211,29 @@ public final class CustomFoodEditorViewModel: ObservableObject {
         isSaving = true
         defer { isSaving = false }
 
-        let baseline: [CustomFood]
         do {
-            // The baseline is required for safe reconciliation. Never create
-            // without knowing which foods existed beforehand.
-            baseline = try await service.listCustomFoods()
-        } catch let error as CustomFoodServiceError {
-            if error.isUnauthorized {
-                onSessionExpired()
-            }
-            submitError = error.message
-            return
-        } catch {
-            submitError = String(localized: "library.error.load")
-            return
-        }
-
-        let result = await engine.create(
-            draft: request,
-            baselineFoodIDs: baseline.map(\.id)
-        )
-        switch result {
-        case .saved(let foodID):
+            let foodID = try await service.createCustomFood(request)
             savedFoodID = foodID
-            savedFoodName = request.name
-            savedLogIntent = nil
-            savedLogAttemptID = nil
-            if let retained = try? engine.currentAttempt(),
-               retained.foodID == foodID,
-               retained.logIntent != nil {
-                savedLogIntent = retained.logIntent
-                savedLogAttemptID = retained.id
-            }
             isDirty = false
             onSaved(foodID)
-        case .needsReconciliation(let attempt):
-            reconciliationAttempt = attempt
-            reconciliationCandidates = []
-            reconciliationMessage = nil
-            await refreshReconciliationCandidates()
-        case .failed(let error):
-            if error.isUnauthorized {
-                onSessionExpired()
-            }
-            submitError = error.message
-        case .blocked(let message):
-            submitError = message
-        }
-    }
-
-    // MARK: Reconciliation
-
-    public func refreshReconciliationCandidates() async {
-        guard let attempt = reconciliationAttempt, !isRefreshingReconciliation else {
-            return
-        }
-        isRefreshingReconciliation = true
-        reconciliationMessage = nil
-        defer { isRefreshingReconciliation = false }
-        do {
-            let matches = try await engine.candidates(for: attempt)
-            reconciliationCandidates = matches.sorted {
-                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-            if matches.isEmpty {
-                reconciliationMessage = String(localized: "library.reconcile.noMatches")
-            }
         } catch let error as CustomFoodServiceError {
             if error.isUnauthorized {
                 onSessionExpired()
             }
-            reconciliationMessage = error.message
+            submitError = createErrorMessage(for: error)
         } catch {
-            reconciliationMessage = String(localized: "library.error.load")
+            submitError = String(localized: "foodDetail.error.saveFailed")
         }
     }
 
-    public func useReconciledFood(_ food: CustomFood) async {
-        guard let attempt = reconciliationAttempt else { return }
-        let retained: CustomFoodCreateAttempt?
-        do {
-            retained = try engine.resolve(attempt: attempt, food: food)
-        } catch {
-            reconciliationMessage = String(localized: "library.reconcile.storeUnavailable")
-            return
-        }
-        reconciliationAttempt = nil
-        reconciliationCandidates = []
-        reconciliationMessage = nil
-        savedFoodID = food.id
-        savedFoodName = food.name
-        savedLogIntent = attempt.logIntent
-        savedLogAttemptID = attempt.logIntent == nil ? nil : (retained?.id ?? attempt.id)
-        isDirty = false
-
-        if let intent = attempt.logIntent {
-            await submitSavedFoodLog(foodID: food.id, intent: intent)
-        } else {
-            onSaved(food.id)
-        }
-    }
-
-    public func discardReconciliation() async {
-        guard let attempt = reconciliationAttempt else { return }
-        do {
-            try engine.discard(attempt: attempt)
-        } catch {
-            reconciliationMessage = String(localized: "library.reconcile.storeUnavailable")
-            return
-        }
-        reconciliationAttempt = nil
-        reconciliationCandidates = []
-        reconciliationMessage = nil
-        savedFoodID = nil
-        savedLogIntent = nil
-        savedLogAttemptID = nil
-        savedLogState = .none
-        await load()
-    }
-
-    public func resetUnreadableReconciliation() async {
-        do {
-            try engine.resetUnreadableState()
-        } catch {
-            submitError = String(localized: "library.reconcile.storeUnavailable")
-            return
-        }
-        await load()
-    }
-
-    public func reviewPendingLogs() {
-        onReviewPending()
-    }
-
-    // MARK: Save-then-log retry (recovered operation only)
-
-    /// A definitively rejected log can be submitted again for the retained
-    /// food. Uncertain journal states are recovered by the shell.
-    public func retrySavedFoodLog() async {
-        guard let foodID = savedFoodID, let intent = savedLogIntent else { return }
-        switch savedLogState {
-        case .retryable:
-            await submitSavedFoodLog(foodID: foodID, intent: intent)
-        case .none, .logging, .pending, .logged:
-            break
-        }
-    }
-
-    private func submitSavedFoodLog(
-        foodID: String,
-        intent: CustomFoodLogIntent
-    ) async {
-        guard let attemptID = savedLogAttemptID else {
-            savedLogState = .retryable(
-                message: String(localized: "library.reconcile.storeUnavailable")
+    private func createErrorMessage(for error: CustomFoodServiceError) -> String {
+        if case .uncertain = error {
+            return String(
+                localized: "library.editor.create.uncertain",
+                defaultValue: "CalCo couldn't confirm whether this food was saved. Check the library before trying again."
             )
-            return
         }
-        let journalRequest: CustomFoodJournalRequest
-        do {
-            journalRequest = try engine.prepareJournalRequest(
-                attemptID: attemptID,
-                currentBaseURL: baseURL
-            )
-        } catch {
-            savedLogState = .retryable(
-                message: String(localized: "library.reconcile.storeUnavailable")
-            )
-            return
-        }
-
-        savedLogState = .logging
-        let draft = intent.logSubmissionDraft(productID: foodID)
-        let name = savedFoodName ?? foodID
-        let outcome = await submissionService.submitPersisted(
-            LibraryPersistedLogRequest(
-                accountID: accountID,
-                operationID: journalRequest.operationID,
-                draft: draft,
-                itemName: name,
-                summary: name,
-                request: journalRequest.submissionRequest
-            )
-        )
-        handleSavedFoodLogOutcome(
-            outcome,
-            intent: intent,
-            attemptID: attemptID
-        )
-    }
-
-    private func handleSavedFoodLogOutcome(
-        _ outcome: LibraryLogHandoffOutcome,
-        intent: CustomFoodLogIntent,
-        attemptID: String
-    ) {
-        if outcome.journalOwned {
-            switch outcome.result {
-            case .success:
-                finishLogHandoff(attemptID)
-            case .failure(.uncertain), .failure(.conflict), .failure(.unauthorized):
-                finishLogHandoff(attemptID)
-            case .failure(.rejected),
-                 .failure(.missingComponents),
-                 .failure(.serverChanged),
-                 .failure(.reconciliationOnly),
-                 .failure(.capabilityUnavailable),
-                 .failure(.capabilityTemporarilyUnavailable),
-                 .failure(.journalUnavailable):
-                break
-            }
-        }
-
-        switch outcome.result {
-        case .success(let logs, let replayed):
-            savedLogState = .logged(logID: logs.first?.id, replayed: replayed)
-            onLogged(intent.date, intent.mealSlot)
-        case .failure(.uncertain(let message)):
-            savedLogState = .pending(message: message)
-        case .failure(.conflict(let message)):
-            savedLogState = .pending(message: message)
-        case .failure(.unauthorized):
-            savedLogState = .pending(
-                message: String(localized: "foodDetail.error.sessionExpired")
-            )
-            onSessionExpired()
-        case .failure(.rejected(let message)),
-             .failure(.missingComponents(let message)),
-             .failure(.serverChanged(let message)),
-             .failure(.reconciliationOnly(let message)),
-             .failure(.capabilityUnavailable(let message)),
-             .failure(.capabilityTemporarilyUnavailable(let message)),
-             .failure(.journalUnavailable(let message)):
-            savedLogState = .retryable(message: message)
-        }
-    }
-
-    private func finishLogHandoff(_ attemptID: String) {
-        try? engine.completeLogHandoff(attemptID: attemptID)
-        savedLogAttemptID = nil
+        return error.message
     }
 
     // MARK: Form mutation
@@ -634,8 +338,6 @@ public final class CustomFoodEditorViewModel: ObservableObject {
     private func markDirty() {
         guard !isApplyingInitialValues else { return }
         isDirty = true
-        if !isReconciliationStoreBlocked {
-            submitError = nil
-        }
+        submitError = nil
     }
 }

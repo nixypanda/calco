@@ -20,7 +20,6 @@ final class PortableJourneyUITests: XCTestCase {
         static let password = "native-qa"
         static let baseURLKey = "CALCO_PORTABLE_UI_BASE_URL"
         static let marker = "native-completion-qa"
-        static let accountHeader = "X-CalCo-Account-ID"
         static let profileID = "22222222-2222-4222-8222-222222222222"
     }
 
@@ -136,7 +135,6 @@ final class PortableJourneyUITests: XCTestCase {
             historicalSummary,
             "Returning from Settings changed the historical summary."
         )
-        assertAccountBinding("diary/settings")
     }
 
     func testPortableLibraryCRUDAndAdHocLog() throws {
@@ -284,7 +282,6 @@ final class PortableJourneyUITests: XCTestCase {
         XCTAssertEqual(final.logPostAttempts, adHocBaseline.logPostAttempts + 1)
         XCTAssertEqual(final.logCount, adHocBaseline.logCount + 1)
         XCTAssertEqual(final.customFoodCount, adHocBaseline.customFoodCount + 1)
-        assertAccountBinding("Library/ad-hoc")
     }
 
     func testPortableMealsPreviewLogAndNotes() throws {
@@ -364,7 +361,6 @@ final class PortableJourneyUITests: XCTestCase {
         XCTAssertEqual(final.mealUpdateCount, baseline.mealUpdateCount + 1)
         XCTAssertEqual(final.logCount, baseline.logCount + 1)
         XCTAssertEqual(final.logPostAttempts, baseline.logPostAttempts + 1)
-        assertAccountBinding("meals")
         tap("meals.close")
     }
 
@@ -452,7 +448,6 @@ final class PortableJourneyUITests: XCTestCase {
             "The barcode create path did not open the editor."
         )
         cancelLibraryEditor()
-        assertAccountBinding("nutrition/barcode")
     }
 
     func testPortableAssistantDisabledAndEnabledReview() throws {
@@ -533,7 +528,6 @@ final class PortableJourneyUITests: XCTestCase {
             try mockState().assistantDraftRequestCount,
             beforeAccept.assistantDraftRequestCount
         )
-        assertAccountBinding("assistant")
     }
 
     func testPortableAPIKeyCreateRevealCopyRevoke() throws {
@@ -603,7 +597,6 @@ final class PortableJourneyUITests: XCTestCase {
         )
         let final = try mockState()
         XCTAssertEqual(final.apiKeyCount, baseline.apiKeyCount)
-        assertAccountBinding("API keys")
     }
 
     func testPortableLayoutAdaptation() throws {
@@ -619,7 +612,6 @@ final class PortableJourneyUITests: XCTestCase {
 #else
         exerciseIPadOrientations(window: window)
 #endif
-        assertAccountBinding("layout")
     }
 
     // MARK: - Platform layout
@@ -801,11 +793,6 @@ final class PortableJourneyUITests: XCTestCase {
                 "fixture profile UUID is not the contract value"
             )
         }
-        guard object["account_header"] as? String == Fixture.accountHeader else {
-            throw HarnessError.badResponse(
-                "fixture account header is not the contract value"
-            )
-        }
         guard let identity = object["identity_id"] as? String,
               let identityUUID = UUID(uuidString: identity),
               let profileUUID = UUID(uuidString: Fixture.profileID),
@@ -837,9 +824,7 @@ final class PortableJourneyUITests: XCTestCase {
             customFoodDeleteCount: integer("custom_food_delete_count"),
             mealUpdateCount: integer("meal_update_count"),
             assistantDraftRequestCount: integer("assistant_draft_request_count"),
-            apiKeyCount: integer("api_key_count"),
-            boundRequestCount: integer("bound_request_count"),
-            unboundProtectedRequestCount: integer("unbound_protected_request_count")
+            apiKeyCount: integer("api_key_count")
         )
     }
 
@@ -1448,24 +1433,5 @@ final class PortableJourneyUITests: XCTestCase {
         let mealUpdateCount: Int
         let assistantDraftRequestCount: Int
         let apiKeyCount: Int
-        let boundRequestCount: Int
-        let unboundProtectedRequestCount: Int
-    }
-
-    private func assertAccountBinding(_ context: String) {
-        guard let state = try? mockState() else {
-            XCTFail("\(context): fixture binding counters are unreadable.")
-            return
-        }
-        XCTAssertGreaterThan(
-            state.boundRequestCount,
-            0,
-            "\(context): no protected request carried \(Fixture.accountHeader)."
-        )
-        XCTAssertEqual(
-            state.unboundProtectedRequestCount,
-            0,
-            "\(context): protected requests were unbound."
-        )
     }
 }

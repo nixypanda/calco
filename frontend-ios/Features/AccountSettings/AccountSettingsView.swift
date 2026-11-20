@@ -70,7 +70,6 @@ public struct AccountSettingsView: View {
                                 || viewModel.isLoadingFirstPage
                                 || viewModel.isSessionExpired
                                 || viewModel.isBusy
-                                || viewModel.hasUnresolvedCreateIntent
                                 || !viewModel.isMetadataReady
                         )
                         .accessibilityLabel(String(localized: "apiKeys.create"))
@@ -113,37 +112,6 @@ public struct AccountSettingsView: View {
                         )
                     )
                 }
-                .confirmationDialog(
-                    String(
-                        localized: "apiKeys.intent.reset.title",
-                        defaultValue: "Reset Unreadable Safety Record?"
-                    ),
-                    isPresented: resetIntentConfirmationBinding,
-                    titleVisibility: .visible
-                ) {
-                    Button(
-                        String(
-                            localized: "apiKeys.intent.reset.confirm",
-                            defaultValue: "Reset Safety Record"
-                        ),
-                        role: .destructive
-                    ) {
-                        Task { await viewModel.confirmResetUnreadableCreateIntent() }
-                    }
-                    .accessibilityIdentifier("settings.apiKeys.intent.reset.confirm")
-
-                    Button(String(localized: "diary.common.cancel"), role: .cancel) {
-                        viewModel.cancelResetUnreadableCreateIntent()
-                    }
-                    .accessibilityIdentifier("settings.apiKeys.intent.reset.cancel")
-                } message: {
-                    Text(
-                        String(
-                            localized: "apiKeys.intent.reset.message",
-                            defaultValue: "A key may exist, but its secret cannot be recovered. Review and revoke any unrecognized key first. This removes only this account's unreadable safety record."
-                        )
-                    )
-                }
                 .interactiveDismissDisabled(viewModel.isCreatePresented || viewModel.isRevoking)
         }
         .accessibilityIdentifier("settings.apiKeys")
@@ -156,54 +124,6 @@ public struct AccountSettingsView: View {
 
     private var list: some View {
         List {
-            if let intent = viewModel.pendingCreateIntent {
-                interruptedCreateSection(intent)
-            } else if let message = viewModel.createIntentErrorMessage {
-                Section {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("settings.apiKeys.intent.error")
-
-                    Button(
-                        String(
-                            localized: "apiKeys.intent.refresh",
-                            defaultValue: "Refresh Keys"
-                        )
-                    ) {
-                        Task { await viewModel.refreshInterruptedCreateMetadata() }
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("settings.apiKeys.intent.refresh")
-
-                    if viewModel.createIntentRecoveryIdentity != nil {
-                        Button(
-                            String(
-                                localized: "apiKeys.intent.reset",
-                                defaultValue: "Reset Safety Record…"
-                            ),
-                            role: .destructive
-                        ) {
-                            viewModel.requestResetUnreadableCreateIntent()
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!viewModel.canResetUnreadableCreateIntent)
-                        .accessibilityIdentifier("settings.apiKeys.intent.reset")
-
-                        Text(
-                            String(
-                                localized: "apiKeys.intent.reset.refreshHint",
-                                defaultValue: "Refresh keys successfully and review the list before resetting."
-                            )
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-
             if let notice = viewModel.listNotice {
                 Section {
                     Text(notice)
@@ -304,146 +224,6 @@ public struct AccountSettingsView: View {
         } footer: {
             Text(String(localized: "apiKeys.limit.footer"))
         }
-    }
-
-    @ViewBuilder
-    private func interruptedCreateSection(_ intent: APIKeyCreateIntent) -> some View {
-        Section {
-            Label(
-                String(
-                    localized: "apiKeys.intent.title",
-                    defaultValue: "API Key Creation Interrupted"
-                ),
-                systemImage: "exclamationmark.triangle.fill"
-            )
-            .font(.headline)
-            .foregroundStyle(.orange)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("settings.apiKeys.intent.title")
-
-            Text(
-                String(
-                    localized: "apiKeys.intent.message",
-                    defaultValue: "A create may have completed, but its secret cannot be shown again. Review the keys below. If you see one you did not expect, revoke it and create a new key."
-                )
-            )
-            .font(.footnote)
-            .fixedSize(horizontal: false, vertical: true)
-
-            Text(
-                String(
-                    format: String(
-                        localized: "apiKeys.intent.details",
-                        defaultValue: "Interrupted request: %@ · %@ · %@"
-                    ),
-                    intent.name,
-                    creatableScopeLabel(intent.scope),
-                    intent.startedAt.formatted(date: .abbreviated, time: .shortened)
-                )
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("settings.apiKeys.intent.details")
-
-            if viewModel.potentialOrphanKeys.isEmpty {
-                Text(
-                    String(
-                        localized: "apiKeys.intent.noOrphans",
-                        defaultValue: "No unrecognized keys were found in the latest list. Refresh after confirming the create has finished."
-                    )
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            } else {
-                ForEach(viewModel.potentialOrphanKeys) { key in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(
-                            String(
-                                format: String(
-                                    localized: "apiKeys.intent.orphan",
-                                    defaultValue: "Possible orphan: %@ (%@)"
-                                ),
-                                key.name,
-                                key.tokenHint
-                            )
-                        )
-                        .font(.subheadline.weight(.semibold))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("settings.apiKeys.intent.orphan.\(key.id)")
-
-                        Button(
-                            String(
-                                localized: "apiKeys.intent.orphan.revoke",
-                                defaultValue: "Revoke Possible Key"
-                            ),
-                            role: .destructive
-                        ) {
-                            viewModel.requestRevoke(key)
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(viewModel.isBusy)
-                        .accessibilityIdentifier("settings.apiKeys.intent.revoke.\(key.id)")
-                    }
-                    .padding(.vertical, 2)
-                }
-            }
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    interruptedCreateButtons
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    interruptedCreateButtons
-                }
-            }
-
-            if let message = viewModel.createIntentErrorMessage {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("settings.apiKeys.intent.error")
-            }
-
-            Text(
-                String(
-                    localized: "apiKeys.intent.acknowledge.message",
-                    defaultValue: "The possible key will stay active, still consume a key slot, and its secret cannot be recovered."
-                )
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    @ViewBuilder
-    private var interruptedCreateButtons: some View {
-        Button(
-            String(
-                localized: "apiKeys.intent.refresh",
-                defaultValue: "Refresh Keys"
-            )
-        ) {
-            Task { await viewModel.refreshInterruptedCreateMetadata() }
-        }
-        .buttonStyle(.bordered)
-        .disabled(viewModel.isBusy)
-        .accessibilityIdentifier("settings.apiKeys.intent.refresh")
-
-        Button(
-            String(
-                localized: "apiKeys.intent.acknowledge",
-                defaultValue: "Acknowledge Without Revoking"
-            )
-        ) {
-            Task { await viewModel.acknowledgeInterruptedCreate() }
-        }
-        .buttonStyle(.bordered)
-        .disabled(viewModel.isBusy)
-        .accessibilityIdentifier("settings.apiKeys.intent.acknowledge")
     }
 
     private func keyRow(_ key: APIKey) -> some View {
@@ -957,17 +737,6 @@ public struct AccountSettingsView: View {
             set: { isPresented in
                 if !isPresented {
                     viewModel.cancelRevoke()
-                }
-            }
-        )
-    }
-
-    private var resetIntentConfirmationBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.isResetIntentConfirmationPresented },
-            set: { isPresented in
-                if !isPresented {
-                    viewModel.cancelResetUnreadableCreateIntent()
                 }
             }
         )

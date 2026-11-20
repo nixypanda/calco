@@ -14,8 +14,6 @@ public struct MealEditorView: View {
     private let onCancel: () -> Void
     @FocusState private var focusedField: MealEditorField?
     @State private var confirmDiscard = false
-    @State private var confirmDiscardReconciliation = false
-    @State private var confirmResetReconciliation = false
 
     public init(
         viewModel: MealEditorViewModel,
@@ -126,165 +124,11 @@ public struct MealEditorView: View {
 
     private var readyView: some View {
         Form {
-            if viewModel.needsCreateReconciliation
-                || viewModel.reconciliationUnreadable {
-                reconciliationSections
-            } else {
-                basicSection
-                recipeTotalSection
-                componentsSection
-            }
+            basicSection
+            recipeTotalSection
+            componentsSection
         }
         .disabled(viewModel.isSaving)
-        .alert(
-            String(localized: "meals.reconcile.discard.title"),
-            isPresented: $confirmDiscardReconciliation
-        ) {
-            Button(role: .destructive) {
-                viewModel.discardReconciliation()
-            } label: {
-                Text(String(localized: "meals.reconcile.discard.confirm"))
-            }
-            Button(role: .cancel) {} label: {
-                Text(String(localized: "meals.editor.discard.keepEditing"))
-            }
-        } message: {
-            Text(String(localized: "meals.reconcile.discard.message"))
-        }
-        .alert(
-            String(localized: "meals.reconcile.reset.title"),
-            isPresented: $confirmResetReconciliation
-        ) {
-            Button(role: .destructive) {
-                viewModel.resetUnreadableReconciliation()
-            } label: {
-                Text(String(localized: "meals.reconcile.reset.confirm"))
-            }
-            Button(role: .cancel) {} label: {
-                Text(String(localized: "meals.editor.discard.keepEditing"))
-            }
-        } message: {
-            Text(String(localized: "meals.reconcile.reset.message"))
-        }
-    }
-
-    @ViewBuilder
-    private var reconciliationSections: some View {
-        if let attempt = viewModel.reconciliationAttempt {
-            Section {
-                Label {
-                    Text(String(localized: "meals.reconcile.title"))
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
-                }
-                .font(.headline)
-                .foregroundStyle(.orange)
-
-                Text(
-                    String(
-                        format: String(localized: "meals.reconcile.message"),
-                        attempt.displayName
-                    )
-                )
-                .font(.subheadline)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("meals.reconcile.message")
-
-                Button {
-                    Task { await viewModel.refreshReconciliationCandidates() }
-                } label: {
-                    HStack(spacing: 8) {
-                        if viewModel.isRefreshingReconciliation {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text(
-                            viewModel.isRefreshingReconciliation
-                                ? String(localized: "meals.reconcile.refreshing")
-                                : String(localized: "meals.reconcile.refresh")
-                        )
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isRefreshingReconciliation)
-                .accessibilityIdentifier("meals.reconcile.refresh")
-            }
-
-            if !viewModel.reconciliationCandidates.isEmpty {
-                Section {
-                    ForEach(viewModel.reconciliationCandidates) { meal in
-                        Button {
-                            viewModel.useReconciledMeal(meal)
-                        } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(meal.name)
-                                        .foregroundStyle(.primary)
-                                    if let total = MealNutrientDisplay.quantity(
-                                        meal.totalQuantity
-                                    ) {
-                                        Text(total)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer(minLength: 8)
-                                Text(String(localized: "meals.reconcile.use"))
-                                    .font(.subheadline.weight(.semibold))
-                            }
-                        }
-                        .disabled(viewModel.isRefreshingReconciliation)
-                        .accessibilityIdentifier("meals.reconcile.candidate.\(meal.id)")
-                    }
-                } header: {
-                    Text(String(localized: "meals.reconcile.candidates"))
-                }
-            }
-
-            if let message = viewModel.reconciliationMessage {
-                Section {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("meals.reconcile.status")
-                }
-            }
-
-            Section {
-                Button(role: .destructive) {
-                    confirmDiscardReconciliation = true
-                } label: {
-                    Text(String(localized: "meals.reconcile.discard"))
-                        .frame(maxWidth: .infinity)
-                }
-                .accessibilityIdentifier("meals.reconcile.discard")
-            } footer: {
-                Text(String(localized: "meals.reconcile.discard.help"))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        } else if viewModel.reconciliationUnreadable {
-            Section {
-                Label {
-                    Text(String(localized: "meals.reconcile.storeUnavailable"))
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                }
-                .foregroundStyle(.red)
-                .accessibilityIdentifier("meals.reconcile.storeUnavailable")
-
-                Button(role: .destructive) {
-                    confirmResetReconciliation = true
-                } label: {
-                    Text(String(localized: "meals.reconcile.reset"))
-                        .frame(maxWidth: .infinity)
-                }
-                .accessibilityIdentifier("meals.reconcile.reset")
-            }
-        }
     }
 
     private var basicSection: some View {

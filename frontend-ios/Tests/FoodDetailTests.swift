@@ -14,49 +14,13 @@ private actor FakeFoodDetailService: FoodDetailServicing {
     private var createStarted = false
     private var createReleased = false
     private var createContinuation: CheckedContinuation<Void, Never>?
-    private var lastUsedResult: RecentLogItem?
-    private var holdsNextLastUsed = false
-    private var lastUsedStarted = false
-    private var lastUsedReleased = false
-    private var lastUsedFinished = false
-    private var lastUsedContinuation: CheckedContinuation<Void, Never>?
 
     func setFood(_ value: FoodDetail?) { food = value }
     func setUnits(_ value: [FoodUnit]) { units = value }
     func setFoodError(_ value: Error?) { foodError = value }
     func setCreateError(_ value: Error?) { createError = value }
     func setDelayNanoseconds(_ value: UInt64) { delayNanoseconds = value }
-    func setLastUsed(_ value: RecentLogItem?) { lastUsedResult = value }
     func recordedCreateCalls() -> [FoodLogCreateRequest] { createCalls }
-
-    func holdNextLastUsed() {
-        holdsNextLastUsed = true
-        lastUsedStarted = false
-        lastUsedReleased = false
-        lastUsedFinished = false
-    }
-
-    func waitForLastUsedStart() async {
-        let deadline = Date().addingTimeInterval(5)
-        while !lastUsedStarted, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 1_000_000)
-        }
-        XCTAssertTrue(lastUsedStarted, "Timed out waiting for last-used")
-    }
-
-    func waitForLastUsedFinish() async {
-        let deadline = Date().addingTimeInterval(5)
-        while !lastUsedFinished, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 1_000_000)
-        }
-        XCTAssertTrue(lastUsedFinished, "Timed out waiting for last-used response")
-    }
-
-    func releaseLastUsed() {
-        lastUsedReleased = true
-        lastUsedContinuation?.resume()
-        lastUsedContinuation = nil
-    }
 
     func holdNextCreate() {
         holdsNextCreate = true
@@ -109,69 +73,12 @@ private actor FakeFoodDetailService: FoodDetailServicing {
         if let createError { throw createError }
         return CreatedFoodLog(id: "log-1", date: request.date, mealSlot: request.mealSlot)
     }
-
-    func lastUsed(
-        for item: LogSubmissionItem,
-        date: LocalDiaryDate,
-        mealSlot: MealSlot?
-    ) async throws -> RecentLogItem? {
-        if holdsNextLastUsed {
-            holdsNextLastUsed = false
-            lastUsedStarted = true
-            await withCheckedContinuation { continuation in
-                if lastUsedReleased {
-                    continuation.resume()
-                } else {
-                    lastUsedContinuation = continuation
-                }
-            }
-        }
-        lastUsedFinished = true
-        return lastUsedResult
-    }
 }
 
 @MainActor
 private final class CallbackRecorder {
     var successes: [(LocalDiaryDate, MealSlot?)] = []
     var sessionExpiredCount = 0
-}
-
-private final class FoodDetailCapabilityProvider: LogCreationCapabilityProviding, @unchecked Sendable {
-    let baseURL = URL(string: "https://calco.example.com")!
-    private let lock = NSLock()
-    private var attempts = 0
-
-    func fetchCapabilities() async throws -> LogCreationIdempotencyCapability {
-        let attempt = lock.withLock {
-            attempts += 1
-            return attempts
-        }
-        if attempt == 1 {
-            throw CalCoAPIError.badStatus(
-                statusCode: 503,
-                payload: APIErrorPayload(
-                    code: "capability_unavailable",
-                    message: "probe unavailable"
-                )
-            )
-        }
-        return LogCreationIdempotencyCapability(
-            version: 2,
-            single: true,
-            adHoc: true,
-            batch: true,
-            batchKeyLocation: "top_level",
-            deletedOperationReplay: "conflict",
-            preMigrationDeletedKeys: "reconciliation_only"
-        )
-    }
-}
-
-private struct FoodDetailNoopSubmissionSender: LogSubmissionSending {
-    func send(_ request: LogSubmissionRequest) async throws -> LogSubmissionSendResult {
-        throw LogSubmissionSendError.failed("must not send")
-    }
 }
 
 @MainActor
@@ -217,30 +124,6 @@ final class FoodDetailTests: XCTestCase {
             onSuccess: { callbacks.successes.append(($0, $1)) },
             onSessionExpired: { callbacks.sessionExpiredCount += 1 }
         )
-    }
-
-    func testStrictLogAmountParserRejectsAmbiguousNumericForms() {
-        for valid in ["1", "1.5", "1,5", "1.", ".5", "0.000001"] {
-            XCTAssertNotNil(parsePositiveLogAmount(valid), valid)
-            XCTAssertNil(validateLogAmount(valid), valid)
-        }
-        for invalid in [
-            "",
-            "1e3",
-            "+1",
-            "0x1p2",
-            "0",
-            "-1",
-            ".",
-            "1.2.3",
-            "1,2.3",
-            "NaN",
-            "Infinity",
-            "1000001",
-        ] {
-            XCTAssertNil(parsePositiveLogAmount(invalid), invalid)
-            XCTAssertNotNil(validateLogAmount(invalid), invalid)
-        }
     }
 
     func testLoadSuccessAppliesDefaults() async {
@@ -605,50 +488,6 @@ final class FoodDetailTests: XCTestCase {
         )
     }
 
-    func testHeldLastUsedCannotBypassUnresolvedAfterUncertainSubmit() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(
-            id: "food-held-prefill",
-            name: "Held Prefill",
-            defaultQuantity: "10",
-            defaultUnit: "g"
-        ))
-        await service.setLastUsed(RecentLogItem(
-            item: .product(ProductLogItemSnapshot(id: "food-held-prefill", name: "Held Prefill")),
-            lastUsedDate: date,
-            mealSlot: .lunch,
-            quantity: NutritionQuantity(amount: "20", unit: "g")
-        ))
-        await service.holdNextLastUsed()
-        await service.setCreateError(FoodDetailServiceError.uncertain("offline"))
-        let store = makeStore()
-        let vm = makeDurableViewModel(
-            foodID: "food-held-prefill",
-            service: service,
-            store: store
-        )
-
-        await vm.load()
-        await service.waitForLastUsedStart()
-        await vm.submit()
-        XCTAssertEqual(vm.submitState, .uncertain("offline"))
-
-        await service.releaseLastUsed()
-        await service.waitForLastUsedFinish()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(vm.amount, "10", "A late prefill must not mutate a submitted form")
-        await service.setCreateError(nil)
-        await vm.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "The unresolved entry must still block a new key")
-        XCTAssertEqual(
-            vm.newSubmissionConfirmation?.id,
-            store.attentionEntries(accountID: "account-a").first?.id
-        )
-    }
-
     func testNewSubmissionFlowUsesNewIdempotencyKey() async {
         let service = FakeFoodDetailService()
         await service.setFood(FoodDetail(id: "food-new-flow", name: "New Flow"))
@@ -851,8 +690,7 @@ final class FoodDetailTests: XCTestCase {
             foodName: "Seeded",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
         switch state {
         case .uncertain:
@@ -886,18 +724,6 @@ final class FoodDetailTests: XCTestCase {
             )
         case .inFlight:
             break
-        case .serverChanged:
-            try store.markServerChanged(
-                id: entry.id,
-                accountID: accountID,
-                message: "server changed"
-            )
-        case .reconciliationOnly:
-            try store.markReconciliationOnly(
-                id: entry.id,
-                accountID: accountID,
-                message: "reconcile"
-            )
         case .invalidated:
             _ = try store.invalidateUnresolved(
                 accountID: accountID,
@@ -1069,19 +895,15 @@ final class FoodDetailTests: XCTestCase {
         await vm.submit()
 
         var calls = await service.recordedCreateCalls()
-        XCTAssertEqual(
-            calls.count,
-            1,
-            "An unresolved food/date attempt must block edited payloads until explicit confirmation"
-        )
+        XCTAssertEqual(calls.count, 2, "Returning to A must not mint its third key implicitly")
         XCTAssertEqual(vm.newSubmissionConfirmation?.id, firstA?.id)
 
         await vm.confirmCreateNewSubmission()
 
         calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2)
-        XCTAssertEqual(Set(calls.compactMap(\.idempotencyKey)).count, 2)
-        XCTAssertNotEqual(calls[1].idempotencyKey, firstA?.idempotencyKey)
+        XCTAssertEqual(calls.count, 3)
+        XCTAssertEqual(Set(calls.compactMap(\.idempotencyKey)).count, 3)
+        XCTAssertNotEqual(calls[2].idempotencyKey, firstA?.idempotencyKey)
         XCTAssertTrue(
             store.attentionEntries(accountID: "account-a").contains { $0.id == firstA?.id },
             "Confirming a new submission must not retry or resolve the older entry"
@@ -1146,17 +968,13 @@ final class FoodDetailTests: XCTestCase {
         await vm.submit()
 
         var calls = await service.recordedCreateCalls()
-        XCTAssertEqual(
-            calls.count,
-            1,
-            "Editing fields must not bypass the unresolved food/date entry"
-        )
+        XCTAssertEqual(calls.count, 2, "Edits back to A must not bypass the unresolved A entry")
         XCTAssertEqual(vm.newSubmissionConfirmation?.id, entryA?.id)
 
         await vm.confirmCreateNewSubmission()
         calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2)
-        XCTAssertEqual(Set(calls.compactMap(\.idempotencyKey)).count, 2)
+        XCTAssertEqual(calls.count, 3)
+        XCTAssertEqual(Set(calls.compactMap(\.idempotencyKey)).count, 3)
     }
 
     func testConflictIsDefinitiveAndNeverAutoRetries() async {
@@ -1196,130 +1014,6 @@ final class FoodDetailTests: XCTestCase {
         let calls = await service.recordedCreateCalls()
         XCTAssertTrue(calls.isEmpty, "No POST may occur without a durable record")
         XCTAssertNotNil(vm.submitErrorMessage)
-    }
-
-    func testServerSuccessButTerminalJournalWriteFailureDoesNotReportSuccess() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("calco-food-journal-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
-        let persistence = FailOnSavePersistence(
-            base: FileLogSubmissionPersistence(directoryURL: directory)
-        )
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(
-            id: "food-journal-success",
-            name: "Journal Success",
-            defaultQuantity: "10",
-            defaultUnit: "g"
-        ))
-        let store = LogSubmissionStore(persistence: persistence)
-        let vm = makeDurableViewModel(
-            foodID: "food-journal-success",
-            service: service,
-            store: store
-        )
-        await vm.load()
-        vm.amountChanged("10")
-        vm.unitChanged("g")
-        persistence.failOnSave = 3
-
-        await vm.submit()
-
-        XCTAssertNotEqual(vm.submitState, .succeeded)
-        XCTAssertFalse(vm.didSubmitSuccessfully)
-        XCTAssertNotNil(vm.submitErrorMessage)
-        persistence.failOnSave = nil
-        let relaunched = LogSubmissionStore(persistence: persistence)
-        XCTAssertFalse(relaunched.unresolved(
-            accountID: "account-a",
-            item: .product(id: "food-journal-success"),
-            date: date
-        ).isEmpty)
-        XCTAssertNotEqual(
-            relaunched.entries(accountID: "account-a").first?.state,
-            .succeeded
-        )
-    }
-
-    func testDurableSingleSubmissionFailsClosedWithoutVerifiedCapability() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(
-            id: "food-gated-single",
-            name: "Gated",
-            defaultQuantity: "10",
-            defaultUnit: "g"
-        ))
-        let store = makeStore()
-        let viewModel = FoodDetailViewModel(
-            foodID: "food-gated-single",
-            originDate: date,
-            originMealSlot: .lunch,
-            service: service,
-            accountID: "account-a",
-            baseURL: URL(string: "https://calco.example.com"),
-            submissionStore: store,
-            singleCapabilityReady: { false }
-        )
-        await viewModel.load()
-        viewModel.amountChanged("10")
-        viewModel.unitChanged("g")
-
-        await viewModel.submit()
-
-        XCTAssertEqual(
-            viewModel.submitState,
-            .failed(String(localized: "foodDetail.error.capabilityUnavailable"))
-        )
-        XCTAssertTrue(store.entries(accountID: "account-a").isEmpty)
-        let calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty)
-    }
-
-    func testTransientCapabilityProbeCanRecoverOnFoodDetailSubmit() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(
-            id: "food-capability-recover",
-            name: "Capability Recover",
-            defaultQuantity: "10",
-            defaultUnit: "g"
-        ))
-        let store = makeStore()
-        let provider = FoodDetailCapabilityProvider()
-        let capabilityService = LogSubmissionService(
-            store: store,
-            sender: FoodDetailNoopSubmissionSender(),
-            capabilityProvider: provider
-        )
-        let viewModel = FoodDetailViewModel(
-            foodID: "food-capability-recover",
-            originDate: date,
-            originMealSlot: .lunch,
-            service: service,
-            accountID: "account-a",
-            baseURL: URL(string: "https://calco.example.com"),
-            submissionStore: store,
-            singleCapabilityEnsure: {
-                await capabilityService.ensureCapability(
-                    accountID: "account-a",
-                    route: .single
-                ) == nil
-            }
-        )
-        await viewModel.load()
-        viewModel.amountChanged("10")
-        viewModel.unitChanged("g")
-
-        await viewModel.submit()
-        var calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty, "No POST may occur before capability is verified")
-        XCTAssertTrue(store.entries(accountID: "account-a").isEmpty)
-
-        await viewModel.submit()
-        calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1)
-        XCTAssertEqual(viewModel.submitState, .succeeded)
-        XCTAssertEqual(store.entries(accountID: "account-a").first?.state, .succeeded)
     }
 
     func testOtherAccountCannotSeeOrRetryPendingSubmission() async {
@@ -1486,8 +1180,7 @@ final class FoodDetailTests: XCTestCase {
         let older = try seedSubmission(
             in: store,
             foodID: "food-success-lock",
-            amount: "10",
-            state: .rejected
+            amount: "10"
         )
         let vm = makeDurableViewModel(
             foodID: "food-success-lock",
@@ -1563,49 +1256,6 @@ final class FoodDetailTests: XCTestCase {
         XCTAssertEqual(calls.count, 1)
         XCTAssertEqual(calls.first?.idempotencyKey, entry.idempotencyKey)
         XCTAssertEqual(vm.submitState, .succeeded)
-    }
-
-    func testTwoDurableViewModelsCannotSendTheSameJournalRowTwice() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-claim", name: "Claim"))
-        await service.holdNextCreate()
-        let store = makeStore()
-        let entry = try seedSubmission(
-            in: store,
-            foodID: "food-claim",
-            amount: "10",
-            state: .uncertain
-        )
-        let first = makeDurableViewModel(
-            foodID: "food-claim",
-            service: service,
-            store: store
-        )
-        let second = makeDurableViewModel(
-            foodID: "food-claim",
-            service: service,
-            store: store
-        )
-        await first.load()
-        await second.load()
-        first.refreshRecoveryEntries()
-        second.refreshRecoveryEntries()
-
-        let firstTask = Task { await first.retryPending(entry) }
-        await service.waitForCreateStart()
-        let secondTask = Task { await second.retryPending(entry) }
-        await Task.yield()
-        await service.releaseCreate()
-        await firstTask.value
-        await secondTask.value
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(
-            calls.count,
-            1,
-            "Two view models sharing the journal must claim the send atomically"
-        )
-        XCTAssertTrue(store.isRetryBlocked(id: entry.id) == false)
     }
 
     func testLiveInFlightRowIsHiddenButStillBlocksNormalLog() async throws {
@@ -1706,30 +1356,4 @@ private struct FailingFoodLogSubmissionPersistence: LogSubmissionPersisting {
         throw CocoaError(.fileWriteUnknown)
     }
     func quarantine(accountID: String, reason: String) {}
-}
-
-private final class FailOnSavePersistence: LogSubmissionPersisting, @unchecked Sendable {
-    let base: FileLogSubmissionPersistence
-    var failOnSave: Int?
-    private var saveCount = 0
-
-    init(base: FileLogSubmissionPersistence) {
-        self.base = base
-    }
-
-    func load(accountID: String) throws -> Data? {
-        try base.load(accountID: accountID)
-    }
-
-    func save(_ data: Data, accountID: String) throws {
-        saveCount += 1
-        if saveCount == failOnSave {
-            throw CocoaError(.fileWriteUnknown)
-        }
-        try base.save(data, accountID: accountID)
-    }
-
-    func quarantine(accountID: String, reason: String) {
-        base.quarantine(accountID: accountID, reason: reason)
-    }
 }

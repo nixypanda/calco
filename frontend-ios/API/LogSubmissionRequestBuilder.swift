@@ -1,47 +1,69 @@
-// Builds typed single, batch, and ad-hoc request bodies once. Journal retries
-// must send the stored bytes unchanged.
+// Builds plain single, batch, and ad-hoc request bodies for direct transport.
+// There is no idempotency key, journal, or replay state on this path.
 
 import Foundation
+
+public enum LogSubmissionRoute: String, Equatable, Sendable {
+    case single
+    case batch
+    case adHoc
+
+    public var requestPath: String {
+        switch self {
+        case .single: return "/api/logs"
+        case .batch: return "/api/logs/batch"
+        case .adHoc: return "/api/logs/ad-hoc"
+        }
+    }
+
+    public static func route(for drafts: [LogSubmissionDraft]) -> LogSubmissionRoute {
+        guard drafts.count > 1 else {
+            if drafts.count == 1, case .adHoc = drafts[0].item {
+                return .adHoc
+            }
+            return .single
+        }
+        return .batch
+    }
+}
+
+public struct LogSubmissionRequest: Equatable, Sendable {
+    public let requestPath: String
+    public let body: Data
+
+    public init(requestPath: String, body: Data) {
+        self.requestPath = requestPath
+        self.body = body
+    }
+}
 
 public struct LogCreateItemRef: Encodable, Equatable, Sendable {
     public let type: String
     public let id: String?
-    public let name: String?
-    public let brand: String?
 
     public init(_ item: LogSubmissionItem) {
         switch item {
         case .product(let id):
             type = "product"
             self.id = id
-            name = nil
-            brand = nil
         case .meal(let id):
             type = "meal"
             self.id = id
-            name = nil
-            brand = nil
-        case .adHoc(let name, let brand):
+        case .adHoc:
             type = "ad_hoc"
             id = nil
-            self.name = name
-            self.brand = brand
         }
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case type
-        case id
-        case name
-        case brand
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(type, forKey: .type)
         try container.encodeIfPresent(id, forKey: .id)
-        try container.encodeIfPresent(name, forKey: .name)
-        try container.encodeIfPresent(brand, forKey: .brand)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case id
     }
 }
 
@@ -62,15 +84,6 @@ public struct LogCreateLineRequest: Encodable, Equatable, Sendable {
         notes = draft.notes
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case logDate = "log_date"
-        case deviceTimeZone = "device_timezone"
-        case mealSlot = "meal_slot"
-        case item
-        case quantity
-        case notes
-    }
-
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeLocalDiaryDate(logDate, forKey: .logDate)
@@ -79,47 +92,27 @@ public struct LogCreateLineRequest: Encodable, Equatable, Sendable {
         try container.encode(item, forKey: .item)
         try container.encode(quantity, forKey: .quantity)
         try container.encodeIfPresent(notes, forKey: .notes)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case logDate = "log_date"
+        case deviceTimeZone = "device_timezone"
+        case mealSlot = "meal_slot"
+        case item
+        case quantity
+        case notes
     }
 }
 
 public struct SingleLogSubmissionRequest: Encodable, Equatable, Sendable {
-    public let logDate: LocalDiaryDate
-    public let deviceTimeZone: String?
-    public let mealSlot: MealSlot?
-    public let item: LogCreateItemRef
-    public let quantity: NutritionQuantity
-    public let notes: String?
-    public let idempotencyKey: String
+    public let line: LogCreateLineRequest
 
-    public init(draft: LogSubmissionDraft, idempotencyKey: String) {
-        logDate = draft.date
-        deviceTimeZone = draft.timeZone
-        mealSlot = draft.mealSlot
-        item = LogCreateItemRef(draft.item)
-        quantity = NutritionQuantity(amount: draft.amount, unit: draft.unit)
-        notes = draft.notes
-        self.idempotencyKey = idempotencyKey
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case logDate = "log_date"
-        case deviceTimeZone = "device_timezone"
-        case mealSlot = "meal_slot"
-        case item
-        case quantity
-        case notes
-        case idempotencyKey = "idempotency_key"
+    public init(draft: LogSubmissionDraft) {
+        line = LogCreateLineRequest(draft: draft)
     }
 
     public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeLocalDiaryDate(logDate, forKey: .logDate)
-        try container.encodeIfPresent(deviceTimeZone, forKey: .deviceTimeZone)
-        try container.encodeIfPresent(mealSlot?.rawValue, forKey: .mealSlot)
-        try container.encode(item, forKey: .item)
-        try container.encode(quantity, forKey: .quantity)
-        try container.encodeIfPresent(notes, forKey: .notes)
-        try container.encode(idempotencyKey, forKey: .idempotencyKey)
+        try line.encode(to: encoder)
     }
 }
 
@@ -144,9 +137,8 @@ public struct AdHocLogSubmissionRequest: Encodable, Equatable, Sendable {
     public let quantity: NutritionQuantity
     public let nutrients: [AdHocNutrientRequest]
     public let notes: String?
-    public let idempotencyKey: String
 
-    public init(draft: LogSubmissionDraft, idempotencyKey: String) throws {
+    public init(draft: LogSubmissionDraft) throws {
         guard case .adHoc(let name, let brand) = draft.item else {
             throw LogCreateRequestBuilderError.invalidItem
         }
@@ -158,19 +150,6 @@ public struct AdHocLogSubmissionRequest: Encodable, Equatable, Sendable {
         quantity = NutritionQuantity(amount: draft.amount, unit: draft.unit)
         nutrients = (draft.nutrients ?? []).map(AdHocNutrientRequest.init)
         notes = draft.notes
-        self.idempotencyKey = idempotencyKey
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case logDate = "log_date"
-        case deviceTimeZone = "device_timezone"
-        case mealSlot = "meal_slot"
-        case name
-        case brand
-        case quantity
-        case nutrients
-        case notes
-        case idempotencyKey = "idempotency_key"
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -183,7 +162,17 @@ public struct AdHocLogSubmissionRequest: Encodable, Equatable, Sendable {
         try container.encode(quantity, forKey: .quantity)
         try container.encode(nutrients, forKey: .nutrients)
         try container.encodeIfPresent(notes, forKey: .notes)
-        try container.encode(idempotencyKey, forKey: .idempotencyKey)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case logDate = "log_date"
+        case deviceTimeZone = "device_timezone"
+        case mealSlot = "meal_slot"
+        case name
+        case brand
+        case quantity
+        case nutrients
+        case notes
     }
 }
 
@@ -201,40 +190,25 @@ public struct BatchLogSubmissionItemRequest: Encodable, Equatable, Sendable {
 
 public struct BatchLogSubmissionRequest: Encodable, Equatable, Sendable {
     public let items: [BatchLogSubmissionItemRequest]
-    public let idempotencyKey: String
 
-    public init(drafts: [LogSubmissionDraft], idempotencyKey: String) {
+    public init(drafts: [LogSubmissionDraft]) {
         items = drafts.map(BatchLogSubmissionItemRequest.init)
-        self.idempotencyKey = idempotencyKey
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case items
-        case idempotencyKey = "idempotency_key"
     }
 }
 
 public enum LogSubmissionRequestBuilder {
+    /// The existing backend batch validation limit.
     public static let maxDrafts = 50
 
     public static func prepare(
-        drafts: [LogSubmissionDraft],
-        baseURL: URL?,
-        idempotencyKey: String = UUID().uuidString.lowercased()
+        drafts: [LogSubmissionDraft]
     ) throws -> (route: LogSubmissionRoute, request: LogSubmissionRequest) {
         guard !drafts.isEmpty, drafts.count <= maxDrafts else {
             throw LogCreateRequestBuilderError.invalidItem
         }
-        let key = idempotencyKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty,
-              key.count <= 128,
-              !key.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
-        else {
-            throw LogCreateRequestBuilderError.invalidKey
-        }
 
         let route = LogSubmissionRoute.route(for: drafts)
-        guard Self.routeMatches(route: route, drafts: drafts) else {
+        guard routeMatches(route: route, drafts: drafts) else {
             throw LogCreateRequestBuilderError.invalidItem
         }
         let encoder = JSONEncoder()
@@ -243,17 +217,11 @@ public enum LogSubmissionRequestBuilder {
         do {
             switch route {
             case .single:
-                data = try encoder.encode(
-                    SingleLogSubmissionRequest(draft: drafts[0], idempotencyKey: key)
-                )
+                data = try encoder.encode(SingleLogSubmissionRequest(draft: drafts[0]))
             case .batch:
-                data = try encoder.encode(
-                    BatchLogSubmissionRequest(drafts: drafts, idempotencyKey: key)
-                )
+                data = try encoder.encode(BatchLogSubmissionRequest(drafts: drafts))
             case .adHoc:
-                data = try encoder.encode(
-                    AdHocLogSubmissionRequest(draft: drafts[0], idempotencyKey: key)
-                )
+                data = try encoder.encode(AdHocLogSubmissionRequest(draft: drafts[0]))
             }
         } catch let error as LogCreateRequestBuilderError {
             throw error
@@ -265,12 +233,7 @@ public enum LogSubmissionRequestBuilder {
         }
         return (
             route,
-            LogSubmissionRequest(
-                requestPath: route.requestPath,
-                idempotencyKey: key,
-                body: data,
-                baseURLString: baseURL?.absoluteString
-            )
+            LogSubmissionRequest(requestPath: route.requestPath, body: data)
         )
     }
 
@@ -307,11 +270,12 @@ public enum LogSubmissionRequestBuilder {
                 return true
             }
         case .adHoc:
-            guard drafts.count == 1, let item = drafts.first?.item else {
-                return false
-            }
-            if case .adHoc = item { return true }
-            return false
+            guard drafts.count == 1,
+                  let draft = drafts.first,
+                  case .adHoc = draft.item,
+                  let nutrients = draft.nutrients,
+                  !nutrients.isEmpty else { return false }
+            return true
         }
     }
 }

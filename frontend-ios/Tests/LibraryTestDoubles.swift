@@ -196,10 +196,7 @@ final class FakeLibraryLogSubmissionService: LibraryLogSubmitting {
     }
 
     private var results: [LogSubmissionServiceResult]
-    private var persistedResults: [String: LogSubmissionServiceResult] = [:]
     private(set) var submissions: [Submission] = []
-    private(set) var persistedRequests: [LibraryPersistedLogRequest] = []
-    var blockingPending: PendingLogSubmission?
 
     init(results: [LogSubmissionServiceResult]) {
         self.results = results
@@ -225,80 +222,8 @@ final class FakeLibraryLogSubmissionService: LibraryLogSubmitting {
             )
         )
         guard !results.isEmpty else {
-            return .failure(.rejected("no submission stub"))
+            return .failure(.failed("no submission stub"))
         }
         return results.removeFirst()
-    }
-
-    func submitPersisted(
-        _ request: LibraryPersistedLogRequest
-    ) async -> LibraryLogHandoffOutcome {
-        if let blockingPending {
-            return LibraryLogHandoffOutcome(
-                result: .failure(.uncertain("pending exists")),
-                journalOwned: false,
-                blockingEntry: blockingPending
-            )
-        }
-        if let stored = persistedResults[request.operationID] {
-            if case .failure(.rejected) = stored {
-                persistedResults.removeValue(forKey: request.operationID)
-            } else {
-                return LibraryLogHandoffOutcome(
-                    result: stored,
-                    journalOwned: true
-                )
-            }
-        }
-        persistedRequests.append(request)
-        submissions.append(
-            Submission(
-                accountID: request.accountID,
-                drafts: [request.draft],
-                itemNames: [request.itemName],
-                summary: request.summary
-            )
-        )
-        let result: LogSubmissionServiceResult
-        if results.isEmpty {
-            result = .failure(.rejected("no submission stub"))
-        } else {
-            result = results.removeFirst()
-        }
-        persistedResults[request.operationID] = result
-        return LibraryLogHandoffOutcome(result: result, journalOwned: true)
-    }
-}
-
-final class MemoryReconciliationPersistence: CustomFoodReconciliationPersisting, @unchecked Sendable {
-    private let lock = NSLock()
-    private var data: [String: Data] = [:]
-    private var quarantined: [String] = []
-
-    func load(accountID: String) throws -> Data? {
-        lock.withLock { data[accountID] }
-    }
-
-    func save(_ data: Data, accountID: String) throws {
-        lock.withLock { self.data[accountID] = data }
-    }
-
-    func remove(accountID: String) throws {
-        lock.withLock { self.data.removeValue(forKey: accountID) }
-    }
-
-    func quarantine(accountID: String, reason: String) {
-        lock.withLock {
-            quarantined.append(accountID)
-            data.removeValue(forKey: accountID)
-        }
-    }
-
-    func storedData(accountID: String) -> Data? {
-        lock.withLock { data[accountID] }
-    }
-
-    var quarantinedAccounts: [String] {
-        lock.withLock { quarantined }
     }
 }

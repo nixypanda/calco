@@ -12,12 +12,6 @@ public final class MealEditorViewModel: ObservableObject {
     @Published public private(set) var units: [ProductUnit] = []
     @Published public private(set) var unitFallbackNotice: String?
     @Published public private(set) var validationMessage: String?
-    @Published public private(set) var saveUncertain = false
-    @Published public private(set) var reconciliationAttempt: MealCreateAttempt?
-    @Published public private(set) var reconciliationCandidates: [Meal] = []
-    @Published public private(set) var reconciliationMessage: String?
-    @Published public private(set) var isRefreshingReconciliation = false
-    @Published public private(set) var reconciliationUnreadable = false
     @Published public var name: String = "" {
         didSet { if name != oldValue { clearTransientMessages() } }
     }
@@ -35,7 +29,6 @@ public final class MealEditorViewModel: ObservableObject {
 
     private let service: MealsServicing
     private let accountID: String
-    private let reconciliationStore: MealCreateReconciliationStore
     private let onSessionExpired: () -> Void
     private let onSaved: (Meal) -> Void
     private let searchDebounceNanoseconds: UInt64
@@ -43,7 +36,6 @@ public final class MealEditorViewModel: ObservableObject {
     private var nextRowID = 1
     private var loadToken = 0
     private var didStartLoad = false
-    private var createSaveClaimed = false
     private var baseline: MealFormSnapshot = .empty
     private var searchTokens: [Int: Int] = [:]
     private var searchTasks: [Int: Task<Void, Never>] = [:]
@@ -54,7 +46,6 @@ public final class MealEditorViewModel: ObservableObject {
         mode: MealEditorMode,
         accountID: String,
         service: MealsServicing,
-        reconciliationStore: MealCreateReconciliationStore? = nil,
         onSessionExpired: @escaping () -> Void = {},
         onSaved: @escaping (Meal) -> Void = { _ in },
         searchDebounceNanoseconds: UInt64 = 300_000_000
@@ -62,8 +53,6 @@ public final class MealEditorViewModel: ObservableObject {
         self.mode = mode
         self.accountID = accountID
         self.service = service
-        self.reconciliationStore = reconciliationStore
-            ?? MealCreateReconciliationStore.shared
         self.onSessionExpired = onSessionExpired
         self.onSaved = onSaved
         self.searchDebounceNanoseconds = searchDebounceNanoseconds
@@ -111,20 +100,9 @@ public final class MealEditorViewModel: ObservableObject {
         return false
     }
 
-    /// A create response may have been lost after the server committed. Retrying
-    /// `POST /api/meals` would create a duplicate recipe, so only an explicit
-    /// return to the list (and a fresh editor) can start another create.
+    /// A successfully saved create stops further saves until the editor closes.
     public var isSaveBlocked: Bool {
         didSave
-            || saveUncertain
-            || reconciliationAttempt != nil
-            || reconciliationUnreadable
-    }
-
-    /// While the create is actively being sent, keep the form visible and
-    /// disabled instead of switching to the post-failure reconciliation UI.
-    public var needsCreateReconciliation: Bool {
-        reconciliationAttempt != nil && !isSaving
     }
 
     public var totalQuantityHelperText: String? {
@@ -159,13 +137,6 @@ public final class MealEditorViewModel: ObservableObject {
         saveState = .idle
         validationMessage = nil
         unitFallbackNotice = nil
-        saveUncertain = false
-        createSaveClaimed = false
-        reconciliationAttempt = nil
-        reconciliationCandidates = []
-        reconciliationMessage = nil
-        reconciliationUnreadable = false
-        isRefreshingReconciliation = false
         cancelAllComponentResolutions()
 
         let fetchedUnits: [ProductUnit]
@@ -199,7 +170,6 @@ public final class MealEditorViewModel: ObservableObject {
             totalUnit = defaultUnitCode
             baseline = currentSnapshot
             loadState = .ready
-            await loadCreateReconciliationIfNeeded()
 
         case .edit(let id):
             do {
@@ -428,86 +398,6 @@ public final class MealEditorViewModel: ObservableObject {
             return
         }
 
-        var reservedAttemptID: String?
-        var reservedAttempt: MealCreateAttempt?
-        if case .create = mode {
-            let isPrimaryCreateSave: Bool
-            if createSaveClaimed {
-                isPrimaryCreateSave = false
-            } else {
-                createSaveClaimed = true
-                isPrimaryCreateSave = true
-            }
-
-            do {
-                if let existing = try reconciliationStore.attempt(accountID: accountID) {
-                    reconciliationAttempt = existing
-                    saveUncertain = true
-                    await refreshReconciliationCandidates()
-                    return
-                }
-            } catch {
-                createSaveClaimed = false
-                reconciliationUnreadable = true
-                saveUncertain = true
-                saveState = .failed(String(localized: "meals.reconcile.storeUnavailable"))
-                return
-            }
-
-            // The baseline is required for safe reconciliation. A failed list
-            // must never degrade to an empty baseline and still POST.
-            let baselineMeals: [Meal]
-            do {
-                baselineMeals = try await service.listMeals()
-            } catch {
-                if isPrimaryCreateSave {
-                    createSaveClaimed = false
-                }
-                if isUnauthorizedMealError(error) {
-                    onSessionExpired()
-                    saveState = .failed(String(localized: "meals.error.sessionExpired"))
-                } else if !isCancelled(error) {
-                    let message = mealServiceMessage(error)
-                    saveState = .failed(
-                        message.isEmpty
-                            ? String(localized: "meals.error.loadFailed")
-                            : message
-                    )
-                } else {
-                    saveState = .idle
-                }
-                return
-            }
-
-            // A concurrent save may overlap the baseline fetch, but only the
-            // first caller may reserve and POST the non-idempotent create.
-            guard isPrimaryCreateSave else { return }
-
-            let attempt = MealCreateAttempt(
-                accountID: accountID,
-                request: request,
-                baselineMealIDs: baselineMeals.map(\.id)
-            )
-            do {
-                let reserved = try reconciliationStore.reserve(attempt)
-                guard reserved.id == attempt.id else {
-                    reconciliationAttempt = reserved
-                    saveUncertain = true
-                    await refreshReconciliationCandidates()
-                    return
-                }
-                reconciliationAttempt = reserved
-                reservedAttemptID = reserved.id
-                reservedAttempt = reserved
-            } catch {
-                createSaveClaimed = false
-                reconciliationUnreadable = true
-                saveUncertain = true
-                saveState = .failed(String(localized: "meals.reconcile.storeUnavailable"))
-                return
-            }
-        }
-
         validationMessage = nil
         saveState = .saving
         do {
@@ -515,21 +405,6 @@ public final class MealEditorViewModel: ObservableObject {
             switch mode {
             case .create:
                 saved = try await service.createMeal(request)
-                if let reservedAttemptID, let reservedAttempt {
-                    do {
-                        try reconciliationStore.clearIfCurrent(
-                            accountID: accountID,
-                            attemptID: reservedAttemptID
-                        )
-                    } catch {
-                        await retainClearFailure(
-                            reservedAttempt,
-                            saveMessage: String(localized: "meals.reconcile.storeUnavailable")
-                        )
-                        return
-                    }
-                }
-                clearReconciliationState()
             case .edit(let id):
                 saved = try await service.updateMeal(id: id, request)
             }
@@ -538,65 +413,21 @@ public final class MealEditorViewModel: ObservableObject {
             onSaved(saved)
         } catch {
             if isUnauthorizedMealError(error) {
-                if case .create = mode {
-                    if let reservedAttemptID, let reservedAttempt {
-                        do {
-                            try reconciliationStore.clearIfCurrent(
-                                accountID: accountID,
-                                attemptID: reservedAttemptID
-                            )
-                            createSaveClaimed = false
-                            clearReconciliationState()
-                        } catch {
-                            await retainClearFailure(
-                                reservedAttempt,
-                                saveMessage: String(localized: "meals.reconcile.storeUnavailable")
-                            )
-                        }
-                    } else {
-                        createSaveClaimed = false
-                        clearReconciliationState()
-                    }
-                }
                 onSessionExpired()
                 saveState = .failed(String(localized: "meals.error.sessionExpired"))
                 return
             }
-            if case .create = mode {
-                if isDefinitiveCreateRejection(error) {
-                    let message = mealServiceMessage(error)
-                    let failureMessage = message.isEmpty
-                        ? String(localized: "meals.error.saveFailed")
-                        : message
-                    if let reservedAttemptID, let reservedAttempt {
-                        do {
-                            try reconciliationStore.clearIfCurrent(
-                                accountID: accountID,
-                                attemptID: reservedAttemptID
-                            )
-                            createSaveClaimed = false
-                            clearReconciliationState()
-                            saveState = .failed(failureMessage)
-                        } catch {
-                            await retainClearFailure(
-                                reservedAttempt,
-                                saveMessage: failureMessage
-                            )
-                        }
-                    } else {
-                        createSaveClaimed = false
-                        clearReconciliationState()
-                        saveState = .failed(failureMessage)
-                    }
-                    return
-                }
-                saveUncertain = true
-                saveState = .failed(String(localized: "meals.error.createUncertain"))
-                await refreshReconciliationCandidates()
-                return
-            }
             if isCancelled(error) {
                 saveState = .idle
+                return
+            }
+            if case .create = mode,
+               let mealError = error as? MealServiceError,
+               mealError == .network || isUncertainServerFailure(mealError) {
+                saveState = .failed(String(
+                    localized: "meals.editor.createUncertain",
+                    defaultValue: "CalCo couldn't confirm whether this meal was saved. Refresh the list before trying again."
+                ))
                 return
             }
             let message = mealServiceMessage(error)
@@ -612,120 +443,9 @@ public final class MealEditorViewModel: ObservableObject {
         validationMessage = nil
     }
 
-    private func retainClearFailure(
-        _ attempt: MealCreateAttempt,
-        saveMessage: String
-    ) async {
-        reconciliationAttempt = attempt
-        saveUncertain = true
-        saveState = .failed(saveMessage)
-        await refreshReconciliationCandidates()
-        reconciliationMessage = String(localized: "meals.reconcile.storeUnavailable")
-    }
-
-    // MARK: - Durable create reconciliation
-
-    public func refreshReconciliationCandidates() async {
-        guard let attempt = reconciliationAttempt,
-              !isRefreshingReconciliation else { return }
-        isRefreshingReconciliation = true
-        reconciliationMessage = nil
-        defer { isRefreshingReconciliation = false }
-        do {
-            let meals = try await service.listMeals()
-            guard reconciliationAttempt?.id == attempt.id else { return }
-            reconciliationCandidates = attempt.matches(in: meals)
-            if reconciliationCandidates.isEmpty {
-                reconciliationMessage = String(localized: "meals.reconcile.empty")
-            }
-        } catch {
-            guard reconciliationAttempt?.id == attempt.id else { return }
-            if isUnauthorizedMealError(error) {
-                onSessionExpired()
-            }
-            let message = mealServiceMessage(error)
-            reconciliationMessage = message.isEmpty
-                ? String(localized: "meals.reconcile.refreshFailed")
-                : message
-        }
-    }
-
-    public func useReconciledMeal(_ meal: Meal) {
-        guard let attempt = reconciliationAttempt,
-              MealCreateAttempt.matches(meal: meal, request: attempt.request) else {
-            return
-        }
-        do {
-            try reconciliationStore.clearIfCurrent(
-                accountID: accountID,
-                attemptID: attempt.id
-            )
-        } catch {
-            reconciliationMessage = String(localized: "meals.reconcile.storeUnavailable")
-            return
-        }
-        createSaveClaimed = false
-        clearReconciliationState()
-        baseline = currentSnapshot
-        saveState = .saved
-        onSaved(meal)
-    }
-
-    /// Only after an explicit warning confirmation. Reopens the create form.
-    public func discardReconciliation() {
-        guard let attempt = reconciliationAttempt else { return }
-        do {
-            try reconciliationStore.clearIfCurrent(
-                accountID: accountID,
-                attemptID: attempt.id
-            )
-        } catch {
-            reconciliationUnreadable = true
-            reconciliationMessage = String(localized: "meals.reconcile.storeUnavailable")
-            return
-        }
-        createSaveClaimed = false
-        clearReconciliationState()
-        saveState = .idle
-    }
-
-    public func resetUnreadableReconciliation() {
-        do {
-            try reconciliationStore.reset(accountID: accountID)
-        } catch {
-            reconciliationMessage = String(localized: "meals.reconcile.storeUnavailable")
-            return
-        }
-        createSaveClaimed = false
-        clearReconciliationState()
-        saveState = .idle
-    }
-
-    private func loadCreateReconciliationIfNeeded() async {
-        do {
-            guard let attempt = try reconciliationStore.attempt(accountID: accountID) else {
-                return
-            }
-            reconciliationAttempt = attempt
-            saveUncertain = true
-            reconciliationMessage = nil
-            await refreshReconciliationCandidates()
-        } catch {
-            reconciliationUnreadable = true
-            saveUncertain = true
-            reconciliationMessage = String(
-                localized: "meals.reconcile.storeUnavailable"
-            )
-        }
-    }
-
-    private func clearReconciliationState() {
-        createSaveClaimed = false
-        reconciliationAttempt = nil
-        reconciliationCandidates = []
-        reconciliationMessage = nil
-        reconciliationUnreadable = false
-        saveUncertain = false
+    private func isUncertainServerFailure(_ error: MealServiceError) -> Bool {
+        if case .server = error { return true }
+        return false
     }
 
     private var defaultUnitCode: String {
@@ -950,7 +670,7 @@ public final class MealEditorViewModel: ObservableObject {
 
     private func clearTransientMessages() {
         if validationMessage != nil { validationMessage = nil }
-        if !saveUncertain, case .failed = saveState {
+        if case .failed = saveState {
             saveState = .idle
         }
     }
@@ -965,16 +685,6 @@ public final class MealEditorViewModel: ObservableObject {
             return true
         }
         return false
-    }
-
-    private func isDefinitiveCreateRejection(_ error: Error) -> Bool {
-        guard let mealError = error as? MealServiceError else { return false }
-        switch mealError {
-        case .forbidden, .validation, .notFound, .missingComponents:
-            return true
-        case .unauthorized, .cancelled, .network, .rateLimited, .server:
-            return false
-        }
     }
 }
 

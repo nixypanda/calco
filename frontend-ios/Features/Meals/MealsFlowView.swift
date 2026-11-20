@@ -37,28 +37,21 @@ public struct MealsFlowView: View {
     private let mealSlot: MealSlot?
     private let initialPortion: NutritionQuantity?
     private let accountID: String
-    private let reconciliationStore: MealCreateReconciliationStore?
     private let service: MealsServicing
     private let onSubmitDrafts: LogSubmissionHandler?
     private let onSessionExpired: () -> Void
     private let onLogged: ((LocalDiaryDate, MealSlot?) -> Void)?
     private let onClose: (() -> Void)?
-    private let onReviewPending: () -> Void
 
-    /// `accountID` scopes the durable uncertain-create record. An empty ID fails
-    /// closed: meal creation is blocked rather than sharing another account's
-    /// safety record.
     public init(
         date: LocalDiaryDate,
         mealSlot: MealSlot? = nil,
         accountID: String = "",
         service: MealsServicing,
-        reconciliationStore: MealCreateReconciliationStore? = nil,
         onSubmitDrafts: LogSubmissionHandler? = nil,
         onSessionExpired: @escaping () -> Void = {},
         onLogged: ((LocalDiaryDate, MealSlot?) -> Void)? = nil,
         onClose: (() -> Void)? = nil,
-        onReviewPending: @escaping () -> Void = {},
         initialMealID: String? = nil,
         initialPortion: NutritionQuantity? = nil
     ) {
@@ -66,13 +59,11 @@ public struct MealsFlowView: View {
         self.mealSlot = mealSlot
         self.initialPortion = initialPortion
         self.accountID = accountID
-        self.reconciliationStore = reconciliationStore
         self.service = service
         self.onSubmitDrafts = onSubmitDrafts
         self.onSessionExpired = onSessionExpired
         self.onLogged = onLogged
         self.onClose = onClose
-        self.onReviewPending = onReviewPending
         _listViewModel = StateObject(
             wrappedValue: MealsListViewModel(
                 date: date,
@@ -127,7 +118,6 @@ public struct MealsFlowView: View {
                         onSubmitDrafts: onSubmitDrafts,
                         onSessionExpired: onSessionExpired,
                         onLogged: onLogged,
-                        onReviewPending: onReviewPending,
                         refreshToken: detailRefreshToken,
                         onEdit: { meal in
                             editorTarget = .edit(id: meal.id, name: meal.name)
@@ -153,7 +143,6 @@ public struct MealsFlowView: View {
                     target: target,
                     accountID: accountID,
                     service: service,
-                    reconciliationStore: reconciliationStore,
                     onSessionExpired: onSessionExpired,
                     onCancel: {
                         editorTarget = nil
@@ -188,7 +177,6 @@ private struct MealDetailScreen: View {
         onSubmitDrafts: LogSubmissionHandler?,
         onSessionExpired: @escaping () -> Void,
         onLogged: ((LocalDiaryDate, MealSlot?) -> Void)?,
-        onReviewPending: @escaping () -> Void,
         refreshToken: Int,
         onEdit: @escaping (Meal) -> Void,
         onDeleted: @escaping () -> Void
@@ -205,8 +193,7 @@ private struct MealDetailScreen: View {
                 onSubmitDrafts: onSubmitDrafts,
                 onSessionExpired: onSessionExpired,
                 onDeleted: onDeleted,
-                onLogged: onLogged,
-                onReviewPending: onReviewPending
+                onLogged: onLogged
             )
         )
     }
@@ -227,7 +214,6 @@ private struct MealEditorScreen: View {
         target: MealEditorTarget,
         accountID: String,
         service: MealsServicing,
-        reconciliationStore: MealCreateReconciliationStore?,
         onSessionExpired: @escaping () -> Void,
         onCancel: @escaping () -> Void,
         onSaved: @escaping (Meal) -> Void
@@ -238,7 +224,6 @@ private struct MealEditorScreen: View {
                 mode: target.mode,
                 accountID: accountID,
                 service: service,
-                reconciliationStore: reconciliationStore,
                 onSessionExpired: onSessionExpired,
                 onSaved: onSaved
             )

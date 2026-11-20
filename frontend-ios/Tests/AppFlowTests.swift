@@ -18,6 +18,19 @@ import XCTest
 private let appFlowBaseURL = URL(string: "https://calco.example.com")!
 private let appFlowWaitTimeout: TimeInterval = 5
 
+private actor AppFlowSubmissionSender: LogSubmissionSending {
+    private var requests: [LogSubmissionRequest] = []
+
+    func send(_ request: LogSubmissionRequest) async throws -> [FoodLog] {
+        requests.append(request)
+        return []
+    }
+
+    func recordedRequests() -> [LogSubmissionRequest] {
+        requests
+    }
+}
+
 private final class AppFlowSessionService: SessionServicing, @unchecked Sendable {
     typealias RestoreHandler = @Sendable () async throws -> SessionRestoreOutcome
     typealias LoginHandler =
@@ -319,11 +332,14 @@ private func appFlowSession(
     id: String = "identity-a",
     username: String = "alice",
     role: IdentityRole = .user,
-    displayName: String = "Alice"
+    displayName: String = "Alice",
+    hasProfile: Bool = true
 ) -> LoginSession {
     LoginSession(
         identity: AuthIdentity(id: id, username: username, role: role),
-        profile: AuthProfile(id: "profile-\(id)", displayName: displayName)
+        profile: hasProfile
+            ? AuthProfile(id: "profile-\(id)", displayName: displayName)
+            : nil
     )
 }
 
@@ -340,213 +356,8 @@ private func appFlowUser(
         id: session.identity.id,
         username: session.identity.username,
         role: role,
-        displayName: session.profile?.displayName,
-        profileID: session.profile?.id
+        displayName: session.profile?.displayName
     )
-}
-
-private actor AppFlowNutritionService: NutritionDetailsServicing {
-    func fetchNutritionDetails(
-        for date: LocalDiaryDate
-    ) async throws -> NutritionDetailsReport {
-        throw NutritionDetailsServiceError.server("not loaded in this test")
-    }
-}
-
-private actor AppFlowHoldingSubmissionSender: LogSubmissionSending {
-    private var continuation:
-        CheckedContinuation<LogSubmissionSendResult, Error>?
-    private var started = false
-    private let result: LogSubmissionSendResult
-
-    init(result: LogSubmissionSendResult) {
-        self.result = result
-    }
-
-    func send(_ request: LogSubmissionRequest) async throws -> LogSubmissionSendResult {
-        started = true
-        return try await withCheckedThrowingContinuation { continuation = $0 }
-    }
-
-    func waitForStart() async {
-        let deadline = Date().addingTimeInterval(appFlowWaitTimeout)
-        while !started, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 1_000_000)
-        }
-        XCTAssertTrue(started, "Timed out waiting for submission sender")
-    }
-
-    func release() {
-        continuation?.resume(returning: result)
-        continuation = nil
-    }
-}
-
-private actor AppFlowAssistantService: AssistantServicing {
-    func assistantStatus() async throws -> AssistantStatus {
-        AssistantStatus(enabled: true, supportsImages: false)
-    }
-
-    func requestDraft(
-        purpose: AssistantDraftPurpose,
-        conversation: AssistantConversation
-    ) async throws -> AssistantDraftTurn {
-        .draftReady(
-            assistantMessage: "Draft ready",
-            draft: AssistantFoodDraftPayload(
-                name: "Oats",
-                brand: "Farm",
-                categories: ["breakfast"],
-                nutrients: [
-                    AssistantDraftNutrient(code: NutrientCodes.energyKcal, amountPer100g: "380"),
-                    AssistantDraftNutrient(code: NutrientCodes.proteinG, amountPer100g: "13"),
-                    AssistantDraftNutrient(code: NutrientCodes.carbsG, amountPer100g: "67"),
-                    AssistantDraftNutrient(code: NutrientCodes.fatG, amountPer100g: "7"),
-                ]
-            ),
-            suggestedLog: nil,
-            warnings: []
-        )
-    }
-}
-
-private final class AppFlowReadyCapabilityProvider: LogCreationCapabilityProviding, @unchecked Sendable {
-    let baseURL = URL(string: "https://calco.example.com")!
-
-    func fetchCapabilities() async throws -> LogCreationIdempotencyCapability {
-        LogCreationIdempotencyCapability(
-            version: 2,
-            single: true,
-            adHoc: true,
-            batch: true,
-            batchKeyLocation: "top_level",
-            deletedOperationReplay: "conflict",
-            preMigrationDeletedKeys: "reconciliation_only"
-        )
-    }
-}
-
-private final class AppFlowRecoveringCapabilityProvider:
-    LogCreationCapabilityProviding,
-    @unchecked Sendable
-{
-    let baseURL = URL(string: "https://calco.example.com")!
-    private let lock = NSLock()
-    private var ready = false
-
-    func allowReady() {
-        lock.withLock { ready = true }
-    }
-
-    func fetchCapabilities() async throws -> LogCreationIdempotencyCapability {
-        let isReady = lock.withLock { ready }
-        guard isReady else {
-            throw CalCoAPIError.badStatus(
-                statusCode: 503,
-                payload: APIErrorPayload(
-                    code: "capability_unavailable",
-                    message: "probe unavailable"
-                )
-            )
-        }
-        return LogCreationIdempotencyCapability(
-            version: 2,
-            single: true,
-            adHoc: true,
-            batch: true,
-            batchKeyLocation: "top_level",
-            deletedOperationReplay: "conflict",
-            preMigrationDeletedKeys: "reconciliation_only"
-        )
-    }
-}
-
-private final class AppFlowHeldCapabilityProvider:
-    LogCreationCapabilityProviding,
-    @unchecked Sendable
-{
-    let baseURL = URL(string: "https://calco.example.com")!
-    private var holdNext = false
-    private var started = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-
-    func holdNextRequest() {
-        holdNext = true
-        started = false
-        released = false
-    }
-
-    func fetchCapabilities() async throws -> LogCreationIdempotencyCapability {
-        let shouldHold = holdNext
-        holdNext = false
-        if shouldHold {
-            started = true
-            await withCheckedContinuation { continuation in
-                if released {
-                    continuation.resume()
-                } else {
-                    self.continuation = continuation
-                }
-            }
-        }
-        return LogCreationIdempotencyCapability(
-            version: 2,
-            single: true,
-            adHoc: true,
-            batch: true,
-            batchKeyLocation: "top_level",
-            deletedOperationReplay: "conflict",
-            preMigrationDeletedKeys: "reconciliation_only"
-        )
-    }
-
-    func waitForStart() async {
-        let deadline = Date().addingTimeInterval(2)
-        while !started, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 1_000_000)
-        }
-        XCTAssertTrue(started, "Timed out waiting for capability probe")
-    }
-
-    func release() {
-        released = true
-        continuation?.resume()
-        continuation = nil
-    }
-}
-
-private actor AppFlowCountingSender: LogSubmissionSending {
-    private let date: LocalDiaryDate
-    private var count = 0
-
-    init(date: LocalDiaryDate) {
-        self.date = date
-    }
-
-    func send(_ request: LogSubmissionRequest) async throws -> LogSubmissionSendResult {
-        count += 1
-        return LogSubmissionSendResult(
-            logs: [
-                FoodLog(
-                    id: "log-\(count)",
-                    logDate: date,
-                    mealSlot: .lunch,
-                    item: .product(
-                        ProductLogItemSnapshot(id: "food-1", name: "Oats")
-                    ),
-                    quantity: NutritionQuantity(amount: "100", unit: "g")
-                )
-            ],
-            statusCode: 201
-        )
-    }
-
-    func sendCount() -> Int { count }
-}
-
-private final class AppFlowSubmissionContextState: @unchecked Sendable {
-    var context: LogSubmissionSessionContext?
 }
 
 @MainActor
@@ -592,8 +403,7 @@ final class AppFlowTests: XCTestCase {
             foodName: foodName,
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
         switch state {
         case .uncertain:
@@ -627,18 +437,6 @@ final class AppFlowTests: XCTestCase {
             )
         case .inFlight:
             try store.markInFlight(id: entry.id, accountID: accountID)
-        case .serverChanged:
-            try store.markServerChanged(
-                id: entry.id,
-                accountID: accountID,
-                message: "server changed"
-            )
-        case .reconciliationOnly:
-            try store.markReconciliationOnly(
-                id: entry.id,
-                accountID: accountID,
-                message: "reconcile"
-            )
         case .invalidated:
             _ = try store.invalidateUnresolved(
                 accountID: accountID,
@@ -657,12 +455,8 @@ final class AppFlowTests: XCTestCase {
         searchService: AppFlowSearchService = AppFlowSearchService(),
         foodDetailService: AppFlowFoodDetailService = AppFlowFoodDetailService(),
         settingsService: AppFlowSettingsService? = nil,
-        nutritionDetailsService: (any NutritionDetailsServicing)? = nil,
-        assistantService: (any AssistantServicing)? = nil,
         logSubmissionStore: LogSubmissionStore? = nil,
         logSubmissionService: LogSubmissionService? = nil,
-        logSubmissionSessionContextProvider: LogSubmissionSessionContextProvider? = nil,
-        serviceInjectionPolicy: AppShellServiceInjectionPolicy? = nil,
         todayProvider: (() -> LocalDiaryDate)? = nil
     ) -> AppShellCoordinator {
         let client = CalCoAPIClient(baseURL: appFlowBaseURL)
@@ -670,12 +464,6 @@ final class AppFlowTests: XCTestCase {
             service: sessionService,
             cookieBaseURL: appFlowBaseURL,
             cookieClearer: cookieClearer
-        )
-        let store = logSubmissionStore ?? makeIsolatedSubmissionStore()
-        let submissionService = logSubmissionService ?? LogSubmissionService(
-            store: store,
-            sender: CalCoLogSubmissionSender(client: client),
-            capabilityProvider: AppFlowReadyCapabilityProvider()
         )
         return AppShellCoordinator(
             client: client,
@@ -697,12 +485,8 @@ final class AppFlowTests: XCTestCase {
                 ),
                 preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases))
             ),
-            nutritionDetailsService: nutritionDetailsService,
-            assistantService: assistantService,
-            logSubmissionStore: store,
-            logSubmissionService: submissionService,
-            logSubmissionSessionContextProvider: logSubmissionSessionContextProvider,
-            serviceInjectionPolicy: serviceInjectionPolicy,
+            logSubmissionStore: logSubmissionStore ?? makeIsolatedSubmissionStore(),
+            logSubmissionService: logSubmissionService,
             todayProvider: todayProvider ?? { self.date }
         )
     }
@@ -763,6 +547,56 @@ final class AppFlowTests: XCTestCase {
         let second = makeWindowCoordinator()
         XCTAssertTrue(first.logSubmissionStore === second.logSubmissionStore)
         XCTAssertTrue(first.logSubmissionStore === LogSubmissionStore.shared)
+    }
+
+    func testFeatureSubmissionNeedsNoProfileBindingAndUsesPlainPOST() async throws {
+        let userSession = appFlowSession(hasProfile: false)
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(userSession) }
+        )
+        let sender = AppFlowSubmissionSender()
+        let submissionService = LogSubmissionService(sender: sender)
+        let coordinator = makeCoordinator(
+            sessionService: sessionService,
+            diaryService: AppFlowDiaryService(),
+            cookieClearer: AppFlowCookieClearer(),
+            logSubmissionService: submissionService
+        )
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        XCTAssertEqual(coordinator.currentUser?.id, "identity-a")
+        XCTAssertNil(coordinator.currentUser?.displayName)
+
+        var received: LogSubmissionServiceResult?
+        coordinator.submitDraftsForFeature(
+            [
+                LogSubmissionDraft(
+                    item: .product(id: "food-1"),
+                    date: date,
+                    mealSlot: .lunch,
+                    amount: "100",
+                    unit: "g",
+                    notes: nil,
+                    timeZone: "Asia/Kolkata"
+                )
+            ],
+            itemNames: ["Oats"],
+            summary: "Oats"
+        ) { result in
+            received = result
+        }
+        await waitUntil { received != nil }
+
+        XCTAssertEqual(received, .success([]))
+        let requests = await sender.recordedRequests()
+        let request = try XCTUnwrap(requests.first)
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(request.requestPath, "/api/logs")
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: request.body) as? [String: Any]
+        )
+        XCTAssertNil(object["idempotency_key"])
     }
 
     // MARK: - Compact pane plan
@@ -1802,8 +1636,7 @@ final class AppFlowTests: XCTestCase {
             foodName: "Test Food",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
 
         let coordinator = makeCoordinator(
@@ -2682,93 +2515,6 @@ final class AppFlowTests: XCTestCase {
         XCTAssertEqual(diary.goal, before)
     }
 
-    func testSharedSessionAuthorityKeepsTwoWindowsOnOneAccount() async throws {
-        let firstSession = appFlowSession()
-        let secondSession = appFlowSession(
-            id: "identity-b",
-            username: "bob",
-            displayName: "Bob"
-        )
-        let sessionService = AppFlowSessionService(
-            restore: { .authenticated(firstSession) }
-        )
-        let session = SessionCoordinator(
-            service: sessionService,
-            cookieBaseURL: appFlowBaseURL,
-            cookieClearer: AppFlowCookieClearer()
-        )
-        await session.restore()
-        let client = CalCoAPIClient(baseURL: appFlowBaseURL)
-        let diaryService = AppFlowDiaryService()
-        await diaryService.setDay(DiaryDay(date: date))
-        let store = makeIsolatedSubmissionStore()
-        let settings = AppFlowSettingsService(
-            goal: GoalSnapshot(
-                requestedDate: date,
-                effectiveFrom: nil,
-                source: .default,
-                targets: GoalTargets(
-                    calorieTarget: 2_100,
-                    proteinTargetG: 150,
-                    carbsTargetG: 240,
-                    fatTargetG: 60
-                )
-            ),
-            preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases))
-        )
-
-        func makeWindow() -> AppShellCoordinator {
-            AppShellCoordinator(
-                client: client,
-                session: session,
-                diaryService: diaryService,
-                searchService: AppFlowSearchService(),
-                foodDetailService: AppFlowFoodDetailService(),
-                settingsService: settings,
-                logSubmissionStore: store,
-                todayProvider: { self.date }
-            )
-        }
-
-        let windowA = makeWindow()
-        let windowB = makeWindow()
-        await waitForLoadedDiary(windowA)
-        await waitForLoadedDiary(windowB)
-        let firstUser = appFlowUser(from: firstSession)
-        XCTAssertEqual(windowA.currentUser, firstUser)
-        XCTAssertEqual(windowB.currentUser, firstUser)
-
-        _ = try seedSubmission(
-            in: store,
-            accountID: firstUser.id,
-            foodID: "food-a",
-            amount: "100"
-        )
-
-        sessionService.setLoginHandler { _, _ in secondSession }
-        let login = windowA.loginViewModel
-        login.username = "bob"
-        login.password = "pw"
-        await login.submit()
-
-        let secondUser = appFlowUser(from: secondSession)
-        await waitUntil {
-            windowA.currentUser == secondUser && windowB.currentUser == secondUser
-        }
-        XCTAssertEqual(session.phase, .signedIn(secondUser))
-        XCTAssertTrue(windowA.pendingSubmissions.isEmpty)
-        XCTAssertTrue(windowB.pendingSubmissions.isEmpty)
-        XCTAssertEqual(store.entries(accountID: firstUser.id).count, 1)
-
-        await windowB.signOut()
-
-        XCTAssertEqual(session.phase, .signedOut(.signedOut))
-        XCTAssertNil(windowA.currentUser)
-        XCTAssertNil(windowB.currentUser)
-        XCTAssertNil(windowA.diaryViewModel)
-        XCTAssertNil(windowB.diaryViewModel)
-    }
-
     func testSettingsViewModelIsClearedOnSignOut() async {
         let userSession = appFlowSession()
         let sessionService = AppFlowSessionService(
@@ -2791,512 +2537,5 @@ final class AppFlowTests: XCTestCase {
         await coordinator.signOut()
 
         XCTAssertNil(coordinator.settingsViewModel)
-        XCTAssertNil(coordinator.accountSettingsViewModel)
-    }
-
-    func testNutritionSheetUsesHistoricalDateAndClearsOnSessionReset() async {
-        let userSession = appFlowSession()
-        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
-        let diaryService = AppFlowDiaryService()
-        await diaryService.setDay(DiaryDay(date: date))
-        await diaryService.setDay(DiaryDay(date: yesterday))
-        let coordinator = makeCoordinator(
-            sessionService: sessionService,
-            diaryService: diaryService,
-            cookieClearer: AppFlowCookieClearer(),
-            nutritionDetailsService: AppFlowNutritionService()
-        )
-
-        await coordinator.start()
-        await waitForLoadedDiary(coordinator)
-        guard let diary = coordinator.diaryViewModel else {
-            return XCTFail("Expected a diary view model")
-        }
-        await diary.selectDate(yesterday)
-        await waitUntil { diary.selectedDate == self.yesterday }
-
-        coordinator.showNutritionDetails()
-
-        guard case .nutrition(let viewModel) = coordinator.featureSheet else {
-            return XCTFail("Expected the nutrition sheet")
-        }
-        XCTAssertEqual(viewModel.selectedDate, yesterday)
-        XCTAssertEqual(diary.selectedDate, yesterday)
-        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
-
-        XCTAssertTrue(coordinator.session.handleUnauthorized(
-            atGeneration: coordinator.session.sessionGeneration
-        ))
-        XCTAssertNil(coordinator.featureSheet)
-        XCTAssertNil(coordinator.accountSettingsViewModel)
-    }
-
-    func testMealsAndLibrarySheetsCarryDateSlotAndDoNotChangeNavigation() async {
-        let userSession = appFlowSession()
-        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
-        let diaryService = AppFlowDiaryService()
-        await diaryService.setDay(DiaryDay(date: date))
-        let coordinator = makeCoordinator(
-            sessionService: sessionService,
-            diaryService: diaryService,
-            cookieClearer: AppFlowCookieClearer()
-        )
-        await coordinator.start()
-        await waitForLoadedDiary(coordinator)
-        let originalDate = coordinator.navigationState.selectedDate
-        let portion = NutritionQuantity(amount: "2", unit: "serving")
-
-        coordinator.openMeals(
-            date: yesterday,
-            mealSlot: .dinner,
-            initialMealID: "meal-1",
-            initialPortion: portion
-        )
-
-        guard case .meals(let meals) = coordinator.featureSheet else {
-            return XCTFail("Expected the meals sheet")
-        }
-        XCTAssertEqual(meals.date, yesterday)
-        XCTAssertEqual(meals.mealSlot, .dinner)
-        XCTAssertEqual(meals.initialMealID, "meal-1")
-        XCTAssertEqual(meals.initialPortion, portion)
-        XCTAssertEqual(coordinator.navigationState.selectedDate, originalDate)
-
-        coordinator.dismissFeatureSheet()
-        coordinator.openLibrary(
-            date: yesterday,
-            mealSlot: .dinner,
-            initialBarcode: "0123456789012"
-        )
-
-        guard case .library(let library) = coordinator.featureSheet else {
-            return XCTFail("Expected the library sheet")
-        }
-        XCTAssertEqual(library.date, yesterday)
-        XCTAssertEqual(library.mealSlot, .dinner)
-        XCTAssertEqual(library.initialBarcode, "0123456789012")
-        XCTAssertEqual(coordinator.navigationState.selectedDate, originalDate)
-
-        coordinator.session.handleUnauthorized(
-            atGeneration: coordinator.session.sessionGeneration
-        )
-        XCTAssertNil(coordinator.featureSheet)
-    }
-
-    func testAssistantAcceptanceHandsTypedDraftToLibraryAfterSheetDismissal() async {
-        let userSession = appFlowSession()
-        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
-        let diaryService = AppFlowDiaryService()
-        await diaryService.setDay(DiaryDay(date: date))
-        let coordinator = makeCoordinator(
-            sessionService: sessionService,
-            diaryService: diaryService,
-            cookieClearer: AppFlowCookieClearer(),
-            assistantService: AppFlowAssistantService()
-        )
-        await coordinator.start()
-        await waitForLoadedDiary(coordinator)
-
-        coordinator.openAssistant(purpose: .customFood)
-        guard case .assistant(let assistant) = coordinator.featureSheet else {
-            return XCTFail("Expected the assistant sheet")
-        }
-        await assistant.loadStatus()
-        await assistant.performSend("A bowl of oats")
-        XCTAssertNotNil(assistant.draft)
-        assistant.acceptDraft()
-
-        XCTAssertNil(coordinator.featureSheet)
-        coordinator.featureSheetDidDismiss()
-
-        guard case .library(let library) = coordinator.featureSheet else {
-            return XCTFail("Expected Library after assistant acceptance")
-        }
-        XCTAssertEqual(library.date, coordinator.navigationState.selectedDate)
-        XCTAssertEqual(library.assistantDraft?.purpose, .customFood)
-        XCTAssertEqual(library.assistantDraft?.name, "Oats")
-        XCTAssertEqual(library.assistantDraft?.categories, ["breakfast"])
-    }
-
-    func testSettingsAccountSettingsLifecycleShutdownsOnDismissalAndReset() async {
-        let userSession = appFlowSession()
-        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
-        let diaryService = AppFlowDiaryService()
-        await diaryService.setDay(DiaryDay(date: date))
-        let coordinator = makeCoordinator(
-            sessionService: sessionService,
-            diaryService: diaryService,
-            cookieClearer: AppFlowCookieClearer()
-        )
-        await coordinator.start()
-        await waitForLoadedDiary(coordinator)
-
-        coordinator.showSettings()
-        await waitForSettingsLoaded(coordinator)
-        XCTAssertEqual(coordinator.accountSettingsViewModel?.accountID, userSession.identity.id)
-
-        coordinator.dismissSettings()
-        XCTAssertNil(coordinator.settingsViewModel)
-        XCTAssertNil(coordinator.accountSettingsViewModel)
-
-        coordinator.showSettings()
-        await waitForSettingsLoaded(coordinator)
-        XCTAssertNotNil(coordinator.accountSettingsViewModel)
-        coordinator.session.handleUnauthorized(
-            atGeneration: coordinator.session.sessionGeneration
-        )
-        XCTAssertNil(coordinator.settingsViewModel)
-        XCTAssertNil(coordinator.accountSettingsViewModel)
-    }
-
-    func testSubmitDraftsForFeatureCompletesOnceIfSessionEndsDuringSend() async throws {
-        let userSession = appFlowSession()
-        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
-        let diaryService = AppFlowDiaryService()
-        await diaryService.setDay(DiaryDay(date: date))
-        let session = SessionCoordinator(
-            service: sessionService,
-            cookieBaseURL: appFlowBaseURL,
-            cookieClearer: AppFlowCookieClearer()
-        )
-        await session.restore()
-        let sender = AppFlowHoldingSubmissionSender(
-            result: LogSubmissionSendResult(
-                logs: [
-                    FoodLog(
-                        id: "log-1",
-                        logDate: date,
-                        mealSlot: .lunch,
-                        item: .product(ProductLogItemSnapshot(id: "food-1", name: "Oats")),
-                        quantity: NutritionQuantity(amount: "100", unit: "g")
-                    )
-                ],
-                statusCode: 201
-            )
-        )
-        let store = makeIsolatedSubmissionStore()
-        let submissionService = LogSubmissionService(
-            store: store,
-            sender: sender,
-            capabilityProvider: AppFlowReadyCapabilityProvider()
-        )
-        _ = await submissionService.refreshCapability(accountID: userSession.identity.id)
-        let coordinator = AppShellCoordinator(
-            client: CalCoAPIClient(baseURL: appFlowBaseURL),
-            session: session,
-            diaryService: diaryService,
-            searchService: AppFlowSearchService(),
-            foodDetailService: AppFlowFoodDetailService(),
-            settingsService: AppFlowSettingsService(
-                goal: GoalSnapshot(
-                    requestedDate: date,
-                    effectiveFrom: nil,
-                    source: .default,
-                    targets: GoalTargets(
-                        calorieTarget: 2_100,
-                        proteinTargetG: 150,
-                        carbsTargetG: 240,
-                        fatTargetG: 60
-                    )
-                ),
-                preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases))
-            ),
-            logSubmissionStore: store,
-            logSubmissionService: submissionService,
-            todayProvider: { self.date }
-        )
-        await waitForLoadedDiary(coordinator)
-
-        let completion = expectation(description: "submission completion")
-        var results: [LogSubmissionServiceResult] = []
-        let draft = LogSubmissionDraft(
-            item: .product(id: "food-1"),
-            date: date,
-            mealSlot: .lunch,
-            amount: "100",
-            unit: "g",
-            notes: nil,
-            timeZone: "Asia/Kolkata"
-        )
-        coordinator.submitDraftsForFeature(
-            [draft],
-            itemNames: ["Oats"],
-            summary: "Oats"
-        ) { result in
-            results.append(result)
-            completion.fulfill()
-        }
-        await sender.waitForStart()
-        session.handleUnauthorized(atGeneration: session.sessionGeneration)
-        await sender.release()
-
-        await fulfillment(of: [completion], timeout: 2)
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        XCTAssertEqual(results.count, 1)
-        if case .failure(.rejected) = results[0] {
-        } else {
-            XCTFail("Expected a single session-expired completion, got \(results)")
-        }
-    }
-
-    func testFeatureQuickAddRecoversAfterTransientCapabilityProbe() async throws {
-        let sessionService = AppFlowSessionService(
-            restore: { .authenticated(appFlowSession()) }
-        )
-        let store = makeIsolatedSubmissionStore()
-        let provider = AppFlowRecoveringCapabilityProvider()
-        let sender = AppFlowCountingSender(date: date)
-        let service = LogSubmissionService(
-            store: store,
-            sender: sender,
-            capabilityProvider: provider
-        )
-        let coordinator = makeCoordinator(
-            sessionService: sessionService,
-            diaryService: AppFlowDiaryService(),
-            cookieClearer: AppFlowCookieClearer(),
-            logSubmissionStore: store,
-            logSubmissionService: service
-        )
-        await coordinator.start()
-        await waitForLoadedDiary(coordinator)
-        let accountID = try XCTUnwrap(coordinator.currentUser?.id)
-        let draft = LogSubmissionDraft(
-            item: .product(id: "food-1"),
-            date: date,
-            mealSlot: .lunch,
-            amount: "100",
-            unit: "g",
-            notes: nil,
-            timeZone: "Asia/Kolkata"
-        )
-
-        let first = expectation(description: "first submission")
-        var firstResult: LogSubmissionServiceResult?
-        coordinator.submitDraftsForFeature(
-            [draft],
-            itemNames: ["Oats"],
-            summary: "Oats"
-        ) { result in
-            firstResult = result
-            first.fulfill()
-        }
-        await fulfillment(of: [first], timeout: 2)
-        guard case .failure(.capabilityTemporarilyUnavailable) = firstResult else {
-            return XCTFail("Expected a transient capability failure, got \(String(describing: firstResult))")
-        }
-        let firstSends = await sender.sendCount()
-        XCTAssertEqual(firstSends, 0)
-        XCTAssertTrue(store.entries(accountID: accountID).isEmpty)
-
-        provider.allowReady()
-        let second = expectation(description: "recovered submission")
-        var secondResult: LogSubmissionServiceResult?
-        coordinator.submitDraftsForFeature(
-            [draft],
-            itemNames: ["Oats"],
-            summary: "Oats"
-        ) { result in
-            secondResult = result
-            second.fulfill()
-        }
-        await fulfillment(of: [second], timeout: 2)
-        guard case .success = secondResult else {
-            return XCTFail("Expected capability recovery, got \(String(describing: secondResult))")
-        }
-        let sends = await sender.sendCount()
-        XCTAssertEqual(sends, 1)
-        XCTAssertEqual(store.entries(accountID: accountID).count, 1)
-    }
-
-    func testFeatureQuickAddDeleteBarrierCancelsPreparedIntentBeforeSend() async throws {
-        let sessionService = AppFlowSessionService(
-            restore: { .authenticated(appFlowSession()) }
-        )
-        let store = makeIsolatedSubmissionStore()
-        let provider = AppFlowHeldCapabilityProvider()
-        let sender = AppFlowCountingSender(date: date)
-        let service = LogSubmissionService(
-            store: store,
-            sender: sender,
-            capabilityProvider: provider
-        )
-        let coordinator = makeCoordinator(
-            sessionService: sessionService,
-            diaryService: AppFlowDiaryService(),
-            cookieClearer: AppFlowCookieClearer(),
-            logSubmissionStore: store,
-            logSubmissionService: service
-        )
-        await coordinator.start()
-        await waitForLoadedDiary(coordinator)
-        let accountID = try XCTUnwrap(coordinator.currentUser?.id)
-        service.invalidateCapability(
-            generation: coordinator.session.sessionGeneration
-        )
-        provider.holdNextRequest()
-        let draft = LogSubmissionDraft(
-            item: .product(id: "food-1"),
-            date: date,
-            mealSlot: .lunch,
-            amount: "100",
-            unit: "g",
-            notes: nil,
-            timeZone: "Asia/Kolkata"
-        )
-        let completion = expectation(description: "cancelled submission")
-        var result: LogSubmissionServiceResult?
-        coordinator.submitDraftsForFeature(
-            [draft],
-            itemNames: ["Oats"],
-            summary: "Oats"
-        ) { outcome in
-            result = outcome
-            completion.fulfill()
-        }
-        await provider.waitForStart()
-        _ = try store.blockBeforeDeleting(
-            accountID: accountID,
-            item: .product(id: "food-1"),
-            date: date,
-            reason: "deleted"
-        )
-        await provider.release()
-        await fulfillment(of: [completion], timeout: 2)
-
-        guard case .failure(.rejected("deleted")) = result else {
-            return XCTFail("Expected the delete barrier to cancel, got \(String(describing: result))")
-        }
-        let sends = await sender.sendCount()
-        XCTAssertEqual(sends, 0)
-        XCTAssertTrue(store.entries(accountID: accountID).isEmpty)
-    }
-
-    func testFeatureQuickAddGenerationChangeFailsClosedWhileProbeHeld() async throws {
-        let sessionService = AppFlowSessionService(
-            restore: { .authenticated(appFlowSession()) }
-        )
-        let store = makeIsolatedSubmissionStore()
-        let provider = AppFlowHeldCapabilityProvider()
-        let sender = AppFlowCountingSender(date: date)
-        let service = LogSubmissionService(
-            store: store,
-            sender: sender,
-            capabilityProvider: provider
-        )
-        let coordinator = makeCoordinator(
-            sessionService: sessionService,
-            diaryService: AppFlowDiaryService(),
-            cookieClearer: AppFlowCookieClearer(),
-            logSubmissionStore: store,
-            logSubmissionService: service
-        )
-        await coordinator.start()
-        await waitForLoadedDiary(coordinator)
-        let accountID = try XCTUnwrap(coordinator.currentUser?.id)
-        service.invalidateCapability(
-            generation: coordinator.session.sessionGeneration
-        )
-        provider.holdNextRequest()
-        let draft = LogSubmissionDraft(
-            item: .product(id: "food-1"),
-            date: date,
-            mealSlot: .lunch,
-            amount: "100",
-            unit: "g",
-            notes: nil,
-            timeZone: "Asia/Kolkata"
-        )
-        let completion = expectation(description: "stale generation submission")
-        var result: LogSubmissionServiceResult?
-        coordinator.submitDraftsForFeature(
-            [draft],
-            itemNames: ["Oats"],
-            summary: "Oats"
-        ) { outcome in
-            result = outcome
-            completion.fulfill()
-        }
-        await provider.waitForStart()
-        _ = coordinator.session.handleUnauthorized(
-            atGeneration: coordinator.session.sessionGeneration
-        )
-        await provider.release()
-        await fulfillment(of: [completion], timeout: 2)
-
-        guard case .failure = result else {
-            return XCTFail("A generation change must fail closed, got \(String(describing: result))")
-        }
-        let sends = await sender.sendCount()
-        XCTAssertEqual(sends, 0)
-        XCTAssertTrue(store.entries(accountID: accountID).isEmpty)
-    }
-
-    func testProductionFoodDetailBindsSharedAuthorityAndRejectsContextChange() async throws {
-        let userSession = appFlowSession()
-        let sessionService = AppFlowSessionService(
-            restore: { .authenticated(userSession) }
-        )
-        let foodService = AppFlowFoodDetailService()
-        let store = makeIsolatedSubmissionStore()
-        let state = AppFlowSubmissionContextState()
-        let client = CalCoAPIClient(baseURL: appFlowBaseURL)
-        let submissionService = LogSubmissionService(
-            store: store,
-            sender: CalCoLogSubmissionSender(client: client),
-            capabilityProvider: AppFlowReadyCapabilityProvider(),
-            sessionContextProvider: { state.context }
-        )
-        let coordinator = makeCoordinator(
-            sessionService: sessionService,
-            diaryService: AppFlowDiaryService(),
-            cookieClearer: AppFlowCookieClearer(),
-            foodDetailService: foodService,
-            logSubmissionStore: store,
-            logSubmissionService: submissionService,
-            logSubmissionSessionContextProvider: { state.context },
-            serviceInjectionPolicy: .offlineTesting
-        )
-        await coordinator.start()
-        await waitForLoadedDiary(coordinator)
-        let accountID = try XCTUnwrap(coordinator.currentUser?.id)
-        let profileID = try XCTUnwrap(coordinator.currentUser?.profileID)
-        state.context = LogSubmissionSessionContext(
-            accountID: accountID,
-            generation: coordinator.session.sessionGeneration,
-            baseURL: appFlowBaseURL,
-            profileID: profileID
-        )
-
-        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
-        let viewModel = try XCTUnwrap(
-            coordinator.foodDetailViewModel(for: "food-1")
-        )
-        await viewModel.load()
-        XCTAssertTrue(
-            viewModel.isDurableSubmission,
-            "Production AppShell must use the durable FoodDetail initializer"
-        )
-        viewModel.amount = "100"
-        viewModel.unit = "g"
-        viewModel.mealSlot = .lunch
-
-        state.context = LogSubmissionSessionContext(
-            accountID: "account-b",
-            generation: coordinator.session.sessionGeneration &+ 1,
-            baseURL: appFlowBaseURL,
-            profileID: "profile-b"
-        )
-        await viewModel.submit()
-
-        let requests = await foodService.loggedRequests()
-        XCTAssertTrue(
-            requests.isEmpty,
-            "A changed authority context must not POST the bound detail"
-        )
-        if case .succeeded = viewModel.submitState {
-            XCTFail("A stale authority context must not report success")
-        }
-        XCTAssertTrue(store.entries(accountID: accountID).isEmpty)
     }
 }

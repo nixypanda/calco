@@ -11,7 +11,6 @@ public struct AdHocLogView: View {
     @Environment(\.dismiss) private var dismissEnvironment
     @FocusState private var focusedField: LogFormField?
     @State private var confirmingCancel = false
-    @State private var confirmingResetStore = false
 
     public init(viewModel: AdHocLogViewModel) {
         self.viewModel = viewModel
@@ -94,17 +93,6 @@ public struct AdHocLogView: View {
         } message: {
             Text(String(localized: "diary.editor.discard.message"))
         }
-        .alert(
-            String(localized: "library.reconcile.reset.title"),
-            isPresented: $confirmingResetStore
-        ) {
-            Button(String(localized: "library.reconcile.reset.action"), role: .destructive) {
-                viewModel.resetUnreadableReconciliation()
-            }
-            Button(String(localized: "diary.common.cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "library.reconcile.reset.message"))
-        }
     }
 
     @ViewBuilder
@@ -121,15 +109,6 @@ public struct AdHocLogView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("library.adHoc.retry")
-                    if viewModel.formError != nil {
-                        Button(role: .destructive) {
-                            confirmingResetStore = true
-                        } label: {
-                            Text(String(localized: "library.reconcile.reset"))
-                                .frame(maxWidth: .infinity)
-                        }
-                        .accessibilityIdentifier("library.reconcile.reset")
-                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -139,39 +118,6 @@ public struct AdHocLogView: View {
 
     private var loadedView: some View {
         Form {
-            if let attempt = viewModel.reconciliationAttempt {
-                CustomFoodReconciliationView(
-                    attempt: attempt,
-                    candidates: viewModel.reconciliationCandidates,
-                    message: viewModel.reconciliationMessage,
-                    isRefreshing: viewModel.isRefreshingReconciliation,
-                    onRefresh: {
-                        Task { await viewModel.refreshReconciliationCandidates() }
-                    },
-                    onUse: { food in
-                        Task { await viewModel.useReconciledFood(food) }
-                    },
-                    onDiscard: {
-                        viewModel.discardReconciliation()
-                    }
-                )
-            }
-
-            if viewModel.isReconciliationStoreBlocked {
-                Section {
-                    Text(String(localized: "library.reconcile.storeUnavailable"))
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button(role: .destructive) {
-                        confirmingResetStore = true
-                    } label: {
-                        Text(String(localized: "library.reconcile.reset"))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .accessibilityIdentifier("library.reconcile.reset")
-                }
-            }
-
             if viewModel.savedFoodID == nil {
                 detailsSection
                 logFormSection
@@ -313,9 +259,9 @@ public struct AdHocLogView: View {
                 ProgressView(String(localized: "library.log.logging"))
                     .accessibilityIdentifier("library.log.logging")
             }
-        case .pending(let message):
+        case .failed(let message):
             Section {
-                statusMessage(message, color: .orange)
+                statusMessage(message, color: .red)
                 retainedLogIntentRow
                 if let foodID = viewModel.savedFoodID {
                     Text(
@@ -328,17 +274,6 @@ public struct AdHocLogView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 }
-                Button(String(localized: "foodDetail.pending.checkDiary")) {
-                    viewModel.reviewPendingLogs()
-                }
-                .accessibilityIdentifier("library.log.review")
-            } header: {
-                Text(String(localized: "library.log.pending.title"))
-            }
-        case .retryable(let message):
-            Section {
-                statusMessage(message, color: .red)
-                retainedLogIntentRow
                 Button {
                     Task { await viewModel.retrySavedFoodLog() }
                 } label: {
@@ -353,7 +288,7 @@ public struct AdHocLogView: View {
             } footer: {
                 Text(String(localized: "library.log.saved.help"))
             }
-        case .logged:
+        case .logged(let logID):
             Section {
                 Label(
                     String(localized: "library.log.logged"),
@@ -373,7 +308,7 @@ public struct AdHocLogView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 }
-                if let logID = viewModel.completedSubmissionLogID {
+                if let logID {
                     Text(logID)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -387,23 +322,13 @@ public struct AdHocLogView: View {
         }
 
         switch viewModel.submissionState {
-        case .pending(let message):
-            Section {
-                statusMessage(message, color: .orange)
-                Button(String(localized: "foodDetail.pending.checkDiary")) {
-                    viewModel.reviewPendingLogs()
-                }
-                .accessibilityIdentifier("library.adHoc.reviewPending")
-            } header: {
-                Text(String(localized: "library.log.pending.title"))
-            }
         case .failed(let message):
             Section {
                 statusMessage(message, color: .red)
             } header: {
                 Text(String(localized: "library.log.failed.title"))
             }
-        case .completed(let logID, _):
+        case .completed(let logID):
             if !viewModel.hasLoggedSavedFood {
                 Section {
                     Label(
@@ -432,11 +357,18 @@ public struct AdHocLogView: View {
     @ViewBuilder
     private var retainedLogIntentRow: some View {
         if let intent = viewModel.savedLogIntent {
-            Text(LibraryLogIntentFormat.summary(intent))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("library.log.intent")
+            Text(
+                LibraryLogIntentFormat.summary(
+                    date: intent.date,
+                    mealSlot: intent.mealSlot,
+                    amount: intent.amount,
+                    unit: intent.unit
+                )
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("library.log.intent")
         }
     }
 

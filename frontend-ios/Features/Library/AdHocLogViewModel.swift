@@ -1,8 +1,8 @@
 // One-off ad-hoc logging and "save food and log" view model.
 //
-// Every log write goes through `LibraryLogSubmitting`, which the app shell
-// implements with the shared journal handler. This feature never posts logs
-// directly and never stores a second idempotency key.
+// Log writes go through `LibraryLogSubmitting`, which the app shell adapts to
+// the shared submission handler. A saved food ID is retained only in memory so
+// an explicit retry logs that food instead of creating another catalog entry.
 
 import Combine
 import Foundation
@@ -10,6 +10,44 @@ import Foundation
 public enum AdHocSaveMode: String, CaseIterable, Equatable, Sendable {
     case logOnly
     case saveAndLog
+}
+
+/// In-memory intent for logging a custom food returned by a successful create.
+public struct SavedFoodLogIntent: Equatable, Sendable {
+    public let date: LocalDiaryDate
+    public let mealSlot: MealSlot?
+    public let amount: String
+    public let unit: String
+    public let notes: String?
+    public let timeZone: String
+
+    public init(
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?,
+        amount: String,
+        unit: String,
+        notes: String?,
+        timeZone: String
+    ) {
+        self.date = date
+        self.mealSlot = mealSlot
+        self.amount = amount
+        self.unit = unit
+        self.notes = notes
+        self.timeZone = timeZone
+    }
+
+    public func logSubmissionDraft(productID: String) -> LogSubmissionDraft {
+        LogSubmissionDraft(
+            item: .product(id: productID),
+            date: date,
+            mealSlot: mealSlot,
+            amount: amount,
+            unit: unit,
+            notes: notes,
+            timeZone: timeZone
+        )
+    }
 }
 
 public struct AdHocReview: Equatable, Identifiable, Sendable {
@@ -22,7 +60,7 @@ public struct AdHocReview: Equatable, Identifiable, Sendable {
     public let mealSlot: MealSlot?
     public let draft: LogSubmissionDraft
     public let customFood: CustomFoodWriteRequest?
-    public let logIntent: CustomFoodLogIntent?
+    public let logIntent: SavedFoodLogIntent?
 
     public init(
         id: String = UUID().uuidString.lowercased(),
@@ -34,7 +72,7 @@ public struct AdHocReview: Equatable, Identifiable, Sendable {
         mealSlot: MealSlot?,
         draft: LogSubmissionDraft,
         customFood: CustomFoodWriteRequest?,
-        logIntent: CustomFoodLogIntent?
+        logIntent: SavedFoodLogIntent?
     ) {
         self.id = id
         self.mode = mode
@@ -60,12 +98,7 @@ public final class AdHocLogViewModel: ObservableObject {
     @Published public private(set) var formError: String?
     @Published public private(set) var savedFoodID: String?
     @Published public private(set) var savedFoodName: String?
-    @Published public private(set) var savedLogIntent: CustomFoodLogIntent?
-    @Published public private(set) var reconciliationAttempt: CustomFoodCreateAttempt?
-    @Published public private(set) var reconciliationCandidates: [CustomFood] = []
-    @Published public private(set) var reconciliationMessage: String?
-    @Published public private(set) var isRefreshingReconciliation = false
-    @Published public private(set) var isReconciliationStoreBlocked = false
+    @Published public private(set) var savedLogIntent: SavedFoodLogIntent?
     @Published public private(set) var isDirty = false
     @Published public var pendingReview: AdHocReview?
     @Published public var hasAttemptedReview = false
@@ -104,14 +137,10 @@ public final class AdHocLogViewModel: ObservableObject {
 
     private let service: any LibraryServicing
     private let submissionService: any LibraryLogSubmitting
-    private let engine: CustomFoodReconciliationEngine
-    private let reconciliationStore: CustomFoodReconciliationStore
     private let baseURL: URL?
     private let timeZoneProvider: () -> String
     private let onLogged: (LocalDiaryDate, MealSlot?) -> Void
     private let onSessionExpired: () -> Void
-    private let onReviewPending: () -> Void
-    private let onOpenLibrary: () -> Void
     private let initialAssistantDraft: AssistantReviewedDraft?
 
     private var isApplyingInitialValues = false
@@ -120,15 +149,12 @@ public final class AdHocLogViewModel: ObservableObject {
     private var assistantServingGrams: [String: Decimal] = [:]
     private var assistantPortionWeightGrams: Decimal?
     private var assistantQuantityNeedsReview = false
-    private var savedLogAttemptID: String?
     private var latestIssuedReviewID: String?
-    private var consumedReviewIDs: Set<String> = []
     private var loadGeneration = 0
 
     public init(
         service: any LibraryServicing,
         submissionService: any LibraryLogSubmitting,
-        reconciliationStore: CustomFoodReconciliationStore,
         accountID: String,
         initialDate: LocalDiaryDate,
         today: LocalDiaryDate,
@@ -137,27 +163,17 @@ public final class AdHocLogViewModel: ObservableObject {
         timeZoneProvider: @escaping () -> String = { TimeZone.current.identifier },
         onLogged: @escaping (LocalDiaryDate, MealSlot?) -> Void = { _, _ in },
         onSessionExpired: @escaping () -> Void = {},
-        onReviewPending: @escaping () -> Void = {},
-        onOpenLibrary: @escaping () -> Void = {},
         assistantDraft: AssistantReviewedDraft? = nil
     ) {
         self.service = service
         self.submissionService = submissionService
-        self.reconciliationStore = reconciliationStore
         self.accountID = accountID
         self.today = today
         self.baseURL = baseURL
         self.timeZoneProvider = timeZoneProvider
         self.onLogged = onLogged
         self.onSessionExpired = onSessionExpired
-        self.onReviewPending = onReviewPending
-        self.onOpenLibrary = onOpenLibrary
         self.initialAssistantDraft = assistantDraft
-        self.engine = CustomFoodReconciliationEngine(
-            service: service,
-            store: reconciliationStore,
-            accountID: accountID
-        )
         self.date = min(initialDate, today)
         self.mealSlot = initialMealSlot
         self.nutrientEditor = NutrientEditorState(definitions: [])
@@ -167,16 +183,10 @@ public final class AdHocLogViewModel: ObservableObject {
         isSavingFood
             || submissionState == .submitting
             || savedFoodLogState == .logging
-            || isRefreshingReconciliation
     }
 
     public var isSubmissionCompleted: Bool {
         if case .completed = submissionState { return true }
-        return false
-    }
-
-    public var isSubmissionPending: Bool {
-        if case .pending = submissionState { return true }
         return false
     }
 
@@ -186,34 +196,23 @@ public final class AdHocLogViewModel: ObservableObject {
     }
 
     public var completedSubmissionLogID: String? {
-        if case .completed(let logID, _) = submissionState { return logID }
+        if case .completed(let logID) = submissionState { return logID }
         return nil
     }
 
     public var isFormDisabled: Bool {
-        isBusy || isSubmissionCompleted || isSubmissionPending || savedFoodID != nil
+        isBusy || isSubmissionCompleted || savedFoodID != nil
     }
 
     public var hasUnsavedChanges: Bool {
         isDirty && savedFoodID == nil && !isBusy
     }
 
-    public var isReconciling: Bool { reconciliationAttempt != nil }
-
     public var canReview: Bool {
         guard case .loaded = loadState else { return false }
-        if mode == .saveAndLog, isReconciliationStoreBlocked {
-            return false
-        }
         return !isBusy
             && !isSubmissionCompleted
-            && !isSubmissionPending
             && savedFoodID == nil
-    }
-
-    public var requiresPortionWeight: Bool {
-        mode == .saveAndLog
-            && unit.trimmingCharacters(in: .whitespacesAndNewlines) != "g"
     }
 
     public func load() async {
@@ -245,7 +244,6 @@ public final class AdHocLogViewModel: ObservableObject {
             isApplyingInitialValues = false
             isDirty = false
             loadState = .loaded
-            loadPendingReconciliation()
             if let draft = initialAssistantDraft,
                !hasAppliedInitialAssistantDraft,
                draft.purpose == .adHocLog {
@@ -263,45 +261,6 @@ public final class AdHocLogViewModel: ObservableObject {
         } catch {
             guard generation == loadGeneration, !Task.isCancelled else { return }
             loadState = .failed(String(localized: "library.adHoc.loadFailed"))
-        }
-    }
-
-    private func loadPendingReconciliation() {
-        do {
-            guard let attempt = try engine.loadAttempt() else {
-                reconciliationAttempt = nil
-                isReconciliationStoreBlocked = false
-                return
-            }
-            if let foodID = attempt.foodID, let intent = attempt.logIntent {
-                savedFoodID = foodID
-                savedFoodName = attempt.displayName
-                savedLogIntent = intent
-                savedLogAttemptID = attempt.id
-                savedFoodLogState = .retryable(
-                    message: attempt.message.isEmpty
-                        ? String(localized: "library.log.resumeMessage")
-                        : attempt.message
-                )
-                reconciliationAttempt = nil
-                reconciliationCandidates = []
-                reconciliationMessage = nil
-                isDirty = false
-                isReconciliationStoreBlocked = false
-                return
-            }
-            if attempt.foodID != nil, attempt.logIntent == nil {
-                try? engine.completeLogHandoff(attemptID: attempt.id)
-                reconciliationAttempt = nil
-                isReconciliationStoreBlocked = false
-                return
-            }
-            reconciliationAttempt = attempt
-            isReconciliationStoreBlocked = false
-        } catch {
-            reconciliationAttempt = nil
-            isReconciliationStoreBlocked = true
-            formError = String(localized: "library.reconcile.storeUnavailable")
         }
     }
 
@@ -324,16 +283,8 @@ public final class AdHocLogViewModel: ObservableObject {
         }
 
         var customFood: CustomFoodWriteRequest?
-        var logIntent: CustomFoodLogIntent?
+        var logIntent: SavedFoodLogIntent?
         if mode == .saveAndLog {
-            guard !isReconciliationStoreBlocked else {
-                formError = String(localized: "library.reconcile.storeUnavailable")
-                return
-            }
-            guard reconciliationAttempt == nil else {
-                formError = String(localized: "library.reconcile.pendingBlocksSave")
-                return
-            }
             switch values.makeCustomFoodWriteRequest(
                 portionWeightText: portionWeightText
             ) {
@@ -343,7 +294,7 @@ public final class AdHocLogViewModel: ObservableObject {
             case .success(let request):
                 customFood = request
             }
-            switch values.logIntent(timeZone: timeZoneProvider()) {
+            switch values.savedFoodLogIntent(timeZone: timeZoneProvider()) {
             case .failure(let error):
                 formError = error.message(definitions: definitions)
                 return
@@ -374,33 +325,21 @@ public final class AdHocLogViewModel: ObservableObject {
 
     /// Uses the review captured by the alert action. SwiftUI may clear the
     /// item binding while dismissing the alert, so the action must not depend
-    /// on `pendingReview` still being set.
+    /// on `pendingReview` still being set. A second concurrent action is
+    /// rejected by `isBusy` before any network call starts.
     public func confirmReview(_ review: AdHocReview) async {
-        // Busy is checked before touching pendingReview so a stale alert cannot
-        // dismiss current work.
         guard !isBusy,
               !isSubmissionCompleted,
-              !isSubmissionPending,
               savedFoodID == nil else {
             return
         }
         if let pending = pendingReview, pending.id != review.id {
             return
         }
-        // Only the most recently issued review may write. Keeping the latest
-        // ID lets a captured review still work after SwiftUI clears its item
-        // binding, while rejecting an older alert even when the binding is nil.
-        guard latestIssuedReviewID == review.id,
-              !consumedReviewIDs.contains(review.id) else {
-            return
-        }
+        guard latestIssuedReviewID == review.id else { return }
         if pendingReview?.id == review.id {
             pendingReview = nil
         }
-        // Main-actor reservation happens before any await, so duplicate alert
-        // actions or concurrent callers cannot submit the same logical review
-        // twice, even after completion.
-        consumedReviewIDs.insert(review.id)
         formError = nil
         switch review.mode {
         case .logOnly:
@@ -429,295 +368,122 @@ public final class AdHocLogViewModel: ObservableObject {
             summary: name,
             baseURL: baseURL
         )
-        handleSubmissionResult(result, date: draft.date, mealSlot: draft.mealSlot)
+        handleAdHocResult(result, date: draft.date, mealSlot: draft.mealSlot)
     }
 
     private func createFoodAndLog(
         request: CustomFoodWriteRequest,
-        logIntent: CustomFoodLogIntent,
+        logIntent: SavedFoodLogIntent,
         name: String
     ) async {
         isSavingFood = true
         defer { isSavingFood = false }
 
-        let baseline: [CustomFood]
         do {
-            baseline = try await service.listCustomFoods()
-        } catch let error as CustomFoodServiceError {
-            if error.isUnauthorized {
-                onSessionExpired()
-            }
-            formError = error.message
-            return
-        } catch {
-            formError = String(localized: "library.error.load")
-            return
-        }
-
-        let result = await engine.create(
-            draft: request,
-            baselineFoodIDs: baseline.map(\.id),
-            logIntent: logIntent,
-            logBaseURL: baseURL
-        )
-        switch result {
-        case .saved(let foodID):
+            let foodID = try await service.createCustomFood(request)
             savedFoodID = foodID
             savedFoodName = name
             savedLogIntent = logIntent
-            savedLogAttemptID = (try? engine.currentAttempt())?.id
             isDirty = false
             await submitSavedFoodLog(foodID: foodID, intent: logIntent)
-        case .needsReconciliation(let attempt):
-            reconciliationAttempt = attempt
-            reconciliationCandidates = []
-            reconciliationMessage = nil
-            await refreshReconciliationCandidates()
-        case .failed(let error):
-            if error.isUnauthorized {
-                onSessionExpired()
-            }
-            formError = error.message
-        case .blocked(let message):
-            formError = message
-        }
-    }
-
-    // MARK: Reconciliation
-
-    public func refreshReconciliationCandidates() async {
-        guard let attempt = reconciliationAttempt, !isRefreshingReconciliation else {
-            return
-        }
-        isRefreshingReconciliation = true
-        reconciliationMessage = nil
-        defer { isRefreshingReconciliation = false }
-        do {
-            let matches = try await engine.candidates(for: attempt)
-            reconciliationCandidates = matches.sorted {
-                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-            if matches.isEmpty {
-                reconciliationMessage = String(localized: "library.reconcile.noMatches")
-            }
         } catch let error as CustomFoodServiceError {
             if error.isUnauthorized {
                 onSessionExpired()
             }
-            reconciliationMessage = error.message
+            if case .uncertain = error {
+                formError = String(
+                    localized: "library.editor.create.uncertain",
+                    defaultValue: "CalCo couldn't confirm whether this food was saved. Check the library before trying again."
+                )
+            } else {
+                formError = error.message
+            }
         } catch {
-            reconciliationMessage = String(localized: "library.error.load")
-        }
-    }
-
-    public func useReconciledFood(_ food: CustomFood) async {
-        guard let attempt = reconciliationAttempt else { return }
-        let retained: CustomFoodCreateAttempt?
-        do {
-            retained = try engine.resolve(attempt: attempt, food: food)
-        } catch {
-            reconciliationMessage = String(localized: "library.reconcile.storeUnavailable")
-            return
-        }
-        reconciliationAttempt = nil
-        reconciliationCandidates = []
-        reconciliationMessage = nil
-        savedFoodID = food.id
-        savedFoodName = food.name
-        savedLogIntent = attempt.logIntent
-        savedLogAttemptID = attempt.logIntent == nil ? nil : (retained?.id ?? attempt.id)
-        isDirty = false
-        if let intent = attempt.logIntent {
-            await submitSavedFoodLog(foodID: food.id, intent: intent)
-        } else {
-            savedFoodLogState = .pending(
-                message: String(localized: "library.log.savedOnly")
-            )
-        }
-    }
-
-    public func discardReconciliation() {
-        guard let attempt = reconciliationAttempt else { return }
-        do {
-            try engine.discard(attempt: attempt)
-        } catch {
-            reconciliationMessage = String(localized: "library.reconcile.storeUnavailable")
-            return
-        }
-        reconciliationAttempt = nil
-        reconciliationCandidates = []
-        reconciliationMessage = nil
-    }
-
-    public func resetUnreadableReconciliation() {
-        do {
-            try engine.resetUnreadableState()
-            reconciliationAttempt = nil
-            reconciliationCandidates = []
-            reconciliationMessage = nil
-            isReconciliationStoreBlocked = false
-        } catch {
-            formError = String(localized: "library.reconcile.storeUnavailable")
+            formError = String(localized: "foodDetail.error.saveFailed")
         }
     }
 
     // MARK: Saved-food logging
 
-    /// Only a definitively rejected log may be submitted again. Uncertain,
-    /// conflicting, or unavailable journal states are recovered through the
-    /// shell's shared pending-log review.
+    /// A failed or unconfirmed log can be explicitly retried for the retained
+    /// food. The catalog create is never repeated.
     public func retrySavedFoodLog() async {
         guard let foodID = savedFoodID, let intent = savedLogIntent else { return }
         switch savedFoodLogState {
-        case .retryable:
+        case .failed:
             await submitSavedFoodLog(foodID: foodID, intent: intent)
-        case .none, .logging, .pending, .logged:
+        case .none, .logging, .logged:
             break
         }
     }
 
     private func submitSavedFoodLog(
         foodID: String,
-        intent: CustomFoodLogIntent
+        intent: SavedFoodLogIntent
     ) async {
-        guard let attemptID = savedLogAttemptID else {
-            savedFoodLogState = .retryable(
-                message: String(localized: "library.reconcile.storeUnavailable")
-            )
-            return
-        }
-        let journalRequest: CustomFoodJournalRequest
-        do {
-            journalRequest = try engine.prepareJournalRequest(
-                attemptID: attemptID,
-                currentBaseURL: baseURL
-            )
-        } catch {
-            savedFoodLogState = .retryable(
-                message: String(localized: "library.reconcile.storeUnavailable")
-            )
-            return
-        }
-
         savedFoodLogState = .logging
         let draft = intent.logSubmissionDraft(productID: foodID)
         let name = savedFoodName ?? foodID
-        let outcome = await submissionService.submitPersisted(
-            LibraryPersistedLogRequest(
-                accountID: accountID,
-                operationID: journalRequest.operationID,
-                draft: draft,
-                itemName: name,
-                summary: name,
-                request: journalRequest.submissionRequest
-            )
+        let result = await submissionService.submit(
+            accountID: accountID,
+            drafts: [draft],
+            itemNames: [name],
+            summary: name,
+            baseURL: baseURL
         )
-        handleSavedFoodLogOutcome(
-            outcome,
-            intent: intent,
-            attemptID: attemptID
-        )
+        handleSavedFoodLogResult(result, intent: intent)
     }
 
-    private func handleSavedFoodLogOutcome(
-        _ outcome: LibraryLogHandoffOutcome,
-        intent: CustomFoodLogIntent,
-        attemptID: String
+    private func handleSavedFoodLogResult(
+        _ result: LogSubmissionServiceResult,
+        intent: SavedFoodLogIntent
     ) {
-        if outcome.journalOwned {
-            switch outcome.result {
-            case .success:
-                finishLogHandoff(attemptID)
-            case .failure(.uncertain), .failure(.conflict), .failure(.unauthorized):
-                finishLogHandoff(attemptID)
-            case .failure(.rejected),
-                 .failure(.missingComponents),
-                 .failure(.serverChanged),
-                 .failure(.reconciliationOnly),
-                 .failure(.capabilityUnavailable),
-                 .failure(.capabilityTemporarilyUnavailable),
-                 .failure(.journalUnavailable):
-                break
-            }
-        }
-
-        switch outcome.result {
-        case .success(let logs, let replayed):
-            finishLogHandoff(attemptID)
+        switch result {
+        case .success(let logs):
             let logID = logs.first?.id
-            savedFoodLogState = .logged(logID: logID, replayed: replayed)
-            submissionState = .completed(logID: logID, replayed: replayed)
+            savedFoodLogState = .logged(logID: logID)
+            submissionState = .completed(logID: logID)
             isDirty = false
             onLogged(intent.date, intent.mealSlot)
-        case .failure(.uncertain(let message)):
-            savedFoodLogState = .pending(message: message)
-        case .failure(.conflict(let message)):
-            savedFoodLogState = .pending(message: message)
         case .failure(.unauthorized):
-            savedFoodLogState = .pending(
+            savedFoodLogState = .failed(
                 message: String(localized: "foodDetail.error.sessionExpired")
             )
             onSessionExpired()
-        case .failure(.rejected(let message)),
-             .failure(.missingComponents(let message)),
-             .failure(.serverChanged(let message)),
-             .failure(.reconciliationOnly(let message)),
-             .failure(.capabilityUnavailable(let message)),
-             .failure(.capabilityTemporarilyUnavailable(let message)),
-             .failure(.journalUnavailable(let message)):
-            savedFoodLogState = .retryable(message: message)
+        case .failure(.uncertain):
+            savedFoodLogState = .failed(message: uncertainLogMessage())
+        case .failure(.failed(let message)):
+            savedFoodLogState = .failed(message: message)
         }
     }
 
-    private func finishLogHandoff(_ attemptID: String) {
-        try? engine.completeLogHandoff(attemptID: attemptID)
-        savedLogAttemptID = nil
-    }
-
-    private func handleSubmissionResult(
+    private func handleAdHocResult(
         _ result: LogSubmissionServiceResult,
         date: LocalDiaryDate,
         mealSlot: MealSlot?
     ) {
         switch result {
-        case .success(let logs, let replayed):
-            submissionState = .completed(
-                logID: logs.first?.id,
-                replayed: replayed
-            )
+        case .success(let logs):
+            submissionState = .completed(logID: logs.first?.id)
             isDirty = false
             onLogged(date, mealSlot)
-        case .failure(.rejected(let message)):
-            submissionState = .failed(message: message)
-        case .failure(.missingComponents(let message)):
-            submissionState = .failed(message: message)
         case .failure(.unauthorized):
-            submissionState = .pending(
+            submissionState = .failed(
                 message: String(localized: "foodDetail.error.sessionExpired")
             )
             onSessionExpired()
-        case .failure(.uncertain(let message)):
-            submissionState = .pending(message: message)
-        case .failure(.conflict(let message)):
-            submissionState = .pending(message: message)
-        case .failure(.serverChanged(let message)),
-             .failure(.reconciliationOnly(let message)):
-            submissionState = .pending(message: message)
-        case .failure(.capabilityUnavailable(let message)),
-             .failure(.capabilityTemporarilyUnavailable(let message)):
-            submissionState = .failed(message: message)
-        case .failure(.journalUnavailable(let message)):
-            // Reservation failed before the POST; resubmission is safe.
+        case .failure(.uncertain):
+            submissionState = .failed(message: uncertainLogMessage())
+        case .failure(.failed(let message)):
             submissionState = .failed(message: message)
         }
     }
 
-    public func reviewPendingLogs() {
-        onReviewPending()
-    }
-
-    public func openLibrary() {
-        onOpenLibrary()
+    private func uncertainLogMessage() -> String {
+        String(
+            localized: "library.log.uncertain",
+            defaultValue: "CalCo couldn't confirm this log. Check the library and diary before retrying."
+        )
     }
 
     // MARK: Form
@@ -930,8 +696,6 @@ public final class AdHocLogViewModel: ObservableObject {
     private func markDirty() {
         guard !isApplyingInitialValues else { return }
         isDirty = true
-        if !isReconciliationStoreBlocked {
-            formError = nil
-        }
+        formError = nil
     }
 }

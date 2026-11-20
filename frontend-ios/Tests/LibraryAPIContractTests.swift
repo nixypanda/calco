@@ -238,7 +238,7 @@ final class LibraryAPIContractTests: XCTestCase {
         XCTAssertEqual(recorder.all[1].url?.path, "/api/foods/custom/food-2")
     }
 
-    func testAdHocRequestUsesTopLevelIdempotencyKeyAndReturnsReplayStatus() async throws {
+    func testAdHocRequestCarriesNoIdempotencyKeyAndReturnsReplayStatus() async throws {
         let recorder = LibraryRequestRecorder()
         LibraryURLProtocol.setHandler { request in
             recorder.record(request)
@@ -276,10 +276,7 @@ final class LibraryAPIContractTests: XCTestCase {
                 NutrientAmountValue(code: "FAT_G", amount: "5", unit: "g"),
             ]
         )
-        let request = try AdHocLogRequestBuilder.makeRequest(
-            draft: draft,
-            idempotencyKey: "ad-hoc-key"
-        )
+        let request = try AdHocLogRequestBuilder.makeRequest(draft: draft)
         let (log, status) = try await makeClient().createAdHocLog(request)
 
         XCTAssertEqual(status, 200)
@@ -290,7 +287,7 @@ final class LibraryAPIContractTests: XCTestCase {
         let object = try XCTUnwrap(
             JSONSerialization.jsonObject(with: body) as? [String: Any]
         )
-        XCTAssertEqual(object["idempotency_key"] as? String, "ad-hoc-key")
+        XCTAssertNil(object["idempotency_key"])
         XCTAssertEqual(object["name"] as? String, "Bowl")
         XCTAssertEqual((object["quantity"] as? [String: Any])?["unit"] as? String, "bowl")
         let nutrients = try XCTUnwrap(object["nutrients"] as? [[String: Any]])

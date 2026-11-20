@@ -8,25 +8,20 @@ public final class LibraryViewModel: ObservableObject {
     @Published public private(set) var state: LibraryLoadState = .loading
     @Published public private(set) var foods: [CustomFood] = []
     @Published public private(set) var refreshError: String?
-    @Published public private(set) var pendingCreateAttempt: CustomFoodCreateAttempt?
-    @Published public private(set) var pendingCreateError: String?
     @Published public var searchText: String = ""
 
     public let accountID: String
 
     private let service: any LibraryServicing
-    private let reconciliationStore: CustomFoodReconciliationStore
     private let onSessionExpired: () -> Void
     private var loadGeneration = 0
 
     public init(
         service: any LibraryServicing,
-        reconciliationStore: CustomFoodReconciliationStore,
         accountID: String,
         onSessionExpired: @escaping () -> Void = {}
     ) {
         self.service = service
-        self.reconciliationStore = reconciliationStore
         self.accountID = accountID
         self.onSessionExpired = onSessionExpired
     }
@@ -55,7 +50,6 @@ public final class LibraryViewModel: ObservableObject {
             state = .loading
         }
         refreshError = nil
-        reloadPendingCreate()
         do {
             let fetched = try await service.listCustomFoods()
             guard generation == loadGeneration, !Task.isCancelled else { return }
@@ -81,7 +75,6 @@ public final class LibraryViewModel: ObservableObject {
                 refreshError = String(localized: "library.error.load")
             }
         }
-        reloadPendingCreate()
     }
 
     public func refresh() async {
@@ -92,16 +85,6 @@ public final class LibraryViewModel: ObservableObject {
         foods.removeAll { $0.id == id }
         if foods.isEmpty, state == .loaded {
             state = .loaded
-        }
-    }
-
-    public func reloadPendingCreate() {
-        do {
-            pendingCreateAttempt = try reconciliationStore.attempt(accountID: accountID)
-            pendingCreateError = nil
-        } catch {
-            pendingCreateAttempt = nil
-            pendingCreateError = String(localized: "library.reconcile.storeUnavailable")
         }
     }
 }

@@ -2,8 +2,8 @@
 //
 // A newly created secret lives only in this in-memory view model until the user
 // finishes the reveal. It is never written to defaults, files, or diagnostics.
-// An ambiguous create refreshes metadata and requires the user to leave the
-// form before another create can be attempted.
+// If a create response is ambiguous, metadata is refreshed and the user can
+// review the list; no automatic retry is made and no safety file is persisted.
 
 import Combine
 import Foundation
@@ -60,13 +60,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
     @Published public private(set) var copyState: APIKeyCopyState = .idle
     @Published public private(set) var uncertainMetadataRefreshFailed = false
 
-    /// Durable, non-secret record for a create whose outcome is unknown.
-    @Published public private(set) var pendingCreateIntent: APIKeyCreateIntent?
-    @Published public private(set) var potentialOrphanKeys: [APIKey] = []
-    @Published public private(set) var createIntentErrorMessage: String?
-    @Published public private(set) var createIntentRecoveryIdentity: APIKeyCreateIntentFileIdentity?
-    @Published public private(set) var isResetIntentConfirmationPresented = false
-
     @Published public private(set) var revokeTarget: APIKey?
     @Published public private(set) var revokingKeyID: String?
     @Published public private(set) var revokeState: APIKeyRevokeState = .idle
@@ -75,7 +68,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
 
     public let service: any APIKeyServicing
     private let clipboard: any APIKeySecretCopying
-    private let intentStore: any APIKeyCreateIntentStoring
     private let nowProvider: () -> Date
 
     private var hasLoaded = false
@@ -83,7 +75,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
     private var sessionExpired = false
     private var isSceneActive = true
     private var clipboardReceipt: APIKeyClipboardReceipt?
-    private var hasFreshInterruptedMetadata = false
 
     private var listRequestID = 0
     private var createRequestID = 0
@@ -95,14 +86,12 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
         service: any APIKeyServicing,
         accountID: String,
         clipboard: any APIKeySecretCopying = SystemAPIKeySecretClipboard(),
-        nowProvider: @escaping () -> Date = { Date() },
-        intentStore: any APIKeyCreateIntentStoring = APIKeyCreateIntentStore.shared
+        nowProvider: @escaping () -> Date = { Date() }
     ) {
         self.service = service
         self.accountID = accountID
         self.clipboard = clipboard
         self.nowProvider = nowProvider
-        self.intentStore = intentStore
     }
 
     // MARK: - Inspection
@@ -119,24 +108,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
 
     public var hasReachedActiveKeyLimit: Bool {
         activeKeyCount >= Self.maximumActiveKeys
-    }
-
-    /// A persisted or in-memory interrupted create must be explicitly
-    /// acknowledged or its possible orphan revoked before a new POST.
-    public var hasUnresolvedCreateIntent: Bool {
-        pendingCreateIntent != nil || createIntentErrorMessage != nil
-    }
-
-    public var isCreateBlocked: Bool {
-        hasUnresolvedCreateIntent || hasReachedActiveKeyLimit
-    }
-
-    public var canResetUnreadableCreateIntent: Bool {
-        createIntentRecoveryIdentity != nil
-            && hasFreshInterruptedMetadata
-            && listState == .loaded
-            && !sessionExpired
-            && !isBusy
     }
 
     public var isLoadingFirstPage: Bool {
@@ -176,8 +147,7 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
     public var isCreateFormEnabled: Bool {
         guard isCreatePresented,
               createdKey == nil,
-              !sessionExpired,
-              !hasUnresolvedCreateIntent else {
+              !sessionExpired else {
             return false
         }
         switch createState {
@@ -225,8 +195,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
 
     public func load() async {
         guard !sessionExpired else { return }
-        restoreCreateIntent()
-        hasFreshInterruptedMetadata = false
         let requestID = nextListRequestID()
         let hadKeys = !keys.isEmpty
         if hadKeys {
@@ -242,8 +210,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
             listState = .loaded
             isRefreshing = false
             listNotice = nil
-            refreshPotentialOrphanKeys()
-            hasFreshInterruptedMetadata = hasUnresolvedCreateIntent
             if let target = revokeTarget,
                !fetched.contains(where: { $0.id == target.id }) {
                 revokeTarget = nil
@@ -251,7 +217,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
         } catch {
             guard requestID == listRequestID, !sessionExpired else { return }
             isRefreshing = false
-            hasFreshInterruptedMetadata = false
             let serviceError = Self.serviceError(from: error)
             if serviceError.isUnauthorized {
                 expireSession()
@@ -271,7 +236,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
 
     public func presentCreateForm() {
         guard !sessionExpired, !isBusy, createdKey == nil else { return }
-        guard !hasUnresolvedCreateIntent else { return }
         guard listState == .loaded else { return }
         guard !hasReachedActiveKeyLimit else {
             listNotice = String(localized: "apiKeys.limit.message")
@@ -301,7 +265,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
     public func submitCreate() async {
         guard isCreateFormEnabled,
               !hasReachedActiveKeyLimit,
-              !hasUnresolvedCreateIntent,
               !sessionExpired,
               listState == .loaded else {
             return
@@ -312,32 +275,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
         ) else {
             return
         }
-
-        // The non-secret intent must be durable before the non-idempotent POST.
-        // If this write fails, or another window already owns an unresolved
-        // intent, no request is sent.
-        let intent = APIKeyCreateIntent(
-            accountID: accountID,
-            name: name,
-            scope: draftScope,
-            expiresInDays: draftExpiry.expiresInDays,
-            startedAt: nowProvider(),
-            baselineKeyIDs: keys.map(\.id)
-        )
-        do {
-            try intentStore.saveIfAbsent(intent)
-        } catch {
-            restoreCreateIntent()
-            if let storeError = error as? APIKeyCreateIntentStoreError,
-               storeError == .alreadyPending {
-                createState = .failed(Self.intentPendingMessage)
-            } else {
-                createState = .failed(Self.intentPersistenceMessage)
-            }
-            return
-        }
-        pendingCreateIntent = intent
-        refreshPotentialOrphanKeys()
 
         let request = APIKeyCreateRequest(
             name: name,
@@ -350,9 +287,7 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
 
         do {
             let created = try await service.createAPIKey(request)
-            guard requestID == createRequestID,
-                  !sessionExpired,
-                  accountID == intent.accountID else {
+            guard requestID == createRequestID, !sessionExpired else {
                 return
             }
             createdKey = created
@@ -368,18 +303,9 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
             }
             listState = .loaded
             listNotice = nil
-            // The secret is now in hand. Clear the non-secret intent, but never
-            // clear it for a stale session/account response.
-            clearResolvedCreateIntent(intent, excluding: created.key.id)
         } catch {
             let serviceError = Self.serviceError(from: error)
-            if serviceError.isDefinitiveCreateFailure {
-                // The server definitely did not commit this create.
-                clearResolvedCreateIntent(intent)
-            }
-            guard requestID == createRequestID,
-                  !sessionExpired,
-                  accountID == intent.accountID else {
+            guard requestID == createRequestID, !sessionExpired else {
                 return
             }
             if serviceError.isUnauthorized {
@@ -388,8 +314,8 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
             }
 
             if serviceError.isAmbiguousCreateFailure {
-                // The request may have committed. Refresh metadata and block
-                // resubmission in this form; do not issue another POST.
+                // The request may have committed. Refresh metadata and let the
+                // user review the list; do not issue another POST automatically.
                 createState = .uncertain(
                     String(localized: "apiKeys.create.uncertain.message")
                 )
@@ -409,78 +335,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
         await load()
         guard case .uncertain = createState, !sessionExpired else { return }
         uncertainMetadataRefreshFailed = listNotice != nil || listErrorMessage != nil
-    }
-
-    /// Re-read the list and recalculate possible orphans without retrying POST.
-    public func refreshInterruptedCreateMetadata() async {
-        guard hasUnresolvedCreateIntent else { return }
-        await load()
-    }
-
-    /// User reviewed the list and accepted that a possible key cannot be
-    /// recovered. CAS protects against clearing a newer intent from another
-    /// window.
-    public func acknowledgeInterruptedCreate() async {
-        guard let intent = pendingCreateIntent,
-              intent.accountID == accountID else { return }
-        do {
-            try intentStore.clear(
-                accountID: intent.accountID,
-                revision: intent.revision
-            )
-            if pendingCreateIntent?.revision == intent.revision {
-                pendingCreateIntent = nil
-                potentialOrphanKeys = []
-            }
-            createIntentErrorMessage = nil
-            createIntentRecoveryIdentity = nil
-            hasFreshInterruptedMetadata = false
-        } catch {
-            restoreCreateIntent()
-            createIntentErrorMessage = Self.intentPersistenceMessage
-        }
-    }
-
-    /// Opens the explicit destructive confirmation. Metadata must have been
-    /// refreshed successfully in this review session first.
-    public func requestResetUnreadableCreateIntent() {
-        guard canResetUnreadableCreateIntent else { return }
-        isResetIntentConfirmationPresented = true
-    }
-
-    public func cancelResetUnreadableCreateIntent() {
-        isResetIntentConfirmationPresented = false
-    }
-
-    /// Removes only the quarantined record whose identity the user reviewed.
-    /// A newer valid intent changes the file identity and rejects this reset.
-    public func confirmResetUnreadableCreateIntent() async {
-        guard let identity = createIntentRecoveryIdentity,
-              identity.accountID == accountID,
-              canResetUnreadableCreateIntent else {
-            isResetIntentConfirmationPresented = false
-            return
-        }
-        isResetIntentConfirmationPresented = false
-        do {
-            try intentStore.resetUnreadable(
-                accountID: identity.accountID,
-                expectedIdentity: identity
-            )
-            createIntentRecoveryIdentity = nil
-            createIntentErrorMessage = nil
-            pendingCreateIntent = nil
-            potentialOrphanKeys = []
-            hasFreshInterruptedMetadata = false
-        } catch {
-            let stale = (error as? APIKeyCreateIntentStoreError) == .staleReset
-            restoreCreateIntent()
-            if stale {
-                listNotice = Self.intentResetStaleMessage
-            } else {
-                createIntentErrorMessage = Self.intentResetFailedMessage
-            }
-        }
     }
 
     public func finishSecretReveal() {
@@ -546,18 +400,10 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
         do {
             try await service.revokeAPIKey(id: target.id)
             guard requestID == revokeRequestID, !sessionExpired else { return }
-            let wasPotentialOrphan = potentialOrphanKeys.contains { $0.id == target.id }
             keys.removeAll { $0.id == target.id }
             listNotice = nil
             revokingKeyID = nil
             revokeState = .idle
-            if pendingCreateIntent != nil {
-                refreshPotentialOrphanKeys()
-                if wasPotentialOrphan, potentialOrphanKeys.isEmpty {
-                    // Revoking the last possible orphan resolves the warning.
-                    await acknowledgeInterruptedCreate()
-                }
-            }
         } catch {
             guard requestID == revokeRequestID, !sessionExpired else { return }
             let serviceError = Self.serviceError(from: error)
@@ -610,12 +456,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
         listNotice = nil
         isCreatePresented = false
         resetCreateDraft()
-        pendingCreateIntent = nil
-        potentialOrphanKeys = []
-        createIntentErrorMessage = nil
-        createIntentRecoveryIdentity = nil
-        isResetIntentConfirmationPresented = false
-        hasFreshInterruptedMetadata = false
         revokeTarget = nil
         revokingKeyID = nil
         revokeState = .idle
@@ -634,12 +474,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
         listNotice = nil
         isCreatePresented = false
         resetCreateDraft()
-        pendingCreateIntent = nil
-        potentialOrphanKeys = []
-        createIntentErrorMessage = nil
-        createIntentRecoveryIdentity = nil
-        isResetIntentConfirmationPresented = false
-        hasFreshInterruptedMetadata = false
         revokeTarget = nil
         revokingKeyID = nil
         revokeState = .idle
@@ -670,69 +504,6 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
     private func clearDefinitiveCreateError() {
         guard case .failed = createState else { return }
         createState = .editing
-    }
-
-    // MARK: - Durable create-intent lifecycle
-
-    private func restoreCreateIntent() {
-        do {
-            let intent = try intentStore.load(accountID: accountID)
-            pendingCreateIntent = intent
-            createIntentErrorMessage = nil
-            createIntentRecoveryIdentity = nil
-            refreshPotentialOrphanKeys()
-        } catch {
-            // Fail closed. Keep an in-memory intent if this window already
-            // knew about one; never treat an unreadable record as absent.
-            if let storeError = error as? APIKeyCreateIntentStoreError,
-               case .unreadable(let identity) = storeError {
-                createIntentRecoveryIdentity = identity
-                createIntentErrorMessage = Self.intentUnreadableMessage
-            } else {
-                createIntentRecoveryIdentity = nil
-                createIntentErrorMessage = Self.intentPersistenceMessage
-            }
-            if pendingCreateIntent == nil {
-                potentialOrphanKeys = []
-            }
-        }
-    }
-
-    private func refreshPotentialOrphanKeys() {
-        guard let intent = pendingCreateIntent,
-              intent.accountID == accountID else {
-            potentialOrphanKeys = []
-            return
-        }
-        potentialOrphanKeys = intent.potentialOrphanKeys(from: keys)
-    }
-
-    /// Clears the non-secret intent only after a definitive result or a
-    /// successful secret handoff in the current account/session.
-    private func clearResolvedCreateIntent(
-        _ intent: APIKeyCreateIntent,
-        excluding handedOffKeyID: String? = nil
-    ) {
-        do {
-            try intentStore.clear(
-                accountID: intent.accountID,
-                revision: intent.revision
-            )
-            if pendingCreateIntent?.revision == intent.revision {
-                pendingCreateIntent = nil
-                potentialOrphanKeys = []
-            }
-            createIntentErrorMessage = nil
-            createIntentRecoveryIdentity = nil
-            isResetIntentConfirmationPresented = false
-            hasFreshInterruptedMetadata = false
-        } catch {
-            restoreCreateIntent()
-            createIntentErrorMessage = Self.intentPersistenceMessage
-            if let handedOffKeyID {
-                potentialOrphanKeys.removeAll { $0.id == handedOffKeyID }
-            }
-        }
     }
 
     private func clearOwnedClipboardSecret() {
@@ -792,40 +563,5 @@ public final class AccountSettingsViewModel: ObservableObject, Identifiable {
         case .unknown:
             return String(localized: "apiKeys.error.unknown")
         }
-    }
-
-    private static var intentPersistenceMessage: String {
-        String(
-            localized: "apiKeys.intent.persistence",
-            defaultValue: "The API-key safety record could not be saved or read. Key creation is disabled until it is resolved."
-        )
-    }
-
-    private static var intentPendingMessage: String {
-        String(
-            localized: "apiKeys.intent.pending",
-            defaultValue: "Another window has an unresolved API-key creation. Review it before creating another key."
-        )
-    }
-
-    private static var intentUnreadableMessage: String {
-        String(
-            localized: "apiKeys.intent.unreadable",
-            defaultValue: "The API-key safety record is unreadable. Key creation stays disabled. Review the key list for a possible orphan, then reset the safety record only if you accept that a key may exist without a recoverable secret."
-        )
-    }
-
-    private static var intentResetStaleMessage: String {
-        String(
-            localized: "apiKeys.intent.reset.stale",
-            defaultValue: "The safety record changed in another window. Review the refreshed warning before resetting."
-        )
-    }
-
-    private static var intentResetFailedMessage: String {
-        String(
-            localized: "apiKeys.intent.reset.failed",
-            defaultValue: "The unreadable safety record could not be reset. Try again."
-        )
     }
 }

@@ -2,8 +2,7 @@
 //
 // The backend serializes decimals as JSON strings on reads but accepts either
 // strings or numbers on writes. All request amounts are rounded to six decimal
-// places here to match the catalog's stored nutrient scale and to make a
-// reconciled read-back compare equal after a lost create response.
+// places here to match the catalog's stored nutrient scale.
 
 import Foundation
 
@@ -49,25 +48,7 @@ public enum CatalogDecimal {
     public static func canonical(_ value: Decimal?, scale: Int = 6) -> String? {
         value.map { canonical($0, scale: scale) }
     }
-
-    public static func same(_ lhs: Decimal, _ rhs: Decimal) -> Bool {
-        NSDecimalNumber(decimal: round(lhs)).compare(
-            NSDecimalNumber(decimal: round(rhs))
-        ) == .orderedSame
-    }
-
-    public static func same(_ lhs: Decimal?, _ rhs: Decimal?) -> Bool {
-        switch (lhs, rhs) {
-        case (nil, nil):
-            return true
-        case (.some(let left), .some(let right)):
-            return same(left, right)
-        default:
-            return false
-        }
-    }
 }
-
 public enum CustomFoodNutrientCodes {
     /// Required by the catalog for every custom food, in display order.
     public static let required = [
@@ -220,51 +201,6 @@ public struct CustomFood: Equatable, Identifiable, Sendable {
     public var fatGValue: Double {
         nutrients.first { $0.code == NutrientCodes.fatG }?.amountValue ?? 0
     }
-
-    /// The editable write form of a read model. Returns nil if the server sent
-    /// a decimal that this client cannot preserve; such a food must not be
-    /// silently rewritten with lossy values.
-    public func asWriteRequest() -> CustomFoodWriteRequest? {
-        let nutrientWrites: [CustomFoodNutrientWrite] = nutrients.compactMap { nutrient in
-            guard let amount = CatalogDecimal.parseNonNegative(nutrient.amountPer100g) else {
-                return nil
-            }
-            return CustomFoodNutrientWrite(
-                code: nutrient.code,
-                amountPer100g: CatalogDecimal.round(amount)
-            )
-        }
-        guard nutrientWrites.count == nutrients.count else { return nil }
-
-        let servingWrites: [CustomFoodServingWrite] = servings.compactMap { serving in
-            guard let grams = CatalogDecimal.parseNonNegative(serving.gramsPerUnit) else {
-                return nil
-            }
-            return CustomFoodServingWrite(
-                unit: serving.unit,
-                gramsPerUnit: CatalogDecimal.round(grams)
-            )
-        }
-        guard servingWrites.count == servings.count else { return nil }
-
-        let defaultQuantityValue: Decimal?
-        if let rawQuantity = defaultQuantity {
-            guard let parsed = CatalogDecimal.parseNonNegative(rawQuantity) else { return nil }
-            defaultQuantityValue = CatalogDecimal.round(parsed)
-        } else {
-            defaultQuantityValue = nil
-        }
-
-        return CustomFoodWriteRequest(
-            name: name,
-            brand: brand,
-            categories: categories,
-            defaultQuantity: defaultQuantityValue,
-            defaultUnit: defaultUnit,
-            nutrients: nutrientWrites,
-            servings: servingWrites
-        )
-    }
 }
 
 public struct CustomFoodListResponse: Decodable, Equatable, Sendable {
@@ -381,56 +317,5 @@ public struct CustomFoodWriteRequest: Codable, Equatable, Sendable {
             [CustomFoodServingWrite].self,
             forKey: .servings
         ) ?? []
-    }
-
-    /// Normalized comparison used only for matching a refreshed library item
-    /// to an uncertain create. Ordering and case are significant to the server
-    /// only where it normalizes them itself.
-    public func matches(_ other: CustomFoodWriteRequest) -> Bool {
-        guard normalizedName == other.normalizedName,
-              normalizedBrand == other.normalizedBrand,
-              normalizedCategories == other.normalizedCategories,
-              defaultUnit == other.defaultUnit,
-              CatalogDecimal.same(defaultQuantity, other.defaultQuantity),
-              nutrientKeys == other.nutrientKeys,
-              servingKeys == other.servingKeys
-        else { return false }
-        return true
-    }
-
-    private var normalizedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var normalizedBrand: String? {
-        guard let brand else { return nil }
-        let trimmed = brand.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private var normalizedCategories: [String] {
-        Array(
-            Set(
-                categories
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-                    .filter { !$0.isEmpty }
-            )
-        ).sorted()
-    }
-
-    private var nutrientKeys: [String] {
-        nutrients
-            .map {
-                "\($0.code)=\(CatalogDecimal.canonical($0.amountPer100g))"
-            }
-            .sorted()
-    }
-
-    private var servingKeys: [String] {
-        servings
-            .map {
-                "\($0.unit)=\(CatalogDecimal.canonical($0.gramsPerUnit))"
-            }
-            .sorted()
     }
 }

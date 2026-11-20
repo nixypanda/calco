@@ -204,96 +204,6 @@ private final class FakeAPIKeyClipboard: APIKeySecretCopying {
     var hasOwnedSecret: Bool { ownedSecret != nil }
 }
 
-private final class InMemoryAPIKeyCreateIntentStore:
-    APIKeyCreateIntentStoring, @unchecked Sendable
-{
-    private let lock = NSLock()
-    private var intents: [String: APIKeyCreateIntent] = [:]
-
-    func load(accountID: String) throws -> APIKeyCreateIntent? {
-        lock.withLock { intents[accountID] }
-    }
-
-    func saveIfAbsent(_ intent: APIKeyCreateIntent) throws {
-        try lock.withLock {
-            if intents[intent.accountID] != nil {
-                throw APIKeyCreateIntentStoreError.alreadyPending
-            }
-            intents[intent.accountID] = intent
-        }
-    }
-
-    func clear(accountID: String, revision: String) throws {
-        try lock.withLock {
-            guard let current = intents[accountID] else { return }
-            guard current.revision == revision else {
-                throw APIKeyCreateIntentStoreError.staleRevision
-            }
-            _ = intents.removeValue(forKey: accountID)
-        }
-    }
-
-    func resetUnreadable(
-        accountID: String,
-        expectedIdentity: APIKeyCreateIntentFileIdentity
-    ) throws {
-        // The in-memory fake only stores valid intents; resetting one would
-        // model exactly the stale-window hazard this test double must reject.
-        if intents[accountID] != nil {
-            throw APIKeyCreateIntentStoreError.staleReset
-        }
-    }
-}
-
-private final class UnreadableAPIKeyCreateIntentStore:
-    APIKeyCreateIntentStoring, @unchecked Sendable
-{
-    func load(accountID: String) throws -> APIKeyCreateIntent? {
-        throw APIKeyCreateIntentStoreError.unreadable(
-            APIKeyCreateIntentFileIdentity(
-                accountID: accountID,
-                digest: "fixture-unreadable"
-            )
-        )
-    }
-
-    func saveIfAbsent(_ intent: APIKeyCreateIntent) throws {
-        throw APIKeyCreateIntentStoreError.persistence
-    }
-
-    func clear(accountID: String, revision: String) throws {
-        throw APIKeyCreateIntentStoreError.persistence
-    }
-
-    func resetUnreadable(
-        accountID: String,
-        expectedIdentity: APIKeyCreateIntentFileIdentity
-    ) throws {
-        throw APIKeyCreateIntentStoreError.persistence
-    }
-}
-
-private final class SaveFailingAPIKeyCreateIntentStore:
-    APIKeyCreateIntentStoring, @unchecked Sendable
-{
-    func load(accountID: String) throws -> APIKeyCreateIntent? { nil }
-
-    func saveIfAbsent(_ intent: APIKeyCreateIntent) throws {
-        throw APIKeyCreateIntentStoreError.persistence
-    }
-
-    func clear(accountID: String, revision: String) throws {
-        throw APIKeyCreateIntentStoreError.persistence
-    }
-
-    func resetUnreadable(
-        accountID: String,
-        expectedIdentity: APIKeyCreateIntentFileIdentity
-    ) throws {
-        throw APIKeyCreateIntentStoreError.persistence
-    }
-}
-
 @MainActor
 final class AccountSettingsTests: XCTestCase {
     private let nowDate = APIKeyTimestamp.date(from: "2026-11-19T12:00:00Z")!
@@ -320,51 +230,13 @@ final class AccountSettingsTests: XCTestCase {
     private func makeViewModel(
         service: any APIKeyServicing,
         clipboard: FakeAPIKeyClipboard? = nil,
-        intentStore: (any APIKeyCreateIntentStoring)? = nil,
         accountID: String = "account-a"
     ) -> AccountSettingsViewModel {
         AccountSettingsViewModel(
             service: service,
             accountID: accountID,
             clipboard: clipboard ?? FakeAPIKeyClipboard(),
-            nowProvider: { [nowDate] in nowDate },
-            intentStore: intentStore ?? InMemoryAPIKeyCreateIntentStore()
-        )
-    }
-
-    private func makeTempDirectory() -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(
-                "calco-api-key-intent-\(UUID().uuidString)",
-                isDirectory: true
-            )
-        try? FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
-        )
-        addTeardownBlock {
-            try? FileManager.default.setAttributes(
-                [.posixPermissions: 0o700],
-                ofItemAtPath: directory.path
-            )
-            try? FileManager.default.removeItem(at: directory)
-        }
-        return directory
-    }
-
-    private func intentFile(in directory: URL) throws -> URL {
-        try XCTUnwrap(
-            FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: nil
-            ).first { $0.pathExtension == "json" }
-        )
-    }
-
-    private func ledgerDirectory(for intentDirectory: URL) -> URL {
-        intentDirectory.deletingLastPathComponent().appendingPathComponent(
-            "\(intentDirectory.lastPathComponent)-ledger",
-            isDirectory: true
+            nowProvider: { [nowDate] in nowDate }
         )
     }
 
@@ -511,7 +383,6 @@ final class AccountSettingsTests: XCTestCase {
         guard case .uncertain = viewModel.createState else {
             return XCTFail("Expected an uncertain create state")
         }
-        XCTAssertNotNil(viewModel.pendingCreateIntent)
         XCTAssertTrue(viewModel.isCreateSubmitDisabled)
 
         await viewModel.submitCreate()
@@ -548,116 +419,9 @@ final class AccountSettingsTests: XCTestCase {
         XCTAssertTrue(viewModel.isCreateSubmitDisabled)
     }
 
-    func testCreateIntentPersistsBeforePostWithoutSecretOrBody() async throws {
-        let directory = makeTempDirectory()
-        let store = APIKeyCreateIntentStore(directoryURL: directory)
-        let baseline = key(id: "key-existing", name: "Existing")
-        let service = HoldingCreateService(keys: [baseline])
-        let viewModel = makeViewModel(service: service, intentStore: store)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Nightly backup"
-        viewModel.draftScope = .readWrite
-        viewModel.draftExpiry = .days30
-
-        let create = Task { await viewModel.submitCreate() }
-        await service.waitForCreateStart()
-
-        let intent = try XCTUnwrap(try store.load(accountID: "account-a"))
-        XCTAssertEqual(intent.name, "Nightly backup")
-        XCTAssertEqual(intent.scope, .readWrite)
-        XCTAssertEqual(intent.expiresInDays, 30)
-        XCTAssertEqual(intent.startedAt, nowDate)
-        XCTAssertEqual(intent.baselineKeyIDs, ["key-existing"])
-
-        let files = try FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        )
-        let persistedText = try files.compactMap {
-            try? String(contentsOf: $0, encoding: .utf8)
-        }.joined(separator: "\n")
-        XCTAssertFalse(persistedText.contains("calco_pat_"))
-        XCTAssertFalse(persistedText.contains("token"))
-        XCTAssertFalse(persistedText.contains("secret"))
-        XCTAssertFalse(persistedText.contains("request"))
-
-        await service.releaseCreate()
-        await create.value
-        XCTAssertNil(try store.load(accountID: "account-a"))
-        XCTAssertNotNil(viewModel.createdKey)
-    }
-
-    func testIntentSaveFailureBlocksPost() async {
-        let service = FakeAPIKeyService()
-        let viewModel = makeViewModel(
-            service: service,
-            intentStore: SaveFailingAPIKeyCreateIntentStore()
-        )
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Blocked key"
-
-        await viewModel.submitCreate()
-
-        let requests = await service.createRequests()
-        XCTAssertEqual(requests.count, 0)
-        XCTAssertNil(viewModel.createdKey)
-        XCTAssertNotNil(viewModel.createErrorMessage)
-    }
-
-    func testUnreadableIntentStoreFailsClosedAndBlocksCreate() async {
-        let service = FakeAPIKeyService(keys: [key(id: "key-1")])
-        let viewModel = makeViewModel(
-            service: service,
-            intentStore: UnreadableAPIKeyCreateIntentStore()
-        )
-
-        await viewModel.load()
-
-        XCTAssertTrue(viewModel.hasUnresolvedCreateIntent)
-        XCTAssertNotNil(viewModel.createIntentErrorMessage)
-        viewModel.presentCreateForm()
-        XCTAssertFalse(viewModel.isCreatePresented)
-        let requests = await service.createRequests()
-        XCTAssertEqual(requests.count, 0)
-    }
-
-    func testPersistedIntentSurvivesRestartAndFutureMetadataRevealsOrphan() async {
-        let store = InMemoryAPIKeyCreateIntentStore()
-        let baseline = key(id: "key-baseline")
-        let service = FakeAPIKeyService(keys: [baseline])
-        await service.setCreateError(.timedOut)
-        let first = makeViewModel(service: service, intentStore: store)
-        await first.load()
-        first.presentCreateForm()
-        first.draftName = "Interrupted"
-        await first.submitCreate()
-        XCTAssertNotNil(first.pendingCreateIntent)
-
-        let restarted = makeViewModel(service: service, intentStore: store)
-        await restarted.load()
-        XCTAssertNotNil(restarted.pendingCreateIntent)
-        XCTAssertTrue(restarted.potentialOrphanKeys.isEmpty)
-        XCTAssertTrue(restarted.isCreateSubmitDisabled)
-        var createCount = await service.createRequests().count
-        XCTAssertEqual(createCount, 1)
-
-        await service.setKeys([key(id: "key-orphan", name: "Orphan"), baseline])
-        await restarted.load()
-
-        XCTAssertEqual(restarted.potentialOrphanKeys.map(\.id), ["key-orphan"])
-        createCount = await service.createRequests().count
-        XCTAssertEqual(createCount, 1)
-        await restarted.submitCreate()
-        createCount = await service.createRequests().count
-        XCTAssertEqual(createCount, 1)
-    }
-
-    func testHeldPostAccountSwitchKeepsOldAccountWarningAndDropsSecret() async {
-        let store = InMemoryAPIKeyCreateIntentStore()
+    func testHeldPostAccountSwitchKeepsOldAccountClearedAndAllowsFreshCreate() async {
         let service = HoldingCreateService()
-        let accountA = makeViewModel(service: service, intentStore: store)
+        let accountA = makeViewModel(service: service)
         await accountA.load()
         accountA.presentCreateForm()
         accountA.draftName = "Held create"
@@ -672,358 +436,16 @@ final class AccountSettingsTests: XCTestCase {
         XCTAssertFalse(accountA.isCreatePresented)
         XCTAssertTrue(accountA.keys.isEmpty)
 
-        let restartedA = makeViewModel(
-            service: service,
-            intentStore: store,
-            accountID: "account-a"
-        )
+        let restartedA = makeViewModel(service: service, accountID: "account-a")
         await restartedA.load()
+        restartedA.presentCreateForm()
 
-        XCTAssertNotNil(restartedA.pendingCreateIntent)
-        XCTAssertEqual(restartedA.potentialOrphanKeys.map(\.id), ["key-held-1"])
+        XCTAssertTrue(
+            restartedA.isCreatePresented,
+            "no durable intent should block a fresh create after relaunch"
+        )
         let createCount = await service.createCallCount()
         XCTAssertEqual(createCount, 1)
-        await restartedA.submitCreate()
-        let countAfterSubmit = await service.createCallCount()
-        XCTAssertEqual(countAfterSubmit, 1)
-    }
-
-    func testCreateIntentStoreRejectsConcurrentBeginAndStaleClear() throws {
-        let directory = makeTempDirectory()
-        let firstStore = APIKeyCreateIntentStore(directoryURL: directory)
-        let secondStore = APIKeyCreateIntentStore(directoryURL: directory)
-        let date = nowDate
-        let firstIntent = APIKeyCreateIntent(
-            accountID: "account-a",
-            revision: "revision-1",
-            name: "First",
-            scope: .read,
-            expiresInDays: nil,
-            startedAt: date,
-            baselineKeyIDs: []
-        )
-        let secondIntent = APIKeyCreateIntent(
-            accountID: "account-a",
-            revision: "revision-2",
-            name: "Second",
-            scope: .readWrite,
-            expiresInDays: 30,
-            startedAt: date,
-            baselineKeyIDs: []
-        )
-
-        try firstStore.saveIfAbsent(firstIntent)
-        XCTAssertNil(try firstStore.load(accountID: "account-b"))
-        XCTAssertThrowsError(try secondStore.saveIfAbsent(secondIntent)) {
-            XCTAssertEqual($0 as? APIKeyCreateIntentStoreError, .alreadyPending)
-        }
-        XCTAssertEqual(try firstStore.load(accountID: "account-a")?.name, "First")
-        XCTAssertThrowsError(
-            try secondStore.clear(accountID: "account-a", revision: "stale")
-        ) {
-            XCTAssertEqual($0 as? APIKeyCreateIntentStoreError, .staleRevision)
-        }
-
-        try firstStore.clear(accountID: "account-a", revision: "revision-1")
-        try secondStore.saveIfAbsent(secondIntent)
-        XCTAssertThrowsError(
-            try firstStore.clear(accountID: "account-a", revision: "revision-1")
-        ) {
-            XCTAssertEqual($0 as? APIKeyCreateIntentStoreError, .staleRevision)
-        }
-        XCTAssertEqual(try firstStore.load(accountID: "account-a")?.revision, "revision-2")
-
-        let file = try XCTUnwrap(
-            try FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: nil
-            ).first
-        )
-        try Data("not json".utf8).write(to: file, options: [.atomic])
-        XCTAssertThrowsError(try firstStore.load(accountID: "account-a")) {
-            guard case .unreadable(let identity) = $0 as? APIKeyCreateIntentStoreError else {
-                return XCTFail("Expected .unreadable, got \($0)")
-            }
-            XCTAssertEqual(identity.accountID, "account-a")
-        }
-    }
-
-    func testCorruptIntentQuarantineSurvivesNewStoreAndStaleResetRejected() throws {
-        let directory = makeTempDirectory()
-        let firstStore = APIKeyCreateIntentStore(directoryURL: directory)
-        let firstIntent = APIKeyCreateIntent(
-            accountID: "account-a",
-            revision: "revision-1",
-            name: "Corrupt me",
-            scope: .read,
-            expiresInDays: nil,
-            startedAt: nowDate,
-            baselineKeyIDs: []
-        )
-        try firstStore.saveIfAbsent(firstIntent)
-        let corruptFile = try intentFile(in: directory)
-        try Data("not json".utf8).write(to: corruptFile, options: [.atomic])
-
-        var capturedIdentity: APIKeyCreateIntentFileIdentity?
-        XCTAssertThrowsError(try firstStore.load(accountID: "account-a")) {
-            guard case .unreadable(let identity) = $0 as? APIKeyCreateIntentStoreError else {
-                return XCTFail("Expected .unreadable, got \($0)")
-            }
-            capturedIdentity = identity
-        }
-        let identity = try XCTUnwrap(capturedIdentity)
-        let filesAfterQuarantine = try FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        )
-        XCTAssertTrue(
-            filesAfterQuarantine.contains { $0.pathExtension == "quarantined" },
-            "Corruption must install a durable quarantine marker"
-        )
-
-        // Even if another process removes the corrupt file, a new store must
-        // not silently treat the account as having no unresolved create.
-        try FileManager.default.removeItem(at: corruptFile)
-        let newStore = APIKeyCreateIntentStore(directoryURL: directory)
-        XCTAssertThrowsError(try newStore.load(accountID: "account-a")) {
-            guard case .unreadable(let markerIdentity) =
-                $0 as? APIKeyCreateIntentStoreError else {
-                return XCTFail("Expected durable quarantine, got \($0)")
-            }
-            XCTAssertEqual(markerIdentity, identity)
-        }
-
-        XCTAssertThrowsError(
-            try newStore.resetUnreadable(
-                accountID: "account-a",
-                expectedIdentity: APIKeyCreateIntentFileIdentity(
-                    accountID: "account-a",
-                    digest: "wrong"
-                )
-            )
-        ) {
-            XCTAssertEqual($0 as? APIKeyCreateIntentStoreError, .staleReset)
-        }
-        try newStore.resetUnreadable(
-            accountID: "account-a",
-            expectedIdentity: identity
-        )
-        XCTAssertNil(try newStore.load(accountID: "account-a"))
-
-        let replacement = APIKeyCreateIntent(
-            accountID: "account-a",
-            revision: "revision-2",
-            name: "New valid intent",
-            scope: .readWrite,
-            expiresInDays: 30,
-            startedAt: nowDate,
-            baselineKeyIDs: []
-        )
-        try newStore.saveIfAbsent(replacement)
-        XCTAssertThrowsError(
-            try firstStore.resetUnreadable(
-                accountID: "account-a",
-                expectedIdentity: identity
-            )
-        ) {
-            XCTAssertEqual($0 as? APIKeyCreateIntentStoreError, .staleReset)
-        }
-        XCTAssertEqual(
-            try newStore.load(accountID: "account-a")?.revision,
-            "revision-2",
-            "A stale window must not erase a newer valid intent"
-        )
-    }
-
-    func testFallbackLedgerResetCoversMarkerWriteFailureAndRejectsStaleWindow() throws {
-        let directory = makeTempDirectory()
-        let ledger = ledgerDirectory(for: directory)
-        addTeardownBlock {
-            try? FileManager.default.setAttributes(
-                [.posixPermissions: 0o700],
-                ofItemAtPath: directory.path
-            )
-            try? FileManager.default.removeItem(at: ledger)
-        }
-        let store = APIKeyCreateIntentStore(directoryURL: directory)
-        try store.saveIfAbsent(
-            APIKeyCreateIntent(
-                accountID: "account-a",
-                revision: "revision-1",
-                name: "Fallback",
-                scope: .read,
-                expiresInDays: nil,
-                startedAt: nowDate,
-                baselineKeyIDs: []
-            )
-        )
-        let corruptFile = try intentFile(in: directory)
-        try Data("not json".utf8).write(to: corruptFile, options: [.atomic])
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o500],
-            ofItemAtPath: directory.path
-        )
-        var capturedIdentity: APIKeyCreateIntentFileIdentity?
-        XCTAssertThrowsError(try store.load(accountID: "account-a")) {
-            guard case .unreadable(let identity) = $0 as? APIKeyCreateIntentStoreError else {
-                return XCTFail("Expected .unreadable, got \($0)")
-            }
-            capturedIdentity = identity
-        }
-        let identity = try XCTUnwrap(capturedIdentity)
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o700],
-            ofItemAtPath: directory.path
-        )
-        try FileManager.default.removeItem(at: corruptFile)
-
-        let restarted = APIKeyCreateIntentStore(directoryURL: directory)
-        XCTAssertThrowsError(try restarted.load(accountID: "account-a")) {
-            guard case .unreadable = $0 as? APIKeyCreateIntentStoreError else {
-                return XCTFail("Expected ledger fallback block, got \($0)")
-            }
-        }
-
-        try restarted.resetUnreadable(
-            accountID: "account-a",
-            expectedIdentity: identity
-        )
-        XCTAssertNil(try restarted.load(accountID: "account-a"))
-
-        let replacement = APIKeyCreateIntent(
-            accountID: "account-a",
-            revision: "revision-2",
-            name: "Replacement",
-            scope: .readWrite,
-            expiresInDays: 30,
-            startedAt: nowDate,
-            baselineKeyIDs: []
-        )
-        try restarted.saveIfAbsent(replacement)
-        XCTAssertThrowsError(
-            try store.resetUnreadable(
-                accountID: "account-a",
-                expectedIdentity: identity
-            )
-        ) {
-            XCTAssertEqual($0 as? APIKeyCreateIntentStoreError, .staleReset)
-        }
-        XCTAssertEqual(
-            try restarted.load(accountID: "account-a")?.revision,
-            "revision-2"
-        )
-    }
-
-    func testCorruptFallbackLedgerFailsClosed() throws {
-        let directory = makeTempDirectory()
-        let ledger = ledgerDirectory(for: directory)
-        addTeardownBlock {
-            try? FileManager.default.removeItem(at: ledger)
-        }
-        let store = APIKeyCreateIntentStore(directoryURL: directory)
-        try store.saveIfAbsent(
-            APIKeyCreateIntent(
-                accountID: "account-a",
-                revision: "revision-1",
-                name: "Ledger",
-                scope: .read,
-                expiresInDays: nil,
-                startedAt: nowDate,
-                baselineKeyIDs: []
-            )
-        )
-        let ledgerFile = try XCTUnwrap(
-            FileManager.default.contentsOfDirectory(
-                at: ledger,
-                includingPropertiesForKeys: nil
-            ).first { $0.pathExtension == "json" }
-        )
-        try Data("broken ledger".utf8).write(to: ledgerFile, options: [.atomic])
-
-        XCTAssertThrowsError(try store.load(accountID: "account-a")) {
-            XCTAssertEqual($0 as? APIKeyCreateIntentStoreError, .unavailable)
-        }
-    }
-
-    func testUnreadableIntentResetNeedsRefreshedMetadataConfirmationAndAllowsNewCreate() async throws {
-        let directory = makeTempDirectory()
-        let store = APIKeyCreateIntentStore(directoryURL: directory)
-        try store.saveIfAbsent(
-            APIKeyCreateIntent(
-                accountID: "account-a",
-                revision: "revision-1",
-                name: "Unreadable",
-                scope: .read,
-                expiresInDays: nil,
-                startedAt: nowDate,
-                baselineKeyIDs: []
-            )
-        )
-        let file = try intentFile(in: directory)
-        try Data("{broken".utf8).write(to: file, options: [.atomic])
-
-        let service = FakeAPIKeyService(keys: [key(id: "key-1")])
-        let viewModel = makeViewModel(service: service, intentStore: store)
-        await viewModel.load()
-
-        XCTAssertTrue(viewModel.hasUnresolvedCreateIntent)
-        XCTAssertNotNil(viewModel.createIntentRecoveryIdentity)
-        XCTAssertTrue(viewModel.canResetUnreadableCreateIntent)
-        viewModel.presentCreateForm()
-        XCTAssertFalse(viewModel.isCreatePresented)
-
-        viewModel.requestResetUnreadableCreateIntent()
-        XCTAssertTrue(viewModel.isResetIntentConfirmationPresented)
-        viewModel.cancelResetUnreadableCreateIntent()
-        XCTAssertFalse(viewModel.isResetIntentConfirmationPresented)
-        XCTAssertTrue(viewModel.hasUnresolvedCreateIntent)
-        XCTAssertTrue(viewModel.canResetUnreadableCreateIntent)
-        viewModel.presentCreateForm()
-        XCTAssertFalse(viewModel.isCreatePresented)
-
-        await viewModel.refreshInterruptedCreateMetadata()
-        XCTAssertTrue(viewModel.canResetUnreadableCreateIntent)
-        viewModel.requestResetUnreadableCreateIntent()
-        await viewModel.confirmResetUnreadableCreateIntent()
-
-        XCTAssertFalse(viewModel.hasUnresolvedCreateIntent)
-        XCTAssertNil(viewModel.createIntentRecoveryIdentity)
-        XCTAssertNil(try store.load(accountID: "account-a"))
-
-        viewModel.presentCreateForm()
-        XCTAssertTrue(viewModel.isCreatePresented)
-        viewModel.draftName = "After reset"
-        await viewModel.submitCreate()
-
-        XCTAssertEqual(viewModel.createState, .created)
-        XCTAssertNil(try store.load(accountID: "account-a"))
-    }
-
-    func testRevokingLastPossibleOrphanClearsInterruptedCreateWarning() async throws {
-        let store = InMemoryAPIKeyCreateIntentStore()
-        try store.saveIfAbsent(
-            APIKeyCreateIntent(
-                accountID: "account-a",
-                revision: "revision-1",
-                name: "Interrupted",
-                scope: .read,
-                expiresInDays: nil,
-                startedAt: nowDate,
-                baselineKeyIDs: []
-            )
-        )
-        let orphan = key(id: "key-orphan")
-        let service = FakeAPIKeyService(keys: [orphan])
-        let viewModel = makeViewModel(service: service, intentStore: store)
-        await viewModel.load()
-        XCTAssertEqual(viewModel.potentialOrphanKeys.map(\.id), ["key-orphan"])
-
-        viewModel.requestRevoke(orphan)
-        await viewModel.confirmRevoke()
-
-        XCTAssertNil(viewModel.pendingCreateIntent)
-        XCTAssertTrue(viewModel.potentialOrphanKeys.isEmpty)
-        XCTAssertNil(try store.load(accountID: "account-a"))
     }
 
     func testClipboardCleanupClearsOnlyOwnedSecret() async {
@@ -1072,26 +494,6 @@ final class AccountSettingsTests: XCTestCase {
         XCTAssertFalse(accountClipboard.hasOwnedSecret)
     }
 
-    func testAmbiguousIntentRemainsUntilExplicitAcknowledge() async {
-        let store = InMemoryAPIKeyCreateIntentStore()
-        let service = FakeAPIKeyService()
-        await service.setCreateError(.timedOut)
-        let viewModel = makeViewModel(service: service, intentStore: store)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Ambiguous"
-        await viewModel.submitCreate()
-        XCTAssertNotNil(try store.load(accountID: "account-a"))
-
-        viewModel.cancelCreateForm()
-        await viewModel.refreshInterruptedCreateMetadata()
-        await viewModel.acknowledgeInterruptedCreate()
-
-        XCTAssertNil(try store.load(accountID: "account-a"))
-        XCTAssertNil(viewModel.pendingCreateIntent)
-        XCTAssertTrue(viewModel.potentialOrphanKeys.isEmpty)
-    }
-
     func testDefinitiveCreateFailureAllowsExplicitRetry() async {
         let service = FakeAPIKeyService()
         await service.setCreateError(.limitReached)
@@ -1102,7 +504,6 @@ final class AccountSettingsTests: XCTestCase {
 
         await viewModel.submitCreate()
         XCTAssertEqual(viewModel.createErrorMessage, String(localized: "apiKeys.limit.message"))
-        XCTAssertNil(viewModel.pendingCreateIntent)
         let firstCallCount = await service.createRequests().count
         XCTAssertEqual(firstCallCount, 1)
 

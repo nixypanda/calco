@@ -347,7 +347,7 @@ public enum APIKeyServiceError: Error, Equatable, Sendable {
     case unknown
 
     /// A create can reach the server even when the client never sees a
-    /// response. Those failures must refresh metadata instead of retrying.
+    /// response. Those failures refresh metadata instead of retrying.
     public var isAmbiguousCreateFailure: Bool {
         switch self {
         case .networkUnavailable, .timedOut, .cancelled, .server, .invalidResponse:
@@ -359,17 +359,6 @@ public enum APIKeyServiceError: Error, Equatable, Sendable {
 
     public var isUnauthorized: Bool {
         self == .unauthorized
-    }
-
-    /// A definitive result proves the server did not commit a key, so the
-    /// durable create intent can be cleared. Ambiguous failures must keep it.
-    public var isDefinitiveCreateFailure: Bool {
-        switch self {
-        case .unauthorized, .rateLimited, .limitReached, .notFound, .rejected:
-            return true
-        case .networkUnavailable, .timedOut, .cancelled, .server, .invalidResponse, .unknown:
-            return false
-        }
     }
 }
 

@@ -1,5 +1,5 @@
 // Meal detail state: recipe load, component-name resolution, server portion
-// preview, deletion, and journal-backed logging.
+// preview, deletion, and logging.
 
 import Combine
 import Foundation
@@ -15,7 +15,6 @@ public final class MealDetailViewModel: ObservableObject {
     @Published public private(set) var logState: MealLogState = .idle
     @Published public private(set) var unitFallbackNotice: String?
     @Published public private(set) var portionFallbackNotice: String?
-    @Published public private(set) var canReviewPendingLog = false
 
     @Published public var portionAmount: String = "100" {
         didSet {
@@ -48,7 +47,6 @@ public final class MealDetailViewModel: ObservableObject {
     private let onSessionExpired: () -> Void
     private let onDeleted: (() -> Void)?
     private let onLogged: ((LocalDiaryDate, MealSlot?) -> Void)?
-    private let onReviewPending: () -> Void
     private let fallbackName: String?
     private let preferredPortion: NutritionQuantity?
     private let timeZoneProvider: () -> String
@@ -72,7 +70,6 @@ public final class MealDetailViewModel: ObservableObject {
         onSessionExpired: @escaping () -> Void = {},
         onDeleted: (() -> Void)? = nil,
         onLogged: ((LocalDiaryDate, MealSlot?) -> Void)? = nil,
-        onReviewPending: @escaping () -> Void = {},
         timeZoneProvider: @escaping () -> String = { TimeZone.current.identifier },
         previewDebounceNanoseconds: UInt64 = 300_000_000
     ) {
@@ -85,7 +82,6 @@ public final class MealDetailViewModel: ObservableObject {
         self.onSessionExpired = onSessionExpired
         self.onDeleted = onDeleted
         self.onLogged = onLogged
-        self.onReviewPending = onReviewPending
         self.timeZoneProvider = timeZoneProvider
         self.previewDebounceNanoseconds = previewDebounceNanoseconds
         self.mealSlot = mealSlot
@@ -305,17 +301,11 @@ public final class MealDetailViewModel: ObservableObject {
         }
 
         logState = .submitting
-        canReviewPendingLog = false
         onSubmitDrafts([draft], [meal.name], meal.name) { [weak self] result in
             Task { @MainActor in
                 self?.finishLog(result)
             }
         }
-    }
-
-    public func reviewPendingLog() {
-        guard canReviewPendingLog else { return }
-        onReviewPending()
     }
 
     public func dismissLogResult() {
@@ -522,25 +512,19 @@ public final class MealDetailViewModel: ObservableObject {
 
     private func finishLog(_ result: LogSubmissionServiceResult) {
         switch result {
-        case .success(let logs, _):
-            canReviewPendingLog = false
+        case .success(let logs):
             logState = .succeeded(logID: logs.first?.id)
             onLogged?(date, mealSlot)
-        case .failure(let failure):
-            if failure == .unauthorized {
-                canReviewPendingLog = false
-                onSessionExpired()
-            } else {
-                switch failure {
-                case .uncertain, .conflict, .serverChanged, .reconciliationOnly,
-                     .journalUnavailable:
-                    canReviewPendingLog = true
-                case .unauthorized, .rejected, .missingComponents,
-                     .capabilityUnavailable, .capabilityTemporarilyUnavailable:
-                    canReviewPendingLog = false
-                }
-            }
-            logState = .failed(failure.message)
+        case .failure(.unauthorized):
+            onSessionExpired()
+            logState = .failed(String(localized: "foodDetail.error.sessionExpired"))
+        case .failure(.uncertain):
+            logState = .failed(String(
+                localized: "meals.detail.log.uncertain",
+                defaultValue: "CalCo couldn't confirm this log. Check the diary before retrying."
+            ))
+        case .failure(.failed(let message)):
+            logState = .failed(message)
         }
     }
 }

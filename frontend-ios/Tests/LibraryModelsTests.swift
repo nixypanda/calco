@@ -309,48 +309,7 @@ final class LibraryModelsTests: XCTestCase {
         )
     }
 
-    // MARK: Reconciliation matching
-
-    func testCandidateMatchingNormalizesOrderAndScaleAndExcludesBaseline() {
-        let draft = CustomFoodWriteRequest(
-            name: "Oats",
-            categories: ["oats", "breakfast"],
-            nutrients: [
-                .init(code: "PROTEIN_G", amountPer100g: 4),
-                .init(code: "ENERGY_KCAL", amountPer100g: 100),
-            ],
-            servings: []
-        )
-        let product = ProductDetail(
-            id: "new-food",
-            source: "USER",
-            visibility: "global",
-            name: "Oats",
-            categories: ["breakfast", "oats"],
-            nutrients: [
-                ProductNutrient(code: "ENERGY_KCAL", amountPer100g: "100.000000", unit: "kcal"),
-                ProductNutrient(code: "PROTEIN_G", amountPer100g: "4.000000", unit: "g"),
-            ]
-        )
-        let attempt = CustomFoodCreateAttempt(
-            accountID: "account",
-            draft: draft,
-            baselineFoodIDs: ["old-food"],
-            message: "uncertain"
-        )
-
-        XCTAssertEqual(attempt.matches(in: [CustomFood(product: product)]).map(\.id), [
-            "new-food",
-        ])
-        let baselineFood = CustomFood(product: product)
-        let withBaseline = CustomFoodCreateAttempt(
-            accountID: "account",
-            draft: draft,
-            baselineFoodIDs: ["new-food"],
-            message: "uncertain"
-        )
-        XCTAssertTrue(withBaseline.matches(in: [baselineFood]).isEmpty)
-    }
+    // MARK: Decimal parsing
 
     func testCatalogDecimalCanonicalizesAndRejectsMalformedInput() {
         XCTAssertEqual(CatalogDecimal.parseNonNegative("1,5"), Decimal(string: "1.5"))

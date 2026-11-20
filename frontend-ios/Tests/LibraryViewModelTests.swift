@@ -2,52 +2,23 @@ import XCTest
 
 @testable import CalCo
 
-private final class LibraryReadyCapabilityProvider: LogCreationCapabilityProviding, @unchecked Sendable {
-    let baseURL = URL(string: "http://127.0.0.1:3002")!
-
-    func fetchCapabilities() async throws -> LogCreationIdempotencyCapability {
-        LogCreationIdempotencyCapability(
-            version: 2,
-            single: true,
-            adHoc: true,
-            batch: true,
-            batchKeyLocation: "top_level",
-            deletedOperationReplay: "conflict",
-            preMigrationDeletedKeys: "reconciliation_only"
-        )
-    }
-}
-
 @MainActor
 final class LibraryViewModelTests: XCTestCase {
     private let date = LocalDiaryDate(year: 2026, month: 11, day: 19)
     private let accountID = "account-a"
 
-    private func makeStore(
-        persistence: MemoryReconciliationPersistence = MemoryReconciliationPersistence()
-    ) -> CustomFoodReconciliationStore {
-        CustomFoodReconciliationStore(persistence: persistence)
-    }
-
     private func makeEditor(
         mode: CustomFoodEditorMode = .create,
         service: FakeLibraryService,
-        submission: FakeLibraryLogSubmissionService,
-        store: CustomFoodReconciliationStore,
         assistantDraft: AssistantReviewedDraft? = nil,
         initialBarcode: String? = nil,
-        onSaved: @escaping (String) -> Void = { _ in },
-        onLogged: @escaping (LocalDiaryDate, MealSlot?) -> Void = { _, _ in }
+        onSaved: @escaping (String) -> Void = { _ in }
     ) -> CustomFoodEditorViewModel {
         CustomFoodEditorViewModel(
             mode: mode,
             service: service,
-            submissionService: submission,
-            reconciliationStore: store,
             accountID: accountID,
-            timeZoneProvider: { "Asia/Kolkata" },
             onSaved: onSaved,
-            onLogged: onLogged,
             assistantDraft: assistantDraft,
             initialBarcode: initialBarcode
         )
@@ -56,14 +27,12 @@ final class LibraryViewModelTests: XCTestCase {
     private func makeAdHoc(
         service: FakeLibraryService,
         submission: any LibraryLogSubmitting,
-        store: CustomFoodReconciliationStore,
         assistantDraft: AssistantReviewedDraft? = nil,
         onLogged: @escaping (LocalDiaryDate, MealSlot?) -> Void = { _, _ in }
     ) -> AdHocLogViewModel {
         AdHocLogViewModel(
             service: service,
             submissionService: submission,
-            reconciliationStore: store,
             accountID: accountID,
             initialDate: date,
             today: date,
@@ -155,17 +124,10 @@ final class LibraryViewModelTests: XCTestCase {
         viewModel.mode = .saveAndLog
     }
 
-    func testCreateRetainsReturnedIDAndClearsDurableAttempt() async throws {
+    func testCreateRetainsReturnedID() async throws {
         let service = FakeLibraryService()
-        let store = makeStore()
-        let submission = FakeLibraryLogSubmissionService(results: [])
         var savedID: String?
-        let editor = makeEditor(
-            service: service,
-            submission: submission,
-            store: store,
-            onSaved: { savedID = $0 }
-        )
+        let editor = makeEditor(service: service, onSaved: { savedID = $0 })
         await editor.load()
         editor.name = "Oats"
         fillRequiredNutrients(editor)
@@ -176,15 +138,12 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(editor.savedFoodID, "new-food")
         XCTAssertEqual(savedID, "new-food")
         XCTAssertEqual(service.createCallCount, 1)
-        XCTAssertNil(try store.attempt(accountID: accountID))
         XCTAssertFalse(editor.hasUnsavedChanges)
     }
 
-    func testUncertainCreateRequiresExplicitReconciliationWithoutSecondPOST() async throws {
+    func testCreateUncertainShowsOrdinaryErrorAndAllowsExplicitRetry() async throws {
         let service = FakeLibraryService()
-        let store = makeStore()
-        let submission = FakeLibraryLogSubmissionService(results: [])
-        let editor = makeEditor(service: service, submission: submission, store: store)
+        let editor = makeEditor(service: service)
         await editor.load()
         editor.name = "Oats"
         fillRequiredNutrients(editor)
@@ -192,62 +151,23 @@ final class LibraryViewModelTests: XCTestCase {
 
         await editor.submit()
 
-        XCTAssertTrue(editor.isReconciling)
         XCTAssertNil(editor.savedFoodID)
         XCTAssertEqual(service.createCallCount, 1)
-        XCTAssertEqual(
-            try store.attempt(accountID: accountID)?.draft.name,
-            "Oats"
-        )
-
-        // A second submit while reconciliation is pending can do nothing.
-        await editor.submit()
-        XCTAssertEqual(service.createCallCount, 1)
-
-        let request = try XCTUnwrap(service.createdRequests.first)
-        service.enqueueList(
-            .success([LibraryTestFixtures.food(matching: request, id: "recovered")])
-        )
-        await editor.refreshReconciliationCandidates()
-        XCTAssertEqual(editor.reconciliationCandidates.map(\.id), ["recovered"])
-
-        await editor.useReconciledFood(editor.reconciliationCandidates[0])
-
-        XCTAssertEqual(editor.savedFoodID, "recovered")
-        XCTAssertFalse(editor.isReconciling)
-        XCTAssertEqual(service.createCallCount, 1)
-        XCTAssertNil(try store.attempt(accountID: accountID))
-    }
-
-    func testBaselineListFailureBlocksCreateBeforePOST() async throws {
-        let service = FakeLibraryService()
-        let editor = makeEditor(
-            mode: .create,
-            service: service,
-            submission: FakeLibraryLogSubmissionService(results: []),
-            store: makeStore()
-        )
-        await editor.load()
-        editor.name = "Oats"
-        fillRequiredNutrients(editor)
-        service.enqueueList(.failure(.uncertain("offline")))
-
-        await editor.submit()
-
-        XCTAssertEqual(service.createCallCount, 0)
         XCTAssertNotNil(editor.submitError)
-        XCTAssertNil(editor.savedFoodID)
+        XCTAssertTrue(editor.isFormEditable)
+
+        // A deliberate second submit is a normal duplicate-capable retry; no
+        // durable guard or reconciliation state blocks it.
+        service.enqueueCreate(.success("new-food"))
+        await editor.submit()
+        XCTAssertEqual(editor.savedFoodID, "new-food")
+        XCTAssertEqual(service.createCallCount, 2)
     }
 
     func testEditLoadsAndSavesServings() async throws {
         let service = FakeLibraryService()
         service.storeFood(LibraryTestFixtures.food(id: "food-1"))
-        let editor = makeEditor(
-            mode: .edit(id: "food-1"),
-            service: service,
-            submission: FakeLibraryLogSubmissionService(results: []),
-            store: makeStore()
-        )
+        let editor = makeEditor(mode: .edit(id: "food-1"), service: service)
         await editor.load()
         XCTAssertEqual(editor.name, "Oats")
         editor.addServingRow()
@@ -265,13 +185,12 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(editor.savedFoodID, "food-1")
     }
 
-    func testSaveThenLogUncertainRetainsFoodIDAndDoesNotCreateAgain() async throws {
+    func testSaveThenLogUncertainRetainsFoodIDAndRetryLogsWithoutCreate() async throws {
         let service = FakeLibraryService()
-        let store = makeStore()
         let submission = FakeLibraryLogSubmissionService(
             results: [.failure(.uncertain("lost log response"))]
         )
-        let adHoc = makeAdHoc(service: service, submission: submission, store: store)
+        let adHoc = makeAdHoc(service: service, submission: submission)
         await adHoc.load()
         fillAdHoc(adHoc)
         service.enqueueCreate(.success("new-food"))
@@ -280,33 +199,32 @@ final class LibraryViewModelTests: XCTestCase {
         await adHoc.confirmReview()
 
         XCTAssertEqual(adHoc.savedFoodID, "new-food")
-        guard case .pending = adHoc.savedFoodLogState else {
-            return XCTFail("uncertain log must be pending")
+        guard case .failed = adHoc.savedFoodLogState else {
+            return XCTFail("uncertain log must report a failed message")
         }
         XCTAssertEqual(service.createCallCount, 1)
         XCTAssertEqual(submission.submissions.count, 1)
         XCTAssertFalse(adHoc.canReview)
 
-        // Retry is not offered for an uncertain journal entry.
+        submission.enqueue(.success([]))
         await adHoc.retrySavedFoodLog()
-        XCTAssertEqual(submission.submissions.count, 1)
+        XCTAssertEqual(submission.submissions.count, 2)
+        XCTAssertEqual(submission.submissions[1].drafts[0].item, .product(id: "new-food"))
         XCTAssertEqual(service.createCallCount, 1)
     }
 
-    func testSaveThenLogRetryableRetriesProductOnly() async throws {
+    func testSaveThenLogDefinitiveFailureRetriesProductOnly() async throws {
         let service = FakeLibraryService()
-        let store = makeStore()
         let submission = FakeLibraryLogSubmissionService(
             results: [
-                .failure(.rejected("invalid log")),
-                .success(logs: [], replayed: false),
+                .failure(.failed("invalid log")),
+                .success([]),
             ]
         )
         var loggedDate: LocalDiaryDate?
         let adHoc = makeAdHoc(
             service: service,
             submission: submission,
-            store: store,
             onLogged: { date, _ in loggedDate = date }
         )
         await adHoc.load()
@@ -316,7 +234,7 @@ final class LibraryViewModelTests: XCTestCase {
         adHoc.requestReview()
         await adHoc.confirmReview()
         XCTAssertEqual(adHoc.savedFoodID, "new-food")
-        guard case .retryable = adHoc.savedFoodLogState else {
+        guard case .failed = adHoc.savedFoodLogState else {
             return XCTFail("definitive rejection must be retryable")
         }
 
@@ -329,16 +247,32 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(loggedDate, date)
     }
 
-    func testLogOnlyUsesJournalDraftWithAbsoluteNutrientsAndNoCreate() async throws {
+    func testSaveAndLogKeepsRetainedFoodWhenLogFails() async throws {
         let service = FakeLibraryService()
         let submission = FakeLibraryLogSubmissionService(
-            results: [.success(logs: [], replayed: false)]
+            results: [.failure(.failed("server rejected"))]
         )
+        let adHoc = makeAdHoc(service: service, submission: submission)
+        await adHoc.load()
+        fillAdHoc(adHoc)
+        service.enqueueCreate(.success("new-food"))
+
+        adHoc.requestReview()
+        await adHoc.confirmReview()
+
+        XCTAssertEqual(adHoc.savedFoodID, "new-food")
+        XCTAssertEqual(adHoc.savedLogIntent?.amount, "1")
+        XCTAssertEqual(service.createCallCount, 1)
+        XCTAssertEqual(submission.submissions.count, 1)
+    }
+
+    func testLogOnlyUsesAdHocDraftWithAbsoluteNutrientsAndNoCreate() async throws {
+        let service = FakeLibraryService()
+        let submission = FakeLibraryLogSubmissionService(results: [.success([])])
         var loggedDate: LocalDiaryDate?
         let adHoc = makeAdHoc(
             service: service,
             submission: submission,
-            store: makeStore(),
             onLogged: { date, _ in loggedDate = date }
         )
         await adHoc.load()
@@ -366,12 +300,12 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(loggedDate, date)
     }
 
-    func testUncertainAdHocLogCannotBeResubmittedFromTheForm() async throws {
+    func testUncertainAdHocLogShowsFailureAndAllowsAnotherReview() async throws {
         let service = FakeLibraryService()
         let submission = FakeLibraryLogSubmissionService(
-            results: [.failure(.uncertain("lost"))]
+            results: [.failure(.uncertain("lost")), .success([])]
         )
-        let adHoc = makeAdHoc(service: service, submission: submission, store: makeStore())
+        let adHoc = makeAdHoc(service: service, submission: submission)
         await adHoc.load()
         adHoc.name = "Bowl"
         adHoc.amount = "1"
@@ -384,12 +318,14 @@ final class LibraryViewModelTests: XCTestCase {
 
         adHoc.requestReview()
         await adHoc.confirmReview()
-        guard case .pending = adHoc.submissionState else {
-            return XCTFail("uncertain log must be pending")
+        guard case .failed = adHoc.submissionState else {
+            return XCTFail("uncertain log must surface an ordinary error")
         }
-        XCTAssertFalse(adHoc.canReview)
+        XCTAssertTrue(adHoc.canReview)
         adHoc.requestReview()
-        XCTAssertEqual(submission.submissions.count, 1)
+        await adHoc.confirmReview()
+        XCTAssertEqual(submission.submissions.count, 2)
+        XCTAssertTrue(adHoc.isSubmissionCompleted)
     }
 
     func testHandlerSubmissionServiceUsesSharedLogSubmissionHandler() async {
@@ -398,7 +334,7 @@ final class LibraryViewModelTests: XCTestCase {
             seededDraft = drafts.first
             XCTAssertEqual(names, ["Bowl"])
             XCTAssertEqual(summary, "Bowl")
-            completion(.success(logs: [], replayed: true))
+            completion(.success([]))
         }
         let draft = LogSubmissionDraft(
             item: .adHoc(name: "Bowl", brand: nil),
@@ -421,70 +357,8 @@ final class LibraryViewModelTests: XCTestCase {
             baseURL: nil
         )
 
-        XCTAssertEqual(result, .success(logs: [], replayed: true))
+        XCTAssertEqual(result, .success([]))
         XCTAssertEqual(seededDraft, draft)
-    }
-
-    func testJournalSubmissionAdapterDelegatesToSharedService() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("calco-library-journal-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let store = LogSubmissionStore(
-            persistence: FileLogSubmissionPersistence(directoryURL: directory)
-        )
-        let service = LogSubmissionService(
-            store: store,
-            sender: RejectingLibraryLogSender(),
-            capabilityProvider: LibraryReadyCapabilityProvider()
-        )
-        _ = await service.refreshCapability(accountID: accountID)
-        let submission = JournalLibraryLogSubmissionService(service: service)
-        let draft = LogSubmissionDraft(
-            item: .product(id: "food-1"),
-            date: date,
-            mealSlot: .lunch,
-            amount: "100",
-            unit: "g",
-            notes: nil,
-            timeZone: "Asia/Kolkata"
-        )
-
-        let result = await submission.submit(
-            accountID: accountID,
-            drafts: [draft],
-            itemNames: ["Oats"],
-            summary: "Oats",
-            baseURL: URL(string: "http://127.0.0.1:3002")
-        )
-
-        guard case .failure(.rejected(let message)) = result else {
-            return XCTFail("expected the shared service rejection")
-        }
-        XCTAssertEqual(message, "definitive")
-        let entries = store.entries(accountID: accountID)
-        XCTAssertEqual(entries.count, 1)
-        XCTAssertEqual(entries[0].state, .rejected)
-    }
-
-    func testUnreadableReconciliationStoreBlocksCreate() async throws {
-        let persistence = MemoryReconciliationPersistence()
-        try persistence.save(Data("broken".utf8), accountID: accountID)
-        let service = FakeLibraryService()
-        let editor = makeEditor(
-            mode: .create,
-            service: service,
-            submission: FakeLibraryLogSubmissionService(results: []),
-            store: makeStore(persistence: persistence)
-        )
-
-        await editor.load()
-
-        guard case .failed = editor.loadState else {
-            return XCTFail("unreadable safety state must fail closed")
-        }
-        XCTAssertTrue(editor.isReconciliationStoreBlocked)
-        await editor.submit()
-        XCTAssertEqual(service.createCallCount, 0)
     }
 
     func testDeleteUncertainRechecksAndCompletesWhenFoodIsGone() async throws {
@@ -498,7 +372,6 @@ final class LibraryViewModelTests: XCTestCase {
             onDeleted: { deletedID = $0 }
         )
         await detail.load()
-        // The authoritative list no longer contains the food.
         service.enqueueList(.success([]))
 
         await detail.delete()
@@ -525,8 +398,6 @@ final class LibraryViewModelTests: XCTestCase {
         let draft = try adHocAssistantDraft()
         let editor = makeEditor(
             service: FakeLibraryService(),
-            submission: FakeLibraryLogSubmissionService(results: []),
-            store: makeStore(),
             assistantDraft: draft
         )
 
@@ -541,8 +412,6 @@ final class LibraryViewModelTests: XCTestCase {
         let draft = try customAssistantDraft()
         let editor = makeEditor(
             service: FakeLibraryService(),
-            submission: FakeLibraryLogSubmissionService(results: []),
-            store: makeStore(),
             assistantDraft: draft
         )
 
@@ -557,14 +426,8 @@ final class LibraryViewModelTests: XCTestCase {
     }
 
     func testCapturedReviewConfirmsAfterPendingBindingCleared() async throws {
-        let submission = FakeLibraryLogSubmissionService(
-            results: [.success(logs: [], replayed: false)]
-        )
-        let adHoc = makeAdHoc(
-            service: FakeLibraryService(),
-            submission: submission,
-            store: makeStore()
-        )
+        let submission = FakeLibraryLogSubmissionService(results: [.success([])])
+        let adHoc = makeAdHoc(service: FakeLibraryService(), submission: submission)
         await adHoc.load()
         fillAdHoc(adHoc)
         adHoc.mode = .logOnly
@@ -580,14 +443,8 @@ final class LibraryViewModelTests: XCTestCase {
     }
 
     func testStaleCapturedReviewAfterNewReviewSendsNothing() async throws {
-        let submission = FakeLibraryLogSubmissionService(
-            results: [.success(logs: [], replayed: false)]
-        )
-        let adHoc = makeAdHoc(
-            service: FakeLibraryService(),
-            submission: submission,
-            store: makeStore()
-        )
+        let submission = FakeLibraryLogSubmissionService(results: [.success([])])
+        let adHoc = makeAdHoc(service: FakeLibraryService(), submission: submission)
         await adHoc.load()
         fillAdHoc(adHoc)
         adHoc.mode = .logOnly
@@ -611,11 +468,7 @@ final class LibraryViewModelTests: XCTestCase {
 
     func testConcurrentSameCapturedReviewSendsOneLogOnly() async throws {
         let submission = HoldingLibraryLogSubmissionService()
-        let adHoc = makeAdHoc(
-            service: FakeLibraryService(),
-            submission: submission,
-            store: makeStore()
-        )
+        let adHoc = makeAdHoc(service: FakeLibraryService(), submission: submission)
         await adHoc.load()
         fillAdHoc(adHoc)
         adHoc.mode = .logOnly
@@ -636,14 +489,8 @@ final class LibraryViewModelTests: XCTestCase {
     func testConfirmedSaveAndLogReviewWritesOnce() async throws {
         let service = FakeLibraryService()
         service.enqueueCreate(.success("new-food"))
-        let submission = FakeLibraryLogSubmissionService(
-            results: [.success(logs: [], replayed: false)]
-        )
-        let adHoc = makeAdHoc(
-            service: service,
-            submission: submission,
-            store: makeStore()
-        )
+        let submission = FakeLibraryLogSubmissionService(results: [.success([])])
+        let adHoc = makeAdHoc(service: service, submission: submission)
         await adHoc.load()
         fillAdHoc(adHoc)
         adHoc.requestReview()
@@ -654,21 +501,16 @@ final class LibraryViewModelTests: XCTestCase {
         await adHoc.confirmReview(review)
 
         XCTAssertEqual(service.createCallCount, 1)
-        XCTAssertEqual(submission.persistedRequests.count, 1)
         XCTAssertEqual(submission.submissions.count, 1)
         XCTAssertTrue(adHoc.hasLoggedSavedFood)
     }
 
     func testNewReviewAfterDefinitiveFailureIsAllowed() async throws {
         let submission = FakeLibraryLogSubmissionService(results: [
-            .failure(.rejected("definitive")),
-            .success(logs: [], replayed: false),
+            .failure(.failed("definitive")),
+            .success([]),
         ])
-        let adHoc = makeAdHoc(
-            service: FakeLibraryService(),
-            submission: submission,
-            store: makeStore()
-        )
+        let adHoc = makeAdHoc(service: FakeLibraryService(), submission: submission)
         await adHoc.load()
         fillAdHoc(adHoc)
         adHoc.mode = .logOnly
@@ -696,7 +538,6 @@ final class LibraryViewModelTests: XCTestCase {
         let adHoc = makeAdHoc(
             service: FakeLibraryService(),
             submission: FakeLibraryLogSubmissionService(results: []),
-            store: makeStore(),
             assistantDraft: draft
         )
 
@@ -711,12 +552,7 @@ final class LibraryViewModelTests: XCTestCase {
 
     func testAssistantCustomFoodPrefillKeepsUnitsServingsAndBarcodeNotice() async throws {
         let service = FakeLibraryService()
-        let editor = makeEditor(
-            mode: .create,
-            service: service,
-            submission: FakeLibraryLogSubmissionService(results: []),
-            store: makeStore()
-        )
+        let editor = makeEditor(service: service)
         await editor.load()
         let payload = AssistantFoodDraftPayload(
             name: "Millet",
@@ -759,8 +595,7 @@ final class LibraryViewModelTests: XCTestCase {
         let service = FakeLibraryService()
         let adHoc = makeAdHoc(
             service: service,
-            submission: FakeLibraryLogSubmissionService(results: []),
-            store: makeStore()
+            submission: FakeLibraryLogSubmissionService(results: [])
         )
         await adHoc.load()
         let payload = AssistantFoodDraftPayload(
@@ -798,7 +633,6 @@ final class LibraryViewModelTests: XCTestCase {
     }
 }
 
-
 @MainActor
 private final class HoldingLibraryLogSubmissionService: LibraryLogSubmitting {
     private(set) var submissions = 0
@@ -817,7 +651,7 @@ private final class HoldingLibraryLogSubmissionService: LibraryLogSubmitting {
         await withCheckedContinuation { continuation in
             self.continuation = continuation
         }
-        return .success(logs: [], replayed: false)
+        return .success([])
     }
 
     func waitUntilStarted() async {
@@ -829,11 +663,5 @@ private final class HoldingLibraryLogSubmissionService: LibraryLogSubmitting {
     func release() {
         continuation?.resume()
         continuation = nil
-    }
-}
-
-private final class RejectingLibraryLogSender: LogSubmissionSending, @unchecked Sendable {
-    func send(_ request: LogSubmissionRequest) async throws -> LogSubmissionSendResult {
-        throw LogSubmissionSendError.failed("definitive")
     }
 }

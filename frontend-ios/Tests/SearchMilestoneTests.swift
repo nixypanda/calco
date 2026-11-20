@@ -137,7 +137,7 @@ final class SearchMilestoneTests: XCTestCase {
         var submitted: (drafts: [LogSubmissionDraft], names: [String], summary: String)?
         let vm = makeViewModel(service: service) { drafts, names, summary, completion in
             submitted = (drafts, names, summary)
-            completion(.success(logs: [], replayed: false))
+            completion(.success([]))
         }
         await vm.loadForAppearance()
 
@@ -178,7 +178,7 @@ final class SearchMilestoneTests: XCTestCase {
         var submitted: [LogSubmissionDraft] = []
         let vm = makeViewModel(service: service) { drafts, _, _, completion in
             submitted = drafts
-            completion(.success(logs: [], replayed: false))
+            completion(.success([]))
         }
         await vm.loadForAppearance()
 

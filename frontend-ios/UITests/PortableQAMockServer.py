@@ -9,14 +9,14 @@ The wrapper adds only lifecycle behavior needed by the portable device harness:
 
 * bind ``127.0.0.1`` on port 0 by default;
 * make a real ``GET /__qa/health`` request through the live QA handler and
-  verify the fixture marker, fixed profile UUID, account-binding header, and
-  distinct identity/profile UUIDs before publishing a ready marker;
+  verify the fixture marker, fixed profile UUID, and distinct identity/profile
+  UUIDs before publishing a ready marker;
 * serve a bounded number of seconds/requests and then close the socket;
 * stop on SIGINT/SIGTERM so the driver can guarantee no fixture survives a run;
 * never call ``serve_forever()``, so there is no unbounded background server.
 
-Account/profile headers, capabilities, reset semantics, fake credentials, and
-all API responses remain exactly those of the QA-owned module.
+Reset semantics, fake credentials, and all API responses remain exactly those
+of the QA-owned module.
 """
 
 from __future__ import annotations
@@ -38,7 +38,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 QA_MOCK_PATH = os.path.join(HERE, "NativeCompletionQAMockServer.py")
 FIXTURE_MARKER = "native-completion-qa"
 FIXTURE_PROFILE_ID = "22222222-2222-4222-8222-222222222222"
-ACCOUNT_HEADER = "X-CalCo-Account-ID"
 DEFAULT_MAX_SECONDS = 3600.0
 DEFAULT_IDLE_SECONDS = 0.0
 
@@ -70,8 +69,6 @@ def validate_fixture_health(payload: dict) -> dict:
         )
     if payload.get("profile_id") != FIXTURE_PROFILE_ID:
         raise SystemExit("live fixture profile UUID does not match the contract")
-    if payload.get("account_header") != ACCOUNT_HEADER:
-        raise SystemExit("live fixture account-binding header does not match")
     identity = payload.get("identity_id")
     if not isinstance(identity, str):
         raise SystemExit("live fixture has no identity UUID")
@@ -188,7 +185,6 @@ def main(argv: list[str] | None = None) -> int:
         "base_url": f"http://127.0.0.1:{port}",
         "pid": os.getpid(),
         "profile_id": health["profile_id"],
-        "account_header": health["account_header"],
         "identity_id": health["identity_id"],
         "qa_mock": QA_MOCK_PATH,
     }

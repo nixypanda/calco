@@ -83,15 +83,6 @@ private final class FailingSavePersistence: LogSubmissionPersisting, @unchecked 
     }
 }
 
-private final class QuarantineMoveHooks: @unchecked Sendable {
-    var quarantine: (URL, URL) throws -> Void = {
-        try FileManager.default.moveItem(at: $0, to: $1)
-    }
-    var recovery: (URL, URL) throws -> Void = {
-        try FileManager.default.moveItem(at: $0, to: $1)
-    }
-}
-
 @MainActor
 final class LogSubmissionStoreTests: XCTestCase {
     private let date = LocalDiaryDate(year: 2026, month: 11, day: 17)
@@ -142,8 +133,7 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
 
         let reloaded = LogSubmissionStore(persistence: persistence)
@@ -165,8 +155,7 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
 
         XCTAssertEqual(store.entries(accountID: "account-a").count, 1)
@@ -185,8 +174,7 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: first.draft,
             request: first.request,
-            body: first.body,
-            capabilityVersion: 2
+            body: first.body
         )
         persistence.setShouldFail(true)
 
@@ -196,8 +184,7 @@ final class LogSubmissionStoreTests: XCTestCase {
                 foodName: "Oats",
                 draft: second.draft,
                 request: second.request,
-                body: second.body,
-                capabilityVersion: 2
+                body: second.body
             )
         )
         persistence.setShouldFail(false)
@@ -218,8 +205,7 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
 
         try store.markSucceeded(
@@ -248,8 +234,7 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
 
         try store.markConflicted(id: entry.id, accountID: entryAccount, message: "conflict")
@@ -270,8 +255,7 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
 
         XCTAssertEqual(entry.state, .inFlight)
@@ -315,8 +299,7 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
         var observedAttention: [[String]] = []
         let cancellable = store.$revision
@@ -369,24 +352,21 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: matching.draft,
             request: matching.request,
-            body: matching.body,
-            capabilityVersion: 2
+            body: matching.body
         )
         let unrelatedEntry = try store.reserve(
             accountID: entryAccount,
             foodName: "Oats",
             draft: unrelatedFood.draft,
             request: unrelatedFood.request,
-            body: unrelatedFood.body,
-            capabilityVersion: 2
+            body: unrelatedFood.body
         )
         let otherDateEntry = try store.reserve(
             accountID: entryAccount,
             foodName: "Oats",
             draft: otherDate.draft,
             request: otherDate.request,
-            body: otherDate.body,
-            capabilityVersion: 2
+            body: otherDate.body
         )
 
         let invalidated = try store.invalidateUnresolved(
@@ -442,8 +422,7 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
+            body: prepared.body
         )
         try store.markUncertain(
             id: entry.id,
@@ -498,16 +477,14 @@ final class LogSubmissionStoreTests: XCTestCase {
             foodName: "Oats",
             draft: live.draft,
             request: live.request,
-            body: live.body,
-            capabilityVersion: 2
+            body: live.body
         )
         let unrelatedEntry = try store.reserve(
             accountID: entryAccount,
             foodName: "Oats",
             draft: unrelated.draft,
             request: unrelated.request,
-            body: unrelated.body,
-            capabilityVersion: 2
+            body: unrelated.body
         )
         try store.markInFlight(id: liveEntry.id, accountID: entryAccount)
 
@@ -553,8 +530,7 @@ final class LogSubmissionStoreTests: XCTestCase {
                 foodName: "Oats",
                 draft: prepared.draft,
                 request: prepared.request,
-                body: prepared.body,
-                capabilityVersion: 2
+                body: prepared.body
             )
         ) { error in
             guard let storeError = error as? LogSubmissionStoreError,
@@ -571,8 +547,7 @@ final class LogSubmissionStoreTests: XCTestCase {
                 foodName: "Oats",
                 draft: prepared.draft,
                 request: prepared.request,
-                body: prepared.body,
-                capabilityVersion: 2
+                body: prepared.body
             )
         )
         XCTAssertEqual(persistence.saveCount, 0, "The fail-closed state must persist")
@@ -592,8 +567,7 @@ final class LogSubmissionStoreTests: XCTestCase {
                 foodName: "Oats",
                 draft: prepared.draft,
                 request: prepared.request,
-                body: prepared.body,
-                capabilityVersion: 2
+                body: prepared.body
             )
         ) { error in
             guard let storeError = error as? LogSubmissionStoreError,
@@ -606,351 +580,6 @@ final class LogSubmissionStoreTests: XCTestCase {
         XCTAssertEqual(persistence.quarantineCount, 1)
         XCTAssertEqual(persistence.saveCount, 0, "Quarantine must not be followed by an overwrite")
         XCTAssertEqual(persistence.currentData, corrupt, "The original bytes remain untouched")
-    }
-
-    func testQuarantineDoesNotRemoveOnlyEvidenceWhenMarkerWriteFails() throws {
-        let persistence = FileLogSubmissionPersistence(directoryURL: directory)
-        try persistence.save(Data("{not-json".utf8), accountID: entryAccount)
-        let originalPermissions = try FileManager.default
-            .attributesOfItem(atPath: directory.path)[.posixPermissions] as? NSNumber
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o500],
-            ofItemAtPath: directory.path
-        )
-        defer {
-            if let originalPermissions {
-                try? FileManager.default.setAttributes(
-                    [.posixPermissions: originalPermissions],
-                    ofItemAtPath: directory.path
-                )
-            }
-        }
-
-        persistence.quarantine(accountID: entryAccount, reason: "invalid-envelope")
-
-        XCTAssertFalse(persistence.isQuarantined(accountID: entryAccount))
-        let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
-        XCTAssertTrue(
-            files.contains { $0.hasSuffix(".json") },
-            "The corrupt source must remain when the durable marker cannot be written"
-        )
-
-        if let originalPermissions {
-            try FileManager.default.setAttributes(
-                [.posixPermissions: originalPermissions],
-                ofItemAtPath: directory.path
-            )
-        }
-        let relaunched = LogSubmissionStore(persistence: persistence)
-        XCTAssertTrue(relaunched.entries(accountID: entryAccount).isEmpty)
-        XCTAssertNotNil(
-            relaunched.journalError(accountID: entryAccount),
-            "A relaunch must not reinterpret the still-corrupt source as an empty journal"
-        )
-    }
-
-    func testQuarantineMarkerSurvivesRelaunchUntilExplicitRecovery() throws {
-        let persistence = FileLogSubmissionPersistence(directoryURL: directory)
-        try persistence.save(Data("{not-json".utf8), accountID: entryAccount)
-        let store = LogSubmissionStore(persistence: persistence)
-
-        XCTAssertTrue(store.entries(accountID: entryAccount).isEmpty)
-        XCTAssertNotNil(store.journalError(accountID: entryAccount))
-        XCTAssertTrue(persistence.isQuarantined(accountID: entryAccount))
-
-        let relaunched = LogSubmissionStore(persistence: persistence)
-        XCTAssertTrue(relaunched.entries(accountID: entryAccount).isEmpty)
-        XCTAssertNotNil(
-            relaunched.journalError(accountID: entryAccount),
-            "A moved corrupt file must remain blocked across relaunch"
-        )
-        let prepared = try makeReservation()
-        XCTAssertThrowsError(
-            try relaunched.reserve(
-                accountID: entryAccount,
-                foodName: "Oats",
-                draft: prepared.draft,
-                request: prepared.request,
-                body: prepared.body,
-                capabilityVersion: 2
-            )
-        )
-
-        try relaunched.recoverQuarantinedJournal(accountID: entryAccount)
-        XCTAssertFalse(persistence.isQuarantined(accountID: entryAccount))
-        XCTAssertNil(relaunched.journalError(accountID: entryAccount))
-        XCTAssertNoThrow(
-            try relaunched.reserve(
-                accountID: entryAccount,
-                foodName: "Oats",
-                draft: prepared.draft,
-                request: prepared.request,
-                body: prepared.body,
-                capabilityVersion: 2
-            )
-        )
-    }
-
-    func testRecoveryMovesCorruptSourceBeforeClearingMarker() throws {
-        let hooks = QuarantineMoveHooks()
-        var persistence = FileLogSubmissionPersistence(directoryURL: directory)
-        persistence.quarantineMove = { _, _ in
-            throw CocoaError(.fileWriteUnknown)
-        }
-        persistence.recoveryMove = { url, destination in
-            try hooks.recovery(url, destination)
-        }
-        try persistence.save(Data("{not-json".utf8), accountID: entryAccount)
-        let store = LogSubmissionStore(persistence: persistence)
-
-        XCTAssertTrue(store.entries(accountID: entryAccount).isEmpty)
-        XCTAssertNotNil(store.journalError(accountID: entryAccount))
-        XCTAssertTrue(persistence.isQuarantined(accountID: entryAccount))
-        let source = try XCTUnwrap(
-            FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: nil
-            ).first { $0.pathExtension == "json" }
-        )
-
-        try store.recoverQuarantinedJournal(accountID: entryAccount)
-
-        XCTAssertFalse(persistence.isQuarantined(accountID: entryAccount))
-        XCTAssertNil(store.journalError(accountID: entryAccount))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
-        let prepared = try makeReservation()
-        XCTAssertNoThrow(
-            try store.reserve(
-                accountID: entryAccount,
-                foodName: "Oats",
-                draft: prepared.draft,
-                request: prepared.request,
-                body: prepared.body,
-                capabilityVersion: 2
-            )
-        )
-    }
-
-    func testRecoveryMoveRefusalKeepsMarkerAndSourceBlocked() throws {
-        let hooks = QuarantineMoveHooks()
-        var persistence = FileLogSubmissionPersistence(directoryURL: directory)
-        persistence.quarantineMove = { _, _ in
-            throw CocoaError(.fileWriteUnknown)
-        }
-        persistence.recoveryMove = { url, destination in
-            try hooks.recovery(url, destination)
-        }
-        try persistence.save(Data("{not-json".utf8), accountID: entryAccount)
-        let store = LogSubmissionStore(persistence: persistence)
-        XCTAssertTrue(store.entries(accountID: entryAccount).isEmpty)
-        XCTAssertNotNil(store.journalError(accountID: entryAccount))
-        hooks.recovery = { _, _ in
-            throw CocoaError(.fileWriteNoPermission)
-        }
-
-        XCTAssertThrowsError(
-            try store.recoverQuarantinedJournal(accountID: entryAccount)
-        )
-        XCTAssertTrue(persistence.isQuarantined(accountID: entryAccount))
-        XCTAssertNotNil(store.journalError(accountID: entryAccount))
-        let source = try XCTUnwrap(
-            FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: nil
-            ).first { $0.pathExtension == "json" }
-        )
-        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
-    }
-
-    func testRecoveryDoesNotRemoveNewSourceWithStaleIdentity() throws {
-        let hooks = QuarantineMoveHooks()
-        var persistence = FileLogSubmissionPersistence(directoryURL: directory)
-        persistence.quarantineMove = { _, _ in
-            throw CocoaError(.fileWriteUnknown)
-        }
-        persistence.recoveryMove = { url, destination in
-            try hooks.recovery(url, destination)
-        }
-        try persistence.save(Data("{not-json".utf8), accountID: entryAccount)
-        let store = LogSubmissionStore(persistence: persistence)
-        XCTAssertTrue(store.entries(accountID: entryAccount).isEmpty)
-        XCTAssertNotNil(store.journalError(accountID: entryAccount))
-        let source = try XCTUnwrap(
-            FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: nil
-            ).first { $0.pathExtension == "json" }
-        )
-        try Data("new-valid-source".utf8).write(to: source, options: [.atomic])
-
-        XCTAssertThrowsError(
-            try store.recoverQuarantinedJournal(accountID: entryAccount)
-        )
-        XCTAssertTrue(persistence.isQuarantined(accountID: entryAccount))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
-        XCTAssertEqual(
-            try String(contentsOf: source, encoding: .utf8),
-            "new-valid-source"
-        )
-    }
-
-    func testReserveSameKeyReturnsExactExistingEntryAndConflictsOnChangedPayload() throws {
-        let store = LogSubmissionStore(
-            persistence: FileLogSubmissionPersistence(directoryURL: directory)
-        )
-        let prepared = try makeReservation(key: "same-operation-key")
-        let first = try store.reserve(
-            accountID: entryAccount,
-            foodName: "Oats",
-            draft: prepared.draft,
-            request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
-        )
-        let second = try store.reserve(
-            accountID: entryAccount,
-            foodName: "Oats",
-            draft: prepared.draft,
-            request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
-        )
-        XCTAssertEqual(second.id, first.id)
-        XCTAssertEqual(store.entries(accountID: entryAccount).count, 1)
-
-        let changedDraft = LogSubmissionDraft(
-            item: .product(id: "food-1"),
-            date: date,
-            mealSlot: .lunch,
-            amount: "200",
-            unit: "g",
-            notes: "Café",
-            timeZone: "America/New_York"
-        )
-        let changedRequest = try LogSubmissionRequestBuilder.prepare(
-            drafts: [changedDraft],
-            baseURL: URL(string: "https://calco.example.com"),
-            idempotencyKey: "same-operation-key"
-        ).request
-        XCTAssertThrowsError(
-            try store.reserve(
-                accountID: entryAccount,
-                summary: "Oats",
-                drafts: [changedDraft],
-                request: changedRequest,
-                capabilityVersion: 2
-            )
-        ) {
-            XCTAssertEqual($0 as? LogSubmissionStoreError, .idempotencyConflict)
-        }
-        XCTAssertEqual(store.entries(accountID: entryAccount).count, 1)
-    }
-
-    func testTerminalExactMatchUsesRetainedHashAndChangedPayloadConflicts() throws {
-        let persistence = FileLogSubmissionPersistence(directoryURL: directory)
-        let store = LogSubmissionStore(persistence: persistence)
-        let prepared = try makeReservation(key: "terminal-hash-key")
-        let entry = try store.reserve(
-            accountID: entryAccount,
-            foodName: "Oats",
-            draft: prepared.draft,
-            request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
-        )
-        try store.markSucceeded(
-            id: entry.id,
-            accountID: entryAccount,
-            logID: "terminal-log",
-            date: date,
-            mealSlot: .lunch,
-            replayed: false
-        )
-        let relaunched = LogSubmissionStore(persistence: persistence)
-        let terminal = try XCTUnwrap(
-            relaunched.entry(id: entry.id, accountID: entryAccount)
-        )
-        XCTAssertNil(terminal.body)
-        XCTAssertNotNil(terminal.requestSHA256)
-        let logRequest = LogSubmissionRequest(
-            requestPath: "/api/logs",
-            idempotencyKey: prepared.request.idempotencyKey ?? "terminal-hash-key",
-            body: prepared.body,
-            baseURLString: prepared.request.baseURLString
-        )
-        XCTAssertTrue(
-            terminal.matchesRequest(
-                logRequest,
-                drafts: [prepared.draft]
-            )
-        )
-
-        let replay = try relaunched.reserve(
-            accountID: entryAccount,
-            foodName: "Oats",
-            draft: prepared.draft,
-            request: prepared.request,
-            body: prepared.body,
-            capabilityVersion: 2
-        )
-        XCTAssertEqual(replay.id, entry.id)
-        XCTAssertEqual(replay.state, .succeeded)
-
-        let changedDraft = LogSubmissionDraft(
-            item: .product(id: "food-1"),
-            date: date,
-            mealSlot: .lunch,
-            amount: "200",
-            unit: "g",
-            notes: "Café",
-            timeZone: "America/New_York"
-        )
-        let changedRequest = try LogSubmissionRequestBuilder.prepare(
-            drafts: [changedDraft],
-            baseURL: URL(string: "https://calco.example.com"),
-            idempotencyKey: "terminal-hash-key"
-        ).request
-        XCTAssertThrowsError(
-            try relaunched.reserve(
-                accountID: entryAccount,
-                summary: "Oats",
-                drafts: [changedDraft],
-                request: changedRequest,
-                capabilityVersion: 2
-            )
-        ) {
-            XCTAssertEqual($0 as? LogSubmissionStoreError, .idempotencyConflict)
-        }
-        XCTAssertEqual(relaunched.entries(accountID: entryAccount).count, 1)
-    }
-
-    func testLegacyTerminalWithoutBodyOrHashCannotMatchRequest() throws {
-        let prepared = try makeReservation(key: "legacy-terminal-key")
-        let entry = PendingLogSubmission(
-            id: "legacy-terminal",
-            accountID: entryAccount,
-            foodName: "Oats",
-            draft: prepared.draft,
-            idempotencyKey: "legacy-terminal-key",
-            body: nil,
-            requestSHA256: nil,
-            baseURLString: "https://calco.example.com",
-            requestPath: "/api/logs",
-            state: .succeeded,
-            createdAt: Date(),
-            updatedAt: Date()
-        )
-        XCTAssertFalse(
-            entry.matchesRequest(
-                LogSubmissionRequest(
-                    requestPath: "/api/logs",
-                    idempotencyKey: "legacy-terminal-key",
-                    body: prepared.body,
-                    baseURLString: prepared.request.baseURLString
-                ),
-                drafts: [prepared.draft]
-            )
-        )
     }
 
     func testMissingEntryThrowsInsteadOfSendingFromMemory() throws {
@@ -968,6 +597,29 @@ final class LogSubmissionStoreTests: XCTestCase {
         ) { error in
             XCTAssertEqual(error as? LogSubmissionStoreError, .missingEntry)
         }
+    }
+
+    func testNewerSchemaJournalIsQuarantinedWithoutBlockingTheLegacyJournal() throws {
+        let newer = Data(#"{"schemaVersion":2,"entries":[]}"#.utf8)
+        let persistence = CorruptJournalPersistence(corrupt: newer)
+        let store = LogSubmissionStore(persistence: persistence)
+
+        XCTAssertEqual(store.entries(accountID: entryAccount), [])
+        XCTAssertNil(store.journalError(accountID: entryAccount))
+        XCTAssertEqual(persistence.quarantineCount, 1)
+        XCTAssertEqual(persistence.saveCount, 0, "A newer journal must not be overwritten")
+        XCTAssertEqual(persistence.currentData, newer, "The quarantined source stays untouched")
+
+        let prepared = try makeReservation()
+        let entry = try store.reserve(
+            accountID: entryAccount,
+            foodName: "Oats",
+            draft: prepared.draft,
+            request: prepared.request,
+            body: prepared.body
+        )
+        XCTAssertEqual(entry.accountID, entryAccount)
+        XCTAssertEqual(persistence.saveCount, 1)
     }
 
     private var entryAccount: String { "account-a" }

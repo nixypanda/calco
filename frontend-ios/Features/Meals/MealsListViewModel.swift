@@ -1,4 +1,4 @@
-// Meal list loading and journal-backed quick add.
+// Meal list loading and quick add.
 
 import Combine
 import Foundation
@@ -160,11 +160,18 @@ public final class MealsListViewModel: ObservableObject {
             case .success:
                 self.quickAddState = .added(mealID: meal.id)
                 self.onLogged?(self.date, self.mealSlot)
-            case .failure(let failure):
-                if failure == .unauthorized {
-                    self.onSessionExpired()
-                }
-                self.quickAddState = .failed(failure.message)
+            case .failure(.unauthorized):
+                self.onSessionExpired()
+                self.quickAddState = .failed(
+                    String(localized: "foodDetail.error.sessionExpired")
+                )
+            case .failure(.uncertain):
+                self.quickAddState = .failed(String(
+                    localized: "meals.list.quickAdd.uncertain",
+                    defaultValue: "CalCo couldn't confirm this log. Check the diary before retrying."
+                ))
+            case .failure(.failed(let message)):
+                self.quickAddState = .failed(message)
             }
         }
     }

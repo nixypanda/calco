@@ -87,16 +87,6 @@ public enum AppShellFeatureSheet: Identifiable {
     }
 }
 
-public enum AppShellServiceInjectionPolicy: Equatable, Sendable {
-    /// Production: feature adapters and the shared submission service are
-    /// constructed by the shell from the authority-bound client. Injected
-    /// production services are rejected.
-    case authorityBound
-    /// Explicit test/offline seam for fakes that do not use the shared
-    /// session authority. Never used by CalCoApp.
-    case offlineTesting
-}
-
 @MainActor
 public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinating {
     public let client: CalCoAPIClient
@@ -114,8 +104,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     public let logSubmissionService: LogSubmissionService
     public let logSubmissionSessionContextProvider: LogSubmissionSessionContextProvider?
     public let todayProvider: () -> LocalDiaryDate
-    private let serviceInjectionPolicy: AppShellServiceInjectionPolicy
-    private let rejectsAuthorityInjection: Bool
 
     public let configurationError: String?
 
@@ -127,12 +115,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     /// All recoverable entries in most-recent-first order. The banner shows a
     /// count and lets the user review each entry instead of hiding all but one.
     @Published public private(set) var pendingSubmissions: [PendingLogSubmission] = []
-    /// Batch, meal, and ad-hoc entries need a recovery sheet that can replay
-    /// the frozen request. Single products keep their detailed FoodDetail flow.
-    @Published public private(set) var pendingReviewSubmission: PendingLogSubmission?
-    @Published public private(set) var pendingReviewIsRetrying = false
-    @Published public private(set) var pendingReviewMessage: String?
-    @Published public private(set) var journalBlockedMessage: String?
     /// Set when a dirty editor would otherwise be closed, replaced, or left
     /// behind. The shell asks for explicit discard confirmation.
     @Published public private(set) var pendingEditorDiscard: EditorDiscardRequest?
@@ -157,9 +139,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     /// Assistant acceptance closes its sheet first, then this opens Library from
     /// the sheet's `onDismiss` so two presentations never race.
     private var pendingLibraryAfterAssistant: LibrarySheetRequest?
-    /// Library recovery closes its sheet first; the shared pending review is
-    /// presented from `onDismiss`, never as a sibling sheet.
-    private var pendingReviewAfterFeatureDismiss: PendingLogSubmission?
 
     public var currentUser: AuthUser? { featureGraph.readyState?.user }
     public var diaryViewModel: DiaryViewModel? { featureGraph.readyState?.diary }
@@ -213,7 +192,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         logSubmissionStore: LogSubmissionStore? = nil,
         logSubmissionService: LogSubmissionService? = nil,
         logSubmissionSessionContextProvider: LogSubmissionSessionContextProvider? = nil,
-        serviceInjectionPolicy: AppShellServiceInjectionPolicy? = nil,
         todayProvider: (() -> LocalDiaryDate)? = nil
     ) {
         let resolvedClient: CalCoAPIClient
@@ -237,22 +215,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         }
 
         let resolvedSession = session ?? SessionCoordinator(client: resolvedClient)
-        let resolvedInjectionPolicy = serviceInjectionPolicy
-            ?? (logSubmissionSessionContextProvider == nil
-                ? .offlineTesting
-                : .authorityBound)
-        let hasInjectedFeatureService = diaryService != nil
-            || searchService != nil
-            || foodDetailService != nil
-            || settingsService != nil
-            || nutritionDetailsService != nil
-            || mealsService != nil
-            || libraryService != nil
-            || assistantService != nil
-            || apiKeyService != nil
-        self.serviceInjectionPolicy = resolvedInjectionPolicy
-        self.rejectsAuthorityInjection = resolvedInjectionPolicy == .authorityBound
-            && (hasInjectedFeatureService || logSubmissionService != nil)
         self.client = resolvedClient
         self.configurationError = configurationError
         self.session = resolvedSession
@@ -287,9 +249,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         self.logSubmissionStore = logSubmissionStore ?? .shared
         self.logSubmissionSessionContextProvider = logSubmissionSessionContextProvider
         self.logSubmissionService = logSubmissionService ?? LogSubmissionService(
-            store: self.logSubmissionStore,
             sender: CalCoLogSubmissionSender(client: resolvedClient),
-            capabilityProvider: CalCoLogCreationCapabilityProvider(client: resolvedClient),
             sessionContextProvider: logSubmissionSessionContextProvider
         )
         self.todayProvider = resolvedTodayProvider
@@ -412,15 +372,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         dismissedSubmissions.removeAll()
         settingsViewModel = nil
         clearPresentedFeatures()
-        logSubmissionService.invalidateCapability(
-            generation: session.sessionGeneration
-        )
         pendingSubmission = nil
         pendingSubmissions = []
-        pendingReviewSubmission = nil
-        pendingReviewIsRetrying = false
-        pendingReviewMessage = nil
-        journalBlockedMessage = nil
         pendingEditorDiscard = nil
         previous.readyState?.diary.resetForSessionChange()
         previous.readyState?.search.invalidateSession()
@@ -438,65 +391,31 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         accountSettingsViewModel = nil
         featureSheet = nil
         pendingLibraryAfterAssistant = nil
-        pendingReviewAfterFeatureDismiss = nil
     }
 
-    private func makeFeatureServices(for user: AuthUser) -> FeatureGraph.FeatureServices? {
-        if serviceInjectionPolicy == .authorityBound {
-            guard injectedDiaryService == nil,
-                  injectedSearchService == nil,
-                  injectedFoodDetailService == nil,
-                  injectedSettingsService == nil,
-                  injectedNutritionDetailsService == nil,
-                  injectedMealsService == nil,
-                  injectedLibraryService == nil,
-                  injectedAssistantService == nil,
-                  injectedAPIKeyService == nil else {
-                return nil
-            }
-        }
-        let profileID = (user.profileID ?? "").trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-        let boundClient: CalCoAPIClient
-        if !profileID.isEmpty {
-            boundClient = client.bound(toAccountID: profileID)
-        } else if serviceInjectionPolicy == .offlineTesting {
-            // Explicit offline/preview mode for test coordinators without the
-            // shared session authority. Production must never take this path.
-            boundClient = client
-        } else {
-            return nil
-        }
-        return FeatureGraph.FeatureServices(
-            diary: injectedDiaryService ?? CalCoDiaryServiceAdapter(client: boundClient),
-            search: injectedSearchService ?? CalCoFoodSearchServiceAdapter(client: boundClient),
+    private func makeFeatureServices() -> FeatureGraph.FeatureServices {
+        FeatureGraph.FeatureServices(
+            diary: injectedDiaryService ?? CalCoDiaryServiceAdapter(client: client),
+            search: injectedSearchService ?? CalCoFoodSearchServiceAdapter(client: client),
             foodDetail: injectedFoodDetailService
-                ?? CalCoFoodDetailServiceAdapter(client: boundClient),
+                ?? CalCoFoodDetailServiceAdapter(client: client),
             settings: injectedSettingsService
-                ?? CalCoSettingsServiceAdapter(client: boundClient),
+                ?? CalCoSettingsServiceAdapter(client: client),
             nutrition: injectedNutritionDetailsService
-                ?? CalCoNutritionDetailsServiceAdapter(client: boundClient),
+                ?? CalCoNutritionDetailsServiceAdapter(client: client),
             meals: injectedMealsService
-                ?? CalCoMealsServiceAdapter(client: boundClient),
+                ?? CalCoMealsServiceAdapter(client: client),
             library: injectedLibraryService
-                ?? CalCoLibraryServiceAdapter(client: boundClient),
+                ?? CalCoLibraryServiceAdapter(client: client),
             assistant: injectedAssistantService
-                ?? CalCoAssistantServiceAdapter(client: boundClient),
+                ?? CalCoAssistantServiceAdapter(client: client),
             apiKeys: injectedAPIKeyService
-                ?? CalCoAPIKeysServiceAdapter(client: boundClient)
+                ?? CalCoAPIKeysServiceAdapter(client: client)
         )
     }
 
     private func installFeatureGraph(for user: AuthUser) {
         let generation = session.sessionGeneration
-        if rejectsAuthorityInjection {
-            _ = session.handleUnauthorized(
-                atGeneration: generation,
-                reason: .expired
-            )
-            return
-        }
         if let ready = featureGraph.readyState,
            ready.user == user,
            ready.generation == generation {
@@ -512,27 +431,14 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         previous.readyState?.search.invalidateSession()
         settingsViewModel = nil
         clearPresentedFeatures()
-        logSubmissionService.invalidateCapability(generation: generation)
         pendingSubmission = nil
         pendingSubmissions = []
-        pendingReviewSubmission = nil
-        pendingReviewIsRetrying = false
-        pendingReviewMessage = nil
-        journalBlockedMessage = nil
         pendingEditorDiscard = nil
 
         let today = todayProvider()
         navigationState = NavigationState(date: today)
 
-        guard let services = makeFeatureServices(for: user) else {
-            // Production requires an authoritative profile UUID for request
-            // account binding. Never fall back to the identity UUID.
-            _ = session.handleUnauthorized(
-                atGeneration: generation,
-                reason: .expired
-            )
-            return
-        }
+        let services = makeFeatureServices()
 
         let diaryVM = DiaryViewModel(
             service: services.diary,
@@ -618,14 +524,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
 
         Task { [weak self] in
             guard let self, self.isCurrent(generation) else { return }
-            _ = await self.logSubmissionService.refreshCapability(
-                accountID: user.id,
-                generation: generation
-            )
-        }
-
-        Task { [weak self] in
-            guard let self, self.isCurrent(generation) else { return }
             await diaryVM.load()
         }
     }
@@ -699,47 +597,28 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         completion: @escaping (LogSubmissionServiceResult) -> Void
     ) {
         guard isCurrent(generation), let accountID = currentUser?.id else {
-            completion(.failure(.rejected(
-                String(localized: "foodDetail.error.sessionExpired")
-            )))
+            completion(.failure(.unauthorized))
             return
-        }
-        let intent: PreparedLogSubmissionIntent
-        switch logSubmissionService.prepareIntent(
-            accountID: accountID,
-            summary: summary,
-            drafts: drafts,
-            itemNames: itemNames,
-            baseURL: client.configuration.baseURL,
-            generation: generation
-        ) {
-        case .failure(let failure):
-            completion(.failure(failure))
-            return
-        case .success(let prepared):
-            intent = prepared
         }
 
         Task { [weak self] in
             guard let self else {
-                completion(.failure(.rejected(
-                    String(localized: "foodDetail.error.sessionExpired")
-                )))
+                completion(.failure(.unauthorized))
                 return
             }
-            let result = await self.logSubmissionService.submitPreparedIntent(
-                intent,
+            let result = await self.logSubmissionService.submit(
+                accountID: accountID,
+                summary: summary,
+                drafts: drafts,
+                itemNames: itemNames,
                 generation: generation
             )
             guard self.isCurrent(generation) else {
-                completion(.failure(.rejected(
-                    String(localized: "foodDetail.error.sessionExpired")
-                )))
+                completion(.failure(.unauthorized))
                 return
             }
             if case .success = result {
                 await self.diaryViewModel?.refresh()
-                self.refreshPendingSubmission()
             }
             completion(result)
         }
@@ -795,79 +674,32 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         }
 
         let identity = FoodDetailSuccessIdentity()
-        let accountID = ready.user.id
-        let baseURL = client.configuration.baseURL
-        let ensureSingleCapability: () async -> Bool = { [weak self] in
-            guard let self, self.isCurrent(generation) else { return false }
-            let failure = await self.logSubmissionService.ensureCapability(
-                accountID: accountID,
-                generation: generation,
-                route: .single
-            )
-            return failure == nil && self.isCurrent(generation)
-        }
-        let viewModel: FoodDetailViewModel
-        if let provider = logSubmissionSessionContextProvider {
-            viewModel = FoodDetailViewModel(
-                foodID: foodID,
-                originDate: date,
-                originMealSlot: mealSlot,
-                service: ready.services.foodDetail,
-                onSessionExpired: { [weak self] in
-                    self?.handleSessionExpired(generation: generation)
-                },
-                onSubmissionSuccess: { [weak self, identity] success in
-                    guard let source = identity.viewModel else { return }
-                    self?.handleFoodDetailSuccess(
-                        success,
-                        expectedGeneration: generation,
-                        source: source
-                    )
-                },
-                onCheckDiary: { [weak self] diaryDate in
-                    self?.showDiary(
-                        date: diaryDate,
-                        generation: generation
-                    )
-                },
-                accountID: accountID,
-                baseURL: baseURL,
-                submissionStore: logSubmissionStore,
-                submissionContextProvider: provider,
-                singleCapabilityEnsure: ensureSingleCapability
-            )
-        } else {
-            // Explicit offline/preview path for test coordinators that do not
-            // inject the shared session authority. Production AppShell always
-            // supplies the authoritative provider via CalCoSessionAuthority.
-            viewModel = FoodDetailViewModel(
-                foodID: foodID,
-                originDate: date,
-                originMealSlot: mealSlot,
-                service: ready.services.foodDetail,
-                onSessionExpired: { [weak self] in
-                    self?.handleSessionExpired(generation: generation)
-                },
-                onSubmissionSuccess: { [weak self, identity] success in
-                    guard let source = identity.viewModel else { return }
-                    self?.handleFoodDetailSuccess(
-                        success,
-                        expectedGeneration: generation,
-                        source: source
-                    )
-                },
-                onCheckDiary: { [weak self] diaryDate in
-                    self?.showDiary(
-                        date: diaryDate,
-                        generation: generation
-                    )
-                },
-                accountID: accountID,
-                baseURL: baseURL,
-                submissionStore: logSubmissionStore,
-                singleCapabilityEnsure: ensureSingleCapability
-            )
-        }
+        let viewModel = FoodDetailViewModel(
+            foodID: foodID,
+            originDate: date,
+            originMealSlot: mealSlot,
+            service: ready.services.foodDetail,
+            onSessionExpired: { [weak self] in
+                self?.handleSessionExpired(generation: generation)
+            },
+            onSubmissionSuccess: { [weak self, identity] success in
+                guard let source = identity.viewModel else { return }
+                self?.handleFoodDetailSuccess(
+                    success,
+                    expectedGeneration: generation,
+                    source: source
+                )
+            },
+            onCheckDiary: { [weak self] diaryDate in
+                self?.showDiary(
+                    date: diaryDate,
+                    generation: generation
+                )
+            },
+            accountID: ready.user.id,
+            baseURL: client.configuration.baseURL,
+            submissionStore: logSubmissionStore
+        )
         identity.viewModel = viewModel
         ready.foodDetails[foodID] = viewModel
         featureGraph = .ready(ready)
@@ -949,12 +781,12 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             submissionStore: logSubmissionStore,
             matchingPendingCount: { [weak self] in
                 guard let self,
-                      let submissionItem = log.submissionItem else {
+                      let productID = log.productID else {
                     return 0
                 }
                 return self.logSubmissionStore.unresolved(
                     accountID: ready.user.id,
-                    item: submissionItem,
+                    foodID: productID,
                     date: date
                 ).count
             }
@@ -1357,11 +1189,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     /// follow-up sheet is opened only after the first is gone, avoiding SwiftUI
     /// sibling-sheet races.
     public func featureSheetDidDismiss() {
-        if let pending = pendingReviewAfterFeatureDismiss {
-            pendingReviewAfterFeatureDismiss = nil
-            reviewPendingSubmission(pending)
-            return
-        }
         if let library = pendingLibraryAfterAssistant {
             pendingLibraryAfterAssistant = nil
             guard featureGraph.readyState?.generation == session.sessionGeneration else {
@@ -1369,19 +1196,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             }
             featureSheet = .library(library)
         }
-    }
-
-    public func reviewPendingFromLibrary() {
-        reviewPendingFromFeature()
-    }
-
-    public func reviewPendingFromFeature() {
-        guard let pending = pendingSubmission ?? pendingSubmissions.first else {
-            featureSheet = nil
-            return
-        }
-        pendingReviewAfterFeatureDismiss = pending
-        featureSheet = nil
     }
 
     public func libraryDidLog(date: LocalDiaryDate, mealSlot: MealSlot?) {
@@ -1445,61 +1259,11 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
 
     public func reviewPendingSubmission(_ pending: PendingLogSubmission) {
         guard pending.accountID == currentUser?.id else { return }
-        if pending.requestPath == LogSubmissionRoute.single.requestPath,
-           case .product(let foodID) = pending.draft.item {
-            openFoodDetail(
-                foodID,
-                date: pending.draft.date,
-                mealSlot: pending.draft.mealSlot
-            )
-            return
-        }
-        pendingReviewMessage = nil
-        pendingReviewSubmission = pending
-    }
-
-    public func dismissPendingReview() {
-        guard !pendingReviewIsRetrying else { return }
-        pendingReviewSubmission = nil
-        pendingReviewMessage = nil
-    }
-
-    public func retryPendingReview() async {
-        guard let pending = pendingReviewSubmission,
-              let accountID = currentUser?.id,
-              pending.accountID == accountID,
-              !pendingReviewIsRetrying else { return }
-        let generation = session.sessionGeneration
-        pendingReviewIsRetrying = true
-        pendingReviewMessage = nil
-        let result = await logSubmissionService.retry(
-            entry: pending,
-            accountID: accountID,
-            generation: generation
+        openFoodDetail(
+            pending.draft.foodID,
+            date: pending.draft.date,
+            mealSlot: pending.draft.mealSlot
         )
-        guard isCurrent(generation) else {
-            pendingReviewIsRetrying = false
-            pendingReviewSubmission = nil
-            pendingReviewMessage = nil
-            return
-        }
-        pendingReviewIsRetrying = false
-        switch result {
-        case .success:
-            pendingReviewSubmission = nil
-            await diaryViewModel?.refresh()
-            refreshPendingSubmission()
-        case .failure(let failure):
-            if failure == .unauthorized {
-                handleSessionExpired(generation: generation)
-                return
-            }
-            pendingReviewMessage = failure.message
-            pendingReviewSubmission = logSubmissionStore.entry(
-                id: pending.id,
-                accountID: accountID
-            ) ?? pending
-        }
     }
 
     /// Hides the global banner for the entries it currently shows. This is a
@@ -1511,14 +1275,12 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         refreshPendingSubmission()
     }
 
-    /// Explicitly resolves a definitively conflicted journal row. The caller
-    /// must obtain confirmation before invoking it.
+    /// Explicitly resolves a definitively conflicted legacy journal row. The
+    /// caller must obtain confirmation before invoking it.
     @discardableResult
     public func discardPendingSubmission(_ pending: PendingLogSubmission) -> Bool {
         guard pending.accountID == currentUser?.id,
               pending.state == .conflicted
-                || pending.state == .serverChanged
-                || pending.state == .reconciliationOnly
         else { return false }
         do {
             try logSubmissionStore.remove(id: pending.id, accountID: pending.accountID)
@@ -1534,46 +1296,13 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         guard let user = currentUser else {
             pendingSubmissions = []
             pendingSubmission = nil
-            journalBlockedMessage = nil
             return
         }
-        _ = logSubmissionStore.entries(accountID: user.id)
-        if logSubmissionStore.journalError(accountID: user.id) != nil {
-            journalBlockedMessage = String(localized: "journal.blocked.message")
-            pendingSubmissions = []
-            pendingSubmission = nil
-            return
-        }
-        journalBlockedMessage = nil
         let visible = logSubmissionStore
             .attentionEntries(accountID: user.id)
             .filter { dismissedSubmissions[$0.id] != $0.updatedAt }
         pendingSubmissions = visible
         pendingSubmission = visible.first
-        if let reviewed = pendingReviewSubmission {
-            if let refreshed = visible.first(where: { $0.id == reviewed.id }) {
-                pendingReviewSubmission = refreshed
-            } else if !pendingReviewIsRetrying {
-                pendingReviewSubmission = nil
-                pendingReviewMessage = nil
-            }
-        }
-    }
-
-    /// User-confirmed recovery for a quarantined local journal. The explicit
-    /// confirmation and warning are in the shell; this method never runs from a
-    /// generic error path.
-    @discardableResult
-    public func recoverBlockedJournal() -> Bool {
-        guard let accountID = currentUser?.id else { return false }
-        do {
-            try logSubmissionStore.recoverQuarantinedJournal(accountID: accountID)
-        } catch {
-            journalBlockedMessage = String(localized: "journal.blocked.message")
-            return false
-        }
-        refreshPendingSubmission()
-        return true
     }
 
     public func showSearch() {
@@ -1858,14 +1587,7 @@ private extension Pane {
 public struct AppShell: View {
     @StateObject private var coordinator: AppShellCoordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var pendingBannerDiscard: PendingLogSubmission?
-    @State private var pendingSheetDiscard: PendingLogSubmission?
-    @State private var isJournalResetConfirmationPresented = false
-
-    private var usesAccessibilityPendingLayout: Bool {
-        dynamicTypeSize.isAccessibilitySize
-    }
 
     public init() {
         _coordinator = StateObject(wrappedValue: AppShellCoordinator())
@@ -1878,22 +1600,16 @@ public struct AppShell: View {
                 session: sessionAuthority.session,
                 logSubmissionSessionContextProvider: { [weak sessionAuthority] in
                     guard let sessionAuthority,
-                          case .signedIn(let user) = sessionAuthority.session.phase,
-                          let profileID = user.profileID,
-                          !profileID.trimmingCharacters(
-                              in: .whitespacesAndNewlines
-                          ).isEmpty
+                          case .signedIn(let user) = sessionAuthority.session.phase
                     else {
                         return nil
                     }
                     return LogSubmissionSessionContext(
                         accountID: user.id,
                         generation: sessionAuthority.session.sessionGeneration,
-                        baseURL: sessionAuthority.client.configuration.baseURL,
-                        profileID: profileID
+                        baseURL: sessionAuthority.client.configuration.baseURL
                     )
-                },
-                serviceInjectionPolicy: .authorityBound
+                }
             )
         )
     }
@@ -1998,9 +1714,6 @@ public struct AppShell: View {
                 width: Double(proxy.size.width)
             )
             VStack(spacing: 0) {
-                if let message = coordinator.journalBlockedMessage {
-                    journalBlockedBanner(message)
-                }
                 if let pending = coordinator.pendingSubmission {
                     pendingSubmissionBanner(pending)
                 }
@@ -2019,9 +1732,6 @@ public struct AppShell: View {
                 onClose: { coordinator.dismissSettings() },
                 onAccountSettingsDismissed: { coordinator.dismissAccountSettings() }
             )
-        }
-        .sheet(item: pendingReviewBinding) { pending in
-            pendingReviewSheet(pending)
         }
         .sheet(
             item: featureSheetBinding,
@@ -2042,17 +1752,6 @@ public struct AppShell: View {
                     Text(String(localized: "foodDetail.pending.cancel"))
                 )
             )
-        }
-        .alert(
-            String(localized: "journal.blocked.resetTitle"),
-            isPresented: $isJournalResetConfirmationPresented
-        ) {
-            Button(String(localized: "journal.blocked.resetAction"), role: .destructive) {
-                _ = coordinator.recoverBlockedJournal()
-            }
-            Button(String(localized: "diary.common.cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "journal.blocked.resetMessage"))
         }
         .confirmationDialog(
             String(localized: "diary.editor.discard.title"),
@@ -2082,17 +1781,6 @@ public struct AppShell: View {
         )
     }
 
-    private var pendingReviewBinding: Binding<PendingLogSubmission?> {
-        Binding(
-            get: { coordinator.pendingReviewSubmission },
-            set: { newValue in
-                if newValue == nil {
-                    coordinator.dismissPendingReview()
-                }
-            }
-        )
-    }
-
     private var featureSheetBinding: Binding<AppShellFeatureSheet?> {
         Binding(
             get: { coordinator.featureSheet },
@@ -2115,89 +1803,67 @@ public struct AppShell: View {
         )
     }
 
-    private func journalBlockedBanner(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "externaldrive.badge.exclamationmark")
-                    .foregroundStyle(.red)
-                    .accessibilityHidden(true)
-                Text(message)
-                    .font(.footnote)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Button(String(localized: "journal.blocked.reset")) {
-                isJournalResetConfirmationPresented = true
-            }
-            .buttonStyle(.bordered)
-            .font(.footnote.weight(.semibold))
-            .accessibilityIdentifier("journal.blocked.reset")
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.bar)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("journal.blocked.banner")
-    }
-
     private func pendingSubmissionBanner(
         _ pending: PendingLogSubmission
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
                 Image(systemName: "clock.arrow.circlepath")
                     .foregroundStyle(.orange)
-                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(bannerTitle(count: coordinator.pendingSubmissions.count))
-                        .font(.subheadline.weight(.semibold))
-                        .fixedSize(horizontal: false, vertical: true)
+                        .font(.footnote.weight(.semibold))
                     Text("\(pending.foodName) · \(pending.draft.date.formatted)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
+
+                if coordinator.pendingSubmissions.count > 1 {
+                    Menu {
+                        ForEach(coordinator.pendingSubmissions) { entry in
+                            Button {
+                                coordinator.reviewPendingSubmission(entry)
+                            } label: {
+                                Text("\(entry.foodName) · \(entry.draft.date.formatted)")
+                            }
+                        }
+                    } label: {
+                        Text(String(localized: "foodDetail.pending.reviewAll"))
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .accessibilityIdentifier("foodDetail.pending.reviewAll")
+                }
+
+                Button(String(localized: "foodDetail.pending.review")) {
+                    coordinator.reviewPendingSubmission(pending)
+                }
+                .font(.footnote.weight(.semibold))
+                .accessibilityIdentifier("foodDetail.pending.review")
+
                 Button {
                     coordinator.dismissPendingSubmissionBanner()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.semibold))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "foodDetail.pending.dismissBanner"))
                 .accessibilityIdentifier("foodDetail.pending.dismiss")
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                if usesAccessibilityPendingLayout {
-                    VStack(alignment: .leading, spacing: 6) {
-                        pendingReviewAllControl
-                        pendingReviewControl(pending)
-                    }
-                } else {
-                    HStack(spacing: 8) {
-                        pendingReviewAllControl
-                        pendingReviewControl(pending)
-                        Spacer(minLength: 0)
-                    }
-                }
-
-                if pending.state == .conflicted {
+            if pending.state == .conflicted {
+                HStack(spacing: 8) {
                     Text(String(localized: "foodDetail.pending.conflicted"))
                         .font(.caption)
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button(role: .destructive) {
+                    Spacer(minLength: 8)
+                    Button(String(localized: "foodDetail.pending.discard")) {
                         pendingBannerDiscard = pending
-                    } label: {
-                        Text(String(localized: "foodDetail.pending.discard"))
-                            .frame(maxWidth: usesAccessibilityPendingLayout ? .infinity : nil)
-                            .contentShape(Rectangle())
                     }
                     .font(.footnote.weight(.semibold))
-                    .buttonStyle(.bordered)
                     .accessibilityIdentifier("foodDetail.pending.banner.discard")
                 }
             }
@@ -2205,51 +1871,7 @@ public struct AppShell: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .background(.bar)
-        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("foodDetail.pending.banner")
-    }
-
-    @ViewBuilder
-    private var pendingReviewAllControl: some View {
-        if coordinator.pendingSubmissions.count > 1 {
-            Menu {
-                ForEach(coordinator.pendingSubmissions) { entry in
-                    Button {
-                        coordinator.reviewPendingSubmission(entry)
-                    } label: {
-                        Text("\(entry.foodName) · \(entry.draft.date.formatted)")
-                    }
-                }
-            } label: {
-                Label(
-                    String(localized: "foodDetail.pending.reviewAll"),
-                    systemImage: "list.bullet"
-                )
-                .frame(
-                    maxWidth: usesAccessibilityPendingLayout ? .infinity : nil,
-                    alignment: .leading
-                )
-                .contentShape(Rectangle())
-            }
-            .font(.footnote.weight(.semibold))
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("foodDetail.pending.reviewAll")
-        }
-    }
-
-    private func pendingReviewControl(
-        _ pending: PendingLogSubmission
-    ) -> some View {
-        Button {
-            coordinator.reviewPendingSubmission(pending)
-        } label: {
-            Text(String(localized: "foodDetail.pending.review"))
-                .frame(maxWidth: usesAccessibilityPendingLayout ? .infinity : nil)
-                .contentShape(Rectangle())
-        }
-        .font(.footnote.weight(.semibold))
-        .buttonStyle(.bordered)
-        .accessibilityIdentifier("foodDetail.pending.review")
     }
 
     private func bannerTitle(count: Int) -> String {
@@ -2260,135 +1882,6 @@ public struct AppShell: View {
             format: String(localized: "foodDetail.pending.banner.count"),
             count
         )
-    }
-
-    private func pendingReviewSheet(_ pending: PendingLogSubmission) -> some View {
-        NavigationStack {
-            List {
-                Section {
-                    LabeledContent(
-                        String(localized: "search.batch.date"),
-                        value: pending.draft.date.formatted
-                    )
-                    LabeledContent(
-                        String(localized: "search.batch.slot"),
-                        value: pending.draft.mealSlot.map(DiaryLabels.mealSlotName)
-                            ?? String(localized: "diary.unslotted")
-                    )
-                    LabeledContent(
-                        String(localized: "foodDetail.pending.review"),
-                        value: pending.foodName
-                    )
-                }
-                Section(String(localized: "search.batch.items")) {
-                    ForEach(Array(pending.allDrafts.enumerated()), id: \.offset) { index, draft in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(pending.itemName(at: index))
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(
-                                NutritionQuantity(
-                                    amount: draft.amount,
-                                    unit: draft.unit
-                                ).described
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-                Section {
-                    Text(pending.lastMessage ?? pendingStateMessage(pending))
-                        .font(.footnote)
-                        .foregroundStyle(
-                            pending.state == .conflicted ? Color.red : Color.secondary
-                        )
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let message = coordinator.pendingReviewMessage {
-                        Label(message, systemImage: "exclamationmark.triangle")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("app.pendingReview.error")
-                    }
-                    if pending.state == .conflicted
-                        || pending.state == .serverChanged
-                        || pending.state == .reconciliationOnly {
-                        Button(role: .destructive) {
-                            pendingSheetDiscard = pending
-                        } label: {
-                            Text(String(localized: "foodDetail.pending.discard"))
-                        }
-                        .accessibilityIdentifier("app.pendingReview.discard")
-                    }
-                }
-            }
-            .navigationTitle(String(localized: "foodDetail.pending.title"))
-            .alert(item: $pendingSheetDiscard) { pending in
-                Alert(
-                    title: Text(String(localized: "foodDetail.pending.discard.confirmTitle")),
-                    message: Text(String(localized: "foodDetail.pending.discard.confirmMessage")),
-                    primaryButton: .destructive(
-                        Text(String(localized: "foodDetail.pending.discard.confirmAction"))
-                    ) {
-                        _ = coordinator.discardPendingSubmission(pending)
-                    },
-                    secondaryButton: .cancel(
-                        Text(String(localized: "foodDetail.pending.cancel"))
-                    )
-                )
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "foodDetail.pending.later")) {
-                        coordinator.dismissPendingReview()
-                    }
-                    .disabled(coordinator.pendingReviewIsRetrying)
-                    .accessibilityIdentifier("app.pendingReview.close")
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        Task { await coordinator.retryPendingReview() }
-                    } label: {
-                        if coordinator.pendingReviewIsRetrying {
-                            ProgressView()
-                        } else {
-                            Text(String(localized: "foodDetail.pending.retry"))
-                        }
-                    }
-                    .disabled(
-                        coordinator.pendingReviewIsRetrying
-                            || pending.body == nil
-                            || pending.state == .conflicted
-                            || pending.state == .serverChanged
-                            || pending.state == .reconciliationOnly
-                            || pending.state == .invalidated
-                    )
-                    .accessibilityIdentifier("app.pendingReview.retry")
-                }
-            }
-            .interactiveDismissDisabled(coordinator.pendingReviewIsRetrying)
-        }
-        .accessibilityIdentifier("app.pendingReview")
-    }
-
-    private func pendingStateMessage(_ pending: PendingLogSubmission) -> String {
-        switch pending.state {
-        case .conflicted:
-            return String(localized: "foodDetail.pending.conflicted")
-        case .serverChanged:
-            return String(localized: "foodDetail.pending.serverChanged")
-        case .reconciliationOnly:
-            return String(localized: "submission.reconciliationOnly")
-        case .invalidated:
-            return String(localized: "foodDetail.pending.invalidated")
-        case .inFlight:
-            return String(localized: "foodDetail.error.uncertain")
-        case .uncertain:
-            return String(localized: "foodDetail.error.uncertain")
-        case .succeeded, .rejected:
-            return String(localized: "foodDetail.error.saveFailed")
-        }
     }
 
     // MARK: Feature sheets
@@ -2431,9 +1924,6 @@ public struct AppShell: View {
                 onClose: { [weak coordinator] in
                     coordinator?.dismissFeatureSheet()
                 },
-                onReviewPending: { [weak coordinator] in
-                    coordinator?.reviewPendingFromFeature()
-                },
                 initialMealID: request.initialMealID,
                 initialPortion: request.initialPortion
             )
@@ -2442,23 +1932,25 @@ public struct AppShell: View {
             if let accountID = coordinator.currentUser?.id {
                 LibraryView(
                     service: coordinator.currentLibraryService,
-                    submissionService: JournalLibraryLogSubmissionService(
-                        service: coordinator.logSubmissionService,
-                        sessionContextProvider: coordinator.logSubmissionSessionContextProvider
+                    submissionService: HandlerLibraryLogSubmissionService(
+                        handler: { [weak coordinator] drafts, names, summary, completion in
+                            coordinator?.submitDraftsForFeature(
+                                drafts,
+                                itemNames: names,
+                                summary: summary,
+                                completion: completion
+                            )
+                        }
                     ),
                     accountID: accountID,
                     today: coordinator.todayProvider(),
                     initialDate: request.date,
                     initialMealSlot: request.mealSlot,
-                    baseURL: coordinator.client.configuration.baseURL,
                     onLogged: { [weak coordinator] date, slot in
                         coordinator?.libraryDidLog(date: date, mealSlot: slot)
                     },
                     onSessionExpired: { [weak coordinator] in
                         coordinator?.featureSessionExpired()
-                    },
-                    onReviewPending: { [weak coordinator] in
-                        coordinator?.reviewPendingFromLibrary()
                     },
                     onClose: { [weak coordinator] in
                         coordinator?.dismissFeatureSheet()

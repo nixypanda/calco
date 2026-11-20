@@ -173,20 +173,18 @@ class XctestrunContractTests(unittest.TestCase):
             )
             self.assertTrue((private_run / "Test").is_symlink())
 
-    def test_health_contract_rejects_marker_profile_header_or_identity_drift(
+    def test_health_contract_rejects_marker_profile_or_identity_drift(
         self,
     ) -> None:
         valid = {
             "fixture": driver.FIXTURE_MARKER,
             "profile_id": driver.FIXTURE_PROFILE_ID,
-            "account_header": driver.ACCOUNT_HEADER,
             "identity_id": "11111111-1111-4111-8111-111111111111",
         }
         self.assertEqual(driver.validate_fixture_health(valid), valid)
         mutations = [
             ("fixture", "wrong"),
             ("profile_id", "00000000-0000-0000-0000-000000000000"),
-            ("account_header", "X-Wrong"),
             ("identity_id", driver.FIXTURE_PROFILE_ID),
             ("identity_id", "not-a-uuid"),
         ]
@@ -229,6 +227,7 @@ class PortableSwiftSourceContractTests(unittest.TestCase):
         self.assertEqual(text.count("func test"), 7)
         self.assertNotIn("XCTSkip", text)
         self.assertNotIn("throw XCTSkip", text)
+        self.assertNotIn("X-CalCo-Account-ID", text)
 
 
 if __name__ == "__main__":

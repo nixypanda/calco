@@ -54,13 +54,6 @@ final class NativeCompletionUITests: XCTestCase {
         static let submitWarning = "foodDetail.submit.warning"
         static let submitError = "foodDetail.submit.error"
         static let submitSuccess = "foodDetail.submit.success"
-        static let pendingBanner = "foodDetail.pending.banner"
-        static let pendingBannerDiscard = "foodDetail.pending.banner.discard"
-        static let pendingReview = "foodDetail.pending.review"
-        static let pendingDismiss = "foodDetail.pending.dismiss"
-        static let pendingRetry = "foodDetail.pending.retry"
-        static let pendingDiscard = "foodDetail.pending.discard"
-        static let pendingNotice = "foodDetail.pending.notice"
         static let editorAmount = "diary.editor.amount"
         static let editorUnit = "diary.editor.unit"
         static let editorNotes = "diary.editor.notes"
@@ -533,237 +526,106 @@ final class NativeCompletionUITests: XCTestCase {
         attachScreenshot(named: "iPhone-13-mini-dynamic-type-settings")
     }
 
-    // MARK: - Pending retry UI
+    // MARK: - Ordinary transient submission errors
 
-    func testMiniUncertainSubmissionShowsRetryAndRetriesExactlyOnce() throws {
+    func testMiniTransientSubmissionErrorAllowsManualResubmission() throws {
         try resetFixture(logPost: "fail_once")
         XCTAssertTrue(
             try launchSignedIn(),
-            "The diary did not load for the pending-retry journey."
+            "The diary did not load for the transient-error journey."
         )
         try assertIPhone13Mini()
 
-        let baselineState = try mockState()
-        XCTAssertEqual(baselineState.logCount, 8, "Unexpected fixture log baseline.")
+        let baseline = try mockState()
+        XCTAssertEqual(baseline.logCount, 8, "Unexpected fixture log baseline.")
 
         submitFixtureFood()
-        if !app.descendants(matching: .any)[Identifier.submitWarning]
-            .waitForExistence(timeout: Timeout.long) {
-            print("NATIVE_QA_NO_WARNING_AX\n\(app.debugDescription)")
+        let surfaced = CalCoE2E.waitUntil(timeout: Timeout.long) {
+            self.app.descendants(matching: .any)[Identifier.submitError].exists
+                || self.app.descendants(matching: .any)[Identifier.submitWarning].exists
         }
         XCTAssertTrue(
-            app.descendants(matching: .any)[Identifier.submitWarning].exists,
-            "The ambiguous 503 did not surface a warning."
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)[Identifier.pendingBanner].exists,
-            "The global pending-submission banner is missing after an ambiguous write."
+            surfaced,
+            "The transient 503 did not surface an ordinary submission error."
         )
 
-        guard let retry = scrollToButton(
-            labelPrefix: "Retry",
-            marker: "foodDetail.mealSlot.picker",
-            direction: .up
-        ) else {
-            print("NATIVE_QA_PENDING_AX\n\(app.debugDescription)")
-            XCTFail("The inline pending retry action is not reachable.")
-            return
+        // A transient failure must not trigger an automatic retry or write.
+        let afterFailure = try mockState()
+        XCTAssertEqual(
+            afterFailure.logPostAttempts,
+            baseline.logPostAttempts + 1,
+            "The transient failure issued more than the one user-initiated submission."
+        )
+        XCTAssertEqual(
+            afterFailure.logCount,
+            baseline.logCount,
+            "The transient failure wrote a log without a manual resubmission."
+        )
+
+        let submit = app.buttons[Identifier.submit]
+        XCTAssertTrue(
+            submit.waitForExistence(timeout: Timeout.normal),
+            "The ordinary Log action disappeared after the transient failure."
+        )
+        if !submit.isHittable {
+            _ = scrollToElement(
+                Identifier.amountField,
+                marker: Identifier.amountField,
+                direction: .down
+            )
         }
-        XCTAssertTrue(retry.isHittable, "The pending retry action is not hittable.")
-        retry.tap()
+        XCTAssertTrue(
+            submit.isHittable,
+            "The ordinary Log action is not reachable for manual resubmission."
+        )
+        XCTAssertTrue(
+            submit.isEnabled,
+            "The ordinary Log action is disabled for manual resubmission."
+        )
+        submit.tap()
+
+        // The pre-existing single-attempt journal may offer "Log as new…"
+        // followed by a confirm dialog. That is ordinary explicit consent,
+        // never an automatic replay.
+        let logAsNew = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Log as new")
+        ).firstMatch
+        if logAsNew.waitForExistence(timeout: 2), logAsNew.isHittable {
+            logAsNew.tap()
+        }
+
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: Timeout.short) {
+            let create = alert.buttons.matching(
+                NSPredicate(format: "label CONTAINS[c] %@", "Create")
+            ).firstMatch
+            XCTAssertTrue(
+                create.exists && create.isHittable,
+                "The confirm-new-log alert has no reachable create action."
+            )
+            create.tap()
+        }
 
         let success = app.descendants(matching: .any)[Identifier.submitSuccess]
             .waitForExistence(timeout: Timeout.long)
         let leftDetail = app.descendants(matching: .any)[Identifier.diarySummary].exists
         XCTAssertTrue(
             success || leftDetail,
-            "The retry neither reported success nor returned to the diary."
-        )
-        XCTAssertTrue(
-            CalCoE2E.waitUntil(timeout: Timeout.normal) {
-                !self.app.descendants(matching: .any)[Identifier.pendingBanner].exists
-            },
-            "The pending banner stayed visible after a successful retry."
+            "The manual resubmission neither reported success nor returned to the diary."
         )
 
-        let finalState = try mockState()
+        let final = try mockState()
         XCTAssertEqual(
-            finalState.logCount,
-            9,
-            "The retry did not persist exactly one new fixture log."
-        )
-        XCTAssertEqual(
-            finalState.logPostAttempts,
-            2,
-            "Expected the original POST and one replay; observed a different attempt count."
-        )
-        XCTAssertEqual(
-            finalState.idempotencyKeys,
-            1,
-            "The two attempts did not share exactly one idempotency key."
-        )
-        attachScreenshot(named: "iPhone-13-mini-pending-retry")
-    }
-
-    func testMiniAccessibilityPendingBannerAndRecoveryRemainUsable() throws {
-        try resetFixture(logPost: "fail_once")
-        XCTAssertTrue(
-            try launchSignedIn(dynamicType: QA.dynamicTypeAccessibility),
-            "The diary did not load at AX XXXL."
-        )
-        try assertIPhone13Mini()
-        let baseline = try mockState()
-        submitFixtureFood()
-        XCTAssertTrue(
-            app.descendants(matching: .any)[Identifier.submitWarning]
-                .waitForExistence(timeout: Timeout.long),
-            "The ambiguous write did not surface a warning."
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)[Identifier.pendingBanner].exists,
-            "The pending banner is missing at AX XXXL."
-        )
-        guard let review = app.buttons[Identifier.pendingReview].firstMatch as XCUIElement?,
-              review.exists else {
-            XCTFail("The pending banner has no Review action at AX XXXL.")
-            return
-        }
-        XCTAssertTrue(review.isHittable, "The pending banner Review action is not hittable.")
-        XCTAssertEqual(
-            review.frame.width,
-            app.windows.firstMatch.frame.width - 32,
-            accuracy: 1,
-            "The pending banner Review action is not full width at AX XXXL."
-        )
-        XCTAssertLessThanOrEqual(
-            review.frame.height,
-            120,
-            "The pending banner Review action is excessively tall at AX XXXL."
-        )
-        let dismiss = app.buttons[Identifier.pendingDismiss]
-        XCTAssertTrue(dismiss.exists, "The pending banner dismiss action is missing at AX XXXL.")
-        XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
-        XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
-
-        // At AX XXXL the banner plus the wrapped navigation title leave no
-        // usable form strip. The user-visible escape path is the 44-point
-        // dismiss control, after which the detail form can be scrolled.
-        dismiss.tap()
-        XCTAssertTrue(
-            CalCoE2E.waitUntil(timeout: Timeout.normal) {
-                !self.app.descendants(matching: .any)[Identifier.pendingBanner].exists
-            },
-            "Dismissing the pending banner at AX XXXL did not clear it."
-        )
-        guard let retry = scrollToButton(
-            labelPrefix: "Retry",
-            marker: "foodDetail.mealSlot.picker",
-            direction: .up
-        ) else {
-            print("NATIVE_QA_PENDING_AX\n\(app.debugDescription)")
-            XCTFail("Inline pending recovery is not reachable at AX XXXL after dismissing the banner.")
-            return
-        }
-        XCTAssertTrue(retry.isHittable, "The pending retry action is not hittable at AX XXXL.")
-        retry.tap()
-        XCTAssertTrue(
-            CalCoE2E.waitUntil(timeout: Timeout.long) {
-                ((try? self.mockState().logCount) ?? -1) == baseline.logCount + 1
-            },
-            "The AX XXXL retry did not persist the fixture log."
-        )
-        XCTAssertTrue(
-            CalCoE2E.waitUntil(timeout: Timeout.long) {
-                !self.app.descendants(matching: .any)["foodDetail.pending.notice"].exists
-                    && !self.app.descendants(matching: .any)[Identifier.submitWarning].exists
-            },
-            "The AX XXXL retry left the pending recovery or warning UI visible."
-        )
-        let finalState = try mockState()
-        XCTAssertEqual(
-            finalState.logCount,
-            baseline.logCount + 1,
-            "The AX XXXL retry did not persist exactly one new fixture log."
-        )
-        XCTAssertEqual(
-            finalState.logPostAttempts,
+            final.logPostAttempts,
             baseline.logPostAttempts + 2,
-            "The AX XXXL retry did not share one idempotent replay."
+            "Manual resubmission should make exactly one additional POST."
         )
         XCTAssertEqual(
-            finalState.idempotencyKeys,
-            baseline.idempotencyKeys + 1,
-            "The AX XXXL retry did not share exactly one idempotency key."
+            final.logCount,
+            baseline.logCount + 1,
+            "The manual resubmission did not persist exactly one log."
         )
-    }
-
-    func testMiniConflictedPendingReviewRequiresDestructiveConfirmation() throws {
-        try resetFixture(logPost: "conflict")
-        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
-        try assertIPhone13Mini()
-
-        submitFixtureFood()
-        XCTAssertTrue(
-            app.descendants(matching: .any)[Identifier.submitWarning]
-                .waitForExistence(timeout: Timeout.long),
-            "The 409 conflict did not surface a warning."
-        )
-        guard scrollToButton(
-            labelPrefix: "Discard attempt",
-            marker: Identifier.amountField,
-            direction: .up
-        ) != nil else {
-            XCTFail("The conflict recovery section is not reachable.")
-            return
-        }
-        XCTAssertTrue(
-            app.descendants(matching: .any)[Identifier.pendingBanner].exists,
-            "The conflict banner is missing."
-        )
-
-        guard let bannerDiscard = hittablePrefixButton(labelPrefix: "Discard attempt") else {
-            XCTFail("The reviewed conflict does not offer a reachable discard action.")
-            return
-        }
-        bannerDiscard.tap()
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(
-            alert.waitForExistence(timeout: Timeout.short),
-            "Discarding a conflicted pending submission did not ask for confirmation."
-        )
-        let cancel = alert.buttons["Cancel"]
-        XCTAssertTrue(cancel.exists, "The conflict discard alert has no Cancel action.")
-        cancel.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)[Identifier.pendingBanner].exists,
-            "Cancel removed the pending conflict instead of leaving it in place."
-        )
-
-        bannerDiscard.tap()
-        guard alert.waitForExistence(timeout: Timeout.short) else {
-            XCTFail("The second discard attempt did not ask for confirmation.")
-            return
-        }
-        let destructive = alert.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", "Discard")
-        ).firstMatch
-        XCTAssertTrue(destructive.exists, "The conflict discard alert has no destructive action.")
-        destructive.tap()
-
-        XCTAssertTrue(
-            CalCoE2E.waitUntil(timeout: Timeout.normal) {
-                !self.app.descendants(matching: .any)[Identifier.pendingNotice].exists
-                    && !self.app.descendants(matching: .any)[Identifier.pendingBanner].exists
-            },
-            "Confirmed discard left the conflicted pending entry visible."
-        )
-        let finalState = try mockState()
-        XCTAssertEqual(
-            finalState.logCount,
-            8,
-            "A conflicted submission unexpectedly created a log."
-        )
-        XCTAssertEqual(finalState.logPostAttempts, 1, "The conflict should not be retried implicitly.")
+        attachScreenshot(named: "iPhone-13-mini-manual-resubmission")
     }
 
     // MARK: - Calendar, macro, and transient review controls
@@ -973,10 +835,9 @@ final class NativeCompletionUITests: XCTestCase {
             },
             "The revoked fixture key remained listed."
         )
-        assertFixtureAccountBinding("API-key management")
     }
 
-    func testMiniQuickAddAndBatchSubmitWithoutDoublePOST() throws {
+    func testMiniQuickAddAndBatchSubmitOneRequestPerIntent() throws {
         try resetFixture()
         XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
         try assertIPhone13Mini()
@@ -1020,7 +881,6 @@ final class NativeCompletionUITests: XCTestCase {
             2,
             "Quick add plus batch should be exactly two POST operations."
         )
-        assertFixtureAccountBinding("quick-add/batch")
     }
 
     func testMiniRepeatLatestRequiresReviewAndWritesOnce() throws {
@@ -1130,7 +990,6 @@ final class NativeCompletionUITests: XCTestCase {
         // Goal changes are effective from today; the historical selected day
         // must keep the goal that was effective for it.
         assertHistoricalContext(retainedSummary: summaryBefore)
-        assertFixtureAccountBinding("settings goals")
     }
 
     func testMiniHistoricalLoggingRetainsDateAndMealSlot() throws {
@@ -1220,7 +1079,6 @@ final class NativeCompletionUITests: XCTestCase {
         XCTAssertEqual(created.mealSlot, "breakfast", "The submitted meal slot is not Breakfast.")
         XCTAssertEqual(created.amount, "100", "The submitted fixture quantity is not 100.")
         XCTAssertEqual(created.unit, "g", "The submitted fixture unit is not grams.")
-        assertFixtureAccountBinding("historical logging")
     }
 
     func testMiniHistoricalDateSurvivesLibraryDestination() throws {
@@ -1468,7 +1326,6 @@ final class NativeCompletionUITests: XCTestCase {
         }
         XCTAssertEqual(createdLog.amount, "100")
         XCTAssertEqual(createdLog.unit, "g")
-        assertFixtureAccountBinding("Library/ad-hoc")
     }
 
     func testMiniHistoricalDateSurvivesMealsDestination() throws {
@@ -1531,7 +1388,6 @@ final class NativeCompletionUITests: XCTestCase {
             baseline.logCount + 1,
             "Meal logging did not create exactly one fixture log."
         )
-        assertFixtureAccountBinding("meals")
         dismissToDiary()
         assertHistoricalContext(retainedSummary: "Calories 900 / 2000")
     }
@@ -1675,7 +1531,6 @@ final class NativeCompletionUITests: XCTestCase {
             app.staticTexts["Native QA AI Brand"].waitForExistence(timeout: Timeout.long),
             "The edited assistant brand was not saved."
         )
-        assertFixtureAccountBinding("assistant custom food")
     }
 
     func testMiniAssistantEnabledAdHocDraftRequiresReviewConfirm() throws {
@@ -1745,10 +1600,9 @@ final class NativeCompletionUITests: XCTestCase {
         }
         XCTAssertEqual(log.amount, "1")
         XCTAssertEqual(log.unit, "bowl")
-        assertFixtureAccountBinding("assistant ad-hoc")
     }
 
-    func testMiniMealsCreateEditDeleteAndMissingRepair() throws {
+    func testMiniMealsCreateEditDeleteAndLog() throws {
         try resetFixture()
         XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
         try assertIPhone13Mini()
@@ -1806,89 +1660,50 @@ final class NativeCompletionUITests: XCTestCase {
             baseline.mealCreateCount + 1
         )
 
-        try removeFixtureFood("qa-apple")
-        app.buttons["meals.close"].tap()
-        guard openFeatureDestination(.meals) else {
-            XCTFail("Meals could not be reopened after the ingredient removal.")
-            return
-        }
-        XCTAssertTrue(
-            CalCoE2E.waitUntil(timeout: Timeout.long) {
-                self.app.descendants(matching: .any)
-                    .matching(NSPredicate(format: "identifier BEGINSWITH %@", "meals.list.missing."))
-                    .count > 0
-            },
-            "The degraded meal warning was not shown in the list."
-        )
-        let mealRow = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS %@", "Native QA Built Meal")
-        ).firstMatch
-        XCTAssertTrue(mealRow.waitForExistence(timeout: Timeout.long))
-        mealRow.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["meals.detail.missing"]
-                .waitForExistence(timeout: Timeout.long),
-            "The degraded meal did not expose the missing-ingredient warning."
-        )
-        XCTAssertNotNil(
-            revealMealPreview("meals.detail.preview.unavailable"),
-            "A degraded meal must not show a false preview."
-        )
-        XCTAssertFalse(
-            app.buttons["meals.detail.log"].exists,
-            "A degraded meal must not offer a log action."
-        )
-        let beforeRepair = try mockState()
-        XCTAssertEqual(
-            beforeRepair.logPostAttempts,
-            baseline.logPostAttempts,
-            "A degraded meal must not issue a log POST."
-        )
         app.buttons["meals.detail.edit"].tap()
         XCTAssertTrue(
-            app.textFields["meals.editor.name"].waitForExistence(timeout: Timeout.long)
+            app.textFields["meals.editor.name"].waitForExistence(timeout: Timeout.long),
+            "The meal edit form did not open."
         )
-        let remove = app.buttons.matching(
-            NSPredicate(format: "label == %@", "Remove Component")
-        ).firstMatch
-        XCTAssertTrue(remove.waitForExistence(timeout: Timeout.normal))
-        remove.tap()
-        let repairSearch = app.textFields.matching(
-            NSPredicate(format: "label == %@", "Search Food")
-        ).firstMatch
+        let notes = app.textFields["meals.editor.notes"]
+        let currentNotes = notes.value as? String ?? ""
+        // Tap at the trailing edge so backspaces delete the existing notes;
+        // a centre tap can put the cursor before the text and prepend instead.
+        notes.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        notes.typeText(
+            String(repeating: XCUIKeyboardKey.delete.rawValue, count: currentNotes.count)
+        )
+        notes.typeText("Native QA edited meal notes")
+        if app.keyboards.firstMatch.exists {
+            app.swipeUp()
+        }
+        let editSave = app.buttons["meals.editor.save"]
         XCTAssertTrue(
-            repairSearch.waitForExistence(timeout: Timeout.normal),
-            "The repaired component picker is not reachable."
+            editSave.waitForExistence(timeout: Timeout.normal) && editSave.isHittable,
+            "Meal edit Save is not reachable."
         )
-        repairSearch.tap()
-        repairSearch.typeText("Native QA Pear")
-        let pear = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "Native QA Pear")
-        ).firstMatch
-        XCTAssertTrue(pear.waitForExistence(timeout: Timeout.normal))
-        pear.tap()
-        app.buttons["meals.editor.save"].tap()
+        editSave.tap()
         XCTAssertTrue(
-            CalCoE2E.waitUntil(timeout: Timeout.long) {
-                !self.app.descendants(matching: .any)["meals.detail.missing"].exists
-                    && self.app.buttons["meals.detail.log"].isEnabled
-            },
-            "The repaired meal did not return to a loggable state."
+            app.staticTexts["Native QA edited meal notes"]
+                .waitForExistence(timeout: Timeout.long),
+            "The edited meal notes are missing."
         )
-        XCTAssertNotNil(
-            revealMealPreview("meals.detail.preview.nutrient.ENERGY_KCAL"),
-            "The repaired meal preview did not load."
+        XCTAssertEqual(
+            try mockState().mealUpdateCount,
+            baseline.mealUpdateCount + 1
         )
+
         let beforeLog = try mockState()
         app.buttons["meals.detail.log"].tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["meals.detail.log.success"]
                 .waitForExistence(timeout: Timeout.long),
-            "The repaired meal did not log."
+            "The meal did not log."
         )
         let afterLog = try mockState()
         XCTAssertEqual(afterLog.logPostAttempts, beforeLog.logPostAttempts + 1)
         XCTAssertEqual(afterLog.logCount, beforeLog.logCount + 1)
+
         app.buttons["meals.detail.delete"].tap()
         let deleteAlert = app.alerts.firstMatch
         XCTAssertTrue(deleteAlert.waitForExistence(timeout: Timeout.normal))
@@ -1909,7 +1724,6 @@ final class NativeCompletionUITests: XCTestCase {
         app.buttons["meals.close"].tap()
         scrollDiaryToTop()
         XCTAssertTrue(isHistoricalDateVisible(), "The selected historical date was not held.")
-        assertFixtureAccountBinding("meals CRUD")
     }
 
     // MARK: - Feature destination discovery
@@ -2680,73 +2494,6 @@ final class NativeCompletionUITests: XCTestCase {
         return nil
     }
 
-    private func hittablePrefixButton(labelPrefix: String) -> XCUIElement? {
-        app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH[c] %@", labelPrefix)
-        ).allElementsBoundByIndex.first { $0.exists && $0.isHittable }
-    }
-
-    private func scrollToButton(
-        labelPrefix: String,
-        marker: String,
-        direction: ScrollDirection,
-        maxSwipes: Int = 16
-    ) -> XCUIElement? {
-        if let button = hittablePrefixButton(labelPrefix: labelPrefix) {
-            return button
-        }
-        let container = scrollContainer(marker: marker)
-        switch direction {
-        case .up:
-            for _ in 0..<maxSwipes {
-                if let container {
-                    container.swipeUp()
-                } else {
-                    app.swipeUp()
-                }
-                if let button = hittablePrefixButton(labelPrefix: labelPrefix) {
-                    return button
-                }
-            }
-        case .down:
-            for _ in 0..<maxSwipes {
-                if let container {
-                    container.swipeDown()
-                } else {
-                    app.swipeDown()
-                }
-                if let button = hittablePrefixButton(labelPrefix: labelPrefix) {
-                    return button
-                }
-            }
-        }
-        if direction == .up {
-            for _ in 0..<8 {
-                app.swipeUp()
-                if let button = hittablePrefixButton(labelPrefix: labelPrefix) {
-                    return button
-                }
-            }
-            // At AX XXXL the global pending banner can cover most of the
-            // window, so full-window swipes never reach the form. Drag inside
-            // the remaining visible strip below the banner instead.
-            let window = app.windows.firstMatch
-            let start = window.coordinate(
-                withNormalizedOffset: CGVector(dx: 0.5, dy: 0.94)
-            )
-            let end = window.coordinate(
-                withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78)
-            )
-            for _ in 0..<12 {
-                start.press(forDuration: 0.05, thenDragTo: end)
-                if let button = hittablePrefixButton(labelPrefix: labelPrefix) {
-                    return button
-                }
-            }
-        }
-        return hittablePrefixButton(labelPrefix: labelPrefix)
-    }
-
     private func scrollContainer(marker: String) -> XCUIElement? {
         let candidates = app.collectionViews.allElementsBoundByIndex
             + app.tables.allElementsBoundByIndex
@@ -2910,10 +2657,6 @@ final class NativeCompletionUITests: XCTestCase {
     private struct MockState {
         let logCount: Int
         let logPostAttempts: Int
-        let idempotencyKeys: Int
-        let protectedRequestCount: Int
-        let boundRequestCount: Int
-        let unboundProtectedRequestCount: Int
         let goalCalories: Int
         let customFoodCount: Int
         let customFoodCreateCount: Int
@@ -2971,15 +2714,6 @@ final class NativeCompletionUITests: XCTestCase {
         )
     }
 
-    private func removeFixtureFood(_ foodID: String) throws {
-        let response = try mockRequest(
-            method: "POST",
-            path: "/__qa/remove-food",
-            json: ["id": foodID]
-        )
-        XCTAssertEqual(response.status, 200, "The fixture could not remove \(foodID).")
-    }
-
     private func sendAssistantPrompt(_ text: String, draftTimeout: TimeInterval) {
         let composer = app.descendants(matching: .any)["assistant.composer"]
         XCTAssertTrue(composer.waitForExistence(timeout: Timeout.normal), "Assistant composer missing.")
@@ -3032,10 +2766,6 @@ final class NativeCompletionUITests: XCTestCase {
         return MockState(
             logCount: object["log_count"] as? Int ?? -1,
             logPostAttempts: object["log_post_attempts"] as? Int ?? -1,
-            idempotencyKeys: object["idempotency_keys"] as? Int ?? -1,
-            protectedRequestCount: object["protected_request_count"] as? Int ?? -1,
-            boundRequestCount: object["bound_request_count"] as? Int ?? -1,
-            unboundProtectedRequestCount: object["unbound_protected_request_count"] as? Int ?? -1,
             goalCalories: object["goal_calories"] as? Int ?? -1,
             customFoodCount: object["custom_food_count"] as? Int ?? -1,
             customFoodCreateCount: object["custom_food_create_count"] as? Int ?? -1,
@@ -3049,27 +2779,6 @@ final class NativeCompletionUITests: XCTestCase {
             logs: logs
         )
     }
-
-    private func assertFixtureAccountBinding(_ context: String) {
-        do {
-            let state = try mockState()
-            XCTAssertGreaterThan(
-                state.boundRequestCount,
-                0,
-                "\(context): no protected request carried \(mockAccountHeader)."
-            )
-            XCTAssertEqual(
-                state.unboundProtectedRequestCount,
-                0,
-                "\(context): \(state.unboundProtectedRequestCount) protected requests "
-                    + "were still unbound."
-            )
-        } catch {
-            XCTFail("Could not read fixture binding counters for \(context): \(error)")
-        }
-    }
-
-    private var mockAccountHeader: String { "X-CalCo-Account-ID" }
 
     private func assertMockLogCount(_ expected: Int) {
         let count: Int

@@ -1,4 +1,4 @@
-// Typed log-history and submission endpoint calls.
+// Typed log-history and direct submission endpoint calls.
 
 import Foundation
 
@@ -48,11 +48,10 @@ public extension CalCoAPIClient {
         return try await send(request, as: LatestSlotsResponse.self).slots
     }
 
-    /// Sends journal-prepared bytes to the path frozen with the request. The
-    /// path allowlist keeps a corrupted journal from becoming an arbitrary POST.
+    /// Sends one plain request body. The path allowlist keeps this seam limited
+    /// to the three existing log-create endpoints.
     func createSubmissionRaw(
-        _ submission: LogSubmissionRequest,
-        expectedAccountID: String? = nil
+        _ submission: LogSubmissionRequest
     ) async throws -> (logs: [FoodLog], statusCode: Int) {
         guard let route = Self.submissionRoute(for: submission.requestPath) else {
             throw CalCoAPIError.invalidURL
@@ -60,8 +59,7 @@ public extension CalCoAPIClient {
         let request = try makeRequest(
             method: .post,
             path: ["api", "logs"] + (route == .single ? [] : [route.pathSuffix]),
-            body: submission.body,
-            expectedAccountID: expectedAccountID
+            body: submission.body
         )
         switch route {
         case .single, .adHoc:

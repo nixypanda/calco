@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, urlparse
 FIXTURE_USERNAME = "native-qa"
 FIXTURE_PASSWORD = "native-qa"
 COOKIE_NAME = "calco_session"
-ACCOUNT_HEADER = "X-CalCo-Account-ID"
+LEGACY_ACCOUNT_HEADER = "X-CalCo-Account-ID"
 FIXTURE_PROFILE_ID = "22222222-2222-4222-8222-222222222222"
 
 NUTRIENTS = [
@@ -162,8 +162,6 @@ PRODUCT_BASES = {
 
 
 def product_name(state: "FixtureState", product_id: str) -> str | None:
-    if product_id in state.removed_food_ids:
-        return None
     base = PRODUCT_BASES.get(product_id)
     if base is not None:
         return base["name"]
@@ -248,7 +246,6 @@ def make_meal(
             "fat_g": f"{fat:g}",
         },
         "components": components,
-        "has_missing_components": False,
         "created_at": (existing or {}).get("created_at", timestamp),
         "updated_at": timestamp,
     }
@@ -256,20 +253,11 @@ def make_meal(
 
 def decorate_meal(state: "FixtureState", meal: dict) -> dict:
     decorated = copy.deepcopy(meal)
-    missing = False
     for component in decorated.get("components") or []:
         product_id = str((component.get("item") or {}).get("id") or "")
         name = product_name(state, product_id)
-        if name is None:
-            component["missing"] = True
-            component["missing_reason"] = "product_not_found"
-            component["name"] = "Unavailable food"
-            missing = True
-        else:
-            component.pop("missing", None)
-            component.pop("missing_reason", None)
+        if name is not None:
             component["name"] = name
-    decorated["has_missing_components"] = missing
     return decorated
 
 
@@ -312,13 +300,11 @@ class FixtureState:
             self.historical = iso_date(historical)
             self.identity_id = str(uuid.uuid4())
             self.profile_id = FIXTURE_PROFILE_ID
-            # Backwards-compatible state alias: journal account scope remains
-            # the identity UUID; the request binding header uses profile_id.
-            self.account_id = self.identity_id
             self.session_token = "qa-session-" + uuid.uuid4().hex
             self.log_post_mode = body.get("log_post", "success")
-            if self.log_post_mode not in {"success", "fail_once", "conflict"}:
+            if self.log_post_mode not in {"success", "fail_once"}:
                 self.log_post_mode = "success"
+            self.log_fail_once_armed = self.log_post_mode == "fail_once"
             self.seed_logs = body.get("seed_logs", True) is not False
             self.recent_items = [
                 {
@@ -369,7 +355,6 @@ class FixtureState:
             self.custom_food_create_count = 0
             self.custom_food_update_count = 0
             self.custom_food_delete_count = 0
-            self.removed_food_ids: set[str] = set()
             self.assistant_enabled = body.get("assistant_enabled") is True
             self.assistant_draft_request_count = 0
             self.assistant_last_purpose: str | None = None
@@ -416,13 +401,7 @@ class FixtureState:
                 "snack",
                 "late_night_snack",
             ]
-            self.failed_once_keys: set[str] = set()
-            self.idempotency: dict[str, str] = {}
-            self.batch_idempotency: dict[str, list[str]] = {}
             self.log_post_attempts = 0
-            self.protected_request_count = 0
-            self.bound_request_count = 0
-            self.unbound_protected_request_count = 0
             self.api_keys: list[dict] = [
                 {
                     "id": "qa-api-key-1",
@@ -473,10 +452,8 @@ class FixtureState:
             "fixture": "native-completion-qa",
             "today": self.today,
             "historical": self.historical,
-            "account_id": self.identity_id,
             "identity_id": self.identity_id,
             "profile_id": self.profile_id,
-            "account_header": ACCOUNT_HEADER,
             "log_post": self.log_post_mode,
         }
 
@@ -569,32 +546,20 @@ class Handler(BaseHTTPRequestHandler):
                 return True
         return False
 
+    def _reject_legacy_account_header(self) -> bool:
+        if self.headers.get(LEGACY_ACCOUNT_HEADER) is None:
+            return False
+        self._error(
+            400,
+            "unexpected_account_header",
+            "Account-binding headers are not part of the normal API.",
+        )
+        return True
+
     def _require_auth(self) -> bool:
         if not self._authorized():
             self._error(401, "unauthorized", "Sign in required.")
             return False
-        self.state.protected_request_count += 1
-        raw = self.headers.get(ACCOUNT_HEADER)
-        # Header absence is allowed for legacy/read-only checks. Native scoped
-        # actions must send it; if present it is never ignored. Counters let the
-        # acceptance suite prove the native client is bound, not just accepted.
-        if raw is None:
-            self.state.unbound_protected_request_count += 1
-            return True
-        candidate = raw.strip()
-        try:
-            parsed = uuid.UUID(candidate)
-        except (ValueError, AttributeError):
-            self._error(400, "invalid_account_header", "Malformed account binding header.")
-            return False
-        if str(parsed).lower() != self.state.profile_id.lower():
-            self._error(
-                401,
-                "session_account_changed",
-                "Authenticated account does not match the expected profile.",
-            )
-            return False
-        self.state.bound_request_count += 1
         return True
 
     def _query(self) -> dict[str, list[str]]:
@@ -625,6 +590,8 @@ class Handler(BaseHTTPRequestHandler):
     # MARK: - routes
 
     def do_GET(self) -> None:  # noqa: N802
+        if self._reject_legacy_account_header():
+            return
         path = urlparse(self.path).path
         if path == "/__qa/health":
             self._send(200, self.state.summary())
@@ -647,7 +614,6 @@ class Handler(BaseHTTPRequestHandler):
                             for log in self.state.logs
                         ],
                         "log_post_attempts": self.state.log_post_attempts,
-                        "idempotency_keys": len(self.state.idempotency),
                         "api_key_count": len(self.state.api_keys),
                         "goal_calories": self.state.goal.get("calorie_target"),
                         "custom_food_count": len(self.state.custom_foods),
@@ -661,9 +627,6 @@ class Handler(BaseHTTPRequestHandler):
                         "meal_create_count": self.state.meal_create_count,
                         "meal_update_count": self.state.meal_update_count,
                         "meal_delete_count": self.state.meal_delete_count,
-                        "protected_request_count": self.state.protected_request_count,
-                        "bound_request_count": self.state.bound_request_count,
-                        "unbound_protected_request_count": self.state.unbound_protected_request_count,
                     },
                 )
             return
@@ -772,23 +735,6 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
-        if path == "/api/capabilities":
-            self._send(
-                200,
-                {
-                    "log_creation_idempotency": {
-                        "version": 2,
-                        "single": True,
-                        "ad_hoc": True,
-                        "batch": True,
-                        "batch_key_location": "top_level",
-                        "deleted_operation_replay": "conflict",
-                        "pre_migration_deleted_keys": "reconciliation_only",
-                        "request_account_binding": "x-calco-account-id",
-                    }
-                },
-            )
-            return
         if path == "/api/units":
             self._send(
                 200,
@@ -833,8 +779,6 @@ class Handler(BaseHTTPRequestHandler):
             items = []
             with self.state.lock:
                 for product_id, base in PRODUCT_BASES.items():
-                    if product_id in self.state.removed_food_ids:
-                        continue
                     items.append(
                         {
                             "id": product_id,
@@ -851,10 +795,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path in {"/api/foods/qa-apple", "/api/foods/qa-pear"}:
             product_id = path.rsplit("/", 1)[-1]
-            with self.state.lock:
-                if product_id in self.state.removed_food_ids:
-                    self._error(404, "not_found", "Food not found.")
-                    return
             base = PRODUCT_BASES[product_id]
             summary = {
                 "energy_kcal": f"{base['energy']:g}",
@@ -936,13 +876,6 @@ class Handler(BaseHTTPRequestHandler):
                     self._error(404, "not_found", "Meal not found.")
                     return
                 decorated = decorate_meal(self.state, meal)
-            if decorated.get("has_missing_components"):
-                self._error(
-                    409,
-                    "missing_components",
-                    "Meal contains unavailable ingredients.",
-                )
-                return
             query = self._query()
             amount = (query.get("amount") or ["100"])[0]
             unit = (query.get("unit") or ["g"])[0]
@@ -1048,16 +981,11 @@ class Handler(BaseHTTPRequestHandler):
         # Always drain Content-Length, including routes that ignore the body,
         # or the next keep-alive request line will be prefixed by leftover JSON.
         self._body()
+        if self._reject_legacy_account_header():
+            return
         path = urlparse(self.path).path
         if path == "/__qa/reset":
             self._send(200, self.state.reset(self._json_body()))
-            return
-        if path == "/__qa/remove-food":
-            body = self._json_body()
-            food_id = str(body.get("id") or "")
-            with self.state.lock:
-                self.state.removed_food_ids.add(food_id)
-            self._send(200, {"removed": food_id})
             return
         if path == "/api/auth/login":
             body = self._json_body()
@@ -1138,20 +1066,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/logs/batch":
             body = self._json_body()
-            key = str(body.get("idempotency_key") or "")
             items = body.get("items") or []
             with self.state.lock:
                 self.state.log_post_attempts += 1
-                if key and key in self.state.batch_idempotency:
-                    ids = self.state.batch_idempotency[key]
-                    logs = [
-                        copy.deepcopy(log)
-                        for log_id in ids
-                        for log in self.state.logs
-                        if log["id"] == log_id
-                    ]
-                    self._send(200, {"items": logs})
-                    return
                 created: list[dict] = []
                 for index, line in enumerate(items):
                     item = line.get("item") or {}
@@ -1180,30 +1097,15 @@ class Handler(BaseHTTPRequestHandler):
                         }
                     self.state.logs.append(log)
                     created.append(log)
-                if key:
-                    self.state.batch_idempotency[key] = [log["id"] for log in created]
                 self._send(201, {"items": created})
             return
         if path == "/api/logs/ad-hoc":
             body = self._json_body()
             if getattr(self.server, "verbose", False):
                 print("QA_ADHOC_POST " + json.dumps(body, sort_keys=True), flush=True)
-            key = str(body.get("idempotency_key") or "")
             quantity = body.get("quantity") or {}
             with self.state.lock:
                 self.state.log_post_attempts += 1
-                if key and key in self.state.idempotency:
-                    existing = next(
-                        (
-                            log
-                            for log in self.state.logs
-                            if log["id"] == self.state.idempotency[key]
-                        ),
-                        None,
-                    )
-                    if existing is not None:
-                        self._send(200, existing)
-                        return
                 log = make_log(
                     "adhoc-log-" + uuid.uuid4().hex[:8],
                     str(body.get("log_date") or self.state.today),
@@ -1227,39 +1129,20 @@ class Handler(BaseHTTPRequestHandler):
                     for n in (body.get("nutrients") or [])
                 ] or log["nutrients"]
                 self.state.logs.append(log)
-                if key:
-                    self.state.idempotency[key] = log["id"]
                 self._send(201, log)
             return
         if path == "/api/logs":
             body = self._json_body()
             if getattr(self.server, "verbose", False):
                 print("QA_LOG_POST " + json.dumps(body, sort_keys=True), flush=True)
-            key = body.get("idempotency_key") or ""
             with self.state.lock:
                 self.state.log_post_attempts += 1
-                if self.state.log_post_mode == "conflict":
-                    self._error(
-                        409,
-                        "idempotency_conflict",
-                        "Injected conflict for the same idempotency key.",
-                    )
-                    return
-                if key and key in self.state.idempotency:
-                    log_id = self.state.idempotency[key]
-                    existing = next(
-                        (item for item in self.state.logs if item["id"] == log_id),
-                        None,
-                    )
-                    if existing is not None:
-                        self._send(200, existing)
-                        return
-                if self.state.log_post_mode == "fail_once" and key not in self.state.failed_once_keys:
-                    self.state.failed_once_keys.add(key)
+                if self.state.log_post_mode == "fail_once" and self.state.log_fail_once_armed:
+                    self.state.log_fail_once_armed = False
                     self._error(
                         503,
                         "temporarily_unavailable",
-                        "Injected ambiguous failure; retry the same key.",
+                        "Injected transient failure; retry the submission.",
                     )
                     return
                 item = body.get("item") or {}
@@ -1294,8 +1177,6 @@ class Handler(BaseHTTPRequestHandler):
                 if brand is not None:
                     log["item"]["brand"] = brand
                 self.state.logs.append(log)
-                if key:
-                    self.state.idempotency[key] = log["id"]
                 if getattr(self.server, "verbose", False):
                     print("QA_LOG_RESPONSE " + json.dumps(log, sort_keys=True), flush=True)
                 self._send(201, log)
@@ -1303,22 +1184,6 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/meals":
             body = self._json_body()
             with self.state.lock:
-                missing = [
-                    str((item.get("item") or {}).get("id") or "")
-                    for item in (body.get("components") or [])
-                    if product_name(
-                        self.state,
-                        str((item.get("item") or {}).get("id") or ""),
-                    )
-                    is None
-                ]
-                if missing:
-                    self._error(
-                        409,
-                        "missing_components",
-                        "Meal contains unavailable ingredients.",
-                    )
-                    return
                 meal_id = "qa-meal-" + uuid.uuid4().hex[:8]
                 meal = make_meal(self.state, meal_id, body)
                 self.state.meal_create_count += 1
@@ -1354,6 +1219,8 @@ class Handler(BaseHTTPRequestHandler):
         self._error(404, "not_found", f"No fixture route for {path}.")
 
     def do_PUT(self) -> None:  # noqa: N802
+        if self._reject_legacy_account_header():
+            return
         path = urlparse(self.path).path
         if not self._require_auth():
             return
@@ -1399,22 +1266,6 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 if existing is None:
                     self._error(404, "not_found", "Meal not found.")
-                    return
-                missing = [
-                    str((item.get("item") or {}).get("id") or "")
-                    for item in (body.get("components") or [])
-                    if product_name(
-                        self.state,
-                        str((item.get("item") or {}).get("id") or ""),
-                    )
-                    is None
-                ]
-                if missing:
-                    self._error(
-                        409,
-                        "missing_components",
-                        "Meal contains unavailable ingredients.",
-                    )
                     return
                 updated = make_meal(self.state, meal_id, body, existing=existing)
                 self.state.meal_update_count += 1
@@ -1464,6 +1315,8 @@ class Handler(BaseHTTPRequestHandler):
         self._error(404, "not_found", f"No fixture route for {path}.")
 
     def do_DELETE(self) -> None:  # noqa: N802
+        if self._reject_legacy_account_header():
+            return
         path = urlparse(self.path).path
         if not self._require_auth():
             return

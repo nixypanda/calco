@@ -1,8 +1,6 @@
 // Meal service contract, feature-visible catalog values, and error mapping.
 //
-// This file deliberately contains no submission transport. Logging a meal goes
-// through the shared typed log-submission handler so the journal owns
-// idempotency, retry, account isolation, and deletion barriers.
+// Logging a meal goes through the shared typed log-submission handler.
 
 import Foundation
 
@@ -132,9 +130,9 @@ public func isMissingComponentsMealError(_ error: Error) -> Bool {
     return false
 }
 
-/// Builds a typed meal log draft for the shared journal. Returns nil when the
-/// quantity is not a positive plain decimal or the unit is not one the meal
-/// nutrition contract can convert to grams.
+/// Builds a typed meal log draft for the shared submission handler. Returns nil
+/// when the quantity is not a positive plain decimal or the unit is not one the
+/// meal nutrition contract can convert to grams.
 public enum MealLogDraftBuilder {
     public static func makeDraft(
         meal: Meal,

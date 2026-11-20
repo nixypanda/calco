@@ -658,9 +658,9 @@ public struct AdHocLogFormValues: Equatable, Sendable {
         )
     }
 
-    public func logIntent(
+    public func savedFoodLogIntent(
         timeZone: String
-    ) -> Result<CustomFoodLogIntent, AdHocLogFormError> {
+    ) -> Result<SavedFoodLogIntent, AdHocLogFormError> {
         let trimmedUnit = unit.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUnit.isEmpty else { return .failure(.unitRequired) }
         guard let quantity = CatalogDecimal.parseNonNegative(
@@ -670,7 +670,7 @@ public struct AdHocLogFormValues: Equatable, Sendable {
         }
         let notesText = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         return .success(
-            CustomFoodLogIntent(
+            SavedFoodLogIntent(
                 date: date,
                 mealSlot: mealSlot,
                 amount: CatalogDecimal.canonical(quantity),

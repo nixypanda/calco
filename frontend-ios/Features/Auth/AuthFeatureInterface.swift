@@ -11,22 +11,12 @@ public struct AuthUser: Equatable, Sendable, Identifiable {
     public let username: String
     public let role: AuthRole
     public let displayName: String?
-    /// Backend user-profile UUID used for request account binding. This is
-    /// intentionally separate from `id`, which remains the journal/auth scope.
-    public let profileID: String?
 
-    public init(
-        id: String,
-        username: String,
-        role: AuthRole,
-        displayName: String?,
-        profileID: String? = nil
-    ) {
+    public init(id: String, username: String, role: AuthRole, displayName: String?) {
         self.id = id
         self.username = username
         self.role = role
         self.displayName = displayName
-        self.profileID = profileID
     }
 }
 

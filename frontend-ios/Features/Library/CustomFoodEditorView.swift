@@ -12,7 +12,6 @@ public struct CustomFoodEditorView: View {
     @Environment(\.dismiss) private var dismissEnvironment
     @FocusState private var focusedField: Field?
     @State private var confirmingCancel = false
-    @State private var confirmingResetStore = false
 
     private enum Field: Hashable {
         case name
@@ -101,17 +100,6 @@ public struct CustomFoodEditorView: View {
         } message: {
             Text(String(localized: "diary.editor.discard.message"))
         }
-        .alert(
-            String(localized: "library.reconcile.reset.title"),
-            isPresented: $confirmingResetStore
-        ) {
-            Button(String(localized: "library.reconcile.reset.action"), role: .destructive) {
-                Task { await viewModel.resetUnreadableReconciliation() }
-            }
-            Button(String(localized: "diary.common.cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "library.reconcile.reset.message"))
-        }
     }
 
     private var title: String {
@@ -134,17 +122,6 @@ public struct CustomFoodEditorView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("library.editor.retry")
-
-                    if viewModel.isReconciliationStoreBlocked {
-                        Button(role: .destructive) {
-                            confirmingResetStore = true
-                        } label: {
-                            Text(String(localized: "library.reconcile.reset"))
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .accessibilityIdentifier("library.reconcile.reset")
-                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -154,67 +131,45 @@ public struct CustomFoodEditorView: View {
 
     private var loadedView: some View {
         Form {
-            if let attempt = viewModel.reconciliationAttempt {
-                CustomFoodReconciliationView(
-                    attempt: attempt,
-                    candidates: viewModel.reconciliationCandidates,
-                    message: viewModel.reconciliationMessage,
-                    isRefreshing: viewModel.isRefreshingReconciliation,
-                    onRefresh: {
-                        Task { await viewModel.refreshReconciliationCandidates() }
-                    },
-                    onUse: { food in
-                        Task { await viewModel.useReconciledFood(food) }
-                    },
-                    onDiscard: {
-                        Task { await viewModel.discardReconciliation() }
-                    }
-                )
-            } else if viewModel.hasRetainedLogIntent {
-                retainedFoodSection
-            } else {
-                detailsSection
-                if let barcodeNotice = viewModel.barcodeNotice {
-                    Section {
-                        Label(barcodeNotice, systemImage: "barcode")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("library.barcode.notice")
-                    }
-                }
-                NutrientEditorView(
-                    title: String(localized: "library.editor.nutrients.title"),
-                    help: String(localized: "library.editor.nutrients.help"),
-                    state: viewModel.nutrientEditor,
-                    isDisabled: !viewModel.isFormEditable,
-                    onAmountChange: { viewModel.setNutrientAmount($0, code: $1) },
-                    onAddOptional: { viewModel.addOptionalNutrient(code: $0) },
-                    onRemove: { viewModel.removeNutrient(code: $0) }
-                )
-                if viewModel.mode.isCreate {
-                    Section {
-                        Text(String(localized: "library.editor.create.servingsNote"))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                } else {
-                    servingSection
-                    defaultPortionSection
-                }
-                if !viewModel.mode.isCreate {
-                    Section {
-                        Text(String(localized: "library.editor.snapshotNote"))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("library.editor.snapshotNote")
-                    }
+            detailsSection
+            if let barcodeNotice = viewModel.barcodeNotice {
+                Section {
+                    Label(barcodeNotice, systemImage: "barcode")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("library.barcode.notice")
                 }
             }
-
-            submittedLogSection
+            NutrientEditorView(
+                title: String(localized: "library.editor.nutrients.title"),
+                help: String(localized: "library.editor.nutrients.help"),
+                state: viewModel.nutrientEditor,
+                isDisabled: !viewModel.isFormEditable,
+                onAmountChange: { viewModel.setNutrientAmount($0, code: $1) },
+                onAddOptional: { viewModel.addOptionalNutrient(code: $0) },
+                onRemove: { viewModel.removeNutrient(code: $0) }
+            )
+            if viewModel.mode.isCreate {
+                Section {
+                    Text(String(localized: "library.editor.create.servingsNote"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                servingSection
+                defaultPortionSection
+            }
+            if !viewModel.mode.isCreate {
+                Section {
+                    Text(String(localized: "library.editor.snapshotNote"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("library.editor.snapshotNote")
+                }
+            }
 
             if let message = viewModel.submitError {
                 Section {
@@ -226,30 +181,6 @@ public struct CustomFoodEditorView: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-    }
-
-    private var retainedFoodSection: some View {
-        Section {
-            Label {
-                Text(String(localized: "library.log.saved.title"))
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "checkmark.circle.fill")
-            }
-            .foregroundStyle(.green)
-
-            if let foodID = viewModel.savedFoodID {
-                Text(
-                    String(
-                        format: String(localized: "library.log.savedFoodID"),
-                        foodID
-                    )
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-            }
-        }
     }
 
     private var detailsSection: some View {
@@ -395,78 +326,6 @@ public struct CustomFoodEditorView: View {
             Text(String(localized: "library.editor.default.help"))
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    @ViewBuilder
-    private var submittedLogSection: some View {
-        switch viewModel.savedLogState {
-        case .none:
-            EmptyView()
-        case .logging:
-            Section {
-                ProgressView(String(localized: "library.log.logging"))
-                    .accessibilityIdentifier("library.log.logging")
-            }
-        case .pending(let message):
-            Section {
-                savedLogMessage(message, style: .orange)
-                retainedLogIntentRow
-                Button(String(localized: "foodDetail.pending.checkDiary")) {
-                    viewModel.reviewPendingLogs()
-                }
-                .accessibilityIdentifier("library.log.review")
-            } header: {
-                Text(String(localized: "library.log.pending.title"))
-            }
-        case .retryable(let message):
-            Section {
-                savedLogMessage(message, style: .red)
-                retainedLogIntentRow
-                Button {
-                    Task { await viewModel.retrySavedFoodLog() }
-                } label: {
-                    Text(String(localized: "library.log.retry"))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isBusy)
-                .accessibilityIdentifier("library.log.retry")
-            } header: {
-                Text(String(localized: "library.log.saved.title"))
-            }
-        case .logged:
-            Section {
-                Label(
-                    String(localized: "library.log.logged"),
-                    systemImage: "checkmark.circle.fill"
-                )
-                .foregroundStyle(.green)
-                .accessibilityIdentifier("library.log.logged")
-                Button(String(localized: "library.common.done")) {
-                    dismissEnvironment()
-                }
-                .accessibilityIdentifier("library.editor.done")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var retainedLogIntentRow: some View {
-        if let intent = viewModel.savedLogIntent {
-            Text(LibraryLogIntentFormat.summary(intent))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("library.log.intent")
-        }
-    }
-
-    private func savedLogMessage(_ message: String, style: Color) -> some View {
-        Text(message)
-            .foregroundStyle(style)
-            .font(.subheadline)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("library.log.message")
     }
 
     private enum ServingField {

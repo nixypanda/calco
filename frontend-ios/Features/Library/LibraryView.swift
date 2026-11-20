@@ -10,7 +10,6 @@ public struct LibraryView: View {
 
     private let service: any LibraryServicing
     private let submissionService: any LibraryLogSubmitting
-    private let reconciliationStore: CustomFoodReconciliationStore
     private let accountID: String
     private let baseURL: URL?
     private let initialDate: LocalDiaryDate
@@ -18,7 +17,6 @@ public struct LibraryView: View {
     private let today: LocalDiaryDate
     private let onLogged: (LocalDiaryDate, MealSlot?) -> Void
     private let onSessionExpired: () -> Void
-    private let onReviewPending: () -> Void
     private let onClose: (() -> Void)?
     private let initialAssistantDraft: AssistantReviewedDraft?
     private let initialBarcode: String?
@@ -27,7 +25,6 @@ public struct LibraryView: View {
     public init(
         service: any LibraryServicing,
         submissionService: any LibraryLogSubmitting = UnavailableLibraryLogSubmissionService(),
-        reconciliationStore: CustomFoodReconciliationStore? = nil,
         accountID: String,
         today: LocalDiaryDate,
         initialDate: LocalDiaryDate,
@@ -35,15 +32,12 @@ public struct LibraryView: View {
         baseURL: URL? = nil,
         onLogged: @escaping (LocalDiaryDate, MealSlot?) -> Void = { _, _ in },
         onSessionExpired: @escaping () -> Void = {},
-        onReviewPending: @escaping () -> Void = {},
         onClose: (() -> Void)? = nil,
         assistantDraft: AssistantReviewedDraft? = nil,
         initialBarcode: String? = nil
     ) {
-        let resolvedStore = reconciliationStore ?? .shared
         self.service = service
         self.submissionService = submissionService
-        self.reconciliationStore = resolvedStore
         self.accountID = accountID
         self.today = today
         self.initialDate = min(initialDate, today)
@@ -51,7 +45,6 @@ public struct LibraryView: View {
         self.baseURL = baseURL
         self.onLogged = onLogged
         self.onSessionExpired = onSessionExpired
-        self.onReviewPending = onReviewPending
         self.onClose = onClose
         self.initialAssistantDraft = assistantDraft
         self.initialBarcode = initialBarcode
@@ -81,7 +74,6 @@ public struct LibraryView: View {
         _viewModel = StateObject(
             wrappedValue: LibraryViewModel(
                 service: service,
-                reconciliationStore: resolvedStore,
                 accountID: accountID,
                 onSessionExpired: onSessionExpired
             )
@@ -177,7 +169,6 @@ public struct LibraryView: View {
         .onChange(of: path) { _, newPath in
             if newPath.isEmpty {
                 hasDirtyEditor = false
-                viewModel.reloadPendingCreate()
                 Task { await viewModel.refresh() }
             }
         }
@@ -186,39 +177,6 @@ public struct LibraryView: View {
     @ViewBuilder
     private var listView: some View {
         List {
-            if let pending = viewModel.pendingCreateAttempt {
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label {
-                            Text(String(localized: "library.reconcile.pendingExists"))
-                                .fixedSize(horizontal: false, vertical: true)
-                        } icon: {
-                            Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
-                        }
-                        .foregroundStyle(.orange)
-                        Text(pending.displayName)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Button(String(localized: "library.reconcile.review")) {
-                            path.append(.create(token: UUID()))
-                        }
-                        .accessibilityIdentifier("library.pending.review")
-                    }
-                }
-            }
-
-            if let error = viewModel.pendingCreateError {
-                Section {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button(String(localized: "library.reconcile.review")) {
-                        path.append(.create(token: UUID()))
-                    }
-                    .accessibilityIdentifier("library.pending.review")
-                }
-            }
-
             if let refreshError = viewModel.refreshError {
                 Section {
                     Text(refreshError)
@@ -306,8 +264,6 @@ public struct LibraryView: View {
         .task {
             if case .loading = viewModel.state, viewModel.foods.isEmpty {
                 await viewModel.load()
-            } else {
-                viewModel.reloadPendingCreate()
             }
         }
     }
@@ -334,16 +290,11 @@ public struct LibraryView: View {
                 CustomFoodEditorRouteView(
                     mode: .create,
                     service: service,
-                    submissionService: submissionService,
-                    reconciliationStore: reconciliationStore,
                     accountID: accountID,
-                    baseURL: baseURL,
                     onSaved: { _ in
                         path.removeAll()
                     },
-                    onLogged: onLogged,
                     onSessionExpired: onSessionExpired,
-                    onReviewPending: onReviewPending,
                     assistantDraft: isInitialRoute
                         && initialAssistantDraft?.purpose == .customFood
                         ? initialAssistantDraft
@@ -355,16 +306,11 @@ public struct LibraryView: View {
                 CustomFoodEditorRouteView(
                     mode: .edit(id: foodID),
                     service: service,
-                    submissionService: submissionService,
-                    reconciliationStore: reconciliationStore,
                     accountID: accountID,
-                    baseURL: baseURL,
                     onSaved: { _ in
                         path.removeAll()
                     },
-                    onLogged: onLogged,
                     onSessionExpired: onSessionExpired,
-                    onReviewPending: onReviewPending,
                     assistantDraft: nil,
                     initialBarcode: nil,
                     onDirtyChange: { hasDirtyEditor = $0 }
@@ -373,7 +319,6 @@ public struct LibraryView: View {
                 AdHocRouteView(
                     service: service,
                     submissionService: submissionService,
-                    reconciliationStore: reconciliationStore,
                     accountID: accountID,
                     initialDate: initialDate,
                     today: today,
@@ -381,10 +326,6 @@ public struct LibraryView: View {
                     baseURL: baseURL,
                     onLogged: onLogged,
                     onSessionExpired: onSessionExpired,
-                    onReviewPending: onReviewPending,
-                    onOpenLibrary: {
-                        path.removeAll()
-                    },
                     assistantDraft: token == initialRouteToken
                         && initialAssistantDraft?.purpose == .adHocLog
                         ? initialAssistantDraft
@@ -423,14 +364,9 @@ private struct CustomFoodEditorRouteView: View {
     init(
         mode: CustomFoodEditorMode,
         service: any LibraryServicing,
-        submissionService: any LibraryLogSubmitting,
-        reconciliationStore: CustomFoodReconciliationStore,
         accountID: String,
-        baseURL: URL?,
         onSaved: @escaping (String) -> Void,
-        onLogged: @escaping (LocalDiaryDate, MealSlot?) -> Void,
         onSessionExpired: @escaping () -> Void,
-        onReviewPending: @escaping () -> Void,
         assistantDraft: AssistantReviewedDraft?,
         initialBarcode: String?,
         onDirtyChange: @escaping (Bool) -> Void
@@ -440,14 +376,9 @@ private struct CustomFoodEditorRouteView: View {
             wrappedValue: CustomFoodEditorViewModel(
                 mode: mode,
                 service: service,
-                submissionService: submissionService,
-                reconciliationStore: reconciliationStore,
                 accountID: accountID,
-                baseURL: baseURL,
                 onSaved: onSaved,
-                onLogged: onLogged,
                 onSessionExpired: onSessionExpired,
-                onReviewPending: onReviewPending,
                 assistantDraft: assistantDraft,
                 initialBarcode: initialBarcode
             )
@@ -471,7 +402,6 @@ private struct AdHocRouteView: View {
     init(
         service: any LibraryServicing,
         submissionService: any LibraryLogSubmitting,
-        reconciliationStore: CustomFoodReconciliationStore,
         accountID: String,
         initialDate: LocalDiaryDate,
         today: LocalDiaryDate,
@@ -479,8 +409,6 @@ private struct AdHocRouteView: View {
         baseURL: URL?,
         onLogged: @escaping (LocalDiaryDate, MealSlot?) -> Void,
         onSessionExpired: @escaping () -> Void,
-        onReviewPending: @escaping () -> Void,
-        onOpenLibrary: @escaping () -> Void,
         assistantDraft: AssistantReviewedDraft?,
         onDirtyChange: @escaping (Bool) -> Void
     ) {
@@ -489,7 +417,6 @@ private struct AdHocRouteView: View {
             wrappedValue: AdHocLogViewModel(
                 service: service,
                 submissionService: submissionService,
-                reconciliationStore: reconciliationStore,
                 accountID: accountID,
                 initialDate: initialDate,
                 today: today,
@@ -497,8 +424,6 @@ private struct AdHocRouteView: View {
                 baseURL: baseURL,
                 onLogged: onLogged,
                 onSessionExpired: onSessionExpired,
-                onReviewPending: onReviewPending,
-                onOpenLibrary: onOpenLibrary,
                 assistantDraft: assistantDraft
             )
         )
