@@ -137,6 +137,9 @@ fn multipart_request(
     );
     if let Some(cookie) = cookie {
         request = request.header(header::COOKIE, cookie);
+        if let Some(account_id) = remembered_cookie_account(cookie) {
+            request = request.header(ACCOUNT_HEADER, account_id);
+        }
     }
     request.body(Body::from(body)).unwrap()
 }
@@ -510,13 +513,19 @@ async fn per_user_rate_limit_returns_retry_after(pool: PgPool) {
     assert!(headers.contains_key(header::RETRY_AFTER));
     assert_eq!(parse_json::<Value>(&bytes)["error"]["code"], "rate_limited");
 
-    let non_json = Request::builder()
+    let mut non_json = Request::builder()
         .method(Method::POST)
         .uri("/api/ai/custom-food/draft")
-        .header(header::COOKIE, malformed_user)
+        .header(header::COOKIE, &malformed_user)
         .header(header::CONTENT_TYPE, "text/plain")
         .body(Body::from("not json"))
         .unwrap();
+    if let Some(account_id) = remembered_cookie_account(&malformed_user) {
+        non_json.headers_mut().insert(
+            header::HeaderName::from_static(ACCOUNT_HEADER),
+            account_id.parse().unwrap(),
+        );
+    }
     let (status, _, _) = send(&router, non_json).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }

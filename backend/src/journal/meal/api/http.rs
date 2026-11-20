@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::auth::api::http::{ReadUser, WriteUser};
+use crate::auth::api::http::{AccountBoundReadUser, AccountBoundWriteUser};
 use crate::catalog::domain::calculation::Quantity;
 use crate::catalog::domain::{Product, ProductId, UnitCode};
 use crate::journal::error::JournalError;
@@ -125,7 +125,7 @@ pub struct UpdateMealRequest {
 }
 
 async fn create_meal_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<MealModule>,
     Json(req): Json<CreateMealRequest>,
 ) -> impl IntoResponse {
@@ -146,7 +146,7 @@ async fn create_meal_handler(
 }
 
 async fn get_meal_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<MealModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
@@ -159,7 +159,10 @@ async fn get_meal_handler(
     }
 }
 
-async fn list_meals_handler(auth: ReadUser, State(state): State<MealModule>) -> impl IntoResponse {
+async fn list_meals_handler(
+    auth: AccountBoundReadUser,
+    State(state): State<MealModule>,
+) -> impl IntoResponse {
     match state.meal_services.list_meals(auth.0.id).await {
         Ok(meals) => match meals_to_list_response(&state.meal_services, auth.0.id, meals).await {
             Ok(resp) => Json(resp).into_response(),
@@ -170,7 +173,7 @@ async fn list_meals_handler(auth: ReadUser, State(state): State<MealModule>) -> 
 }
 
 async fn update_meal_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<MealModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateMealRequest>,
@@ -192,7 +195,7 @@ async fn update_meal_handler(
 }
 
 async fn delete_meal_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<MealModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
@@ -205,7 +208,7 @@ async fn delete_meal_handler(
 }
 
 async fn meal_nutrients_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<MealModule>,
     Path(id): Path<Uuid>,
     Query(query): Query<MealNutrientQuery>,

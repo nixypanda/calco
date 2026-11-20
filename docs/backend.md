@@ -330,6 +330,12 @@ truth.
 
 See [api-access.md](api-access.md) for the user-facing workflow and examples.
 
+An API-key-only client can call `GET /auth/identity` with its bearer key and no
+`X-CalCo-Account-ID` header to discover its own `profile.id`. The response is
+the same identity/profile envelope as login. The route is read-only and returns
+only the authenticated principal; it does not make key management, assistant,
+admin, import, or write routes key-accessible.
+
 ### Token Model
 
 - Token format is `calco_pat_` followed by 32 random bytes encoded as
@@ -346,13 +352,14 @@ See [api-access.md](api-access.md) for the user-facing workflow and examples.
 
 | Extractor | Authentication | Key scope | Use |
 | --- | --- | --- | --- |
-| `SessionUser` | Browser session cookie only | Not applicable | API-key management and assistant routes |
-| `ReadUser` | Bearer key or browser session | `read` or `read_write` for keys | Read routes |
-| `WriteUser` | Bearer key or browser session | `read_write` for keys | Mutating user-data routes |
+| `IdentityDiscoveryUser` | Bearer key or browser session, no expected account | Any valid key scope | `GET /auth/identity` only |
+| `AccountBoundSessionUser` | Browser session cookie plus required expected account | Not applicable | API-key management and assistant routes |
+| `AccountBoundReadUser` | Bearer key or browser session plus required expected account | `read` or `read_write` for keys | Read routes |
+| `AccountBoundWriteUser` | Bearer key or browser session plus required expected account | `read_write` for keys | Mutating user-data routes |
 | `AuthAdmin` | Admin session cookie only | Not applicable | Admin and import routes |
 | `RawSessionToken` | Session cookie only | Not applicable | Session and logout routes |
 
-`ReadUser` and `WriteUser` resolve authentication in this order:
+`AccountBoundReadUser` and `AccountBoundWriteUser` resolve authentication in this order:
 
 1. If an `Authorization` header is present, require a valid `Bearer <token>`
    form. Authenticate through `ApiKeyService`, which returns `ApiKeyAuth` with
@@ -362,14 +369,51 @@ See [api-access.md](api-access.md) for the user-facing workflow and examples.
 2. Otherwise, use the existing browser session path.
 
 An invalid bearer key returns `401 invalid_api_key`. A valid key with
-insufficient scope returns `403 insufficient_scope`. `SessionUser` always uses
-the browser session path and ignores `Authorization`; API keys cannot
+insufficient scope returns `403 insufficient_scope`. `AccountBoundSessionUser`
+always uses the browser session path and ignores `Authorization`; API keys cannot
 authenticate key-management or assistant routes. `AuthAdmin` remains cookie-only
 and likewise ignores `Authorization`.
 
+### Required Expected Account
+
+Every account-scoped normal-user route requires:
+
+```text
+X-CalCo-Account-ID: <user_profiles.id UUID>
+```
+
+The header is an assertion, never an authentication mechanism. The server first
+resolves the principal from the cookie or bearer key. It then requires exactly
+one header whose value is the profile UUID of that principal. The header cannot
+select, replace, or impersonate a user.
+
+- Header absent: `400 missing_account_header`.
+- Header present but not exactly one valid nonblank UUID:
+  `400 invalid_account_header`.
+- Header present, valid, but different from the authenticated profile:
+  `401 session_account_changed`. The response does not disclose either profile
+  ID.
+- API-key scope and expiry are checked before account binding. A binding header
+  cannot elevate a `read` key to a write route.
+
+The extractors are the only normal-user auth extractors; there is no unbound
+legacy variant that a route can accidentally use. The boundary is:
+
+- Bound: all catalog, log, meal, goal, diary-preference, nutrition-detail,
+  API-key-management, and assistant routes.
+- Not bound: `/auth/login`, `/auth/identity`, `/auth/session`, `/auth/logout`,
+  `/auth/bootstrap/status`, `/auth/bootstrap/admin`, admin routes, and import
+  routes. Those routes authenticate without an expected account header.
+  `/auth/identity` accepts either a bearer key or a browser session and returns
+  only the authenticated principal, so an API-key-only client can discover its
+  own profile UUID before calling bound data routes.
+
+`AUTHORIZATION` and `X-CalCo-Account-ID` are included in the allowed CORS
+headers for trusted tools. CORS does not make embedded browser secrets safe.
+
 ### Route Scope Mapping
 
-Read routes use `ReadUser`:
+Read routes use `AccountBoundReadUser`:
 
 - Catalog: `GET /foods/search`, `GET /foods/categories`,
   `GET /foods/barcode/{barcode}`, `GET /foods/{id}`, `GET /foods/custom`,
@@ -382,7 +426,7 @@ Read routes use `ReadUser`:
 - Goals: `GET /goal`.
 - Diary preferences: `GET /diary-preferences`.
 
-Write routes use `WriteUser`:
+Write routes use `AccountBoundWriteUser`:
 
 - Catalog: `POST /foods/custom`, `PUT /foods/custom/{id}`,
   `DELETE /foods/custom/{id}`.
@@ -393,7 +437,7 @@ Write routes use `WriteUser`:
 - Diary preferences: `PUT /diary-preferences`.
 
 `POST /logs/last-used` is read-scoped even though it uses POST because it only
-returns prefill data. Assistant routes remain `SessionUser` in v1. Admin and
+returns prefill data. Assistant routes remain `AccountBoundSessionUser` in v1. Admin and
 import routes remain `AuthAdmin`, so no API key can use them.
 
 `GET /foods/barcode/{barcode}` can persist an Open Food Facts product on a cache
@@ -401,7 +445,7 @@ miss. This existing read-path side effect is allowed for `read` keys.
 
 ### Management Routes
 
-All three routes use `SessionUser`:
+All three routes use `AccountBoundSessionUser`:
 
 ```text
 GET    /auth/api-keys
@@ -490,7 +534,7 @@ rejection, normally `401 unauthorized`, not `invalid_api_key`.
 
 - Key authentication requires a normal, active user identity and an existing
   profile. Admin identities and missing profiles fail closed.
-- On `ReadUser`/`WriteUser` user-data routes, a malformed `Authorization` header
+- On `AccountBoundReadUser`/`AccountBoundWriteUser` user-data routes, a malformed `Authorization` header
   is rejected and CalCo does not fall back to a cookie. Key-management,
   assistant, admin, and import routes ignore `Authorization` and use their
   session/cookie authentication.
@@ -525,9 +569,15 @@ GET /version
 GET  /auth/bootstrap/status
 POST /auth/bootstrap/admin
 POST /auth/login
+GET  /auth/identity
 GET  /auth/session
 POST /auth/logout
 ```
+
+`GET /auth/identity` accepts a bearer key or browser session without requiring
+`X-CalCo-Account-ID` and returns the same identity/profile envelope as login. It
+returns only the caller's principal. It does not make API-key management,
+assistant, admin, import, or write routes key-accessible.
 
 Personal API key management (browser session only):
 
@@ -572,7 +622,7 @@ GET    /nutrients/{code}
 GET    /units
 ```
 
-Food detail includes product nutrients and servings. There are no separate public nutrient/serving detail endpoints. Catalog reads use `ReadUser`; custom-food writes use `WriteUser`.
+Food detail includes product nutrients and servings. There are no separate public nutrient/serving detail endpoints. Catalog reads use `AccountBoundReadUser`; custom-food writes use `AccountBoundWriteUser`.
 
 `GET /foods/barcode/{barcode}` trims the path value and uses local-first lookup.
 Locally cached values are returned without an external request. Only an
@@ -628,7 +678,7 @@ GET    /logs/summary?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
 ```
 
 Use the same date for `from_date` and `to_date` for a single-day view. Log reads and
-`POST /logs/last-used` use `ReadUser`; log mutations use `WriteUser`.
+`POST /logs/last-used` use `AccountBoundReadUser`; log mutations use `AccountBoundWriteUser`.
 
 `GET /logs/recent-items` dedups logs to one entry per item and orders both the
 items and each item's `top_quantities` by time-decayed usage frequency. Log age
@@ -695,7 +745,7 @@ GET /nutrition/details?date=YYYY-MM-DD
 ```
 
 Returns per-nutrient known amounts, reference guidance, item counts, coverage,
-and status for the requested day. It uses `ReadUser`.
+and status for the requested day. It uses `AccountBoundReadUser`.
 
 ### Meals
 
@@ -709,7 +759,7 @@ GET    /meals/{id}/nutrients?amount=&unit=
 ```
 
 Meal requests are aggregate-shaped. There are no standalone meal-component
-mutation routes. Meal reads use `ReadUser`; meal mutations use `WriteUser`.
+mutation routes. Meal reads use `AccountBoundReadUser`; meal mutations use `AccountBoundWriteUser`.
 
 ### Goals
 
@@ -719,7 +769,7 @@ PUT /goal
 ```
 
 `GET /goal` resolves the target snapshot effective for the requested local date
-and uses `ReadUser`. `PUT /goal` uses `WriteUser`.
+and uses `AccountBoundReadUser`. `PUT /goal` uses `AccountBoundWriteUser`.
 
 `PUT /goal` saves the current day's target values using:
 
@@ -742,7 +792,7 @@ PUT /diary-preferences
 ```
 
 The update replaces the authenticated user's enabled meal slots. At least one
-known slot must remain enabled. `GET` uses `ReadUser`; `PUT` uses `WriteUser`.
+known slot must remain enabled. `GET` uses `AccountBoundReadUser`; `PUT` uses `AccountBoundWriteUser`.
 
 ### Imports
 
@@ -761,7 +811,7 @@ GET  /imports/{id}/errors
 
 ### Assistant
 
-Authenticated user routes (browser session only through `SessionUser`; API keys
+Authenticated user routes (browser session only through `AccountBoundSessionUser`; API keys
 cannot use these routes in v1):
 
 ```text

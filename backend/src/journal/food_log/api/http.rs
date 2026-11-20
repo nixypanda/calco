@@ -14,7 +14,7 @@ use uuid::Uuid;
 use std::str::FromStr;
 
 use crate::AppState;
-use crate::auth::api::http::{ReadUser, WriteUser};
+use crate::auth::api::http::{AccountBoundReadUser, AccountBoundWriteUser};
 use crate::catalog::domain::calculation::Quantity;
 use crate::catalog::domain::{ProductId, UnitCode};
 use crate::journal::error::JournalError;
@@ -148,7 +148,7 @@ pub struct UpdateLogRequest {
 use crate::journal::api::http::{ErrorResponse, error_response, internal_error};
 
 async fn create_log_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
     Json(req): Json<CreateLogRequest>,
 ) -> impl IntoResponse {
@@ -176,7 +176,7 @@ async fn create_log_handler(
 }
 
 async fn create_ad_hoc_log_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
     Json(req): Json<CreateAdHocLogRequest>,
 ) -> impl IntoResponse {
@@ -196,7 +196,7 @@ async fn create_ad_hoc_log_handler(
 }
 
 async fn create_logs_batch_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
     Json(req): Json<CreateLogsBatchRequest>,
 ) -> impl IntoResponse {
@@ -235,7 +235,7 @@ async fn create_logs_batch_handler(
 }
 
 async fn latest_slots_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Query(query): Query<LatestSlotsQuery>,
 ) -> impl IntoResponse {
@@ -259,7 +259,7 @@ async fn latest_slots_handler(
 }
 
 async fn recent_items_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Query(query): Query<RecentItemsQuery>,
 ) -> impl IntoResponse {
@@ -284,7 +284,7 @@ async fn recent_items_handler(
 }
 
 async fn summary_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Query(query): Query<SummaryQuery>,
 ) -> impl IntoResponse {
@@ -308,7 +308,7 @@ async fn summary_handler(
 }
 
 async fn last_used_items_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Json(req): Json<LastUsedItemsRequest>,
 ) -> impl IntoResponse {
@@ -341,7 +341,7 @@ async fn last_used_items_handler(
 }
 
 async fn get_log_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
@@ -356,7 +356,7 @@ async fn get_log_handler(
 }
 
 async fn list_logs_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Query(query): Query<LogQuery>,
 ) -> impl IntoResponse {
@@ -376,7 +376,7 @@ async fn list_logs_handler(
 }
 
 async fn update_log_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateLogRequest>,
@@ -401,7 +401,7 @@ async fn update_log_handler(
 }
 
 async fn delete_log_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {

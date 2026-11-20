@@ -1,3 +1,4 @@
+mod account_binding_lifecycle;
 mod ad_hoc_log_lifecycle;
 mod api_key_lifecycle;
 mod assistant_http;

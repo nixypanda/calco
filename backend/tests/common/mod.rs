@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::{Mutex, OnceLock};
 
 use axum::Router;
 use axum::body::{Body, Bytes};
@@ -15,6 +17,62 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 pub const COOKIE_NAME: &str = "calco_session";
+pub const ACCOUNT_HEADER: &str = "x-calco-account-id";
+
+fn cookie_accounts() -> &'static Mutex<HashMap<String, String>> {
+    static ACCOUNTS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    ACCOUNTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn bearer_accounts() -> &'static Mutex<HashMap<String, String>> {
+    static ACCOUNTS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    ACCOUNTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub fn remember_account(cookie: &str, profile_id: &str) {
+    cookie_accounts()
+        .lock()
+        .expect("cookie account map poisoned")
+        .insert(cookie.to_string(), profile_id.to_string());
+}
+
+pub fn remember_api_key(token: &str, profile_id: &str) {
+    bearer_accounts()
+        .lock()
+        .expect("bearer account map poisoned")
+        .insert(token.to_string(), profile_id.to_string());
+}
+
+pub fn remembered_cookie_account(cookie: &str) -> Option<String> {
+    cookie_accounts()
+        .lock()
+        .expect("cookie account map poisoned")
+        .get(cookie)
+        .cloned()
+}
+
+fn remembered_bearer_account(token: &str) -> Option<String> {
+    bearer_accounts()
+        .lock()
+        .expect("bearer account map poisoned")
+        .get(token)
+        .cloned()
+}
+
+fn remember_created_api_key(cookie: Option<&str>, bytes: &Bytes) {
+    let Some(cookie) = cookie else {
+        return;
+    };
+    let Some(account_id) = remembered_cookie_account(cookie) else {
+        return;
+    };
+    let Ok(body) = serde_json::from_slice::<Value>(bytes) else {
+        return;
+    };
+    if let Some(token) = body["token"].as_str() {
+        remember_api_key(token, &account_id);
+    }
+}
 
 pub fn test_config() -> AppConfig {
     AppConfig {
@@ -54,6 +112,12 @@ fn init_tracing() {
 }
 
 pub async fn send(router: &Router, req: Request<Body>) -> (StatusCode, HeaderMap, Bytes) {
+    let api_key_create = req.uri().path() == "/api/auth/api-keys";
+    let cookie = req
+        .headers()
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
     let response = router
         .clone()
         .oneshot(req)
@@ -67,10 +131,24 @@ pub async fn send(router: &Router, req: Request<Body>) -> (StatusCode, HeaderMap
         .await
         .expect("collect body failed")
         .to_bytes();
+    if api_key_create && status == StatusCode::CREATED {
+        remember_created_api_key(cookie.as_deref(), &bytes);
+    }
     (status, headers, bytes)
 }
 
 pub fn json_request(
+    method: Method,
+    uri: &str,
+    cookie: Option<&str>,
+    body: &impl Serialize,
+) -> Request<Body> {
+    let mut request = json_request_unbound(method, uri, cookie, body);
+    add_remembered_cookie_account(&mut request, cookie);
+    request
+}
+
+pub fn json_request_unbound(
     method: Method,
     uri: &str,
     cookie: Option<&str>,
@@ -88,11 +166,40 @@ pub fn json_request(
 }
 
 pub fn empty_request(method: Method, uri: &str, cookie: Option<&str>) -> Request<Body> {
+    let mut request = empty_request_unbound(method, uri, cookie);
+    add_remembered_cookie_account(&mut request, cookie);
+    request
+}
+
+pub fn empty_request_unbound(method: Method, uri: &str, cookie: Option<&str>) -> Request<Body> {
     let mut builder = Request::builder().method(method).uri(uri);
     if let Some(c) = cookie {
         builder = builder.header(header::COOKIE, c);
     }
     builder.body(Body::empty()).expect("build empty request")
+}
+
+fn add_remembered_cookie_account(request: &mut Request<Body>, cookie: Option<&str>) {
+    let Some(cookie) = cookie else {
+        return;
+    };
+    let Some(account_id) = remembered_cookie_account(cookie) else {
+        return;
+    };
+    request.headers_mut().insert(
+        header::HeaderName::from_static(ACCOUNT_HEADER),
+        header::HeaderValue::from_str(&account_id).expect("account id header"),
+    );
+}
+
+fn add_remembered_bearer_account(request: &mut Request<Body>, token: &str) {
+    let Some(account_id) = remembered_bearer_account(token) else {
+        return;
+    };
+    request.headers_mut().insert(
+        header::HeaderName::from_static(ACCOUNT_HEADER),
+        header::HeaderValue::from_str(&account_id).expect("account id header"),
+    );
 }
 
 pub fn parse_json<T: DeserializeOwned>(bytes: &Bytes) -> T {
@@ -159,7 +266,12 @@ pub async fn login(router: &Router, username: &str, password: &str) -> String {
     let req = json_request(Method::POST, "/api/auth/login", None, &body);
     let (status, headers, bytes) = send(router, req).await;
     assert_status(status, StatusCode::OK, &bytes);
-    extract_session_cookie(&headers)
+    let cookie = extract_session_cookie(&headers);
+    let session: Value = parse_json(&bytes);
+    if let Some(profile_id) = session["profile"]["id"].as_str() {
+        remember_account(&cookie, profile_id);
+    }
+    cookie
 }
 
 /// Convenience: bootstrap admin, create one user, return (admin_cookie, user_cookie).
@@ -176,6 +288,17 @@ pub async fn get_json<T: DeserializeOwned>(router: &Router, uri: &str, cookie: &
     parse_json(&bytes)
 }
 
+/// Performs a GET without attaching the remembered account-binding header.
+/// Use this to prove that explicitly unbound routes authenticate from the
+/// cookie alone rather than accidentally passing because of test-harness
+/// header injection.
+pub async fn get_json_unbound<T: DeserializeOwned>(router: &Router, uri: &str, cookie: &str) -> T {
+    let req = empty_request_unbound(Method::GET, uri, Some(cookie));
+    let (status, _h, bytes) = send(router, req).await;
+    assert_status(status, StatusCode::OK, &bytes);
+    parse_json(&bytes)
+}
+
 pub async fn post_json<T: DeserializeOwned>(
     router: &Router,
     uri: &str,
@@ -183,10 +306,22 @@ pub async fn post_json<T: DeserializeOwned>(
     body: &impl Serialize,
     expected: StatusCode,
 ) -> T {
-    let req = json_request(Method::POST, uri, Some(cookie), body);
+    let mut payload = serde_json::to_value(body).expect("serialize body");
+    ensure_test_idempotency_key(uri, &mut payload);
+    let req = json_request(Method::POST, uri, Some(cookie), &payload);
     let (status, _h, bytes) = send(router, req).await;
     assert_status(status, expected, &bytes);
     parse_json(&bytes)
+}
+
+/// Ordinary lifecycle tests exercise the keyed create path by default.
+/// Dedicated contract tests use raw requests when they need to prove that a
+/// missing key is rejected.
+fn ensure_test_idempotency_key(uri: &str, payload: &mut Value) {
+    let is_log_create = matches!(uri, "/api/logs" | "/api/logs/ad-hoc" | "/api/logs/batch");
+    if is_log_create && payload.get("idempotency_key").is_none() {
+        payload["idempotency_key"] = Value::String(format!("test-{}", uuid::Uuid::new_v4()));
+    }
 }
 
 pub async fn put_json<T: DeserializeOwned>(
@@ -200,6 +335,28 @@ pub async fn put_json<T: DeserializeOwned>(
     let (status, _h, bytes) = send(router, req).await;
     assert_status(status, expected, &bytes);
     parse_json(&bytes)
+}
+
+pub async fn put_status(
+    router: &Router,
+    uri: &str,
+    cookie: &str,
+    body: &impl Serialize,
+) -> (StatusCode, Value) {
+    let req = json_request(Method::PUT, uri, Some(cookie), body);
+    let (status, _h, bytes) = send(router, req).await;
+    body_or_null(status, &bytes)
+}
+
+pub async fn post_status(
+    router: &Router,
+    uri: &str,
+    cookie: &str,
+    body: &impl Serialize,
+) -> (StatusCode, Value) {
+    let req = json_request(Method::POST, uri, Some(cookie), body);
+    let (status, _h, bytes) = send(router, req).await;
+    body_or_null(status, &bytes)
 }
 
 pub async fn delete_no_content(router: &Router, uri: &str, cookie: &str) {
@@ -220,6 +377,17 @@ pub fn bearer_json_request(
     token: &str,
     body: &impl Serialize,
 ) -> Request<Body> {
+    let mut request = bearer_json_request_unbound(method, uri, token, body);
+    add_remembered_bearer_account(&mut request, token);
+    request
+}
+
+pub fn bearer_json_request_unbound(
+    method: Method,
+    uri: &str,
+    token: &str,
+    body: &impl Serialize,
+) -> Request<Body> {
     let bytes = serde_json::to_vec(body).expect("serialize body");
     Request::builder()
         .method(method)
@@ -231,6 +399,12 @@ pub fn bearer_json_request(
 }
 
 pub fn bearer_empty_request(method: Method, uri: &str, token: &str) -> Request<Body> {
+    let mut request = bearer_empty_request_unbound(method, uri, token);
+    add_remembered_bearer_account(&mut request, token);
+    request
+}
+
+pub fn bearer_empty_request_unbound(method: Method, uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method(method)
         .uri(uri)
@@ -253,7 +427,9 @@ pub async fn post_json_bearer<T: DeserializeOwned>(
     body: &impl Serialize,
     expected: StatusCode,
 ) -> T {
-    let req = bearer_json_request(Method::POST, uri, token, body);
+    let mut payload = serde_json::to_value(body).expect("serialize body");
+    ensure_test_idempotency_key(uri, &mut payload);
+    let req = bearer_json_request(Method::POST, uri, token, &payload);
     let (status, _h, bytes) = send(router, req).await;
     assert_status(status, expected, &bytes);
     parse_json(&bytes)

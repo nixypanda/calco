@@ -22,6 +22,8 @@ Personal API keys provide:
 - Immediate revocation from the web app.
 - Access only to the owner's user-owned data, through the existing authorization
   and owner checks.
+- A required `X-CalCo-Account-ID` assertion that binds every account-scoped
+  request to the authenticated profile.
 - Optional idempotency keys on `POST /api/logs` for safe create retries.
 
 Current limitations:
@@ -68,6 +70,20 @@ cannot open Settings or API key management:
    and closing the tab are not intercepted.
 4. Store the secret in a password manager, secret manager, or environment
    variable on the machine that runs the script.
+5. If the client has only the key, discover its own profile UUID before calling
+   account-scoped routes:
+
+```bash
+curl -sS "$CALCO_BASE_URL/api/auth/identity" \
+  -H "Authorization: Bearer $CALCO_API_KEY"
+```
+
+The response is the same `{ "identity": ..., "profile": ... }` envelope as
+login/session, and `profile.id` is the value to send as `X-CalCo-Account-ID`.
+`GET /api/auth/identity` requires no account-binding header, returns only the
+authenticated principal, and is available to both bearer keys and browser
+sessions. It is read-only discovery; it does not unlock API-key management,
+assistant, admin, import, or write routes.
 
 Key names are trimmed and must contain visible text. They reject control and
 invisible formatting characters such as bidi controls, zero-width space,
@@ -100,6 +116,7 @@ Send the secret as a bearer token on every request:
 GET /api/logs?log_date=2026-10-26 HTTP/1.1
 Host: calco.example.com
 Authorization: Bearer calco_pat_<random secret>
+X-CalCo-Account-ID: <user-profile-id>
 Accept: application/json
 ```
 
@@ -107,23 +124,40 @@ Accept: application/json
 tokens and `X-API-Key` are not supported. Browser cookies authenticate the web
 app, not API-key clients.
 
-On user-data routes that accept API keys (`ReadUser` and `WriteUser` routes such
-as logs, foods, meals, goals, diary preferences, and nutrition details), an
-`Authorization` header takes precedence: CalCo authenticates with that bearer
-token and does not fall back to a browser session cookie. A malformed, invalid,
-expired, revoked, or security-stamp-invalidated key returns
-`401 invalid_api_key`.
+Every account-scoped user-data route also requires
+`X-CalCo-Account-ID: <user_profiles.id UUID>`. It is not an API key and does not
+authenticate anything by itself. The server authenticates the bearer token or
+cookie first, then requires the header to name exactly that principal's profile
+UUID. Send the profile ID returned in `profile.id` from `GET /api/auth/identity`
+or from the browser-only `GET /api/auth/session`. A missing header returns
+`400 missing_account_header`; a malformed, blank, or repeated header returns
+`400 invalid_account_header`; a valid header for another profile returns
+`401 session_account_changed`.
+
+The binding applies to logs, foods, meals, goals, diary preferences, nutrition
+details, API-key management, and assistant routes. Login, identity discovery,
+session, logout, bootstrap, admin, and import routes do not require it.
+API-key scope and expiry are checked before the account binding, so the header
+cannot elevate a `read` key to a write route.
+
+On user-data routes that accept API keys (`AccountBoundReadUser` and
+`AccountBoundWriteUser` routes such as logs, foods, meals, goals, diary
+preferences, and nutrition details), an `Authorization` header takes precedence:
+CalCo authenticates with that bearer token and does not fall back to a browser
+session cookie. A malformed, invalid, expired, revoked, or
+security-stamp-invalidated key returns `401 invalid_api_key`.
 
 Key management, assistant, admin, and import routes are browser-session-only.
 They ignore `Authorization`; a request with only a bearer token and no valid
 session cookie returns `401 unauthorized` (or the relevant session rejection),
 not `invalid_api_key`. API keys never authenticate these routes.
 
-Set the base URL and key once in a shell:
+Set the base URL, key, and profile ID once in a shell:
 
 ```bash
 export CALCO_BASE_URL="https://calco.example.com"
 export CALCO_API_KEY="calco_pat_<random secret>"
+export CALCO_ACCOUNT_ID="<user-profile-id>"
 ```
 
 ## Read Examples
@@ -132,7 +166,8 @@ List the owner's logs for a date:
 
 ```bash
 curl -sS "$CALCO_BASE_URL/api/logs?log_date=2026-10-26" \
-  -H "Authorization: Bearer $CALCO_API_KEY"
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID"
 ```
 
 Read the day's calorie and macro summary:
@@ -140,7 +175,8 @@ Read the day's calorie and macro summary:
 ```bash
 curl -sS \
   "$CALCO_BASE_URL/api/logs/summary?from_date=2026-10-26&to_date=2026-10-26" \
-  -H "Authorization: Bearer $CALCO_API_KEY"
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID"
 ```
 
 Search the shared catalog or list meals:
@@ -148,10 +184,12 @@ Search the shared catalog or list meals:
 ```bash
 curl -sS -G "$CALCO_BASE_URL/api/foods/search" \
   --data-urlencode "q=paneer" \
-  -H "Authorization: Bearer $CALCO_API_KEY"
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID"
 
 curl -sS "$CALCO_BASE_URL/api/meals" \
-  -H "Authorization: Bearer $CALCO_API_KEY"
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID"
 ```
 
 Read endpoints include `GET /api/logs`, `GET /api/logs/summary`,
@@ -169,6 +207,7 @@ A `read_write` key can create a food log for the owner:
 ```bash
 curl -sS -X POST "$CALCO_BASE_URL/api/logs" \
   -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID" \
   -H "Content-Type: application/json" \
   -d '{
     "log_date": "2026-10-26",
@@ -200,6 +239,7 @@ Scripts can make `POST /api/logs` retry-safe by supplying an optional
 ```bash
 curl -sS -X POST "$CALCO_BASE_URL/api/logs" \
   -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID" \
   -H "Content-Type: application/json" \
   -d '{
     "log_date": "2026-10-26",
@@ -257,9 +297,9 @@ Never put a CalCo API key in browser JavaScript, a single-page app, a mobile app
 `localStorage`, or any other client distributed to other people. Anyone who can
 load the app can read the key and act as the owner.
 
-The backend allows the `Authorization` header through CORS so trusted tools can
-call the API, but CORS does not make an embedded secret safe. Browser clients
-should use the normal CalCo login and session cookie.
+The backend allows the `Authorization` and `X-CalCo-Account-ID` headers through
+CORS so trusted tools can call the API, but CORS does not make an embedded secret
+safe. Browser clients should use the normal CalCo login and session cookie.
 
 > **Warning:** `CORS_ALLOWED_ORIGINS` is a credential-minting trust boundary.
 > When it is non-empty, the backend enables credentialed CORS for exactly those
@@ -295,6 +335,9 @@ product change. Do not rely on API-key scopes to provide that isolation.
 | `401` | `invalid_api_key` | The bearer token on a user-data route is malformed, invalid, expired, revoked, or invalidated by a security-stamp change. |
 | `401` | `unauthorized` (or session error) | A bearer token was sent to a browser-session-only route (key management, assistant, admin, or import) without a valid session cookie. These routes ignore `Authorization`. |
 | `403` | `insufficient_scope` | The key is valid but its scope does not permit the route. |
+| `400` | `missing_account_header` | The account-scoped route was called without `X-CalCo-Account-ID`. |
+| `400` | `invalid_account_header` | `X-CalCo-Account-ID` was blank, malformed, non-UUID, non-UTF-8, or supplied more than once. |
+| `401` | `session_account_changed` | `X-CalCo-Account-ID` does not match the authenticated cookie/API-key profile. The response does not disclose either profile ID. |
 | `404` | `api_key_not_found` | A key-management route referenced a key that does not exist for this user. |
 | `409` | `conflict` | A log `idempotency_key` was reused with a different request. |
 | `409` | `api_key_limit_reached` | The account is at its soft limit of 10 active keys; revoke an unused key and retry. |
