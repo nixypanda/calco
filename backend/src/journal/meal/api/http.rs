@@ -12,9 +12,12 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::api::http::{AccountBoundReadUser, AccountBoundWriteUser};
-use crate::catalog::domain::calculation::Quantity;
-use crate::catalog::domain::{Product, ProductId, UnitCode};
-use crate::journal::error::JournalError;
+use crate::catalog::domain::calculation::{CalculatedNutrition, Quantity};
+use crate::catalog::domain::{ProductId, UnitCode};
+use crate::journal::error::{
+    JournalError, MealComponentUnavailableReason, MealQuantityUnavailableReason,
+    UnavailableMealComponent, UnavailableMealComponents,
+};
 use crate::journal::meal::app::*;
 use crate::journal::meal::domain::*;
 use crate::journal::module::MealModule;
@@ -33,95 +36,163 @@ pub fn meal_routes(state: AppState) -> Router {
 }
 
 use crate::journal::api::http::{
-    NutrientSummaryDto, internal_error, is_summary_nutrient_code, nutrient_summary_from_entries,
+    NutrientSummaryDto, is_summary_nutrient_code, nutrient_summary_from_entries,
 };
 
 #[derive(Deserialize)]
-pub struct CreateMealRequest {
-    pub name: String,
-    pub notes: Option<String>,
-    pub total_quantity: Option<QuantityDto>,
-    pub components: Vec<CreateMealComponentRequest>,
+struct CreateMealRequest {
+    name: String,
+    notes: Option<String>,
+    total_quantity: Option<QuantityDto>,
+    components: Vec<CreateMealComponentRequest>,
 }
 
 #[derive(Deserialize)]
-pub struct CreateMealComponentRequest {
-    pub item: ItemRefDto,
-    pub quantity: QuantityDto,
+struct CreateMealComponentRequest {
+    item: ItemRefDto,
+    quantity: QuantityDto,
 }
 
 #[derive(Deserialize)]
-pub struct ItemRefDto {
+struct ItemRefDto {
     #[serde(rename = "type")]
-    pub item_type: String,
-    pub id: Uuid,
+    item_type: String,
+    id: Uuid,
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct QuantityDto {
-    pub amount: Decimal,
-    pub unit: String,
+struct QuantityDto {
+    amount: Decimal,
+    unit: String,
 }
 
 #[derive(Serialize)]
-pub struct MealResponse {
-    pub id: Uuid,
-    pub name: String,
-    pub notes: Option<String>,
-    pub total_quantity: Option<QuantityDto>,
-    pub nutrition_summary: Option<NutrientSummaryDto>,
-    pub components: Vec<MealComponentDto>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+struct MealResponse {
+    id: Uuid,
+    name: String,
+    notes: Option<String>,
+    total_quantity: Option<QuantityDto>,
+    nutrition: MealNutritionDto,
+    components: Vec<MealComponentDto>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
-pub struct MealComponentDto {
-    pub id: Uuid,
-    pub item: ItemDto,
-    pub quantity: QuantityDto,
-    pub nutrition_summary: Option<NutrientSummaryDto>,
+#[serde(tag = "status", rename_all = "snake_case")]
+enum MealNutritionDto {
+    Available {
+        summary: NutrientSummaryDto,
+    },
+    NotDeclared,
+    Unavailable {
+        unavailable_components: UnavailableMealComponentsDto,
+    },
+    TotalQuantityUnavailable {
+        reason: MealQuantityUnavailableReason,
+        total_quantity: QuantityDto,
+    },
 }
 
 #[derive(Serialize)]
-pub struct ItemDto {
+#[serde(tag = "availability", rename_all = "snake_case")]
+enum MealComponentDto {
+    Available {
+        id: Uuid,
+        item: ItemDto,
+        quantity: QuantityDto,
+        nutrition_summary: NutrientSummaryDto,
+    },
+    Unavailable {
+        id: Uuid,
+        item: ItemDto,
+        quantity: QuantityDto,
+        reason: MealComponentUnavailableReason,
+    },
+}
+
+#[derive(Serialize)]
+struct UnavailableMealComponentDto {
+    component_id: Uuid,
+    item: ItemDto,
+    quantity: QuantityDto,
+    reason: MealComponentUnavailableReason,
+}
+
+impl From<&UnavailableMealComponent> for UnavailableMealComponentDto {
+    fn from(component: &UnavailableMealComponent) -> Self {
+        Self {
+            component_id: component.component_id,
+            item: ItemDto {
+                item_type: "product".to_string(),
+                id: component.product_id,
+            },
+            quantity: quantity_to_dto(component.quantity_amount, component.quantity_unit.clone()),
+            reason: component.reason,
+        }
+    }
+}
+
+/// Wire representation of a guaranteed non-empty unavailable-component set.
+///
+/// The inner vector is private and can only be built from the domain's
+/// `UnavailableMealComponents`, so an empty set cannot be constructed as a
+/// valid DTO.
+#[derive(Serialize)]
+#[serde(transparent)]
+struct UnavailableMealComponentsDto(Vec<UnavailableMealComponentDto>);
+
+impl From<&UnavailableMealComponents> for UnavailableMealComponentsDto {
+    fn from(components: &UnavailableMealComponents) -> Self {
+        Self(
+            components
+                .as_slice()
+                .iter()
+                .map(UnavailableMealComponentDto::from)
+                .collect(),
+        )
+    }
+}
+
+#[derive(Serialize)]
+struct ItemDto {
     #[serde(rename = "type")]
-    pub item_type: String,
-    pub id: Uuid,
+    item_type: String,
+    id: Uuid,
 }
 
 #[derive(Serialize)]
-pub struct MealListResponse {
-    pub items: Vec<MealResponse>,
+struct MealListResponse {
+    items: Vec<MealResponse>,
 }
 
 #[derive(Serialize)]
-pub struct MealNutritionResponse {
-    pub meal_id: Uuid,
-    pub quantity: QuantityDto,
-    pub nutrition_summary: NutrientSummaryDto,
-    pub nutrients: Vec<MealNutrientDto>,
+struct MealNutritionResponse {
+    meal_id: Uuid,
+    quantity: QuantityDto,
+    nutrition_summary: NutrientSummaryDto,
+    nutrients: Vec<MealNutrientDto>,
 }
 
 #[derive(Serialize)]
-pub struct MealNutrientDto {
-    pub code: String,
-    pub amount: Decimal,
-    pub unit: String,
+struct MealNutrientDto {
+    code: String,
+    amount: Decimal,
+    unit: String,
 }
 
 #[derive(Deserialize)]
-pub struct MealNutrientQuery {
-    pub amount: Decimal,
-    pub unit: String,
+struct MealNutrientQuery {
+    amount: Decimal,
+    unit: String,
 }
 
 #[derive(Deserialize)]
-pub struct UpdateMealRequest {
-    pub name: Option<String>,
-    pub notes: Option<Option<String>>,
-    pub total_quantity: Option<Option<QuantityDto>>,
-    pub components: Option<Vec<CreateMealComponentRequest>>,
+struct UpdateMealRequest {
+    name: Option<String>,
+    notes: Option<Option<String>>,
+    total_quantity: Option<Option<QuantityDto>>,
+    components: Option<Vec<CreateMealComponentRequest>>,
 }
 
 async fn create_meal_handler(
@@ -139,7 +210,7 @@ async fn create_meal_handler(
     match services.create_meal(auth.0.id, input).await {
         Ok(meal) => match meal_to_response(&state.meal_services, auth.0.id, &meal).await {
             Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
-            Err(e) => internal_error(e).into_response(),
+            Err(e) => e.into_response(),
         },
         Err(e) => e.into_response(),
     }
@@ -153,7 +224,7 @@ async fn get_meal_handler(
     match state.meal_services.get_meal(auth.0.id, MealId(id)).await {
         Ok(meal) => match meal_to_response(&state.meal_services, auth.0.id, &meal).await {
             Ok(resp) => Json(resp).into_response(),
-            Err(e) => internal_error(e).into_response(),
+            Err(e) => e.into_response(),
         },
         Err(e) => e.into_response(),
     }
@@ -166,9 +237,9 @@ async fn list_meals_handler(
     match state.meal_services.list_meals(auth.0.id).await {
         Ok(meals) => match meals_to_list_response(&state.meal_services, auth.0.id, meals).await {
             Ok(resp) => Json(resp).into_response(),
-            Err(e) => internal_error(e).into_response(),
+            Err(e) => e.into_response(),
         },
-        Err(e) => internal_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -188,7 +259,7 @@ async fn update_meal_handler(
     match services.update_meal(MealId(id), auth.0.id, input).await {
         Ok(meal) => match meal_to_response(&state.meal_services, auth.0.id, &meal).await {
             Ok(resp) => Json(resp).into_response(),
-            Err(e) => internal_error(e).into_response(),
+            Err(e) => e.into_response(),
         },
         Err(e) => e.into_response(),
     }
@@ -242,36 +313,42 @@ fn parse_quantity_dto(q: &QuantityDto) -> Result<Quantity, JournalError> {
     Quantity::new(q.amount, UnitCode(q.unit.clone())).map_err(JournalError::from)
 }
 
+fn parse_meal_quantity_dto(q: &QuantityDto) -> Result<MealQuantity, JournalError> {
+    let quantity = parse_quantity_dto(q)?;
+    let (amount, unit) = quantity.into_parts();
+    MealQuantity::new(amount, unit)
+}
+
 fn meal_create_request_to_input(req: CreateMealRequest) -> Result<CreateMealInput, JournalError> {
-    Ok(CreateMealInput {
-        name: req.name,
-        notes: req.notes,
-        total_quantity_amount: req.total_quantity.as_ref().map(|q| q.amount),
-        total_quantity_unit: req
-            .total_quantity
-            .as_ref()
-            .map(|q| UnitCode(q.unit.clone())),
-        components: meal_component_requests_to_inputs(req.components)?,
-    })
+    let total_quantity = req
+        .total_quantity
+        .as_ref()
+        .map(parse_meal_quantity_dto)
+        .transpose()?;
+    Ok(CreateMealInput::new(
+        req.name,
+        req.notes,
+        total_quantity,
+        meal_component_requests_to_inputs(req.components)?,
+    ))
 }
 
 fn meal_update_request_to_input(req: UpdateMealRequest) -> Result<UpdateMealInput, JournalError> {
-    let total_quantity = req.total_quantity;
-    let total_quantity_amount = total_quantity
-        .as_ref()
-        .map(|quantity| quantity.as_ref().map(|q| q.amount));
-    let total_quantity_unit = total_quantity.map(|quantity| quantity.map(|q| UnitCode(q.unit)));
+    let total_quantity = match req.total_quantity {
+        None => MealTotalQuantityPatch::Unchanged,
+        Some(None) => MealTotalQuantityPatch::Clear,
+        Some(Some(quantity)) => MealTotalQuantityPatch::Set(parse_meal_quantity_dto(&quantity)?),
+    };
     let components = req
         .components
         .map(meal_component_requests_to_inputs)
         .transpose()?;
-    Ok(UpdateMealInput {
-        name: req.name,
-        notes: req.notes,
-        total_quantity_amount,
-        total_quantity_unit,
+    Ok(UpdateMealInput::new(
+        req.name,
+        req.notes,
+        total_quantity,
         components,
-    })
+    ))
 }
 
 fn meal_component_requests_to_inputs(
@@ -286,10 +363,10 @@ fn meal_component_requests_to_inputs(
 fn meal_component_request_to_input(
     component: CreateMealComponentRequest,
 ) -> Result<CreateMealComponentInput, JournalError> {
-    Ok(CreateMealComponentInput {
-        item: parse_component_item(&component.item)?,
-        quantity: parse_quantity_dto(&component.quantity)?,
-    })
+    Ok(CreateMealComponentInput::new(
+        parse_component_item(&component.item)?,
+        parse_meal_quantity_dto(&component.quantity)?,
+    ))
 }
 
 async fn meals_to_list_response(
@@ -309,58 +386,108 @@ async fn meal_to_response(
     actor_id: Uuid,
     meal: &Meal,
 ) -> Result<MealResponse, JournalError> {
-    let products = services.load_products(actor_id, meal).await?;
-    Ok(meal_to_response_with_products(
-        meal,
-        &products,
-        services.unit_converter(),
-    ))
+    let resolution = services.resolve_meal_products(actor_id, meal).await?;
+    meal_to_response_with_resolution(meal, &resolution, services.unit_converter())
 }
 
-fn meal_to_response_with_products(
+fn meal_to_response_with_resolution(
     meal: &Meal,
-    products: &[(ProductId, Product)],
+    resolution: &MealProductResolution,
     unit_converter: &crate::catalog::domain::units::UnitConverter,
-) -> MealResponse {
-    MealResponse {
-        id: meal.id.0,
-        name: meal.name.as_str().to_string(),
-        notes: meal.notes.as_ref().map(|n| n.0.clone()),
-        total_quantity: meal_total_quantity_to_dto(meal),
-        nutrition_summary: meal_declared_nutrition_summary(meal, products, unit_converter),
-        components: meal
-            .components
-            .iter()
-            .map(|component| meal_component_to_dto(component, products, unit_converter))
-            .collect(),
-        created_at: meal.created_at,
-        updated_at: meal.updated_at,
-    }
-}
+) -> Result<MealResponse, JournalError> {
+    let nutrition = meal_nutrition_dto(meal, resolution, unit_converter)?;
+    let components = resolution
+        .components()
+        .iter()
+        .map(meal_component_to_dto)
+        .collect();
 
-fn meal_total_quantity_to_dto(meal: &Meal) -> Option<QuantityDto> {
-    meal.total_quantity_amount.map(|amount| QuantityDto {
-        amount,
-        unit: meal
-            .total_quantity_unit
-            .as_ref()
-            .map(|unit| unit.0.clone())
-            .unwrap_or_default(),
+    Ok(MealResponse {
+        id: meal.id().0,
+        name: meal.name().as_str().to_string(),
+        notes: meal.notes().map(|notes| notes.0.clone()),
+        total_quantity: meal
+            .total_quantity()
+            .map(|quantity| quantity_to_dto(quantity.amount(), quantity.unit().0.clone())),
+        nutrition,
+        components,
+        created_at: meal.created_at(),
+        updated_at: meal.updated_at(),
     })
 }
 
-fn meal_component_to_dto(
-    component: &MealComponent,
-    products: &[(ProductId, Product)],
+fn meal_nutrition_dto(
+    meal: &Meal,
+    resolution: &MealProductResolution,
     unit_converter: &crate::catalog::domain::units::UnitConverter,
-) -> MealComponentDto {
-    let (item_type, item_id) = meal_component_item_to_parts(&component.item);
-    MealComponentDto {
-        id: component.id,
-        item: item_parts_to_dto(item_type, item_id),
-        quantity: quantity_to_dto(component.quantity_amount, component.quantity_unit.0.clone()),
-        nutrition_summary: meal_component_nutrition_summary(component, products, unit_converter),
+) -> Result<MealNutritionDto, JournalError> {
+    if let Some(unavailable) = resolution.unavailable_components() {
+        return Ok(MealNutritionDto::Unavailable {
+            unavailable_components: (&unavailable).into(),
+        });
     }
+    let Some(total) = meal.total_quantity() else {
+        return Ok(MealNutritionDto::NotDeclared);
+    };
+    let total_quantity = quantity_to_dto(total.amount(), total.unit().0.clone());
+
+    match resolution.declared_nutrition(meal, unit_converter) {
+        Ok(nutrition) => Ok(MealNutritionDto::Available {
+            summary: calculated_nutrition_summary(nutrition),
+        }),
+        Err(MealNutritionResolutionError::QuantityNotConvertible { .. }) => {
+            Ok(MealNutritionDto::TotalQuantityUnavailable {
+                reason: MealQuantityUnavailableReason::QuantityNotConvertible,
+                total_quantity,
+            })
+        }
+        Err(MealNutritionResolutionError::UnavailableComponents(unavailable)) => {
+            Ok(MealNutritionDto::Unavailable {
+                unavailable_components: (&unavailable).into(),
+            })
+        }
+        Err(MealNutritionResolutionError::Internal(message)) => {
+            Err(JournalError::Internal(message))
+        }
+    }
+}
+
+fn meal_component_to_dto(component: &ResolvedMealComponent) -> MealComponentDto {
+    let (item_type, item_id) = meal_component_item_to_parts(component.component().item());
+    let item = item_parts_to_dto(item_type, item_id);
+    let quantity = quantity_to_dto(
+        component.component().quantity().amount(),
+        component.component().quantity().unit().0.clone(),
+    );
+    let id = component.component().id();
+
+    match component.availability() {
+        ResolvedMealComponentAvailability::Available { nutrition, .. } => {
+            MealComponentDto::Available {
+                id,
+                item,
+                quantity,
+                nutrition_summary: calculated_nutrition_summary(nutrition.clone()),
+            }
+        }
+        ResolvedMealComponentAvailability::Unavailable { reason } => {
+            MealComponentDto::Unavailable {
+                id,
+                item,
+                quantity,
+                reason: *reason,
+            }
+        }
+    }
+}
+
+fn calculated_nutrition_summary(nutrition: CalculatedNutrition) -> NutrientSummaryDto {
+    nutrient_summary_from_entries(
+        nutrition
+            .amounts
+            .into_iter()
+            .map(|amount| (amount.nutrient_code.0, amount.amount)),
+    )
 }
 
 fn meal_component_item_to_parts(item: &MealComponentItem) -> (&'static str, Uuid) {
@@ -395,60 +522,6 @@ fn meal_nutrition_to_response(nutrition: MealNutritionOutput) -> MealNutritionRe
     }
 }
 
-fn meal_declared_nutrition_summary(
-    meal: &Meal,
-    products: &[(ProductId, Product)],
-    unit_converter: &crate::catalog::domain::units::UnitConverter,
-) -> Option<NutrientSummaryDto> {
-    match (
-        meal.total_quantity_amount,
-        meal.total_quantity_unit.as_ref(),
-    ) {
-        (Some(amount), Some(unit)) => {
-            Quantity::new(amount, unit.clone())
-                .ok()
-                .and_then(|quantity| {
-                    meal.nutrition_for(&quantity, products, unit_converter)
-                        .ok()
-                        .map(|nutrition| {
-                            nutrient_summary_from_entries(
-                                nutrition
-                                    .amounts
-                                    .into_iter()
-                                    .map(|amount| (amount.nutrient_code.0, amount.amount)),
-                            )
-                        })
-                })
-        }
-        _ => None,
-    }
-}
-
-fn meal_component_nutrition_summary(
-    component: &MealComponent,
-    products: &[(ProductId, Product)],
-    unit_converter: &crate::catalog::domain::units::UnitConverter,
-) -> Option<NutrientSummaryDto> {
-    let MealComponentItem::Product(product_id) = component.item;
-    let product = products
-        .iter()
-        .find(|(id, _)| id == &product_id)
-        .map(|(_, product)| product)?;
-    let quantity =
-        Quantity::new(component.quantity_amount, component.quantity_unit.clone()).ok()?;
-    product
-        .nutrition_for(&quantity, unit_converter)
-        .ok()
-        .map(|nutrition| {
-            nutrient_summary_from_entries(
-                nutrition
-                    .amounts
-                    .into_iter()
-                    .map(|amount| (amount.nutrient_code.0, amount.amount)),
-            )
-        })
-}
-
 fn meal_nutrient_entries_summary(nutrients: &[MealNutrientEntry]) -> NutrientSummaryDto {
     nutrient_summary_from_entries(
         nutrients
@@ -462,5 +535,86 @@ fn meal_nutrient_to_dto(nutrient: MealNutrientEntry) -> MealNutrientDto {
         code: nutrient.code,
         amount: nutrient.amount,
         unit: nutrient.unit,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::catalog::domain::units::UnitConverter;
+    use crate::catalog::domain::{
+        AmountPer100g, NutrientCode, Product, ProductName, ProductNutrient, ProductOrigin,
+        ProductVisibility,
+    };
+
+    fn product() -> Product {
+        Product {
+            id: ProductId(Uuid::nil()),
+            origin: ProductOrigin::Custom {
+                user_id: Uuid::nil(),
+            },
+            visibility: ProductVisibility::Global,
+            name: ProductName::new("Test Food").unwrap(),
+            brand: None,
+            categories: vec![],
+            default_quantity: Some(Decimal::new(100, 0)),
+            default_unit: Some(UnitCode("g".into())),
+            nutrients: vec![ProductNutrient {
+                nutrient_code: NutrientCode("ENERGY_KCAL".into()),
+                amount_per_100g: AmountPer100g::new(Decimal::new(100, 0)).unwrap(),
+                unit: UnitCode("kcal".into()),
+                source: None,
+                confidence: None,
+            }],
+            servings: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn unavailable_component_quantity_is_degraded_instead_of_failing_response() {
+        let product = product();
+        let component = MealComponent::from_stored(
+            Uuid::new_v4(),
+            MealComponentItem::Product(product.id),
+            MealQuantity::new(Decimal::ONE, UnitCode("cup".into()))
+                .expect("stored quantity should be valid"),
+        );
+        let meal = Meal::from_stored(StoredMeal {
+            id: MealId::new(),
+            user_id: Uuid::nil(),
+            name: "Test Meal".into(),
+            notes: None,
+            total_quantity: None,
+            components: vec![component],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+        .unwrap();
+        let converter = UnitConverter::from_entries([("g".to_string(), Decimal::new(1, 0))]);
+        let resolution =
+            MealProductResolution::from_products(&meal, &[(product.id, product)], &converter)
+                .unwrap();
+
+        let response = meal_to_response_with_resolution(&meal, &resolution, &converter).unwrap();
+
+        assert!(matches!(
+            response.nutrition,
+            MealNutritionDto::Unavailable { .. }
+        ));
+        assert!(matches!(
+            &response.components[0],
+            MealComponentDto::Unavailable {
+                reason: MealComponentUnavailableReason::QuantityNotConvertible,
+                ..
+            }
+        ));
+
+        let json = serde_json::to_value(&response).unwrap();
+        let unavailable = json["nutrition"]["unavailable_components"]
+            .as_array()
+            .expect("unavailable components must serialize as an array");
+        assert_eq!(unavailable.len(), 1);
     }
 }

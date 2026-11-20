@@ -231,6 +231,92 @@ A `read` key calling one of these routes receives `403 insufficient_scope`; the
 request is rejected before any user data is changed. Key metadata such as
 `last_used_at` may still be updated during authentication.
 
+### Meals With Unavailable Ingredients
+
+A meal keeps its component IDs and quantities when a catalog product is
+soft-deleted. `GET /api/meals` and `GET /api/meals/{id}` return `200` with an
+explicit degraded shape instead of failing the list:
+
+```json
+{
+  "id": "meal-id",
+  "name": "Broken Porridge",
+  "total_quantity": { "amount": "250", "unit": "g" },
+  "nutrition": {
+    "status": "unavailable",
+    "unavailable_components": [
+      {
+        "component_id": "component-id",
+        "item": { "type": "product", "id": "deleted-product-id" },
+        "quantity": { "amount": "200", "unit": "g" },
+        "reason": "product_unavailable"
+      }
+    ]
+  },
+  "components": [
+    {
+      "availability": "available",
+      "id": "oats-component-id",
+      "item": { "type": "product", "id": "oats-id" },
+      "quantity": { "amount": "50", "unit": "g" },
+      "nutrition_summary": { "energy_kcal": "190", "protein_g": "2.5", "carbs_g": "5", "fat_g": "1", "fiber_g": null }
+    },
+    {
+      "availability": "unavailable",
+      "id": "component-id",
+      "item": { "type": "product", "id": "deleted-product-id" },
+      "quantity": { "amount": "200", "unit": "g" },
+      "reason": "product_unavailable"
+    }
+  ]
+}
+```
+
+Healthy meals use `"nutrition": { "status": "available", "summary": {...} }`.
+A meal without a declared `total_quantity` uses
+`"nutrition": { "status": "not_declared" }`; this is legitimate and not an
+error. A meal whose stored `total_quantity` can no longer be converted to grams
+uses `"nutrition": { "status": "total_quantity_unavailable", "reason":
+"quantity_not_convertible", "total_quantity": ... }`.
+
+Every `available` component carries computed `nutrition_summary`. A component
+keeps its identity and quantity and becomes `"availability": "unavailable"` with
+a typed reason when it can no longer be used:
+
+- `product_unavailable`: the product no longer exists or is no longer visible.
+- `quantity_not_convertible`: the product exists, but its current servings and
+  mass units cannot convert the stored quantity (for example, a product no
+  longer defines the `cup` serving that the meal recorded).
+
+This is a breaking wire-contract change from the earlier preview round:
+`missing_components` is now `unavailable_components`, the component tag
+`missing` is now `unavailable`, and `quantity_not_convertible` is a new reason.
+Clients must switch on the typed reason rather than treating every degradation
+as a deleted product.
+
+Meal writes validate before persistence. The optional `total_quantity` must be a
+positive amount with a nonblank unit supported as a mass quantity. Every supplied
+component quantity must be convertible against the currently resolved product.
+Invalid creates and updates return `400 validation` and write nothing. A later
+catalog change can still invalidate a stored meal; that is reported by the
+degraded read shape above, not by rejecting the whole list.
+
+The meal quantity migration adds validated structural constraints. If a legacy
+database contains a non-positive amount, blank unit, half-paired total, or meal
+without components, the upgrade fails before schema mutation and reports the
+affected row IDs. Blank means empty or containing only Unicode White_Space,
+matching Rust `trim`. Repair those source rows explicitly; the server does not
+delete or rewrite them. Structurally valid legacy quantities, including
+non-mass declared totals, remain readable as dynamic degraded states, and
+catalog-degraded meals remain readable.
+
+Repair a broken meal with `PUT /api/meals/{id}` and a complete `components` array
+using currently convertible products and quantities. `GET /api/meals/{id}/nutrients`
+and meal-based log creates return `409 unavailable_components` with `meal_id` and
+the same non-empty component objects. If the requested meal log/preview quantity
+itself cannot be converted, they return `409 meal_quantity_not_convertible` with
+the offending `quantity` and a typed `reason`.
+
 ### Safe Log Create Retries
 
 Scripts can make `POST /api/logs` retry-safe by supplying an optional
@@ -340,6 +426,8 @@ product change. Do not rely on API-key scopes to provide that isolation.
 | `401` | `session_account_changed` | `X-CalCo-Account-ID` does not match the authenticated cookie/API-key profile. The response does not disclose either profile ID. |
 | `404` | `api_key_not_found` | A key-management route referenced a key that does not exist for this user. |
 | `409` | `conflict` | A log `idempotency_key` was reused with a different request. |
+| `409` | `unavailable_components` | A meal preview or meal-based log references products or component quantities that can no longer be used. The error lists `meal_id` and the non-empty unavailable components with typed reasons; repair the meal or use another meal. |
+| `409` | `meal_quantity_not_convertible` | The requested meal log/preview quantity cannot be converted to grams. The error lists `meal_id`, `quantity`, and reason `quantity_not_convertible`. |
 | `409` | `api_key_limit_reached` | The account is at its soft limit of 10 active keys; revoke an unused key and retry. |
 | `400` | `invalid_api_key_name` | The key name is empty, whitespace-only/invisible-only, too long, or contains a forbidden control/invisible formatting character. |
 | `400` | `invalid_api_key_scope` | The scope is not `read` or `read_write`. |

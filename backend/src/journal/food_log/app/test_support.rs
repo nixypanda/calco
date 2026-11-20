@@ -176,6 +176,14 @@ impl CatalogReadPort for MockCatalogReadPort {
             .map(|product| vec![(product.id, product)])
             .unwrap_or_default())
     }
+
+    async fn resolve_products_available(
+        &self,
+        _actor_id: Uuid,
+        ids: &[ProductId],
+    ) -> Result<Vec<(ProductId, Product)>, CatalogError> {
+        self.resolve_products(_actor_id, ids).await
+    }
 }
 
 struct MockMealReadPort {
@@ -209,7 +217,7 @@ impl NutrientCatalogReadPort for MockNutrientCatalogReadPort {
 impl MockMealReadPort {
     fn with_meal(meal: Meal) -> Self {
         Self {
-            meal_id: meal.id,
+            meal_id: meal.id(),
             meal: Some(meal),
         }
     }
@@ -234,10 +242,10 @@ impl MealReadPort for MockMealReadPort {
                 .meal
                 .clone()
                 .ok_or_else(|| JournalError::NotFound("meal not found".into()))?;
-            Ok(ResolvedMeal {
+            Ok(ResolvedMeal::from_parts(
                 meal,
-                products: vec![(ProductId(Uuid::nil()), sample_product())],
-            })
+                vec![(ProductId(Uuid::nil()), sample_product())],
+            ))
         } else {
             Err(JournalError::NotFound("meal not found".into()))
         }
@@ -279,22 +287,22 @@ pub(super) fn sample_product_with_serving() -> Product {
 }
 
 pub(super) fn sample_meal() -> Meal {
-    Meal {
+    Meal::from_stored(StoredMeal {
         id: MealId(Uuid::nil()),
         user_id: Uuid::nil(),
-        name: MealName::new("Test Meal").unwrap(),
+        name: "Test Meal".to_string(),
         notes: None,
-        total_quantity_amount: None,
-        total_quantity_unit: None,
-        components: vec![MealComponent {
-            id: Uuid::new_v4(),
-            item: MealComponentItem::Product(ProductId(Uuid::nil())),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: UnitCode("g".to_string()),
-        }],
+        total_quantity: None,
+        components: vec![MealComponent::from_stored(
+            Uuid::new_v4(),
+            MealComponentItem::Product(ProductId(Uuid::nil())),
+            MealQuantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                .expect("sample quantity should be valid"),
+        )],
         created_at: Utc::now(),
         updated_at: Utc::now(),
-    }
+    })
+    .expect("sample meal should load")
 }
 
 fn sample_unit_converter() -> Arc<UnitConverter> {

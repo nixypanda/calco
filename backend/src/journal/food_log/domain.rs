@@ -141,8 +141,8 @@ impl FoodLogItemSnapshot {
 
     pub fn from_meal(meal: &Meal) -> Self {
         Self::Meal {
-            id: meal.id,
-            name: meal.name.as_str().to_string(),
+            id: meal.id(),
+            name: meal.name().as_str().to_string(),
         }
     }
 
@@ -470,13 +470,9 @@ impl FoodLog {
         device_timezone: Option<String>,
         meal: &Meal,
         quantity: Quantity,
-        products: &[(ProductId, Product)],
-        unit_converter: &UnitConverter,
+        nutrition: CalculatedNutrition,
         notes: Option<String>,
     ) -> Result<Self, JournalError> {
-        let nutrition = meal
-            .nutrition_for(&quantity, products, unit_converter)
-            .map_err(JournalError::Validation)?;
         Ok(self.update(
             log_date,
             meal_slot,

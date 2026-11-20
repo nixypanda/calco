@@ -217,14 +217,11 @@ impl FoodLogService {
             }
             FoodLogItemRef::Meal(meal_id) => {
                 let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
-                let nutrition = resolved
-                    .meal
-                    .nutrition_for(&input.quantity, &resolved.products, &self.unit_converter)
-                    .map_err(JournalError::Validation)?;
+                let nutrition = resolved.nutrition_for(&input.quantity, &self.unit_converter)?;
                 FoodLogBuilder::new(
                     actor_id,
                     input.log_date,
-                    FoodLogItemSnapshot::from_meal(&resolved.meal),
+                    FoodLogItemSnapshot::from_meal(resolved.meal()),
                     input.quantity,
                     nutrition,
                 )
@@ -296,14 +293,14 @@ impl FoodLogService {
                 }
                 Some(FoodLogItemRef::Meal(meal_id)) => {
                     let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
+                    let nutrition = resolved.nutrition_for(&quantity, &self.unit_converter)?;
                     existing.update_meal_log(
                         log_date,
                         meal_slot,
                         device_timezone,
-                        &resolved.meal,
+                        resolved.meal(),
                         quantity,
-                        &resolved.products,
-                        &self.unit_converter,
+                        nutrition,
                         notes,
                     )?
                 }

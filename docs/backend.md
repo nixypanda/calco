@@ -761,6 +761,115 @@ GET    /meals/{id}/nutrients?amount=&unit=
 Meal requests are aggregate-shaped. There are no standalone meal-component
 mutation routes. Meal reads use `AccountBoundReadUser`; meal mutations use `AccountBoundWriteUser`.
 
+#### Meal Availability And Nutrition
+
+Meal responses use explicit tagged values instead of nullable marker fields.
+The top-level `nutrition` object has one of four statuses:
+
+- `available`: `summary` contains the computed nutrition for the declared
+  `total_quantity`.
+- `not_declared`: the meal has no `total_quantity`; this is a legitimate
+  absence, not an error or partial calculation.
+- `unavailable`: one or more components cannot be resolved. The object contains
+  a non-empty `unavailable_components` array, each entry with `component_id`,
+  typed `item`, preserved `quantity`, and typed `reason`.
+- `total_quantity_unavailable`: all components are usable, but the stored
+  `total_quantity` cannot be converted to grams. The object includes the typed
+  `reason` (`quantity_not_convertible`) and the preserved `total_quantity`.
+
+Each component is tagged by `availability`:
+
+- `available`: includes the required computed `nutrition_summary`.
+- `unavailable`: includes a typed `reason`: `product_unavailable` when the
+  product cannot be resolved, or `quantity_not_convertible` when the current
+  product servings/mass units cannot convert the stored quantity. No display
+  name is invented for a product that cannot be loaded.
+
+This is a breaking wire-contract change from the earlier preview round:
+`missing_components` is now `unavailable_components`, the component tag
+`missing` is now `unavailable`, and `quantity_not_convertible` is a new reason.
+
+Example degraded meal:
+
+```json
+{
+  "id": "meal-id",
+  "name": "Broken Porridge",
+  "notes": "needs milk",
+  "total_quantity": { "amount": "250", "unit": "g" },
+  "nutrition": {
+    "status": "unavailable",
+    "unavailable_components": [
+      {
+        "component_id": "component-id",
+        "item": { "type": "product", "id": "deleted-product-id" },
+        "quantity": { "amount": "200", "unit": "g" },
+        "reason": "product_unavailable"
+      }
+    ]
+  },
+  "components": [
+    {
+      "availability": "available",
+      "id": "oats-component-id",
+      "item": { "type": "product", "id": "oats-id" },
+      "quantity": { "amount": "50", "unit": "g" },
+      "nutrition_summary": {
+        "energy_kcal": "190",
+        "protein_g": "2.5",
+        "carbs_g": "5",
+        "fat_g": "1",
+        "fiber_g": null
+      }
+    },
+    {
+      "availability": "unavailable",
+      "id": "component-id",
+      "item": { "type": "product", "id": "deleted-product-id" },
+      "quantity": { "amount": "200", "unit": "g" },
+      "reason": "product_unavailable"
+    }
+  ],
+  "created_at": "2026-06-10T08:00:00Z",
+  "updated_at": "2026-06-10T08:00:00Z"
+}
+```
+
+`GET /meals` and `GET /meals/{id}` keep broken meals in the response and preserve
+component identity and quantity for repair. The meal remains editable and
+deleteable. Repair it with `PUT /meals/{id}` and a complete `components` array
+using currently convertible products and quantities.
+
+`GET /meals/{id}/nutrients` and meal-based `POST /logs` or `PUT /logs/{id}`
+return `409 unavailable_components` instead of calculating false nutrition. The
+error body lists `meal_id` and the same non-empty unavailable-component objects,
+with typed `reason` rather than a free-form string. If the requested preview/log
+quantity itself cannot be converted, the error is `409
+meal_quantity_not_convertible` with `meal_id`, `quantity`, and reason.
+
+Meal creates and updates validate before persistence. The optional
+`total_quantity` must provide both a positive amount and a nonblank unit
+supported as mass, or neither. Every supplied component quantity must convert
+against its currently resolved product. Invalid input returns `400 validation`
+and writes no meal or component row. Catalog changes after a successful write can
+still make a stored meal degraded; that is handled as a read-time typed state,
+not a global list failure. The database adds validated structural check
+constraints, so upgrades never preserve structurally invalid rows.
+
+The meal quantity migration fails fast if legacy data contains a non-positive
+amount, a blank unit, a half-paired total, or a meal without components. It
+aborts before schema mutation and reports the affected row IDs; operators must
+repair those source rows explicitly. Blank means empty or containing only
+Unicode White_Space, matching Rust `trim` (including tab, newline, NBSP, and the
+other Unicode space separators). The server does not delete or rewrite those
+rows and does not serve structurally invalid meals. Structurally valid legacy
+quantities remain readable: a positive, nonblank non-mass declared total is
+reported as `total_quantity_unavailable`, and catalog-degraded components remain
+dynamically unavailable.
+
+Meal nutrition is computed from the current catalog only for preview and new
+log creation. Existing meal-based food logs remain immutable snapshots.
+
 ### Goals
 
 ```text

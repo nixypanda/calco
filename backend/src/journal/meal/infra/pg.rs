@@ -86,23 +86,22 @@ fn meal_insert_statement(meal: &Meal) -> InsertStatement {
         .into_table(Meals::Table)
         .columns(meal_columns())
         .values_panic([
-            meal.id.0.into(),
-            meal.user_id.into(),
-            meal.name.as_str().into(),
-            meal.notes.as_ref().map(|notes| notes.0.as_str()).into(),
-            meal.total_quantity_amount.into(),
-            meal.total_quantity_unit
-                .as_ref()
-                .map(|unit| unit.0.as_str())
+            meal.id().0.into(),
+            meal.user_id().into(),
+            meal.name().as_str().into(),
+            meal.notes().map(|notes| notes.0.as_str()).into(),
+            meal.total_quantity().map(MealQuantity::amount).into(),
+            meal.total_quantity()
+                .map(|quantity| quantity.unit().0.as_str())
                 .into(),
-            meal.created_at.into(),
-            meal.updated_at.into(),
+            meal.created_at().into(),
+            meal.updated_at().into(),
         ])
         .to_owned()
 }
 
 fn meal_component_insert_statement(meal_id: Uuid, component: &MealComponent) -> InsertStatement {
-    let (product_id, component_meal_id) = match &component.item {
+    let (product_id, component_meal_id) = match component.item() {
         MealComponentItem::Product(pid) => (Some(pid.0), None::<Uuid>),
     };
 
@@ -117,12 +116,12 @@ fn meal_component_insert_statement(meal_id: Uuid, component: &MealComponent) -> 
             MealComponents::Unit,
         ])
         .values_panic([
-            component.id.into(),
+            component.id().into(),
             meal_id.into(),
             product_id.into(),
             component_meal_id.into(),
-            component.quantity_amount.into(),
-            component.quantity_unit.0.as_str().into(),
+            component.quantity().amount().into(),
+            component.quantity().unit().0.as_str().into(),
         ])
         .to_owned()
 }
@@ -130,20 +129,19 @@ fn meal_component_insert_statement(meal_id: Uuid, component: &MealComponent) -> 
 fn meal_update_statement(meal: &Meal) -> UpdateStatement {
     Query::update()
         .table(Meals::Table)
-        .value(Meals::Name, meal.name.as_str())
+        .value(Meals::Name, meal.name().as_str())
+        .value(Meals::Notes, meal.notes().map(|notes| notes.0.as_str()))
         .value(
-            Meals::Notes,
-            meal.notes.as_ref().map(|notes| notes.0.as_str()),
+            Meals::TotalQuantityAmount,
+            meal.total_quantity().map(MealQuantity::amount),
         )
-        .value(Meals::TotalQuantityAmount, meal.total_quantity_amount)
         .value(
             Meals::TotalQuantityUnit,
-            meal.total_quantity_unit
-                .as_ref()
-                .map(|unit| unit.0.as_str()),
+            meal.total_quantity()
+                .map(|quantity| quantity.unit().0.as_str()),
         )
         .value(Meals::UpdatedAt, Expr::current_timestamp())
-        .and_where(Expr::col(Meals::Id).eq(meal.id.0))
+        .and_where(Expr::col(Meals::Id).eq(meal.id().0))
         .to_owned()
 }
 
@@ -188,13 +186,25 @@ impl PgMealRepo {
 }
 
 fn meal_row_to_meal(row: MealRow, components: Vec<MealComponent>) -> Result<Meal, JournalError> {
-    Ok(Meal {
+    let total_quantity = match (row.total_quantity_amount, row.total_quantity_unit) {
+        (None, None) => None,
+        (Some(amount), Some(unit)) => {
+            Some(MealQuantity::new(amount, UnitCode(unit)).map_err(|error| {
+                JournalError::Internal(format!("stored meal total_quantity is invalid: {error}"))
+            })?)
+        }
+        _ => {
+            return Err(JournalError::Internal(
+                "meal has an incomplete total quantity".into(),
+            ));
+        }
+    };
+    Meal::from_stored(StoredMeal {
         id: MealId(row.id),
         user_id: row.user_id,
-        name: MealName::new(&row.name)?,
-        notes: row.notes.map(MealNotes),
-        total_quantity_amount: row.total_quantity_amount,
-        total_quantity_unit: row.total_quantity_unit.map(UnitCode),
+        name: row.name,
+        notes: row.notes,
+        total_quantity,
         components,
         created_at: row.created_at,
         updated_at: row.updated_at,
@@ -214,12 +224,14 @@ fn meal_component_row_to_component(row: MealComponentRow) -> Result<MealComponen
         ));
     };
 
-    Ok(MealComponent {
-        id: row.id,
-        item,
-        quantity_amount: row.quantity,
-        quantity_unit: UnitCode(row.unit),
-    })
+    let quantity = MealQuantity::new(row.quantity, UnitCode(row.unit)).map_err(|error| {
+        JournalError::Internal(format!(
+            "stored meal component {} quantity is invalid: {error}",
+            row.id
+        ))
+    })?;
+
+    Ok(MealComponent::from_stored(row.id, item, quantity))
 }
 
 #[async_trait]
@@ -232,8 +244,8 @@ impl MealRepo for PgMealRepo {
             .execute(&mut *tx)
             .await?;
 
-        for component in &meal.components {
-            let (sql, values) = meal_component_insert_statement(meal.id.0, component)
+        for component in meal.components() {
+            let (sql, values) = meal_component_insert_statement(meal.id().0, component)
                 .build_sqlx(PostgresQueryBuilder);
             sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .execute(&mut *tx)
@@ -281,14 +293,14 @@ impl MealRepo for PgMealRepo {
             .execute(&mut *tx)
             .await?;
 
-        let (sql, values) =
-            meal_component_delete_by_meal_id_statement(meal.id.0).build_sqlx(PostgresQueryBuilder);
+        let (sql, values) = meal_component_delete_by_meal_id_statement(meal.id().0)
+            .build_sqlx(PostgresQueryBuilder);
         sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
             .execute(&mut *tx)
             .await?;
 
-        for component in &meal.components {
-            let (sql, values) = meal_component_insert_statement(meal.id.0, component)
+        for component in meal.components() {
+            let (sql, values) = meal_component_insert_statement(meal.id().0, component)
                 .build_sqlx(PostgresQueryBuilder);
             sqlx::query_with::<_, _>(sqlx::AssertSqlSafe(sql.as_str()), values)
                 .execute(&mut *tx)
