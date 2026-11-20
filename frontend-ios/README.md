@@ -6,52 +6,64 @@ Swift Package or third-party dependencies. UI uses native SwiftUI styling with
 Apple-default appearance and English-only copy.
 
 The normal-user workflows are implemented under the shared source directories:
-diary and durable food logging, Library, Meals, Nutrition Details, reviewed AI
+diary and food logging, Library, Meals, Nutrition Details, reviewed AI
 drafting, and personal API-key management. The sections below describe the
-implemented paths and the safety/rollout rules that make them usable. See
+implemented paths and their ordinary data-safety behavior. Food-log creation is
+a normal authenticated POST: an explicit retry may create a duplicate, the
+duplicate is acceptable, and the user can delete it manually. See the accepted
+[no-replay decision](../docs/decisions/2026-11-20-no-replay-protection.md) and
 [Status and acceptance](#status-and-acceptance) before treating any result as a
 release decision.
 
 ## Status and acceptance
 
-As of 2026-11-20, implementation is complete; mini and iPad UI are verified,
-Mac unit is verified while Mac UI is blocked by explicit user decision, and
-iPhone Duo is unavailable. The project is not fully accepted across all device
-classes.
+Current status: **no-replay rollback validation passed.** The post-rollback
+native suite passed on all three unit destinations and both available UI gates:
+**601/601 unit tests** (0 failures, 0 skips, 0 expected) on the exact iPhone 13
+mini, native Mac arm64 (`My Mac`), and iPad Air 11-inch (M4); **24/24 iPhone 13
+mini UI**; and **7/7 iPad Air portable UI**. Mac UI remains blocked by explicit
+user decision, and iPhone Duo is unavailable. The rollback removes only the new
+replay, capability, account-binding-header, and ledger infrastructure; ordinary
+native screens, validation, authentication, ownership, and atomicity remain.
 
-- Native unit baseline: **751 current test methods; 751 passed, 0 failures,
-  0 skipped** after the iOS toolbar fix on both the exact iPhone 13 mini
-  (`90964888-D59F-41EC-8DA2-419C829F3A71`) and iPad Air 11-inch (M4)
-  (`C9CE77F1-89E8-4DF5-B101-871105BCED9B`). Native Mac production also passed
-  **751/751** with the one-line pasteboard compile fix applied; that is an actual
-  run, not a diagnostic. The Mac branch was unchanged by the iOS-only Library
-  fix. No new unit tests were added for the toolbar fix, so the unit count
-  remains 751. Independent runtime results and artifacts/logs are retained.
-- **iPhone 13 mini UI: 26/26 passed, 0 failed, 0 skipped, 0 expected failures**
-  on the exact iPhone 13 mini at 375 x 812 points. The current verified build
-  covers enabled AI custom-food and ad-hoc drafting with explicit review and no
-  write until save, full Meals CRUD including degraded/missing-component repair
-  and delete, Library full CRUD with save-and-log, and accessibility XXXL.
-- **iPad Air 11-inch (M4) portable UI: 7/7 passed, 0 failed, 0 skipped, 0
-  expected failures** on the exact UDID above.
-- **Mac UI is blocked by explicit user decision.** The runner executed **0 app
-  tests** and failed initialization with a macOS automation timeout
+- **Current backend:** **330 unit tests green, 0 failures; 4 existing ignored
+  baseline tests visible; 62 integration tests green, 0 failures.** The backend
+  matches the exact `0ad3` baseline including migrations. The withdrawn
+  operation-migration source files `20261119000000` and `20261119000001` are
+  deleted and were confirmed unapplied; they are removed, not pending rollout.
+  No DB schema, drop, or migration-history change was made.
+- **Current native unit:** **601/601 passed, 0 failures, 0 skips, 0 expected**
+  on the exact iPhone 13 mini (`90964888-D59F-41EC-8DA2-419C829F3A71`), native
+  Mac arm64 (`My Mac`), and iPad Air 11-inch (M4)
+  (`C9CE77F1-89E8-4DF5-B101-871105BCED9B`).
+- **Current iPhone 13 mini UI:** **24/24 passed, 0 failures, 0 skips, 0
+  expected** at 375 x 812 points.
+- **Current iPad Air 11-inch (M4) portable UI:** **7/7 passed, 0 failures, 0
+  skips, 0 expected.**
+- **Current ordinary 503 retry:** two explicit user attempts produced exactly
+  one log after the user pressed retry. No capability endpoint was called and no
+  account-binding header was sent; the mock rejects `X-CalCo-Account-ID` with
+  `400`, and the runtime checks passed with that rejection in place.
+- **Current helper suites:** 11/11 Python mock, 11/11 driver, and 29/29 dev
+  helper tests passed.
+- **Historical pre-rollback results (not current):** the earlier **751/751**
+  native unit result and **26/26** mini UI result are retained as historical
+  artifacts. They predate the rollback and are not current verification.
+- **Mac UI remains blocked by explicit user decision.** The runner executed
+  **0 app tests** and failed initialization with a macOS automation timeout
   (`Timed out while enabling automation mode`); this is one system/runner
-  failure, not one failed product test. No OS privacy/TCC setting was changed
-  and no retry is planned.
+  failure, not one failed product test. No OS privacy/TCC setting was changed,
+  no runtime Mac permission work is planned, and no retry is planned.
 - **iPhone Duo is unavailable**: the exact device/type is absent from Xcode
   26.6 and no substitute was used.
-- Backend: **330 unit tests green; 4 additional ignored existing baseline tests
-  remain visible; 86 integration tests green**, independently reported.
-  The operation migrations `20261119000000` and `20261119000001` remain
-  **unapplied in the app database**.
 - Camera/photo capture and image-based AI drafting remain deferred product
   decisions and are not exposed in the native UI.
 
-`docs/native-completion-qa.md` owns the mini QA record.
-`docs/native-device-acceptance.md` is owned by the portable acceptance work. No
-final all-device acceptance is claimed here. Latest result-bundle filenames are
-listed in those two documents.
+`docs/native-completion-qa.md` owns the current mini QA record and retains the
+old 26-test result as history. `docs/native-device-acceptance.md` owns the
+current portable acceptance record and retains the old 751/26 artifacts as
+history. No final Mac UI or Duo acceptance is claimed. Current and historical
+result-bundle paths are listed in those two documents.
 
 ## Requirements
 
@@ -97,7 +109,8 @@ clear error and the list of installed simulators for that platform only
 (iPhones for `dev-frontend-ios`, iPads for `dev-frontend-ipados`). Labels are
 never silently mapped to another model. The exact iPhone Duo device/type is
 absent from Xcode 26.6; it is unavailable and no substitute is allowed. The
-iPad Air portable UI gate passed 7/7; Mac UI remains blocked by explicit user
+iPad Air portable UI gate passed 7/7 in the current rollback validation, and
+the mini UI gate passed 24/24. Mac UI remains blocked by explicit user
 decision, so no Mac UI pass is claimed. To use a label that is not installed,
 install the matching Xcode/runtime and point the recipes at it:
 
@@ -200,7 +213,7 @@ no team.
 | `App/CalCoApp.swift` | scaffold (reserved) | The only `@main` entry point |
 | `App/` (other files) | app implementor | Navigation, feature sheets, session-scoped wiring |
 | `API/`, `Data/`, `Store/`, `Features/` | shared feature implementation | Network, models, adapters, state, views |
-| `Features/Library/` | feature implementation | Custom-food list/editor/detail, ad-hoc logging, create reconciliation |
+| `Features/Library/` | feature implementation | Custom-food list/editor/detail, ad-hoc logging, save-and-log |
 | `Features/Meals/` | feature implementation | Meal list/editor/detail/flow and portion logging |
 | `Features/NutritionDetails/` | feature implementation | Selected-day nutrient report |
 | `Features/Assistant/` | feature implementation | Server-gated, text-only reviewed AI drafting |
@@ -247,9 +260,10 @@ diary date or meal slot. Historical dates and retained logs remain available.
 - **Library** lists, creates, edits, and deletes custom foods with validated
   per-100 g nutrients, explicit units, optional servings, and confirmations.
   Existing diary snapshots are not rewritten when a custom food changes.
-- Library also provides one-off ad-hoc logging and **Save food and log**. An
-  uncertain custom-food create is reconciled against the refreshed library; it
-  is never blindly retried and the returned food is reused for a log retry.
+- Library also provides one-off ad-hoc logging and **Save food and log**. Food
+  creation and logging use ordinary POST requests. An uncertain outcome is
+  reported to the user; a deliberate retry may create a duplicate food or log,
+  which is acceptable and can be deleted manually.
 - The iOS Library **Add** action is a native menu
   (`.menuStyle(.button)`, `.buttonStyle(.plain)`,
   `.frame(width: 44, height: 44)`, `.fixedSize()`, and
@@ -275,106 +289,64 @@ diary date or meal slot. Historical dates and retained logs remain available.
 - **Account Settings → API Keys** lists, creates, and revokes personal keys with
   supported read/read-write scopes, optional expiry, and an active-key limit.
   A new secret is shown once in memory, can be deliberately copied, and is
-  never persisted, logged, or included in diagnostics. An uncertain create
-  refreshes metadata and uses a durable non-secret intent instead of retrying
-  the create blindly.
+  never persisted, logged, or included in diagnostics. An uncertain create is
+  reported and the list is refreshed instead of being retried automatically; no
+  durable intent ledger is used.
 
 Camera barcode scanning and image-based AI drafting are **not implemented** and
 no camera/photo permission is requested. Manual barcode lookup and text AI
 drafting are shipped. No camera, photo, assistant-image, admin, browser-theme, or
 additional-language scope is implied by the current client.
 
-## Data safety, retry behavior, and server rollout
+## Data safety and ordinary retry behavior
 
-### Account, session, and selected-day boundaries
+### Account and selected-day boundaries
 
 - Feature state is scoped to the signed-in account and session generation;
   stale responses or unauthorized results from an earlier session cannot
-  publish into a newer session. Journal records are account-scoped, and each
-  send is bound to an account, generation, and API origin before it starts.
-- The auth/root client remains unbound for login, restore, and logout. Each
-  signed-in feature graph gets an immutable client bound to the session user's
-  **user-profile UUID**; protected requests send
-  `X-CalCo-Account-ID: <user_profiles.id>`. This UUID is distinct from the
-  identity ID used as the local journal scope. A missing profile fails closed;
-  legacy operations whose account binding cannot be verified stay
-  reconciliation-only and are never replayed.
+  publish into a newer session.
+- Authentication and feature graphs use the normal signed-in identity and
+  username. There is no strict profile-missing gate, no capability-v2 gate, and
+  no `X-CalCo-Account-ID` account-binding header. Protected requests rely on
+  the shared cookie session.
 - The shared session authority owns the cookie session and session generation.
-  Feature adapters are constructed from the bound client in production, and
-  injected production services are rejected rather than allowed to bypass the
-  authority binding.
-- The shared write-ahead journal (`Store/LogSubmissionStore.swift`,
-  `Store/LogSubmissionService.swift`) is account-scoped, bounded, and
-  coordinated across windows. It persists the exact HTTP body and idempotency
-  key before sending. If the journal is unreadable, the client fails closed
-  rather than overwriting it or sending from memory.
-- A deleted log creates a deletion barrier for unresolved operations that could
-  recreate it. A new intentional submission always gets a new key, even for the
-  same food, amount, date, and slot.
+  Feature services are rebuilt for each signed-in session graph, so an earlier
+  session's state cannot leak into a newer one.
+- In-flight submissions carry ordinary account and session-generation context
+  only to detect a session change. That context is local cancellation state and
+  is not sent as an account-binding request header.
 
-### Journal format and recovery
+### Creation and manual retry
 
-- Current journal schema v2 stores typed product, meal, ad-hoc, and ordered batch
-  submissions with their original route, key, body, account, and, where
-  verified, capability provenance.
-- Replays resend the stored bytes and key. Server replay returns the operation's
-  current log rows in original order; it is not a stored response snapshot.
-  Later edits remain visible, and nutrition snapshots remain those stored on the
-  log rows.
-- Legacy or pre-v2 journal entries created before version-2 capability was
-  verified are migrated to **reconciliation-only** and never replayed. Their
-  bodies are cleared so an unverifiable entry cannot be replayed; a key deleted
-  before the operation journal existed cannot be reconstructed.
-- Single-product recovery keeps the detailed food-detail path; batch, meal, and
-  ad-hoc recovery use the shared pending-review sheet. Conflicted, invalidated,
-  missing-body, and reconciliation-only entries cannot be replayed; discard is
-  explicit and destructive.
-
-### Capability gate and 503 behavior
-
-- Keyed single, ad-hoc, and batch creation is gated by authenticated
-  `GET /api/capabilities` (`API/CapabilitiesAPI.swift`,
-  `Data/Capabilities.swift`). The client requires
-  `log_creation_idempotency.version >= 2`, route support, top-level batch key
-  location, `deleted_operation_replay = "conflict"`, and the exact
-  `request_account_binding = "x-calco-account-id"` flag. A missing or unknown
-  binding value fails closed.
-- A missing route (`404`), an older `version < 2`, or an unready journal fails
-  closed for keyed creation/retry. Do not infer this capability from `/health`
-  or `/version`.
-- A capability probe `503`/other transient 5xx or transport failure is not
-  version 0. Retry later and keep the pending operation's exact body and key;
-  do not mark it reconciliation-only and do not clear it.
-- Confirmed replay after a deleted log is a `409 conflict`: the operation's
-  tombstone is permanent and a replay must never recreate the deleted log.
-
-### Server-first migrations and rollout
-
-Apply migrations and deploy the matching backend before enabling keyed native
-ad-hoc/batch submissions. The required order is:
-
-1. `20261115000001_food_log_idempotency.sql` — base key/fingerprint columns.
-2. `20261119000000_food_log_create_operations.sql` — baseline durable operation
-   journal and backfill of existing keyed single logs.
-3. `20261119000001_food_log_create_operations_log_count.sql` — additive
-   `log_count` install/validation and permanent-retention constraints. It does
-   not rewrite or drop existing keys or tombstones.
-
-As of 2026-11-20, `20261119000000_food_log_create_operations.sql` and
-`20261119000001_food_log_create_operations_log_count.sql` remain **unapplied in
-the app database**. This documentation update did not apply migrations.
-
-Run migrations explicitly with `just migrate-backend` (local) or the deployment
-migration step before starting the backend. Never edit applied migration
-checksums, drop/recreate the operation tables, or delete `_sqlx_migrations`
-history. After deployment, verify `GET /api/capabilities` reports version 2
-before clients resume keyed batch/ad-hoc retries.
-
-Operation rows and ordered child links are **permanent for the lifetime of the
-user profile**. There is no TTL, pruning job, admin cleanup, or log-deletion
-path that frees a key or link. A future retention policy must replace the
-tombstone mechanism before deleting anything. See `docs/backend.md` for the
-full contract.
+- Single, batch, ad-hoc, quick-add, repeat, and meal log creation are ordinary
+  authenticated POSTs. New flows do not use capability negotiation, a durable
+  operation journal, request fingerprints, tombstones, prepared-intent ledgers,
+  or automatic replay.
+- If a create is retried or submitted twice, a duplicate food log is
+  acceptable. The user can see the duplicate and delete it manually. Retry is
+  an explicit user action; the client does not silently replay an uncertain
+  write.
+- Ordinary validation, authentication, ownership, and atomic batch behavior
+  remain. A failed batch must not leave partial writes, and errors are shown to
+  the user.
+- The preexisting baseline legacy single-food FoodDetail journal in
+  `Store/LogSubmissionStore.swift` and the server's existing optional key
+  behavior predate this rollback and remain outside it. The policy does not
+  claim they were removed. `Store/LogSubmissionService.swift` is the ordinary
+  direct transport for new submissions and is not a journal. No new flow should
+  depend on the legacy journal or advertise automatic replay safety.
+- There are no new request fingerprints except that baseline legacy path, and no
+  generic durable catalog, meal, or API-key intent ledgers.
+- The operation migrations are removed, not pending rollout. Any old instruction
+  to apply `20261119000000` or `20261119000001` is historical and must not be
+  followed; their source files are deleted, confirmed unapplied, and no schema
+  or migration-history change was made.
+- Log deletion is confirmed. Deleting a duplicate or unwanted log is the normal
+  user-facing cleanup path; there is no permanent operation tombstone or
+  key-reuse window.
+- Historical API documentation that describes the abandoned idempotency-key or
+  operation API is pre-decision documentation and does not override the
+  [no-replay decision](../docs/decisions/2026-11-20-no-replay-protection.md).
 
 ## API base URL configuration
 
