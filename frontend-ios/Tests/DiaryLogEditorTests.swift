@@ -120,7 +120,8 @@ final class DiaryLogEditorTests: XCTestCase {
             foodName: "Oats",
             draft: prepared.draft,
             request: prepared.request,
-            body: prepared.body
+            body: prepared.body,
+            capabilityVersion: 2
         )
         try store.markUncertain(
             id: entry.id,

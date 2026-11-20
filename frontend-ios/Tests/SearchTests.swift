@@ -1,8 +1,9 @@
-// SearchTests layout helpers build a window from the hosted app's live
-// `UIWindowScene`. The test target hosts the SwiftUI app, so a foreground scene
-// is always available; using the scene-based initializer avoids the
-// `UIWindow(frame:)` / `UIWindow()` deprecations while still giving the hosting
-// controller a real window (and screen/trait environment) for SwiftUI layout.
+// SearchTests layout helpers build a window from a connected app
+// `UIWindowScene`, preferring a foreground-active scene and falling back to any
+// connected scene. Test hosts can briefly have no active scene after launch;
+// layout only needs a scene for screen/trait environment, not activation. The
+// scene-based initializer avoids the `UIWindow(frame:)` / `UIWindow()`
+// deprecations while still giving the hosting controller a real window.
 
 import Combine
 import SwiftUI
@@ -674,10 +675,11 @@ final class SearchTests: XCTestCase {
 
     #if canImport(UIKit)
     private func makeLayoutWindow(width: CGFloat, height: CGFloat) -> UIWindow? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive }) else {
-            XCTFail("Hosted test app must provide a foreground-active UIWindowScene for layout")
+        let scenes = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive })
+            ?? scenes.first else {
+            XCTFail("Hosted test app must provide a UIWindowScene for layout")
             return nil
         }
         let window = UIWindow(windowScene: scene)

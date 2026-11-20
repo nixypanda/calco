@@ -21,6 +21,14 @@ public final class DiaryViewModel: ObservableObject {
     @Published public private(set) var macroMode: DiaryMacroDisplayMode = .grams
     @Published public private(set) var mutationNotice: DiaryMutationNotice?
 
+    /// Empty-slot "Log latest" flow. Loading is per tapped slot; the review is
+    /// shown before any write and keeps the destination date/slot explicit.
+    @Published public private(set) var latestLoadingSlot: MealSlot?
+    @Published public private(set) var latestReview: DiaryLatestReview?
+    @Published public private(set) var latestErrorMessage: String?
+    @Published public private(set) var latestIsSubmitting = false
+    @Published public private(set) var latestNotice: String?
+
     @Published public private(set) var completedFetchCount: Int = 0
 
     public var isSessionExpired: Bool {
@@ -54,6 +62,12 @@ public final class DiaryViewModel: ObservableObject {
 
     private let todayProvider: () -> LocalDiaryDate
     private let onSessionExpired: () -> Void
+    private let latestSubmissionHandler: LogSubmissionHandler?
+    private let timeZoneProvider: () -> String
+
+    private var latestSlotsBySlot: [MealSlot: DiaryLatestSlot] = [:]
+    private var latestLoadedForDate: LocalDiaryDate?
+    private var latestFetchToken = 0
 
     private var currentToken: Int = 0
     /// Authoritative local rows from successful PUT responses. A refetch that
@@ -90,7 +104,9 @@ public final class DiaryViewModel: ObservableObject {
         onAddFood: ((MealSlot, LocalDiaryDate) -> Void)? = nil,
         onDateChange: ((LocalDiaryDate) -> Void)? = nil,
         onOpenLogEditor: ((String, LocalDiaryDate) -> Void)? = nil,
-        onSessionExpired: @escaping () -> Void = {}
+        onSessionExpired: @escaping () -> Void = {},
+        latestSubmissionHandler: LogSubmissionHandler? = nil,
+        timeZoneProvider: @escaping () -> String = { TimeZone.current.identifier }
     ) {
         self.service = service
         self.today = today
@@ -100,6 +116,8 @@ public final class DiaryViewModel: ObservableObject {
         self.onDateChange = onDateChange
         self.onOpenLogEditor = onOpenLogEditor
         self.onSessionExpired = onSessionExpired
+        self.latestSubmissionHandler = latestSubmissionHandler
+        self.timeZoneProvider = timeZoneProvider
     }
 
     public func load() async {
@@ -246,6 +264,133 @@ public final class DiaryViewModel: ObservableObject {
     public func addFood(for slot: MealSlot) {
         guard !isSessionExpired else { return }
         onAddFood?(slot, selectedDate)
+    }
+
+    // MARK: - Log latest
+
+    public var isLatestLoggingAvailable: Bool {
+        latestSubmissionHandler != nil
+    }
+
+    /// Shown only for empty, enabled slots. No latest lookup is made until the
+    /// user taps, so an untouched diary never pays for an extra request.
+    public func canLogLatest(for slot: MealSlot) -> Bool {
+        guard isLatestLoggingAvailable,
+              !isSessionExpired,
+              enabledSlots.contains(slot) else { return false }
+        return !logs.contains { $0.mealSlot == slot }
+    }
+
+    public func prepareLatest(for slot: MealSlot) async {
+        guard canLogLatest(for: slot), latestLoadingSlot == nil else { return }
+        let date = selectedDate
+        latestErrorMessage = nil
+        latestNotice = nil
+        latestLoadingSlot = slot
+
+        if latestLoadedForDate != date {
+            await loadLatestSlots(before: date)
+        }
+        guard selectedDate == date, latestLoadingSlot == slot else { return }
+        latestLoadingSlot = nil
+        guard latestLoadedForDate == date else { return }
+
+        guard let source = latestSlotsBySlot[slot], !source.logs.isEmpty else {
+            latestErrorMessage = String(
+                format: String(localized: "diary.latest.empty"),
+                DiaryLabels.mealSlotName(slot)
+            )
+            return
+        }
+        guard source.logs.count <= LogSubmissionRequestBuilder.maxDrafts else {
+            latestErrorMessage = String(
+                format: String(localized: "diary.latest.tooMany"),
+                LogSubmissionRequestBuilder.maxDrafts
+            )
+            return
+        }
+        latestReview = DiaryLatestReview(
+            destinationDate: date,
+            destinationSlot: slot,
+            sourceDate: source.sourceDate,
+            items: source.logs
+        )
+    }
+
+    private func loadLatestSlots(before date: LocalDiaryDate) async {
+        latestFetchToken += 1
+        let token = latestFetchToken
+        do {
+            let slots = try await service.latestSlots(
+                before: date,
+                lookbackDays: 30
+            )
+            guard token == latestFetchToken, selectedDate == date else { return }
+            var bySlot: [MealSlot: DiaryLatestSlot] = [:]
+            for slot in slots {
+                bySlot[slot.mealSlot] = slot
+            }
+            latestSlotsBySlot = bySlot
+            latestLoadedForDate = date
+        } catch {
+            guard token == latestFetchToken, selectedDate == date else { return }
+            if isCancelledDiaryError(error) || error is CancellationError {
+                return
+            }
+            if isUnauthorizedDiaryError(error) {
+                expireSession()
+                return
+            }
+            latestErrorMessage = diaryErrorMessage(error)
+        }
+    }
+
+    public func cancelLatestReview() {
+        guard !latestIsSubmitting else { return }
+        latestReview = nil
+        latestErrorMessage = nil
+    }
+
+    public func submitLatest() {
+        guard let review = latestReview,
+              !latestIsSubmitting,
+              let handler = latestSubmissionHandler else { return }
+        guard let drafts = review.makeDrafts(timeZone: timeZoneProvider()) else {
+            latestErrorMessage = String(localized: "diary.latest.invalid")
+            return
+        }
+        latestIsSubmitting = true
+        latestErrorMessage = nil
+        let summary = LogSubmissionSummary.text(
+            for: drafts,
+            names: review.items.map(\.title)
+        )
+        handler(drafts, review.items.map(\.title), summary) { [weak self] result in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.latestIsSubmitting = false
+                switch result {
+                case .success:
+                    self.latestReview = nil
+                    self.latestNotice = String(localized: "diary.latest.logged")
+                    await self.refresh()
+                case .failure(let failure):
+                    if failure == .unauthorized {
+                        self.expireSession()
+                        return
+                    }
+                    self.latestErrorMessage = failure.message
+                }
+            }
+        }
+    }
+
+    public func dismissLatestNotice() {
+        latestNotice = nil
+    }
+
+    public func dismissLatestError() {
+        latestErrorMessage = nil
     }
 
     public func log(withID id: String) -> DiaryLog? {
@@ -442,6 +587,18 @@ public final class DiaryViewModel: ObservableObject {
         goal = DiaryGoalTargets()
         enabledSlots = Set(MealSlot.allCases)
         clearPendingOverrides()
+        clearLatestSlotState()
+    }
+
+    private func clearLatestSlotState() {
+        latestFetchToken += 1
+        latestSlotsBySlot = [:]
+        latestLoadedForDate = nil
+        latestLoadingSlot = nil
+        latestReview = nil
+        latestErrorMessage = nil
+        latestIsSubmitting = false
+        latestNotice = nil
     }
 
     private func clearPendingOverrides() {

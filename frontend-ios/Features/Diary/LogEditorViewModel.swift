@@ -26,9 +26,12 @@ public final class LogEditorViewModel: ObservableObject {
     public let date: LocalDiaryDate
     public let title: String
     public let subtitle: String?
-    /// Product identity used to conservatively invalidate journal attempts if
-    /// this log is deleted. Nil for non-product logs.
+    /// Product identity retained for source compatibility with existing editor
+    /// tests. Typed identity below also covers meals and ad-hoc logs.
     public let productID: String?
+    /// Conservative identity used to invalidate journal attempts if this log is
+    /// deleted. Nil only for legacy rows that carry no item reference.
+    public let submissionItem: LogSubmissionItem?
     /// Captured when the editor is created so a delete that outlives a session
     /// change still blocks the journal for the account that owned the log.
     public let accountID: String
@@ -79,6 +82,7 @@ public final class LogEditorViewModel: ObservableObject {
         self.title = log.title
         self.subtitle = log.brand
         self.productID = log.productID
+        self.submissionItem = log.submissionItem
         self.accountID = accountID
         self.service = service
         self.submissionStore = submissionStore
@@ -212,11 +216,11 @@ public final class LogEditorViewModel: ObservableObject {
         // durable first; otherwise a late POST replay could recreate the log.
         // Only after the user confirms (or calls delete directly) is it safe
         // to invalidate matching attempts.
-        if let productID, let submissionStore {
+        if let submissionItem, let submissionStore {
             do {
                 let invalidated = try submissionStore.blockBeforeDeleting(
                     accountID: accountID,
-                    foodID: productID,
+                    item: submissionItem,
                     date: date,
                     reason: String(localized: "foodDetail.pending.invalidated")
                 )
@@ -279,7 +283,9 @@ public final class LogEditorViewModel: ObservableObject {
             return String(localized: "diary.editor.delete.liveSubmission")
         case .invalidAccount:
             return String(localized: "diary.editor.delete.accountUnavailable")
-        case .missingEntry, .invalidRequest, .bodyTooLarge, .tooManyEntries:
+        case .missingEntry, .invalidRequest, .bodyTooLarge, .tooManyEntries,
+             .idempotencyConflict, .preparedIntentUnavailable,
+             .preparedIntentCancelled, .preparedIntentPending:
             return String(localized: "diary.editor.delete.blockedFallback")
         }
     }

@@ -14,7 +14,8 @@ enum CalCoStoreMapping {
             quantity: log.quantity,
             notes: log.notes,
             brand: log.itemBrand,
-            itemReference: log.itemReference
+            itemReference: log.itemReference,
+            logItem: LogSubmissionItem(logItem: log.item)
         )
     }
 

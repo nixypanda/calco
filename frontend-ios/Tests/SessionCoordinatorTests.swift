@@ -188,7 +188,8 @@ final class SessionCoordinatorTests: XCTestCase {
             id: session.identity.id,
             username: session.identity.username,
             role: role,
-            displayName: session.profile?.displayName
+            displayName: session.profile?.displayName,
+            profileID: session.profile?.id
         )
     }
 

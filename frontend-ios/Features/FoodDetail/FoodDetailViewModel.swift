@@ -52,6 +52,9 @@ public final class FoodDetailViewModel: ObservableObject {
     @Published public private(set) var recoveryState: FoodDetailRecoveryState = .idle
     @Published public private(set) var pendingSubmissions: [PendingLogSubmission] = []
     @Published public private(set) var hidesPendingNotice = false
+    /// Explains a visible fallback when the last-used amount could not be
+    /// applied (for example, an unavailable unit). Nil when no fallback.
+    @Published public private(set) var lastUsedNotice: String?
     /// Set when normal Log was refused because an unresolved journal entry
     /// matches this draft. The only way past it is an explicit retry or an
     /// explicitly confirmed new logical submission.
@@ -73,15 +76,26 @@ public final class FoodDetailViewModel: ObservableObject {
     private let submissionStore: LogSubmissionStore?
     private let timeZoneProvider: () -> String
     private let idGenerator: () -> String
+    private let singleCapabilityEnsure: () async -> Bool
+    private let durableContextProvider: FoodDetailSubmissionContextProvider?
 
     // In-memory handle for the current logical attempt. Any form edit clears
     // it, so A -> B -> A never silently revives A's key. Persisted entries stay
     // in the journal for explicit recovery.
     private var currentAttempt: PendingLogSubmission?
+    private var boundSubmissionContext: LogSubmissionSessionContext?
     private var frozenTimeZone: String?
     private var lastPendingIDs: Set<String> = []
     private var cancellables: Set<AnyCancellable> = []
+    private var quantityWasEdited = false
+    private var formWasEdited = false
+    private var isApplyingDefaultQuantity = false
+    private var hasAttemptedSubmission = false
+    private var lastUsedTask: Task<Void, Never>?
 
+    /// Legacy/offline initializer retained for existing fakes and tests. It has
+    /// no authoritative session-context binding; production must use the
+    /// `submissionContextProvider` initializer below.
     public init(
         foodID: String,
         originDate: LocalDiaryDate,
@@ -96,7 +110,9 @@ public final class FoodDetailViewModel: ObservableObject {
         baseURL: URL? = nil,
         submissionStore: LogSubmissionStore? = nil,
         timeZoneProvider: @escaping () -> String = { TimeZone.current.identifier },
-        idGenerator: @escaping () -> String = { UUID().uuidString.lowercased() }
+        idGenerator: @escaping () -> String = { UUID().uuidString.lowercased() },
+        singleCapabilityEnsure: (() async -> Bool)? = nil,
+        singleCapabilityReady: @escaping () -> Bool = { true }
     ) {
         self.foodID = foodID
         self.originDate = originDate
@@ -112,6 +128,8 @@ public final class FoodDetailViewModel: ObservableObject {
         self.submissionStore = submissionStore
         self.timeZoneProvider = timeZoneProvider
         self.idGenerator = idGenerator
+        self.singleCapabilityEnsure = singleCapabilityEnsure ?? { singleCapabilityReady() }
+        self.durableContextProvider = nil
         self.mealSlot = originMealSlot
 
         submissionStore?.$revision
@@ -120,6 +138,57 @@ public final class FoodDetailViewModel: ObservableObject {
                 self?.refreshRecoveryEntries()
             }
             .store(in: &cancellables)
+    }
+
+    /// Durable context-bound submission used by production. The captured
+    /// shared session context is authoritative; the legacy initializer above
+    /// is retained only for offline/legacy test doubles.
+    public init(
+        foodID: String,
+        originDate: LocalDiaryDate,
+        originMealSlot: MealSlot? = nil,
+        service: FoodDetailServicing,
+        onSuccess: @escaping (LocalDiaryDate, MealSlot?) -> Void = { _, _ in },
+        onSessionExpired: @escaping () -> Void = {},
+        onSubmissionSuccess: ((FoodLogSubmissionSuccess) -> Void)? = nil,
+        onCheckDiary: ((LocalDiaryDate) -> Void)? = nil,
+        accountID: String,
+        foodName: String? = nil,
+        baseURL: URL? = nil,
+        submissionStore: LogSubmissionStore,
+        submissionContextProvider: @escaping FoodDetailSubmissionContextProvider,
+        timeZoneProvider: @escaping () -> String = { TimeZone.current.identifier },
+        idGenerator: @escaping () -> String = { UUID().uuidString.lowercased() },
+        singleCapabilityEnsure: @escaping () async -> Bool
+    ) {
+        self.foodID = foodID
+        self.originDate = originDate
+        self.originMealSlot = originMealSlot
+        self.service = service
+        self.onSuccess = onSuccess
+        self.onSessionExpired = onSessionExpired
+        self.onSubmissionSuccess = onSubmissionSuccess
+        self.onCheckDiary = onCheckDiary
+        self.accountID = accountID
+        self.displayFoodName = foodName
+        self.baseURL = baseURL
+        self.submissionStore = submissionStore
+        self.timeZoneProvider = timeZoneProvider
+        self.idGenerator = idGenerator
+        self.singleCapabilityEnsure = singleCapabilityEnsure
+        self.durableContextProvider = submissionContextProvider
+        self.mealSlot = originMealSlot
+
+        submissionStore.$revision
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.refreshRecoveryEntries()
+            }
+            .store(in: &cancellables)
+    }
+
+    public var isDurableSubmission: Bool {
+        durableContextProvider != nil
     }
 
     public var loadState: FoodDetailLoadState {
@@ -206,21 +275,60 @@ public final class FoodDetailViewModel: ObservableObject {
     }
 
     public func load() async {
+        lastUsedTask?.cancel()
+        lastUsedTask = nil
         resolvedState = .loading
+        lastUsedNotice = nil
+        quantityWasEdited = false
+        formWasEdited = false
+        isApplyingDefaultQuantity = false
+        hasAttemptedSubmission = false
+        boundSubmissionContext = nil
+        if durableContextProvider != nil {
+            guard let captured = captureSubmissionContext() else {
+                resolvedState = .failed(String(localized: "foodDetail.error.sessionExpired"))
+                onSessionExpired()
+                return
+            }
+            boundSubmissionContext = captured
+        }
         do {
-            async let foodTask = service.fetchFoodDetail(id: foodID)
-            async let unitsTask = service.fetchUnits()
-            let (loadedFood, loadedUnits) = try await (foodTask, unitsTask)
+            let loadedFood: FoodDetail
+            let loadedUnits: [FoodUnit]
+            if let boundSubmissionContext {
+                async let foodTask = service.fetchFoodDetail(
+                    id: foodID,
+                    expectedAccountID: boundSubmissionContext.requestAccountID
+                )
+                async let unitsTask = service.fetchUnits(
+                    expectedAccountID: boundSubmissionContext.requestAccountID
+                )
+                (loadedFood, loadedUnits) = try await (foodTask, unitsTask)
+            } else {
+                async let foodTask = service.fetchFoodDetail(id: foodID)
+                async let unitsTask = service.fetchUnits()
+                (loadedFood, loadedUnits) = try await (foodTask, unitsTask)
+            }
+            if let boundSubmissionContext,
+               !submissionContextIsCurrent(boundSubmissionContext) {
+                resolvedState = .failed(String(localized: "foodDetail.error.sessionExpired"))
+                onSessionExpired()
+                return
+            }
 
             units = loadedUnits
             let defaultLogQuantity = loadedFood.defaultLogQuantity
+            isApplyingDefaultQuantity = true
             amount = defaultLogQuantity.amount
             unit = defaultLogQuantity.unit
             if mealSlot == nil {
                 mealSlot = originMealSlot
             }
+            isApplyingDefaultQuantity = false
             resolvedState = .loaded(loadedFood)
+            startLastUsedPrefill(food: loadedFood, units: loadedUnits)
         } catch {
+            isApplyingDefaultQuantity = false
             if isUnauthorizedFoodDetailError(error) {
                 onSessionExpired()
                 resolvedState = .failed(String(localized: "foodDetail.error.sessionExpired"))
@@ -231,11 +339,101 @@ public final class FoodDetailViewModel: ObservableObject {
         refreshRecoveryEntries()
     }
 
+    /// Fetched after the food is visible so it never blocks the detail screen.
+    /// A user edit, recovery entry, or submission wins over a late response.
+    private func startLastUsedPrefill(food: FoodDetail, units: [FoodUnit]) {
+        let durableContext: LogSubmissionSessionContext?
+        if durableContextProvider != nil {
+            guard let boundSubmissionContext,
+                  submissionContextIsCurrent(boundSubmissionContext) else {
+                onSessionExpired()
+                return
+            }
+            durableContext = boundSubmissionContext
+        } else {
+            durableContext = nil
+        }
+
+        lastUsedTask = Task { [weak self] in
+            guard let self else { return }
+            if let durableContext,
+               !self.submissionContextIsCurrent(durableContext) {
+                self.onSessionExpired()
+                return
+            }
+            let lastUsed: RecentLogItem?
+            do {
+                if let durableContext {
+                    lastUsed = try await self.service.lastUsed(
+                        for: .product(id: self.foodID),
+                        date: self.originDate,
+                        mealSlot: self.originMealSlot,
+                        expectedAccountID: durableContext.requestAccountID
+                    )
+                } else {
+                    lastUsed = try await self.service.lastUsed(
+                        for: .product(id: self.foodID),
+                        date: self.originDate,
+                        mealSlot: self.originMealSlot
+                    )
+                }
+            } catch {
+                if isUnauthorizedFoodDetailError(error) {
+                    self.onSessionExpired()
+                }
+                return
+            }
+            guard !Task.isCancelled else { return }
+            if let durableContext,
+               !self.submissionContextIsCurrent(durableContext) {
+                self.onSessionExpired()
+                return
+            }
+            guard !self.formWasEdited,
+                  !self.hasAttemptedSubmission,
+                  self.currentAttempt == nil,
+                  self.pendingSubmissions.isEmpty,
+                  self.newSubmissionConfirmation == nil else { return }
+            self.applyLastUsed(lastUsed, food: food, units: units)
+        }
+    }
+
+    private func applyLastUsed(
+        _ lastUsed: RecentLogItem?,
+        food: FoodDetail,
+        units: [FoodUnit]
+    ) {
+        guard !formWasEdited,
+              !hasAttemptedSubmission,
+              currentAttempt == nil,
+              pendingSubmissions.isEmpty,
+              newSubmissionConfirmation == nil,
+              let quantity = lastUsed?.quantity,
+              !quantityWasEdited,
+              positiveAmount(quantity.amount) != nil else { return }
+        let allowed = sourceUnits(food: food, units: units)
+        guard allowed.isEmpty || allowed.contains(where: { $0.code == quantity.unit }) else {
+            lastUsedNotice = String(localized: "foodDetail.lastUsed.unavailableUnit")
+            return
+        }
+        isApplyingDefaultQuantity = true
+        amount = quantity.amount
+        unit = quantity.unit
+        isApplyingDefaultQuantity = false
+    }
+
+    public func dismissLastUsedNotice() {
+        guard lastUsedNotice != nil else { return }
+        lastUsedNotice = nil
+    }
+
     public func amountChanged(_ value: String) {
+        quantityWasEdited = true
         amount = value
     }
 
     public func unitChanged(_ value: String) {
+        quantityWasEdited = true
         unit = value
     }
 
@@ -256,7 +454,9 @@ public final class FoodDetailViewModel: ObservableObject {
         if let currentAttempt,
            currentAttempt.state == .inFlight
             || currentAttempt.state == .uncertain
-            || currentAttempt.state == .conflicted {
+            || currentAttempt.state == .conflicted
+            || currentAttempt.state == .serverChanged
+            || currentAttempt.state == .reconciliationOnly {
             if let submissionStore {
                 if submissionStore.isRetryBlocked(id: currentAttempt.id) {
                     self.currentAttempt = nil
@@ -266,7 +466,9 @@ public final class FoodDetailViewModel: ObservableObject {
                 ) {
                     if stored.state == .inFlight
                         || stored.state == .uncertain
-                        || stored.state == .conflicted {
+                        || stored.state == .conflicted
+                        || stored.state == .serverChanged
+                        || stored.state == .reconciliationOnly {
                         self.currentAttempt = stored
                         if !entries.contains(where: { $0.id == stored.id }) {
                             entries.insert(stored, at: 0)
@@ -315,6 +517,18 @@ public final class FoodDetailViewModel: ObservableObject {
             submitState = .failed(validationMessage)
             return
         }
+        let durableContext: LogSubmissionSessionContext?
+        if durableContextProvider != nil {
+            guard let bound = boundSubmissionContext,
+                  submissionContextIsCurrent(bound) else {
+                submitState = .failed(String(localized: "foodDetail.error.sessionExpired"))
+                onSessionExpired()
+                return
+            }
+            durableContext = bound
+        } else {
+            durableContext = nil
+        }
 
         refreshRecoveryEntries()
         let attemptTimeZone = currentAttempt?.draft.timeZone
@@ -355,14 +569,23 @@ public final class FoodDetailViewModel: ObservableObject {
             timeZone: frozenTimeZone ?? attemptTimeZone ?? timeZoneProvider()
         )
         if !authorizingNewLogicalSubmission,
-           let matching = pendingSubmissions.first(where: {
-               draftFieldsMatch($0.draft, draft)
-           }) {
+           let matching = pendingSubmissions.first {
             blockForUnresolved(matching)
             return
         }
 
         newSubmissionConfirmation = nil
+        guard await singleCapabilityEnsure(), !Task.isCancelled else {
+            submitState = .failed(String(localized: "foodDetail.error.capabilityUnavailable"))
+            return
+        }
+        if let durableContext, !submissionContextIsCurrent(durableContext) {
+            submitState = .failed(String(localized: "foodDetail.error.sessionExpired"))
+            onSessionExpired()
+            return
+        }
+        guard !Task.isCancelled, !didSubmitSuccessfully, !isBusy else { return }
+        hasAttemptedSubmission = true
         frozenTimeZone = draft.timeZone
         let key = idGenerator()
         do {
@@ -384,7 +607,7 @@ public final class FoodDetailViewModel: ObservableObject {
                 body: prepared.body
             )
             currentAttempt = entry
-            await send(entry, recovery: false)
+            await send(entry, recovery: false, context: durableContext)
         } catch let error as LogSubmissionStoreError {
             currentAttempt = nil
             submitState = .failed(storeFailureMessage(error))
@@ -402,6 +625,21 @@ public final class FoodDetailViewModel: ObservableObject {
         guard let requested = entry ?? pendingRecoverySubmission,
               requested.accountID == accountID
         else { return }
+
+        let durableContext: LogSubmissionSessionContext?
+        if durableContextProvider != nil {
+            guard let bound = boundSubmissionContext,
+                  submissionContextIsCurrent(bound) else {
+                let message = String(localized: "foodDetail.error.sessionExpired")
+                recoveryState = .failed(message)
+                submitState = .failed(message)
+                onSessionExpired()
+                return
+            }
+            durableContext = bound
+        } else {
+            durableContext = nil
+        }
 
         let attempt: PendingLogSubmission
         if let store = submissionStore {
@@ -432,6 +670,44 @@ public final class FoodDetailViewModel: ObservableObject {
             refreshRecoveryEntries()
             return
         }
+        if attempt.state == .reconciliationOnly {
+            let message = attempt.lastMessage
+                ?? String(localized: "submission.reconciliationOnly")
+            recoveryState = .failed(message)
+            submitState = .failed(message)
+            return
+        }
+        if attempt.state == .serverChanged {
+            let message = attempt.lastMessage
+                ?? String(localized: "foodDetail.error.differentServer")
+            recoveryState = .failed(message)
+            submitState = .failed(message)
+            return
+        }
+        guard attempt.capabilityVersion == 2 else {
+            let message = String(localized: "submission.reconciliationOnly")
+            if let store = submissionStore {
+                do {
+                    try store.markReconciliationOnly(
+                        id: attempt.id,
+                        accountID: accountID,
+                        message: message
+                    )
+                } catch {
+                    recoveryState = .failed(
+                        String(localized: "foodDetail.error.journalUnavailable")
+                    )
+                    submitState = .failed(
+                        String(localized: "foodDetail.error.journalUnavailable")
+                    )
+                    return
+                }
+            }
+            recoveryState = .failed(message)
+            submitState = .failed(message)
+            refreshRecoveryEntries()
+            return
+        }
         if attempt.state == .conflicted || attempt.body == nil {
             recoveryState = .conflicted(
                 attempt.lastMessage ?? String(localized: "foodDetail.error.conflict")
@@ -453,18 +729,35 @@ public final class FoodDetailViewModel: ObservableObject {
             recoveryState = .failed(String(localized: "foodDetail.error.saveFailed"))
             return
         }
+        guard await singleCapabilityEnsure(), !Task.isCancelled else {
+            let message = String(localized: "foodDetail.error.capabilityUnavailable")
+            recoveryState = .failed(message)
+            submitState = .failed(message)
+            return
+        }
+        if let durableContext, !submissionContextIsCurrent(durableContext) {
+            let message = String(localized: "foodDetail.error.sessionExpired")
+            recoveryState = .failed(message)
+            submitState = .failed(message)
+            onSessionExpired()
+            return
+        }
+        guard !Task.isCancelled, !didSubmitSuccessfully else { return }
 
         // Retrying the earlier row is a separate explicit action from creating
         // a new logical submission.
         newSubmissionConfirmation = nil
         recoveryState = .retrying(attempt.id)
-        await send(attempt, recovery: true)
+        await send(attempt, recovery: true, context: durableContext)
     }
 
     /// Removes a definitively conflicted journal row. The view asks for an
     /// explicit confirmation before calling this; normal submission cannot.
     public func discardPending(_ entry: PendingLogSubmission) {
-        guard entry.accountID == accountID, entry.state == .conflicted else { return }
+        guard entry.accountID == accountID,
+              entry.state == .conflicted
+                || entry.state == .serverChanged
+                || entry.state == .reconciliationOnly else { return }
         do {
             if let submissionStore {
                 try submissionStore.remove(id: entry.id, accountID: accountID)
@@ -503,6 +796,8 @@ public final class FoodDetailViewModel: ObservableObject {
 
     private func formDidChange() {
         guard !didSubmitSuccessfully else { return }
+        guard !isApplyingDefaultQuantity else { return }
+        formWasEdited = true
         currentAttempt = nil
         frozenTimeZone = nil
         newSubmissionConfirmation = nil
@@ -528,6 +823,14 @@ public final class FoodDetailViewModel: ObservableObject {
             submitState = .uncertain(
                 entry.lastMessage ?? String(localized: "foodDetail.error.uncertain")
             )
+        case .serverChanged:
+            submitState = .failed(
+                entry.lastMessage ?? String(localized: "foodDetail.error.differentServer")
+            )
+        case .reconciliationOnly:
+            submitState = .failed(
+                entry.lastMessage ?? String(localized: "submission.reconciliationOnly")
+            )
         case .invalidated:
             submitState = .failed(blockedDeletionMessage(entry))
         case .succeeded, .rejected:
@@ -547,18 +850,6 @@ public final class FoodDetailViewModel: ObservableObject {
         )
     }
 
-    private func draftFieldsMatch(
-        _ lhs: LogSubmissionDraft,
-        _ rhs: LogSubmissionDraft
-    ) -> Bool {
-        lhs.foodID == rhs.foodID
-            && lhs.date == rhs.date
-            && lhs.mealSlot == rhs.mealSlot
-            && lhs.amount == rhs.amount
-            && lhs.unit == rhs.unit
-            && lhs.notes == rhs.notes
-    }
-
     private func reserve(
         draft: LogSubmissionDraft,
         request: FoodLogCreateRequest,
@@ -570,7 +861,8 @@ public final class FoodDetailViewModel: ObservableObject {
                 foodName: foodNameForDisplay,
                 draft: draft,
                 request: request,
-                body: body
+                body: body,
+                capabilityVersion: 2
             )
         }
         let timestamp = Date()
@@ -579,6 +871,7 @@ public final class FoodDetailViewModel: ObservableObject {
             accountID: accountID,
             foodName: foodNameForDisplay,
             draft: draft,
+            capabilityVersion: 2,
             idempotencyKey: request.idempotencyKey ?? "",
             body: body,
             baseURLString: request.baseURLString ?? "",
@@ -588,11 +881,39 @@ public final class FoodDetailViewModel: ObservableObject {
         )
     }
 
-    private func send(_ entry: PendingLogSubmission, recovery: Bool) async {
+    private func send(
+        _ entry: PendingLogSubmission,
+        recovery: Bool,
+        context: LogSubmissionSessionContext?
+    ) async {
         var attempt = entry
         do {
             if let submissionStore {
-                try submissionStore.markInFlight(id: entry.id, accountID: accountID)
+                let claimed = try submissionStore.claimSubmission(
+                    id: entry.id,
+                    accountID: accountID
+                )
+                guard claimed else {
+                    let current = submissionStore.entry(
+                        id: entry.id,
+                        accountID: accountID
+                    )
+                    if let current, current.state == .succeeded {
+                        deliverStoredSuccess(current, recovery: recovery)
+                        return
+                    }
+                    let message: String
+                    if let current, current.state == .invalidated {
+                        message = blockedDeletionMessage(current)
+                    } else {
+                        message = String(localized: "submission.pendingExists")
+                    }
+                    currentAttempt = nil
+                    submitState = .failed(message)
+                    if recovery { recoveryState = .failed(message) }
+                    refreshRecoveryEntries()
+                    return
+                }
                 // Never send an in-memory fallback if the durable row vanished.
                 attempt = try submissionStore.requireEntry(
                     id: entry.id,
@@ -629,12 +950,11 @@ public final class FoodDetailViewModel: ObservableObject {
         }
         guard let request = attempt.request else {
             let message = String(localized: "foodDetail.error.saveFailed")
-            try? submissionStore?.markUncertain(
-                id: attempt.id,
-                accountID: accountID,
+            guard markUncertain(
+                attempt,
                 status: nil,
                 message: message
-            )
+            ) else { return }
             if recovery {
                 recoveryState = .failed(message)
             } else {
@@ -644,8 +964,25 @@ public final class FoodDetailViewModel: ObservableObject {
             return
         }
 
+        if let context, !submissionContextIsCurrent(context) {
+            retainUncertainForStaleContext(attempt, recovery: recovery)
+            return
+        }
+
         do {
-            let created = try await service.createLog(request)
+            let created: CreatedFoodLog
+            if let context {
+                created = try await service.createLog(
+                    request,
+                    expectedAccountID: context.requestAccountID
+                )
+            } else {
+                created = try await service.createLog(request)
+            }
+            if let context, !submissionContextIsCurrent(context) {
+                retainUncertainForStaleContext(attempt, recovery: recovery)
+                return
+            }
             if let submissionStore,
                submissionStore.isRetryBlocked(id: attempt.id)
                 || submissionStore.entry(id: attempt.id, accountID: accountID)?
@@ -667,14 +1004,29 @@ public final class FoodDetailViewModel: ObservableObject {
                 logID: created.id,
                 replayed: created.replayed
             )
-            try? submissionStore?.markSucceeded(
-                id: attempt.id,
-                accountID: accountID,
-                logID: created.id,
-                date: success.date,
-                mealSlot: success.mealSlot,
-                replayed: created.replayed
-            )
+            if let submissionStore {
+                do {
+                    try submissionStore.markSucceeded(
+                        id: attempt.id,
+                        accountID: accountID,
+                        logID: created.id,
+                        date: success.date,
+                        mealSlot: success.mealSlot,
+                        replayed: created.replayed
+                    )
+                } catch {
+                    let message = String(localized: "foodDetail.error.journalUnavailable")
+                    currentAttempt = attempt
+                    submitState = .failed(message)
+                    if recovery {
+                        recoveryState = .failed(message)
+                    }
+                    refreshRecoveryEntries()
+                    return
+                }
+            } else {
+                currentAttempt = nil
+            }
             currentAttempt = nil
             newSubmissionConfirmation = nil
             lastSubmissionSuccess = success
@@ -698,35 +1050,44 @@ public final class FoodDetailViewModel: ObservableObject {
         let serviceError = error as? FoodDetailServiceError
         switch serviceError {
         case .unauthorized:
-            markUncertain(entry, status: 401, message: String(localized: "foodDetail.error.sessionExpired"))
+            guard markUncertain(
+                entry,
+                status: 401,
+                message: String(localized: "foodDetail.error.sessionExpired")
+            ) else { return }
             submitState = .failed(String(localized: "foodDetail.error.sessionExpired"))
             if recovery {
                 recoveryState = .failed(String(localized: "foodDetail.error.sessionExpired"))
             }
             onSessionExpired()
         case .uncertain(let message):
-            markUncertain(entry, status: nil, message: message)
+            guard markUncertain(entry, status: nil, message: message) else { return }
             submitState = .uncertain(message)
             if recovery { recoveryState = .failed(message) }
         case .conflict(let message):
-            markConflicted(entry, message: message)
+            guard markConflicted(entry, message: message) else { return }
             submitState = .conflict(message)
             if recovery { recoveryState = .conflicted(message) }
         case .rateLimited(let retryAfter):
             let message = String(localized: "foodDetail.error.rateLimited")
-            markUncertain(entry, status: 429, message: message, retryAfter: retryAfter)
+            guard markUncertain(
+                entry,
+                status: 429,
+                message: message,
+                retryAfter: retryAfter
+            ) else { return }
             submitState = .rateLimited(message)
             if recovery { recoveryState = .failed(message) }
         case .failed(let message):
             if !entry.baseURLString.isEmpty,
                let baseURL,
                entry.baseURLString != baseURL.absoluteString {
-                markUncertain(entry, status: nil, message: message)
+                guard markUncertain(entry, status: nil, message: message) else { return }
                 submitState = .uncertain(message)
                 if recovery { recoveryState = .failed(message) }
                 break
             }
-            markRejected(entry, message: message)
+            guard markRejected(entry, message: message) else { return }
             submitState = .failed(message)
             if recovery { recoveryState = .failed(message) }
             if submissionStore != nil {
@@ -736,7 +1097,7 @@ public final class FoodDetailViewModel: ObservableObject {
             }
         case nil:
             let message = error.localizedDescription
-            markUncertain(entry, status: nil, message: message)
+            guard markUncertain(entry, status: nil, message: message) else { return }
             submitState = .uncertain(message)
             if recovery { recoveryState = .failed(message) }
         }
@@ -773,18 +1134,26 @@ public final class FoodDetailViewModel: ObservableObject {
         status: Int?,
         message: String,
         retryAfter: Int? = nil
-    ) {
-        if let submissionStore,
-           (try? submissionStore.markUncertain(
-               id: entry.id,
-               accountID: accountID,
-               status: status,
-               message: message,
-               retryAfterSeconds: retryAfter
-           )) != nil,
-           let updated = submissionStore.entry(id: entry.id, accountID: accountID) {
-            currentAttempt = updated
-            return
+    ) -> Bool {
+        if let submissionStore {
+            do {
+                try submissionStore.markUncertain(
+                    id: entry.id,
+                    accountID: accountID,
+                    status: status,
+                    message: message,
+                    retryAfterSeconds: retryAfter
+                )
+                if let updated = submissionStore.entry(id: entry.id, accountID: accountID) {
+                    currentAttempt = updated
+                    return true
+                }
+                journalStateFailure()
+                return false
+            } catch {
+                journalStateFailure()
+                return false
+            }
         }
         var updated = entry
         updated.state = .uncertain
@@ -793,37 +1162,55 @@ public final class FoodDetailViewModel: ObservableObject {
         updated.retryAfterSeconds = retryAfter
         updated.updatedAt = Date()
         currentAttempt = updated
+        return true
     }
 
-    private func markRejected(_ entry: PendingLogSubmission, message: String) {
-        if let submissionStore,
-           (try? submissionStore.markRejected(
-               id: entry.id,
-               accountID: accountID,
-               status: 400,
-               message: message
-           )) != nil,
-           let updated = submissionStore.entry(id: entry.id, accountID: accountID) {
-            currentAttempt = updated
-            return
+    private func markRejected(_ entry: PendingLogSubmission, message: String) -> Bool {
+        if let submissionStore {
+            do {
+                try submissionStore.markRejected(
+                    id: entry.id,
+                    accountID: accountID,
+                    status: 400,
+                    message: message
+                )
+                if let updated = submissionStore.entry(id: entry.id, accountID: accountID) {
+                    currentAttempt = updated
+                    return true
+                }
+                journalStateFailure()
+                return false
+            } catch {
+                journalStateFailure()
+                return false
+            }
         }
         var updated = entry
         updated.state = .rejected
         updated.lastMessage = message
         updated.updatedAt = Date()
         currentAttempt = updated
+        return true
     }
 
-    private func markConflicted(_ entry: PendingLogSubmission, message: String) {
-        if let submissionStore,
-           (try? submissionStore.markConflicted(
-               id: entry.id,
-               accountID: accountID,
-               message: message
-           )) != nil,
-           let updated = submissionStore.entry(id: entry.id, accountID: accountID) {
-            currentAttempt = updated
-            return
+    private func markConflicted(_ entry: PendingLogSubmission, message: String) -> Bool {
+        if let submissionStore {
+            do {
+                try submissionStore.markConflicted(
+                    id: entry.id,
+                    accountID: accountID,
+                    message: message
+                )
+                if let updated = submissionStore.entry(id: entry.id, accountID: accountID) {
+                    currentAttempt = updated
+                    return true
+                }
+                journalStateFailure()
+                return false
+            } catch {
+                journalStateFailure()
+                return false
+            }
         }
         var updated = entry
         updated.state = .conflicted
@@ -831,6 +1218,14 @@ public final class FoodDetailViewModel: ObservableObject {
         updated.lastMessage = message
         updated.updatedAt = Date()
         currentAttempt = updated
+        return true
+    }
+
+    private func journalStateFailure() {
+        let message = String(localized: "foodDetail.error.journalUnavailable")
+        submitState = .failed(message)
+        recoveryState = .failed(message)
+        refreshRecoveryEntries()
     }
 
     private func blockedDeletionMessage(_ entry: PendingLogSubmission) -> String {
@@ -842,13 +1237,72 @@ public final class FoodDetailViewModel: ObservableObject {
         return String(localized: "foodDetail.pending.invalidated")
     }
 
+    private func captureSubmissionContext() -> LogSubmissionSessionContext? {
+        guard let durableContextProvider,
+              let context = durableContextProvider(),
+              context.accountID == accountID else {
+            return nil
+        }
+        if let baseURL, context.baseURL != baseURL { return nil }
+        return context
+    }
+
+    private func submissionContextIsCurrent(
+        _ context: LogSubmissionSessionContext
+    ) -> Bool {
+        guard let durableContextProvider,
+              let current = durableContextProvider(),
+              current == context,
+              current.accountID == accountID else {
+            return false
+        }
+        if let baseURL, current.baseURL != baseURL { return false }
+        return true
+    }
+
+    private func retainUncertainForStaleContext(
+        _ entry: PendingLogSubmission,
+        recovery: Bool
+    ) {
+        if let submissionStore,
+           submissionStore.isRetryBlocked(id: entry.id)
+            || submissionStore.entry(id: entry.id, accountID: accountID)?
+                .state == .invalidated {
+            let message = blockedDeletionMessage(entry)
+            currentAttempt = nil
+            submitState = .failed(message)
+            if recovery { recoveryState = .failed(message) }
+            refreshRecoveryEntries()
+            return
+        }
+        let message = String(localized: "foodDetail.error.sessionExpired")
+        let marked = markUncertain(entry, status: nil, message: message)
+        if !marked {
+            submissionStore?.abandonLiveSubmission(id: entry.id)
+        }
+        if let updated = submissionStore?.entry(
+            id: entry.id,
+            accountID: accountID
+        ) {
+            currentAttempt = updated
+        } else {
+            currentAttempt = entry
+        }
+        submitState = .uncertain(message)
+        if recovery { recoveryState = .failed(message) }
+        onSessionExpired()
+        refreshRecoveryEntries()
+    }
+
     private func storeFailureMessage(_ error: LogSubmissionStoreError) -> String {
         switch error {
         case .unreadableJournal:
             return String(localized: "foodDetail.error.journalUnavailable")
         case .missingEntry, .submissionInFlight:
             return String(localized: "foodDetail.error.saveFailed")
-        case .invalidAccount, .invalidRequest, .bodyTooLarge, .tooManyEntries, .persistence:
+        case .invalidAccount, .invalidRequest, .bodyTooLarge, .tooManyEntries, .persistence,
+             .idempotencyConflict, .preparedIntentUnavailable, .preparedIntentCancelled,
+             .preparedIntentPending:
             return String(localized: "foodDetail.error.saveFailed")
         }
     }
@@ -857,7 +1311,7 @@ public final class FoodDetailViewModel: ObservableObject {
         switch error {
         case .bodyTooLarge:
             return String(localized: "foodDetail.error.notesTooLong")
-        case .invalidKey, .encoding:
+        case .invalidKey, .invalidItem, .encoding:
             return String(localized: "foodDetail.error.saveFailed")
         }
     }

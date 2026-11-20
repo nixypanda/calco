@@ -111,7 +111,9 @@ final class SettingsUITests: XCTestCase {
         if didReachDiary {
             restoreFixtureBestEffort()
         }
+#if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+#endif
         app = nil
     }
 
@@ -352,7 +354,9 @@ final class SettingsUITests: XCTestCase {
         let draftCalories = fieldValue(Identifier.calories)
         XCTAssertEqual(draftCalories, Fixture.editedGoal[0])
 
+#if os(iOS)
         XCUIDevice.shared.orientation = .landscapeLeft
+#endif
         XCTAssertTrue(
             waitForSettingsLoaded(),
             "Settings did not survive rotation to landscape."
@@ -364,7 +368,9 @@ final class SettingsUITests: XCTestCase {
             "The dirty goal draft changed across rotation."
         )
 
+#if os(iOS)
         XCUIDevice.shared.orientation = .portrait
+#endif
         XCTAssertTrue(
             waitForSettingsLoaded(),
             "Settings did not survive rotation back to portrait."

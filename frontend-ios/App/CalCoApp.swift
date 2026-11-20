@@ -10,8 +10,31 @@
 
 import SwiftUI
 
+/// App-wide authentication and cookie authority. Every window uses this one
+/// session/client so signing in or out in one window cannot leave another
+/// window showing one account while sending requests as another.
+@MainActor
+public final class CalCoSessionAuthority: ObservableObject {
+    public let client: CalCoAPIClient
+    public let session: SessionCoordinator
+
+    public init(
+        client: CalCoAPIClient? = nil,
+        session: SessionCoordinator? = nil
+    ) {
+        let resolvedClient = client ?? CalCoAPIClient(
+            baseURL: CalCoRuntimeConfiguration.baseURL
+                ?? URL(string: "https://calco.invalid")!
+        )
+        self.client = resolvedClient
+        self.session = session ?? SessionCoordinator(client: resolvedClient)
+    }
+}
+
 @main
 struct CalCoApp: App {
+    @StateObject private var sessionAuthority = CalCoSessionAuthority()
+
     var body: some Scene {
         WindowGroup {
             if let message = CalCoRuntimeConfiguration.startupConfigurationError {
@@ -23,7 +46,7 @@ struct CalCoApp: App {
                 }
                 .padding()
             } else {
-                AppShell()
+                AppShell(sessionAuthority: sessionAuthority)
             }
         }
     }

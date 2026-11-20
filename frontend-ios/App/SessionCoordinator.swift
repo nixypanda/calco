@@ -573,7 +573,8 @@ public final class SessionCoordinator: ObservableObject {
             id: session.identity.id,
             username: session.identity.username,
             role: authRole(from: session.identity.role),
-            displayName: session.profile?.displayName
+            displayName: session.profile?.displayName,
+            profileID: session.profile?.id
         )
     }
 

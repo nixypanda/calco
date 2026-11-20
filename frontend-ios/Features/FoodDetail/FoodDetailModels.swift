@@ -236,16 +236,81 @@ public func makeNutritionPreview(for food: FoodDetail, amount: String, unit: Str
     return nutrients
 }
 
+// MARK: - Durable submission context
+
+/// The same authority used by the shared log journal. Durable FoodDetail
+/// submissions capture this context before capability work and revalidate it
+/// before send and after the response.
+public typealias FoodDetailSubmissionContextProvider =
+    LogSubmissionSessionContextProvider
+
 // MARK: - Service protocol
 
 public protocol FoodDetailServicing: Sendable {
     func fetchFoodDetail(id: String) async throws -> FoodDetail
     func fetchUnits() async throws -> [FoodUnit]
     func createLog(_ request: FoodLogCreateRequest) async throws -> CreatedFoodLog
+    /// Most recent matching log for prefilling the amount. Optional so simple
+    /// test doubles keep compiling; a failure must not block the detail screen.
+    func lastUsed(
+        for item: LogSubmissionItem,
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?
+    ) async throws -> RecentLogItem?
+
+    // Account-bound variants used by durable FoodDetail flows. Legacy/offline
+    // test doubles fall back to the unbound methods above.
+    func fetchFoodDetail(
+        id: String,
+        expectedAccountID: String
+    ) async throws -> FoodDetail
+    func fetchUnits(expectedAccountID: String) async throws -> [FoodUnit]
+    func createLog(
+        _ request: FoodLogCreateRequest,
+        expectedAccountID: String
+    ) async throws -> CreatedFoodLog
+    func lastUsed(
+        for item: LogSubmissionItem,
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?,
+        expectedAccountID: String
+    ) async throws -> RecentLogItem?
 }
 
 public extension FoodDetailServicing {
     func fetchUnits() async throws -> [FoodUnit] { [] }
+    func lastUsed(
+        for item: LogSubmissionItem,
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?
+    ) async throws -> RecentLogItem? { nil }
+
+    func fetchFoodDetail(
+        id: String,
+        expectedAccountID: String
+    ) async throws -> FoodDetail {
+        try await fetchFoodDetail(id: id)
+    }
+
+    func fetchUnits(expectedAccountID: String) async throws -> [FoodUnit] {
+        try await fetchUnits()
+    }
+
+    func createLog(
+        _ request: FoodLogCreateRequest,
+        expectedAccountID: String
+    ) async throws -> CreatedFoodLog {
+        try await createLog(request)
+    }
+
+    func lastUsed(
+        for item: LogSubmissionItem,
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?,
+        expectedAccountID: String
+    ) async throws -> RecentLogItem? {
+        try await lastUsed(for: item, date: date, mealSlot: mealSlot)
+    }
 }
 
 public func isUnauthorizedFoodDetailError(_ error: Error) -> Bool {

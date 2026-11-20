@@ -74,6 +74,18 @@ public struct LoginView: View {
                     .accessibilityIdentifier("auth.login.submit")
                 }
             }
+#if os(iOS)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(String(localized: "auth.login.submit")) {
+                        submit()
+                    }
+                    .disabled(viewModel.isSubmitDisabled)
+                    .accessibilityIdentifier("auth.login.keyboard.submit")
+                }
+            }
+#endif
             .navigationTitle(
                 String(localized: "auth.login.title",
                        comment: "Login screen title / section header")

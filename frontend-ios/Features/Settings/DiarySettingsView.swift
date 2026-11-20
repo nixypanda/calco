@@ -2,9 +2,12 @@ import SwiftUI
 
 public struct DiarySettingsView: View {
     @ObservedObject private var viewModel: DiarySettingsViewModel
+    private let accountSettingsViewModel: AccountSettingsViewModel?
     private let onClose: () -> Void
+    private let onAccountSettingsDismissed: () -> Void
 
     @FocusState private var focusedField: SettingsField?
+    @State private var isAccountSettingsPresented = false
 
     private enum SettingsField: Hashable {
         case calories
@@ -13,9 +16,16 @@ public struct DiarySettingsView: View {
         case fat
     }
 
-    public init(viewModel: DiarySettingsViewModel, onClose: @escaping () -> Void) {
+    public init(
+        viewModel: DiarySettingsViewModel,
+        accountSettingsViewModel: AccountSettingsViewModel? = nil,
+        onClose: @escaping () -> Void,
+        onAccountSettingsDismissed: @escaping () -> Void = {}
+    ) {
         self.viewModel = viewModel
+        self.accountSettingsViewModel = accountSettingsViewModel
         self.onClose = onClose
+        self.onAccountSettingsDismissed = onAccountSettingsDismissed
     }
 
     public var body: some View {
@@ -23,6 +33,7 @@ public struct DiarySettingsView: View {
             Form {
                 goalSection
                 mealSlotSection
+                accountSection
             }
             .accessibilityIdentifier("settings.sheet")
             .navigationTitle(String(localized: "settings.title"))
@@ -74,6 +85,17 @@ public struct DiarySettingsView: View {
         }
         .task {
             await viewModel.loadIfNeeded()
+        }
+        .sheet(
+            isPresented: $isAccountSettingsPresented,
+            onDismiss: { onAccountSettingsDismissed() }
+        ) {
+            if let accountSettingsViewModel {
+                AccountSettingsView(
+                    viewModel: accountSettingsViewModel,
+                    onClose: { isAccountSettingsPresented = false }
+                )
+            }
         }
 #if os(macOS)
         .frame(minWidth: 440, idealWidth: 520, maxWidth: 640)
@@ -160,10 +182,10 @@ public struct DiarySettingsView: View {
             validationText(message, identifier: "settings.goals.error")
         }
 
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) { goalSaveControls }
-            VStack(alignment: .leading, spacing: 8) { goalSaveControls }
+        VStack(alignment: .leading, spacing: 10) {
+            goalSaveControls
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -187,12 +209,19 @@ public struct DiarySettingsView: View {
         } else {
             Button {
                 focusedField = nil
-                Task { await viewModel.saveGoals() }
+                Task { @MainActor in
+                    // Let the focused field commit its binding before the
+                    // view model reads the typed values.
+                    await Task.yield()
+                    await viewModel.saveGoals()
+                }
             } label: {
                 saveButtonLabel(
                     title: String(localized: "settings.goals.save"),
                     saving: viewModel.goalSaveState.isSaving
                 )
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.borderedProminent)
             .disabled(!viewModel.canSaveGoals)
@@ -213,18 +242,25 @@ public struct DiarySettingsView: View {
         field: SettingsField,
         identifier: String
     ) -> some View {
-        LabeledContent(title) {
-            TextField("", text: text)
-                .multilineTextAlignment(.trailing)
-                .textFieldStyle(.plain)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            TextField(title, text: text)
+                .multilineTextAlignment(.leading)
+                .textFieldStyle(.roundedBorder)
                 .focused($focusedField, equals: field)
                 .disabled(!viewModel.canEditGoalFields)
                 .accessibilityLabel(title)
                 .accessibilityIdentifier(identifier)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
 #if os(iOS)
                 .keyboardType(.decimalPad)
 #endif
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -303,6 +339,24 @@ public struct DiarySettingsView: View {
             .font(.footnote.weight(.semibold))
             .foregroundStyle(.green)
             .accessibilityIdentifier("settings.slots.saved")
+        }
+    }
+
+    @ViewBuilder
+    private var accountSection: some View {
+        if accountSettingsViewModel != nil {
+            Section {
+                Button {
+                    isAccountSettingsPresented = true
+                } label: {
+                    Label(String(localized: "apiKeys.title"), systemImage: "key")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .disabled(viewModel.isSaving)
+                .accessibilityIdentifier("settings.apiKeys.entry")
+            } footer: {
+                Text(String(localized: "apiKeys.description"))
+            }
         }
     }
 

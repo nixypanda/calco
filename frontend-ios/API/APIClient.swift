@@ -53,6 +53,10 @@ public enum CalCoAPIError: Error, Equatable, Sendable {
         isUnauthorized && payload?.code == "invalid_credentials"
     }
 
+    public var isSessionAccountChanged: Bool {
+        isUnauthorized && payload?.code == "session_account_changed"
+    }
+
     public var payload: APIErrorPayload? {
         switch self {
         case .unauthorized(let payload):
@@ -79,7 +83,12 @@ public enum CalCoAPIError: Error, Equatable, Sendable {
 }
 
 public struct CalCoAPIClient: @unchecked Sendable {
+    public static let accountIDHeader = "X-CalCo-Account-ID"
+
     public let configuration: CalCoAPIConfiguration
+    /// Immutable expected user-profile binding copied for one presentation or
+    /// feature graph. It is never read from a mutable global at request time.
+    public let expectedAccountID: String?
 
     private let session: URLSession
 
@@ -97,25 +106,58 @@ public struct CalCoAPIClient: @unchecked Sendable {
 
     private static let noRedirectDelegate = NoRedirectDelegate()
 
-    public init(configuration: CalCoAPIConfiguration) {
+    public init(
+        configuration: CalCoAPIConfiguration,
+        expectedAccountID: String? = nil
+    ) {
         self.configuration = configuration
+        self.expectedAccountID = Self.normalizedAccountID(expectedAccountID)
         self.session = Self.makeSession(configuration: configuration)
     }
 
-    public init(baseURL: URL) {
-        self.init(configuration: CalCoAPIConfiguration(baseURL: baseURL))
+    public init(baseURL: URL, expectedAccountID: String? = nil) {
+        self.init(
+            configuration: CalCoAPIConfiguration(baseURL: baseURL),
+            expectedAccountID: expectedAccountID
+        )
     }
 
-    public init(configuration: CalCoAPIConfiguration, session: URLSession) {
+    public init(
+        configuration: CalCoAPIConfiguration,
+        session: URLSession,
+        expectedAccountID: String? = nil
+    ) {
         self.configuration = configuration
+        self.expectedAccountID = Self.normalizedAccountID(expectedAccountID)
         self.session = session
     }
 
-    public init(baseURL: URL, session: URLSession) {
+    public init(
+        baseURL: URL,
+        session: URLSession,
+        expectedAccountID: String? = nil
+    ) {
         self.init(
             configuration: CalCoAPIConfiguration(baseURL: baseURL),
-            session: session
+            session: session,
+            expectedAccountID: expectedAccountID
         )
+    }
+
+    /// Returns an immutable copy sharing the same URLSession/cookie store but
+    /// bound to one user profile for every request it creates.
+    public func bound(toAccountID accountID: String) -> CalCoAPIClient {
+        CalCoAPIClient(
+            configuration: configuration,
+            session: session,
+            expectedAccountID: accountID
+        )
+    }
+
+    private static func normalizedAccountID(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     func makeURL(path: [String], queryItems: [URLQueryItem] = []) throws -> URL {
@@ -173,12 +215,18 @@ public struct CalCoAPIClient: @unchecked Sendable {
         path: [String],
         queryItems: [URLQueryItem] = [],
         body: Data? = nil,
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        expectedAccountID: String? = nil
     ) throws -> URLRequest {
         var request = URLRequest(url: try makeURL(path: path, queryItems: queryItems))
         request.httpMethod = method.rawValue
         request.timeoutInterval = timeout ?? configuration.requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let accountID = Self.normalizedAccountID(
+            expectedAccountID ?? self.expectedAccountID
+        ) {
+            request.setValue(accountID, forHTTPHeaderField: Self.accountIDHeader)
+        }
         if let body {
             request.httpBody = body
             request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")

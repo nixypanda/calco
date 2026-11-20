@@ -119,11 +119,19 @@ public struct FoodDetailView: View {
             }
             .font(.footnote)
 
-            if pending.state == .conflicted {
-                Text(String(localized: "foodDetail.pending.conflicted"))
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+            if pending.state == .conflicted
+                || pending.state == .serverChanged
+                || pending.state == .reconciliationOnly {
+                Text(
+                    pending.state == .serverChanged
+                        ? String(localized: "foodDetail.pending.serverChanged")
+                        : pending.state == .reconciliationOnly
+                            ? String(localized: "submission.reconciliationOnly")
+                            : String(localized: "foodDetail.pending.conflicted")
+                )
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
 
                 Button(role: .destructive) {
                     confirmation = .discard(pending)
@@ -212,6 +220,26 @@ public struct FoodDetailView: View {
                 isSubmitting: !viewModel.isFormEditable
             )
 
+            if let notice = viewModel.lastUsedNotice {
+                Section {
+                    HStack(alignment: .top, spacing: 8) {
+                        Label(notice, systemImage: "info.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        Button {
+                            viewModel.dismissLastUsedNotice()
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(String(localized: "diary.common.dismiss"))
+                    }
+                    .accessibilityIdentifier("foodDetail.lastUsed.notice")
+                }
+            }
+
             pendingRecoverySections
 
             if let preview = viewModel.nutritionPreview, !preview.isEmpty {
@@ -252,7 +280,9 @@ public struct FoodDetailView: View {
         VStack(spacing: 8) {
             if let pending = viewModel.newSubmissionConfirmation {
                 HStack(spacing: 8) {
-                    if pending.state != .conflicted {
+                    if pending.state != .conflicted,
+                       pending.state != .serverChanged,
+                       pending.state != .reconciliationOnly {
                         Button(String(localized: "foodDetail.pending.retry")) {
                             Task { await viewModel.retryPending(pending) }
                         }

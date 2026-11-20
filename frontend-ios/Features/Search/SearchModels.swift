@@ -66,6 +66,88 @@ public enum FoodSearchScope: String, CaseIterable, Sendable {
     case custom
 }
 
+/// Modes exposed by the native search screen. Barcode is a lookup mode rather
+/// than a catalog text-search scope.
+public enum SearchScopeOption: String, CaseIterable, Sendable {
+    case all
+    case history
+    case custom
+    case barcode
+
+    public var foodSearchScope: FoodSearchScope? {
+        switch self {
+        case .all: return .all
+        case .history: return .history
+        case .custom: return .custom
+        case .barcode: return nil
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .all: return String(localized: "search.scope.all")
+        case .history: return String(localized: "search.scope.history")
+        case .custom: return String(localized: "search.scope.custom")
+        case .barcode: return String(localized: "search.scope.barcode")
+        }
+    }
+}
+
+public enum RecentItemsLoadState: Equatable, Sendable {
+    case idle
+    case loading
+    case loaded([RecentLogItem])
+    case failed(String)
+
+    public var items: [RecentLogItem] {
+        guard case .loaded(let items) = self else { return [] }
+        return items
+    }
+}
+
+public enum BarcodeLookupState: Equatable, Sendable {
+    case idle
+    case loading
+    case found(BarcodeLookup)
+    case notFound(String)
+    case failed(String)
+}
+
+public enum SearchQuickAddState: Equatable, Sendable {
+    case idle
+    case submitting(String)
+    case added(String)
+    case failed(String)
+}
+
+public struct SearchBatchSelection: Equatable, Sendable {
+    public let item: RecentLogItem
+    public let quantity: NutritionQuantity
+
+    public init(item: RecentLogItem, quantity: NutritionQuantity) {
+        self.item = item
+        self.quantity = quantity
+    }
+
+    public var key: String { item.id }
+}
+
+public protocol FoodSearchHistoryServicing: Sendable {
+    func recentItems(
+        from: LocalDiaryDate,
+        to: LocalDiaryDate,
+        mealSlot: MealSlot?
+    ) async throws -> [RecentLogItem]
+    func categorySuggestions(query: String, limit: Int) async throws -> [CategorySuggestion]
+    func lookupBarcode(_ barcode: String) async throws -> BarcodeLookup
+}
+
+public extension FoodSearchHistoryServicing {
+    func categorySuggestions(query: String, limit: Int) async throws -> [CategorySuggestion] {
+        []
+    }
+}
+
 public protocol FoodSearchServicing: Sendable {
     func searchFoods(query: String, scope: FoodSearchScope) async throws -> [FoodSearchResult]
 }

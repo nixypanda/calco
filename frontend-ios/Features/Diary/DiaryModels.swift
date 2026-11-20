@@ -18,6 +18,9 @@ public struct DiaryLog: Equatable, Identifiable, Sendable {
     /// Backend item identity retained so deletion can match journal entries
     /// that may have created this log. Nil for legacy/hand-built fixtures.
     public let itemReference: ItemReference?
+    /// Typed identity from the server response. Ad-hoc logs have no reference
+    /// but still need name/brand identity for conservative journal barriers.
+    public let logItem: LogSubmissionItem?
 
     public init(
         id: String,
@@ -30,7 +33,8 @@ public struct DiaryLog: Equatable, Identifiable, Sendable {
         quantity: NutritionQuantity? = nil,
         notes: String? = nil,
         brand: String? = nil,
-        itemReference: ItemReference? = nil
+        itemReference: ItemReference? = nil,
+        logItem: LogSubmissionItem? = nil
     ) {
         self.id = id
         self.mealSlot = mealSlot
@@ -43,11 +47,22 @@ public struct DiaryLog: Equatable, Identifiable, Sendable {
         self.notes = notes
         self.brand = brand
         self.itemReference = itemReference
+        self.logItem = logItem
     }
 
     public var productID: String? {
         guard let itemReference, itemReference.itemType == .product else { return nil }
         return itemReference.id
+    }
+
+    /// Full typed identity, falling back to the legacy product/meal reference.
+    public var submissionItem: LogSubmissionItem? {
+        if let logItem { return logItem }
+        guard let itemReference else { return nil }
+        switch itemReference.itemType {
+        case .product: return .product(id: itemReference.id)
+        case .meal: return .meal(id: itemReference.id)
+        }
     }
 }
 
@@ -113,6 +128,70 @@ public struct DiarySection: Equatable, Identifiable, Sendable {
     }
 }
 
+/// One previously logged slot returned by `/api/logs/latest-slots`. The
+/// backend excludes ad-hoc and unslotted rows, so every log can be replayed
+/// through the typed batch route.
+public struct DiaryLatestSlot: Equatable, Sendable {
+    public let sourceDate: LocalDiaryDate
+    public let mealSlot: MealSlot
+    public let logs: [DiaryLog]
+
+    public init(sourceDate: LocalDiaryDate, mealSlot: MealSlot, logs: [DiaryLog]) {
+        self.sourceDate = sourceDate
+        self.mealSlot = mealSlot
+        self.logs = logs
+    }
+}
+
+public struct DiaryLatestReview: Equatable, Identifiable, Sendable {
+    public let destinationDate: LocalDiaryDate
+    public let destinationSlot: MealSlot
+    public let sourceDate: LocalDiaryDate
+    public let items: [DiaryLog]
+
+    public init(
+        destinationDate: LocalDiaryDate,
+        destinationSlot: MealSlot,
+        sourceDate: LocalDiaryDate,
+        items: [DiaryLog]
+    ) {
+        self.destinationDate = destinationDate
+        self.destinationSlot = destinationSlot
+        self.sourceDate = sourceDate
+        self.items = items
+    }
+
+    public var id: String {
+        "\(sourceDate.formatted):\(destinationSlot.rawValue)"
+    }
+
+    /// Builds one draft per copied row. Returns nil rather than guessing a
+    /// quantity or identity when a malformed row cannot be replayed safely.
+    public func makeDrafts(timeZone: String) -> [LogSubmissionDraft]? {
+        var drafts: [LogSubmissionDraft] = []
+        drafts.reserveCapacity(items.count)
+        for item in items {
+            guard let quantity = item.quantity,
+                  positiveAmount(quantity.amount) != nil,
+                  let submissionItem = item.submissionItem else {
+                return nil
+            }
+            drafts.append(
+                LogSubmissionDraft(
+                    item: submissionItem,
+                    date: destinationDate,
+                    mealSlot: destinationSlot,
+                    amount: quantity.amount,
+                    unit: quantity.unit,
+                    notes: item.notes,
+                    timeZone: timeZone
+                )
+            )
+        }
+        return drafts.isEmpty ? nil : drafts
+    }
+}
+
 public enum DiaryRefreshState: Equatable, Sendable {
     case idle
     case refreshing
@@ -144,6 +223,13 @@ public protocol DiaryServicing: Sendable {
     func fetchUnits() async throws -> [FoodUnit]
     func updateLog(id: String, request: UpdateLogRequest) async throws -> DiaryLog
     func deleteLog(id: String) async throws
+
+    /// Most recent non-empty logs before `date`, grouped by meal slot. Defaults
+    /// to none so existing lightweight fakes keep compiling.
+    func latestSlots(
+        before date: LocalDiaryDate,
+        lookbackDays: Int
+    ) async throws -> [DiaryLatestSlot]
 }
 
 public extension DiaryServicing {
@@ -153,6 +239,10 @@ public extension DiaryServicing {
         throw DiaryServiceError.unknown
     }
     func deleteLog(id: String) async throws { throw DiaryServiceError.unknown }
+    func latestSlots(
+        before date: LocalDiaryDate,
+        lookbackDays: Int
+    ) async throws -> [DiaryLatestSlot] { [] }
 }
 
 

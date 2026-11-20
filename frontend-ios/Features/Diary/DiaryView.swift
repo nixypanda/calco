@@ -9,18 +9,30 @@ public struct DiaryView: View {
     @State private var isDatePickerPresented = false
 
     private let onOpenSettings: () -> Void
+    private let onOpenNutrition: (() -> Void)?
+    private let onOpenMeals: (() -> Void)?
+    private let onOpenLibrary: (() -> Void)?
 
     private var usesAccessibilityLayout: Bool { dynamicTypeSize.isAccessibilitySize }
+    private var usesStackedFeatureLinks: Bool {
+        usesAccessibilityLayout || dynamicTypeSize >= .xxxLarge
+    }
     private var usesExpandedMacroLabels: Bool {
         usesAccessibilityLayout || horizontalSizeClass != .compact
     }
 
     public init(
         viewModel: DiaryViewModel,
-        onOpenSettings: @escaping () -> Void = {}
+        onOpenSettings: @escaping () -> Void = {},
+        onOpenNutrition: (() -> Void)? = nil,
+        onOpenMeals: (() -> Void)? = nil,
+        onOpenLibrary: (() -> Void)? = nil
     ) {
         self.viewModel = viewModel
         self.onOpenSettings = onOpenSettings
+        self.onOpenNutrition = onOpenNutrition
+        self.onOpenMeals = onOpenMeals
+        self.onOpenLibrary = onOpenLibrary
     }
 
     public var body: some View {
@@ -44,8 +56,6 @@ public struct DiaryView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 calendarButton
                 refreshButton
-                previousButton
-                nextButton
             }
         }
         .sheet(isPresented: $isDatePickerPresented) {
@@ -56,6 +66,9 @@ public struct DiaryView: View {
                     await viewModel.selectDate(date)
                 }
             )
+        }
+        .sheet(item: latestReviewBinding) { review in
+            latestReviewSheet(review)
         }
         .task {
             await viewModel.load()
@@ -107,6 +120,8 @@ public struct DiaryView: View {
             Task { await viewModel.previousDay() }
         } label: {
             Image(systemName: "arrow.left")
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
         .disabled(viewModel.isSessionExpired)
         .accessibilityLabel(String(localized: "diary.previousDay"))
@@ -119,6 +134,8 @@ public struct DiaryView: View {
             Task { await viewModel.nextDay() }
         } label: {
             Image(systemName: "arrow.right")
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
         .disabled(!viewModel.canGoNext || viewModel.isSessionExpired)
         .accessibilityLabel(String(localized: "diary.nextDay"))
@@ -189,10 +206,14 @@ public struct DiaryView: View {
     }
 
     private var contentView: some View {
-        List {
+        VStack(spacing: 0) {
+            featureLinksBar
+            List {
             summarySection
             refreshErrorSection
             mutationNoticeSection
+            latestNoticeSection
+            latestErrorSection
             ForEach(viewModel.groupedSections) { section in
                 Section {
                     if section.logs.isEmpty {
@@ -212,6 +233,8 @@ public struct DiaryView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                             .disabled(viewModel.isSessionExpired)
@@ -220,6 +243,25 @@ public struct DiaryView: View {
                         }
                     }
                     if let slot = section.slot {
+                        if viewModel.canLogLatest(for: slot) {
+                            Button {
+                                Task { await viewModel.prepareLatest(for: slot) }
+                            } label: {
+                                if viewModel.latestLoadingSlot == slot {
+                                    HStack(spacing: 8) {
+                                        ProgressView()
+                                        Text(String(localized: "diary.latest.loading"))
+                                    }
+                                } else {
+                                    Label(
+                                        String(localized: "diary.latest.button"),
+                                        systemImage: "clock.arrow.circlepath"
+                                    )
+                                }
+                            }
+                            .disabled(viewModel.latestLoadingSlot != nil)
+                            .accessibilityIdentifier("diary.latest.\(slot.rawValue)")
+                        }
                         Button(String(localized: "diary.addFood")) {
                             viewModel.addFood(for: slot)
                         }
@@ -238,11 +280,88 @@ public struct DiaryView: View {
         .refreshable {
             await viewModel.refresh()
         }
+        }
+    }
+
+    @ViewBuilder
+    private var featureLinksBar: some View {
+        if onOpenLibrary != nil || onOpenMeals != nil || onOpenNutrition != nil {
+            Group {
+                if usesStackedFeatureLinks {
+                    VStack(alignment: .leading, spacing: 6) {
+                        featureLinkButtons
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        featureLinkButtons
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+            .background(.bar)
+        }
+    }
+
+    @ViewBuilder
+    private var featureLinkButtons: some View {
+        if let onOpenLibrary {
+            Button {
+                onOpenLibrary()
+            } label: {
+                Label(
+                    String(localized: "library.title"),
+                    systemImage: "books.vertical"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isSessionExpired)
+            .accessibilityIdentifier("diary.library")
+        }
+        if let onOpenMeals {
+            Button {
+                onOpenMeals()
+            } label: {
+                Label(
+                    String(localized: "meals.title"),
+                    systemImage: "fork.knife"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isSessionExpired)
+            .accessibilityIdentifier("diary.meals")
+        }
+        if let onOpenNutrition {
+            Button {
+                onOpenNutrition()
+            } label: {
+                Label(
+                    String(localized: "nutrition.title"),
+                    systemImage: "chart.bar.doc.horizontal"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isSessionExpired)
+            .accessibilityIdentifier("diary.nutrition")
+        }
     }
 
     private var summarySection: some View {
         Section {
             VStack(alignment: .leading, spacing: usesAccessibilityLayout ? 12 : 8) {
+                HStack(spacing: 12) {
+                    previousButton
+                    Spacer(minLength: 8)
+                    Text(viewModel.selectedDate.formatted)
+                        .font(.subheadline.weight(.semibold))
+                        .multilineTextAlignment(.center)
+                    Spacer(minLength: 8)
+                    nextButton
+                }
+
                 caloriesSummary
 
                 if let fraction = viewModel.calorieProgress.fraction {
@@ -392,5 +511,130 @@ public struct DiaryView: View {
             .accessibilityIdentifier("diary.mutationNotice")
             .accessibilityValue(notice.title)
         }
+    }
+
+    @ViewBuilder
+    private var latestNoticeSection: some View {
+        if let notice = viewModel.latestNotice {
+            Section {
+                HStack(spacing: 10) {
+                    Label(notice, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Button {
+                        viewModel.dismissLatestNotice()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "diary.common.dismiss"))
+                    .accessibilityIdentifier("diary.latestNotice.dismiss")
+                }
+            }
+            .accessibilityIdentifier("diary.latestNotice")
+        }
+    }
+
+    @ViewBuilder
+    private var latestErrorSection: some View {
+        if let message = viewModel.latestErrorMessage, viewModel.latestReview == nil {
+            Section {
+                HStack(alignment: .top, spacing: 10) {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Button {
+                        viewModel.dismissLatestError()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "diary.common.dismiss"))
+                }
+            }
+            .accessibilityIdentifier("diary.latestError")
+        }
+    }
+
+    private var latestReviewBinding: Binding<DiaryLatestReview?> {
+        Binding(
+            get: { viewModel.latestReview },
+            set: { value in
+                if value == nil {
+                    viewModel.cancelLatestReview()
+                }
+            }
+        )
+    }
+
+    private func latestReviewSheet(_ review: DiaryLatestReview) -> some View {
+        NavigationStack {
+            List {
+                Section(String(localized: "diary.latest.sourceSection")) {
+                    LabeledContent(
+                        String(localized: "diary.latest.destination"),
+                        value: "\(review.destinationDate.formatted), "
+                            + DiaryLabels.mealSlotName(review.destinationSlot)
+                    )
+                    LabeledContent(
+                        String(localized: "diary.latest.source"),
+                        value: review.sourceDate.formatted
+                    )
+                }
+                Section(String(localized: "diary.latest.items")) {
+                    ForEach(review.items) { item in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.title)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if let quantity = item.quantity {
+                                Text(quantity.described)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("diary.latest.item.\(item.id)")
+                    }
+                }
+                if let message = viewModel.latestErrorMessage {
+                    Section {
+                        Label(message, systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("diary.latest.error")
+                    }
+                }
+            }
+            .navigationTitle(String(localized: "diary.latest.title"))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "diary.latest.cancel")) {
+                        viewModel.cancelLatestReview()
+                    }
+                    .disabled(viewModel.latestIsSubmitting)
+                    .accessibilityIdentifier("diary.latest.cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        viewModel.submitLatest()
+                    } label: {
+                        if viewModel.latestIsSubmitting {
+                            ProgressView()
+                        } else {
+                            Text(String(localized: "diary.latest.confirm"))
+                        }
+                    }
+                    .disabled(viewModel.latestIsSubmitting)
+                    .accessibilityIdentifier("diary.latest.submit")
+                }
+            }
+            .interactiveDismissDisabled(viewModel.latestIsSubmitting)
+        }
+        .accessibilityIdentifier("diary.latest.review")
     }
 }

@@ -77,4 +77,25 @@ public struct CalCoDiaryServiceAdapter: DiaryServicing {
             throw CalCoStoreMapping.diaryError(from: error)
         }
     }
+
+    public func latestSlots(
+        before date: LocalDiaryDate,
+        lookbackDays: Int
+    ) async throws -> [DiaryLatestSlot] {
+        do {
+            let slots = try await client.latestSlots(
+                before: date,
+                lookbackDays: lookbackDays
+            )
+            return slots.map { slot in
+                DiaryLatestSlot(
+                    sourceDate: slot.sourceDate,
+                    mealSlot: slot.mealSlot,
+                    logs: slot.items.map(CalCoStoreMapping.diaryLog(from:))
+                )
+            }
+        } catch {
+            throw CalCoStoreMapping.diaryError(from: error)
+        }
+    }
 }

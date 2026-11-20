@@ -5,6 +5,19 @@ public enum LogFormValidationError: Equatable, Sendable {
     case amountInvalid
 }
 
+/// Strictly bounded positive decimal input shared by the log form, builders,
+/// and journal validation. It accepts one comma or dot decimal separator for
+/// keypad locale compatibility, but rejects exponent/hex/leading-sign forms and
+/// amounts above the catalog's sane UI bound.
+public func parsePositiveLogAmount(_ raw: String) -> Decimal? {
+    guard let value = CatalogDecimal.parseNonNegative(raw),
+          value > 0,
+          value <= Decimal(1_000_000) else {
+        return nil
+    }
+    return value
+}
+
 public extension LogFormValidationError {
     var message: String {
         switch self {
@@ -21,7 +34,7 @@ public func validateLogAmount(_ amount: String) -> LogFormValidationError? {
     if trimmed.isEmpty {
         return .amountRequired
     }
-    guard let value = Double(trimmed), value.isFinite, value > 0 else {
+    guard parsePositiveLogAmount(trimmed) != nil else {
         return .amountInvalid
     }
     return nil

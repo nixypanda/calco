@@ -4,6 +4,7 @@ import Foundation
 
 public enum LogCreateRequestBuilderError: Error, Equatable, Sendable {
     case invalidKey
+    case invalidItem
     case bodyTooLarge
     case encoding(String)
 }
@@ -40,6 +41,12 @@ public enum LogCreateRequestBuilder {
             notes: notes,
             timeZoneIdentifier: timeZoneIdentifier
         )
+        guard !draft.foodID.isEmpty,
+              !draft.unit.isEmpty,
+              !draft.timeZone.isEmpty,
+              parsePositiveLogAmount(draft.amount) != nil else {
+            throw LogCreateRequestBuilderError.invalidItem
+        }
         let request = FoodLogCreateRequest(
             date: draft.date,
             timeZone: draft.timeZone,

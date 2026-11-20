@@ -21,6 +21,726 @@
         }
       }
     },
+    "apiKeys.close" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "apiKeys.create" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create API Key"
+          }
+        }
+      }
+    },
+    "apiKeys.create.description" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name the key so you can recognize it later."
+          }
+        }
+      }
+    },
+    "apiKeys.create.details" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key details"
+          }
+        }
+      }
+    },
+    "apiKeys.create.expiry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expiry"
+          }
+        }
+      }
+    },
+    "apiKeys.create.expiry.30Days" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 days"
+          }
+        }
+      }
+    },
+    "apiKeys.create.expiry.365Days" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 year"
+          }
+        }
+      }
+    },
+    "apiKeys.create.expiry.90Days" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "90 days"
+          }
+        }
+      }
+    },
+    "apiKeys.create.expiry.never" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Never"
+          }
+        }
+      }
+    },
+    "apiKeys.create.name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        }
+      }
+    },
+    "apiKeys.create.name.invalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name contains unsupported characters."
+          }
+        }
+      }
+    },
+    "apiKeys.create.name.required" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name is required."
+          }
+        }
+      }
+    },
+    "apiKeys.create.name.tooLong" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name must be 64 characters or fewer."
+          }
+        }
+      }
+    },
+    "apiKeys.create.refresh" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh Keys"
+          }
+        }
+      }
+    },
+    "apiKeys.create.scope" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scope"
+          }
+        }
+      }
+    },
+    "apiKeys.create.scope.readDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can read your diary, foods, meals, goals, and preferences."
+          }
+        }
+      }
+    },
+    "apiKeys.create.scope.readWriteDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can read and change your diary, foods, meals, goals, and preferences."
+          }
+        }
+      }
+    },
+    "apiKeys.create.storageWarning" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Never embed an API key in a distributed client. Store it in a password manager or secret manager."
+          }
+        }
+      }
+    },
+    "apiKeys.create.submit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create API Key"
+          }
+        }
+      }
+    },
+    "apiKeys.create.submitting" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creating API Key…"
+          }
+        }
+      }
+    },
+    "apiKeys.create.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create API Key"
+          }
+        }
+      }
+    },
+    "apiKeys.create.uncertain.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The key may have been created, but its secret cannot be shown again. Review the refreshed key list. If it appears, revoke it and create a new key. No automatic retry was made."
+          }
+        }
+      }
+    },
+    "apiKeys.create.uncertain.refreshFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The key list could not be refreshed. Check your connection, then try Refresh Keys again."
+          }
+        }
+      }
+    },
+    "apiKeys.create.uncertain.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creation outcome uncertain"
+          }
+        }
+      }
+    },
+    "apiKeys.created" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created %@"
+          }
+        }
+      }
+    },
+    "apiKeys.description" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API keys let scripts and tools access your data. Treat them like passwords."
+          }
+        }
+      }
+    },
+    "apiKeys.empty.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You don't have any API keys yet."
+          }
+        }
+      }
+    },
+    "apiKeys.empty.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No API Keys"
+          }
+        }
+      }
+    },
+    "apiKeys.error.cancelled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The request was cancelled."
+          }
+        }
+      }
+    },
+    "apiKeys.error.invalidResponse" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server returned an unexpected response."
+          }
+        }
+      }
+    },
+    "apiKeys.error.network" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not reach the server. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "apiKeys.error.notFound" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This API key no longer exists. Refresh the list."
+          }
+        }
+      }
+    },
+    "apiKeys.error.rateLimited" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many requests. Please wait before trying again."
+          }
+        }
+      }
+    },
+    "apiKeys.error.rejected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server rejected the request. Check the values and try again."
+          }
+        }
+      }
+    },
+    "apiKeys.error.server" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server could not complete the request. Try again."
+          }
+        }
+      }
+    },
+    "apiKeys.error.timeout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server took too long to respond. Try again."
+          }
+        }
+      }
+    },
+    "apiKeys.error.unknown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Please try again."
+          }
+        }
+      }
+    },
+    "apiKeys.expired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expired"
+          }
+        }
+      }
+    },
+    "apiKeys.expires" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expires %@"
+          }
+        }
+      }
+    },
+    "apiKeys.hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key hint: %@"
+          }
+        }
+      }
+    },
+    "apiKeys.keyboard.done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "apiKeys.lastUsed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last used %@"
+          }
+        }
+      }
+    },
+    "apiKeys.limit.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up to 10 active keys. Expired keys do not count toward the limit."
+          }
+        }
+      }
+    },
+    "apiKeys.limit.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can have up to 10 active keys. Revoke an unused key before creating another."
+          }
+        }
+      }
+    },
+    "apiKeys.list.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your API Keys"
+          }
+        }
+      }
+    },
+    "apiKeys.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading API keys…"
+          }
+        }
+      }
+    },
+    "apiKeys.neverExpires" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Never expires"
+          }
+        }
+      }
+    },
+    "apiKeys.neverUsed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Never used"
+          }
+        }
+      }
+    },
+    "apiKeys.refreshing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refreshing API keys…"
+          }
+        }
+      }
+    },
+    "apiKeys.revoke" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoke"
+          }
+        }
+      }
+    },
+    "apiKeys.revoke.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoke key"
+          }
+        }
+      }
+    },
+    "apiKeys.revoke.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anything using %@ (%@) will stop working immediately."
+          }
+        }
+      }
+    },
+    "apiKeys.revoke.named" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoke %@"
+          }
+        }
+      }
+    },
+    "apiKeys.revoke.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoke API key?"
+          }
+        }
+      }
+    },
+    "apiKeys.revoking" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoking…"
+          }
+        }
+      }
+    },
+    "apiKeys.scope.read" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read only"
+          }
+        }
+      }
+    },
+    "apiKeys.scope.readWrite" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read and write"
+          }
+        }
+      }
+    },
+    "apiKeys.scope.unknown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown scope"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.copied" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copied"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.copy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.copy.accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy API key to clipboard"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.copyFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy failed — select the key manually."
+          }
+        }
+      }
+    },
+    "apiKeys.secret.done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.hidden" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API key secret hidden"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.hide" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.reveal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reveal Secret"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.storage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Store the key in a password manager or secret manager. CalCo cannot show it again."
+          }
+        }
+      }
+    },
+    "apiKeys.secret.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API Key Created"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.usage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send it in the Authorization header:"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.usageExample" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authorization: Bearer <your API key>"
+          }
+        }
+      }
+    },
+    "apiKeys.secret.warning" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy this key now. It will not be shown again."
+          }
+        }
+      }
+    },
+    "apiKeys.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API Keys"
+          }
+        }
+      }
+    },
     "app.configuration.missingAPIURL" : {
       "localizations" : {
         "en" : {
@@ -1887,6 +2607,4738 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld log attempts need attention."
+          }
+        }
+      }
+    },
+    "search.scope.label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search scope"
+          }
+        }
+      }
+    },
+    "search.scope.all" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        }
+      }
+    },
+    "search.scope.history" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "History"
+          }
+        }
+      }
+    },
+    "search.scope.custom" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom"
+          }
+        }
+      }
+    },
+    "search.scope.barcode" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcode"
+          }
+        }
+      }
+    },
+    "search.recents.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent foods"
+          }
+        }
+      }
+    },
+    "search.recents.lastUsed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last used %@"
+          }
+        }
+      }
+    },
+    "search.quickAdd" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick add"
+          }
+        }
+      }
+    },
+    "search.quickAdd.saving" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logging…"
+          }
+        }
+      }
+    },
+    "search.quickAdd.added" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logged %@"
+          }
+        }
+      }
+    },
+    "search.quickAdd.quantity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log %@ of %@"
+          }
+        }
+      }
+    },
+    "search.batch.review" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review (%lld)"
+          }
+        }
+      }
+    },
+    "search.batch.select" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select for batch"
+          }
+        }
+      }
+    },
+    "search.batch.selected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
+          }
+        }
+      }
+    },
+    "search.batch.notSelected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not selected"
+          }
+        }
+      }
+    },
+    "search.batch.summary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ and %lld more"
+          }
+        }
+      }
+    },
+    "search.batch.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review batch"
+          }
+        }
+      }
+    },
+    "search.batch.date" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Date"
+          }
+        }
+      }
+    },
+    "search.batch.slot" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meal"
+          }
+        }
+      }
+    },
+    "search.batch.items" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Items"
+          }
+        }
+      }
+    },
+    "search.batch.remove" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove"
+          }
+        }
+      }
+    },
+    "search.batch.cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "search.batch.submit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log all"
+          }
+        }
+      }
+    },
+    "search.common.dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "search.barcode.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcode lookup"
+          }
+        }
+      }
+    },
+    "search.barcode.prompt" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a barcode number"
+          }
+        }
+      }
+    },
+    "search.barcode.lookup" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Look up"
+          }
+        }
+      }
+    },
+    "search.barcode.invalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid barcode number."
+          }
+        }
+      }
+    },
+    "search.barcode.notFound" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No food matched this barcode."
+          }
+        }
+      }
+    },
+    "search.barcode.notFoundTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not found"
+          }
+        }
+      }
+    },
+    "search.barcode.origin.local" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Found in your foods"
+          }
+        }
+      }
+    },
+    "search.barcode.origin.openFoodFacts" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imported from Open Food Facts"
+          }
+        }
+      }
+    },
+    "diary.latest.button" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log latest"
+          }
+        }
+      }
+    },
+    "diary.latest.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finding latest…"
+          }
+        }
+      }
+    },
+    "diary.latest.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No %@ meal found in the last 30 days."
+          }
+        }
+      }
+    },
+    "diary.latest.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log latest"
+          }
+        }
+      }
+    },
+    "diary.latest.sourceSection" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repeat from"
+          }
+        }
+      }
+    },
+    "diary.latest.destination" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log to"
+          }
+        }
+      }
+    },
+    "diary.latest.source" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Source date"
+          }
+        }
+      }
+    },
+    "diary.latest.items" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Items"
+          }
+        }
+      }
+    },
+    "diary.latest.invalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This earlier meal can't be repeated safely. Add the items individually."
+          }
+        }
+      }
+    },
+    "diary.latest.cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "diary.latest.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log all"
+          }
+        }
+      }
+    },
+    "diary.latest.logged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latest meal logged"
+          }
+        }
+      }
+    },
+    "submission.pendingExists" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An earlier log attempt is still unresolved. Review it before adding another."
+          }
+        }
+      }
+    },
+    "submission.itemNumber" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Item %lld"
+          }
+        }
+      }
+    },
+    "foodDetail.lastUsed.unavailableUnit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The last used unit is not available for this food. Using the default instead."
+          }
+        }
+      }
+    },
+    "assistant.barcodeNote" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcode %@ will be kept with this custom-food draft."
+          }
+        }
+      }
+    },
+    "assistant.cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel request"
+          }
+        }
+      }
+    },
+    "assistant.composer.label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message to the assistant"
+          }
+        }
+      }
+    },
+    "assistant.composer.placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For example: 1 bowl of dal with 2 rotis"
+          }
+        }
+      }
+    },
+    "assistant.discard" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard"
+          }
+        }
+      }
+    },
+    "assistant.draft.accept" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review and edit"
+          }
+        }
+      }
+    },
+    "assistant.draft.askChanges" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask for changes"
+          }
+        }
+      }
+    },
+    "assistant.draft.barcode" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcode"
+          }
+        }
+      }
+    },
+    "assistant.draft.brand" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brand"
+          }
+        }
+      }
+    },
+    "assistant.draft.categories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Categories"
+          }
+        }
+      }
+    },
+    "assistant.draft.defaultPortion" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default portion"
+          }
+        }
+      }
+    },
+    "assistant.draft.invalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This draft can't be used safely. Ask the assistant for changes."
+          }
+        }
+      }
+    },
+    "assistant.draft.missingNutrients" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some core nutrients are missing. Add them before saving."
+          }
+        }
+      }
+    },
+    "assistant.draft.name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        }
+      }
+    },
+    "assistant.draft.note" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI estimates can be wrong. Review and edit the draft before saving or logging it."
+          }
+        }
+      }
+    },
+    "assistant.draft.per100g" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutrition per 100 g"
+          }
+        }
+      }
+    },
+    "assistant.draft.saveNote" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing has been saved. Continue to edit this draft, then save or log it explicitly."
+          }
+        }
+      }
+    },
+    "assistant.draft.servings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servings"
+          }
+        }
+      }
+    },
+    "assistant.draft.suggestedLog" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggested amount"
+          }
+        }
+      }
+    },
+    "assistant.draft.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review this draft"
+          }
+        }
+      }
+    },
+    "assistant.draft.warnings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimate notes"
+          }
+        }
+      }
+    },
+    "assistant.error.conversationEmpty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a message first."
+          }
+        }
+      }
+    },
+    "assistant.error.conversationFull" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This conversation is full. Start over to continue."
+          }
+        }
+      }
+    },
+    "assistant.error.conversationTooLong" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This message is too long. Use 4,000 characters or fewer."
+          }
+        }
+      }
+    },
+    "assistant.error.generic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The assistant couldn't create a usable draft."
+          }
+        }
+      }
+    },
+    "assistant.error.invalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The request was not valid. Change the message and try again."
+          }
+        }
+      }
+    },
+    "assistant.error.network" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network unavailable. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "assistant.error.provider" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The AI provider is unavailable. Try again later."
+          }
+        }
+      }
+    },
+    "assistant.error.rateLimited" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The assistant is busy. Try again in %lld seconds."
+          }
+        }
+      }
+    },
+    "assistant.error.rateLimitedShort" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The assistant is busy. Try again in a moment."
+          }
+        }
+      }
+    },
+    "assistant.error.server" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The assistant request failed."
+          }
+        }
+      }
+    },
+    "assistant.error.timeout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The assistant took too long to respond. Try again."
+          }
+        }
+      }
+    },
+    "assistant.error.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Draft request failed"
+          }
+        }
+      }
+    },
+    "assistant.intro.adHocLog" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Describe what you ate. The assistant returns an estimate you can review and edit before logging."
+          }
+        }
+      }
+    },
+    "assistant.intro.customFood" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Describe the food. The assistant returns an estimate you can review and edit before saving."
+          }
+        }
+      }
+    },
+    "assistant.keep" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep"
+          }
+        }
+      }
+    },
+    "assistant.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry"
+          }
+        }
+      }
+    },
+    "assistant.send" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask assistant"
+          }
+        }
+      }
+    },
+    "assistant.sending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Asking assistant…"
+          }
+        }
+      }
+    },
+    "assistant.startOver" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start over"
+          }
+        }
+      }
+    },
+    "assistant.startOver.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard this conversation?"
+          }
+        }
+      }
+    },
+    "assistant.startOver.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The conversation and any draft will be discarded. This does not change your diary."
+          }
+        }
+      }
+    },
+    "assistant.status.disabled.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This server has not enabled AI food drafting. You can create the food manually."
+          }
+        }
+      }
+    },
+    "assistant.status.disabled.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI drafting is unavailable"
+          }
+        }
+      }
+    },
+    "assistant.status.failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't check assistant availability."
+          }
+        }
+      }
+    },
+    "assistant.status.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking assistant availability…"
+          }
+        }
+      }
+    },
+    "assistant.status.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "assistant.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI food draft"
+          }
+        }
+      }
+    },
+    "assistant.transcript.assistant" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assistant"
+          }
+        }
+      }
+    },
+    "assistant.transcript.you" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You"
+          }
+        }
+      }
+    },
+    "barcode.cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "barcode.error.network" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network unavailable. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "barcode.error.rateLimited" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many lookups. Try again in %lld seconds."
+          }
+        }
+      }
+    },
+    "barcode.error.rateLimitedShort" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many lookups. Try again in a moment."
+          }
+        }
+      }
+    },
+    "barcode.error.server" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server could not complete the lookup."
+          }
+        }
+      }
+    },
+    "barcode.error.timeout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The lookup took too long. Try again."
+          }
+        }
+      }
+    },
+    "barcode.error.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't look up this barcode"
+          }
+        }
+      }
+    },
+    "barcode.error.upstream" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The external food catalog is temporarily unavailable. Try again."
+          }
+        }
+      }
+    },
+    "barcode.field" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcode number"
+          }
+        }
+      }
+    },
+    "barcode.intro" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the number printed under the barcode. Leading zeros are kept."
+          }
+        }
+      }
+    },
+    "barcode.invalid.characters" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcodes can only contain digits."
+          }
+        }
+      }
+    },
+    "barcode.invalid.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a barcode number."
+          }
+        }
+      }
+    },
+    "barcode.invalid.length" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcodes must contain 4 to 24 digits."
+          }
+        }
+      }
+    },
+    "barcode.lengthHint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use 4 to 24 digits."
+          }
+        }
+      }
+    },
+    "barcode.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Looking up barcode…"
+          }
+        }
+      }
+    },
+    "barcode.lookup" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Look up"
+          }
+        }
+      }
+    },
+    "barcode.notFound.create" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create a custom food draft"
+          }
+        }
+      }
+    },
+    "barcode.notFound.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No food matched this barcode in CalCo or Open Food Facts."
+          }
+        }
+      }
+    },
+    "barcode.notFound.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No food found"
+          }
+        }
+      }
+    },
+    "barcode.nutrient.carbs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carbs"
+          }
+        }
+      }
+    },
+    "barcode.nutrient.energy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Energy"
+          }
+        }
+      }
+    },
+    "barcode.nutrient.fat" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fat"
+          }
+        }
+      }
+    },
+    "barcode.nutrient.protein" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protein"
+          }
+        }
+      }
+    },
+    "barcode.result.log" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log this food"
+          }
+        }
+      }
+    },
+    "barcode.result.origin.local" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Found in CalCo"
+          }
+        }
+      }
+    },
+    "barcode.result.origin.openFoodFacts" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imported from Open Food Facts"
+          }
+        }
+      }
+    },
+    "barcode.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry"
+          }
+        }
+      }
+    },
+    "barcode.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcode lookup"
+          }
+        }
+      }
+    },
+    "nutrition.aboutReferences" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About these references"
+          }
+        }
+      }
+    },
+    "nutrition.advice.addedSugar" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added sugars have a daily limit, not a target."
+          }
+        }
+      }
+    },
+    "nutrition.advice.calcium" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calcium totals reflect your logged items."
+          }
+        }
+      }
+    },
+    "nutrition.advice.cholesterol" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dietary cholesterol is only one influence on blood cholesterol; saturated and trans fats are often more actionable."
+          }
+        }
+      }
+    },
+    "nutrition.advice.default" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This reflects the items logged for this day."
+          }
+        }
+      }
+    },
+    "nutrition.advice.fiber" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fiber supports digestive health. One day below the reference does not indicate a deficiency."
+          }
+        }
+      }
+    },
+    "nutrition.advice.iron" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Iron needs vary by life stage; this is a general reference."
+          }
+        }
+      }
+    },
+    "nutrition.advice.magnesium" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The FDA Daily Value is 420 mg. For adults, the National Academies’ 350 mg upper limit applies only to magnesium from supplements and medications, not food."
+          }
+        }
+      }
+    },
+    "nutrition.advice.potassium" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Potassium is shown against the FDA daily reference."
+          }
+        }
+      }
+    },
+    "nutrition.advice.saturatedFat" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is a daily limit. Replacing some saturated fat with unsaturated fat is generally more useful than simply removing fat."
+          }
+        }
+      }
+    },
+    "nutrition.advice.sodium" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sodium is a daily limit, not a target to chase."
+          }
+        }
+      }
+    },
+    "nutrition.advice.sugar" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Includes naturally occurring and added sugars; FDA sets no Daily Value for total sugars."
+          }
+        }
+      }
+    },
+    "nutrition.advice.transFat" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No FDA Daily Value; keep intake as low as practical."
+          }
+        }
+      }
+    },
+    "nutrition.advice.unsaturatedFats" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unsaturated fats provide context for fat quality; there is no single FDA daily target."
+          }
+        }
+      }
+    },
+    "nutrition.advice.vitaminB12" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More than the daily reference is not shown as a warning."
+          }
+        }
+      }
+    },
+    "nutrition.advice.vitaminD" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vitamin D in logged items is only one part of your overall intake."
+          }
+        }
+      }
+    },
+    "nutrition.coverage.missing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some logged items do not report every nutrient, so those totals are unavailable."
+          }
+        }
+      }
+    },
+    "nutrition.coverage.noItems" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No items were logged for this day, so nutrition details are unavailable."
+          }
+        }
+      }
+    },
+    "nutrition.coverage.partial" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some logged items have incomplete nutrition data. Partial amounts are known minimums."
+          }
+        }
+      }
+    },
+    "nutrition.error.generic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Please try again."
+          }
+        }
+      }
+    },
+    "nutrition.error.invalidResponse" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The nutrition report could not be read. Please try again."
+          }
+        }
+      }
+    },
+    "nutrition.error.network" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You appear to be offline. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "nutrition.error.rateLimited" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many requests. Please wait and try again."
+          }
+        }
+      }
+    },
+    "nutrition.error.sessionExpired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your session has expired. Sign in again."
+          }
+        }
+      }
+    },
+    "nutrition.knownMinimum" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Known minimum"
+          }
+        }
+      }
+    },
+    "nutrition.knownMinimumAmount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is a known minimum"
+          }
+        }
+      }
+    },
+    "nutrition.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading nutrition details…"
+          }
+        }
+      }
+    },
+    "nutrition.nextDay" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next day"
+          }
+        }
+      }
+    },
+    "nutrition.noDailyReference" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No daily reference"
+          }
+        }
+      }
+    },
+    "nutrition.noData" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No data"
+          }
+        }
+      }
+    },
+    "nutrition.noKnownAmount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No known amount"
+          }
+        }
+      }
+    },
+    "nutrition.overLimit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ over daily limit"
+          }
+        }
+      }
+    },
+    "nutrition.overview" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Overview"
+          }
+        }
+      }
+    },
+    "nutrition.overview.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No overview data is available."
+          }
+        }
+      }
+    },
+    "nutrition.partialData" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Partial data"
+          }
+        }
+      }
+    },
+    "nutrition.previousDay" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous day"
+          }
+        }
+      }
+    },
+    "nutrition.progress.label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "progress"
+          }
+        }
+      }
+    },
+    "nutrition.progress.ofReference" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "of daily reference"
+          }
+        }
+      }
+    },
+    "nutrition.reference.source" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View reference source"
+          }
+        }
+      }
+    },
+    "nutrition.reference.sourceMissing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reference source unavailable"
+          }
+        }
+      }
+    },
+    "nutrition.referenceReached" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daily reference reached"
+          }
+        }
+      }
+    },
+    "nutrition.references.description" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These comparisons use %@ from %@ (%@) for %@. They are informational daily comparisons, not medical diagnoses."
+          }
+        }
+      }
+    },
+    "nutrition.remaining" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ remaining"
+          }
+        }
+      }
+    },
+    "nutrition.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry"
+          }
+        }
+      }
+    },
+    "nutrition.section.carbohydrates" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carbohydrates"
+          }
+        }
+      }
+    },
+    "nutrition.section.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No nutrient data is available for this group."
+          }
+        }
+      }
+    },
+    "nutrition.section.fats" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fats"
+          }
+        }
+      }
+    },
+    "nutrition.section.limits" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutrients to limit"
+          }
+        }
+      }
+    },
+    "nutrition.section.vitaminsMinerals" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vitamins & minerals"
+          }
+        }
+      }
+    },
+    "nutrition.sessionExpired.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session expired"
+          }
+        }
+      }
+    },
+    "nutrition.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutrition details"
+          }
+        }
+      }
+    },
+    "nutrition.toReference" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ to daily reference"
+          }
+        }
+      }
+    },
+    "nutrition.unknown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown"
+          }
+        }
+      }
+    },
+    "nutrition.unknownOfReference" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "— of %@"
+          }
+        }
+      }
+    },
+    "nutrition.unknownOfReferenceAccessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown; daily reference is %@"
+          }
+        }
+      }
+    },
+    "meals.common.close" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "meals.common.dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "meals.detail.components" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Components"
+          }
+        }
+      }
+    },
+    "meals.detail.delete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Meal"
+          }
+        }
+      }
+    },
+    "meals.detail.delete.confirmAction" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Meal"
+          }
+        }
+      }
+    },
+    "meals.detail.delete.confirmMessage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This will permanently remove the meal. Existing diary entries keep their saved nutrition."
+          }
+        }
+      }
+    },
+    "meals.detail.delete.confirmTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete meal?"
+          }
+        }
+      }
+    },
+    "meals.detail.delete.deleting" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting…"
+          }
+        }
+      }
+    },
+    "meals.detail.delete.snapshotNote" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting a meal does not change foods already logged in the diary."
+          }
+        }
+      }
+    },
+    "meals.detail.edit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Meal"
+          }
+        }
+      }
+    },
+    "meals.detail.error.missingComponents" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some foods in this meal are unavailable. Edit the meal to replace them."
+          }
+        }
+      }
+    },
+    "meals.detail.lastUsed.unavailableUnit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The last used unit is not available for this meal. Using the default portion instead."
+          }
+        }
+      }
+    },
+    "meals.detail.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading meal…"
+          }
+        }
+      }
+    },
+    "meals.detail.log" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log Meal"
+          }
+        }
+      }
+    },
+    "meals.detail.logged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meal logged"
+          }
+        }
+      }
+    },
+    "meals.detail.logging" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logging…"
+          }
+        }
+      }
+    },
+    "meals.detail.missingComponents" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some ingredients are unavailable."
+          }
+        }
+      }
+    },
+    "meals.detail.preview" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Portion nutrition"
+          }
+        }
+      }
+    },
+    "meals.detail.preview.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No nutrient data is available for this portion."
+          }
+        }
+      }
+    },
+    "meals.detail.preview.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calculating nutrition…"
+          }
+        }
+      }
+    },
+    "meals.detail.preview.prompt" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a portion to preview nutrition."
+          }
+        }
+      }
+    },
+    "meals.detail.preview.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry preview"
+          }
+        }
+      }
+    },
+    "meals.detail.recipe" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recipe"
+          }
+        }
+      }
+    },
+    "meals.detail.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry"
+          }
+        }
+      }
+    },
+    "meals.detail.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meal"
+          }
+        }
+      }
+    },
+    "meals.detail.total" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total"
+          }
+        }
+      }
+    },
+    "meals.detail.unknownQuantity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown quantity"
+          }
+        }
+      }
+    },
+    "meals.editor.addComponent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Component"
+          }
+        }
+      }
+    },
+    "meals.editor.basic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details"
+          }
+        }
+      }
+    },
+    "meals.editor.cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "meals.editor.components" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Components"
+          }
+        }
+      }
+    },
+    "meals.editor.createTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create Meal"
+          }
+        }
+      }
+    },
+    "meals.editor.discard.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard"
+          }
+        }
+      }
+    },
+    "meals.editor.discard.keepEditing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Editing"
+          }
+        }
+      }
+    },
+    "meals.editor.discard.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your changes to this meal will be lost."
+          }
+        }
+      }
+    },
+    "meals.editor.discard.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard changes?"
+          }
+        }
+      }
+    },
+    "meals.editor.editTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Meal"
+          }
+        }
+      }
+    },
+    "meals.editor.error.componentMissing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a food for this component."
+          }
+        }
+      }
+    },
+    "meals.editor.error.componentRequired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add at least one component."
+          }
+        }
+      }
+    },
+    "meals.editor.error.componentUnselected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a food for each component."
+          }
+        }
+      }
+    },
+    "meals.editor.error.nameRequired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a meal name."
+          }
+        }
+      }
+    },
+    "meals.editor.error.quantityInvalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid amount."
+          }
+        }
+      }
+    },
+    "meals.editor.error.totalInvalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid total amount."
+          }
+        }
+      }
+    },
+    "meals.editor.error.unitRequired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a unit."
+          }
+        }
+      }
+    },
+    "meals.editor.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading meal…"
+          }
+        }
+      }
+    },
+    "meals.editor.loadingFood" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading food…"
+          }
+        }
+      }
+    },
+    "meals.editor.missingFood" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Missing food"
+          }
+        }
+      }
+    },
+    "meals.editor.missingFood.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This food is no longer available. Replace it before saving."
+          }
+        }
+      }
+    },
+    "meals.editor.name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meal Name"
+          }
+        }
+      }
+    },
+    "meals.editor.notes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notes"
+          }
+        }
+      }
+    },
+    "meals.editor.notes.placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional notes"
+          }
+        }
+      }
+    },
+    "meals.editor.quantity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quantity"
+          }
+        }
+      }
+    },
+    "meals.editor.removeComponent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove Component"
+          }
+        }
+      }
+    },
+    "meals.editor.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry"
+          }
+        }
+      }
+    },
+    "meals.editor.save" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Meal"
+          }
+        }
+      }
+    },
+    "meals.editor.saving" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saving…"
+          }
+        }
+      }
+    },
+    "meals.editor.searchEmpty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No foods found."
+          }
+        }
+      }
+    },
+    "meals.editor.searchFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food search failed."
+          }
+        }
+      }
+    },
+    "meals.editor.searchFood" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search Food"
+          }
+        }
+      }
+    },
+    "meals.editor.searching" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Searching foods…"
+          }
+        }
+      }
+    },
+    "meals.editor.total" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total quantity"
+          }
+        }
+      }
+    },
+    "meals.editor.total.amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total Amount"
+          }
+        }
+      }
+    },
+    "meals.editor.total.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the total edible amount for this meal."
+          }
+        }
+      }
+    },
+    "meals.editor.total.unit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total Unit"
+          }
+        }
+      }
+    },
+    "meals.editor.totalNonMass" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total quantity must use a mass unit (g, kg, oz, lb)."
+          }
+        }
+      }
+    },
+    "meals.editor.unit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unit"
+          }
+        }
+      }
+    },
+    "meals.editor.unitFallback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meal units are unavailable. Using grams."
+          }
+        }
+      }
+    },
+    "meals.editor.unknownFood" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown food"
+          }
+        }
+      }
+    },
+    "meals.error.amountInvalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid positive amount."
+          }
+        }
+      }
+    },
+    "meals.error.amountRequired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an amount."
+          }
+        }
+      }
+    },
+    "meals.error.createUncertain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The meal may not have been saved. Refresh and check before trying again."
+          }
+        }
+      }
+    },
+    "meals.error.deleteFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The meal could not be deleted."
+          }
+        }
+      }
+    },
+    "meals.error.invalidPortion" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid portion."
+          }
+        }
+      }
+    },
+    "meals.error.loadFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meals could not be loaded."
+          }
+        }
+      }
+    },
+    "meals.error.portionUnit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use a mass unit such as g or oz."
+          }
+        }
+      }
+    },
+    "meals.error.previewFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutrition preview could not be loaded."
+          }
+        }
+      }
+    },
+    "meals.error.saveFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The meal could not be saved."
+          }
+        }
+      }
+    },
+    "meals.error.sessionExpired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your session has expired. Sign in again."
+          }
+        }
+      }
+    },
+    "meals.error.unitRequired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a unit."
+          }
+        }
+      }
+    },
+    "meals.list.add" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create Meal"
+          }
+        }
+      }
+    },
+    "meals.list.empty.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create a meal from your foods to log it quickly."
+          }
+        }
+      }
+    },
+    "meals.list.empty.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Meals"
+          }
+        }
+      }
+    },
+    "meals.list.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading meals…"
+          }
+        }
+      }
+    },
+    "meals.list.openHint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens meal details."
+          }
+        }
+      }
+    },
+    "meals.list.quickAdd.a11y" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log %@"
+          }
+        }
+      }
+    },
+    "meals.list.quickAdd.added" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meal logged"
+          }
+        }
+      }
+    },
+    "meals.list.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry"
+          }
+        }
+      }
+    },
+    "meals.nutrient.carbs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carbohydrates"
+          }
+        }
+      }
+    },
+    "meals.nutrient.energy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calories"
+          }
+        }
+      }
+    },
+    "meals.nutrient.fat" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fat"
+          }
+        }
+      }
+    },
+    "meals.nutrient.fiber" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fiber"
+          }
+        }
+      }
+    },
+    "meals.nutrient.protein" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protein"
+          }
+        }
+      }
+    },
+    "meals.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meals"
+          }
+        }
+      }
+    },
+    "meals.value.kcal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld kcal"
+          }
+        }
+      }
+    },
+    "nutrition.coverage.includedCount" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld logged item is included in these daily totals."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld logged items are included in these daily totals."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "diary.common.close" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "diary.more" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More"
+          }
+        }
+      }
+    },
+    "library.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Library"
+          }
+        }
+      }
+    },
+    "assistant.entry.customFood" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Draft custom food"
+          }
+        }
+      }
+    },
+    "assistant.entry.adHocLog" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Draft a meal log"
+          }
+        }
+      }
+    },
+    "assistant.entry.barcodeCustomFood" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Draft food with assistant"
+          }
+        }
+      }
+    },
+    "library.adHoc.brand" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brand"
+          }
+        }
+      }
+    },
+    "library.adHoc.date" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Date"
+          }
+        }
+      }
+    },
+    "library.adHoc.details" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details"
+          }
+        }
+      }
+    },
+    "library.adHoc.error.name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a food name."
+          }
+        }
+      }
+    },
+    "library.adHoc.error.portionWeight" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid portion weight."
+          }
+        }
+      }
+    },
+    "library.adHoc.error.portionWeightRequired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the portion weight for the amount you are saving."
+          }
+        }
+      }
+    },
+    "library.adHoc.error.quantity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid quantity."
+          }
+        }
+      }
+    },
+    "library.adHoc.error.saveSetup" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The saved food setup is incomplete."
+          }
+        }
+      }
+    },
+    "library.adHoc.error.unit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a unit."
+          }
+        }
+      }
+    },
+    "library.adHoc.loadFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The ad-hoc food could not be loaded."
+          }
+        }
+      }
+    },
+    "library.adHoc.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading\u2026"
+          }
+        }
+      }
+    },
+    "library.adHoc.logged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food logged"
+          }
+        }
+      }
+    },
+    "library.adHoc.mode" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode"
+          }
+        }
+      }
+    },
+    "library.adHoc.mode.logOnly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log only"
+          }
+        }
+      }
+    },
+    "library.adHoc.mode.saveAndLog" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save food and log"
+          }
+        }
+      }
+    },
+    "library.adHoc.name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food name"
+          }
+        }
+      }
+    },
+    "library.adHoc.nutrients.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the nutrient totals for this portion."
+          }
+        }
+      }
+    },
+    "library.adHoc.nutrients.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutrition"
+          }
+        }
+      }
+    },
+    "library.adHoc.portionWeight" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Portion weight (g)"
+          }
+        }
+      }
+    },
+    "library.adHoc.portionWeight.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used to save per-100 g values for the new food."
+          }
+        }
+      }
+    },
+    "library.adHoc.review.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log food"
+          }
+        }
+      }
+    },
+    "library.adHoc.review.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log %@ (%@ %@) on %@?"
+          }
+        }
+      }
+    },
+    "library.adHoc.review.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review log"
+          }
+        }
+      }
+    },
+    "library.adHoc.saveAndLogReview.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save and log"
+          }
+        }
+      }
+    },
+    "library.adHoc.saveAndLogReview.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save this food and log %@ (%@ %@) on %@?"
+          }
+        }
+      }
+    },
+    "library.adHoc.saveAndLogReview.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save food and log"
+          }
+        }
+      }
+    },
+    "library.adHoc.submit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review"
+          }
+        }
+      }
+    },
+    "library.adHoc.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ad-Hoc Food"
+          }
+        }
+      }
+    },
+    "library.add" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add"
+          }
+        }
+      }
+    },
+    "library.add.adhoc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ad-Hoc Food"
+          }
+        }
+      }
+    },
+    "library.add.custom" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom Food"
+          }
+        }
+      }
+    },
+    "library.assistant.barcodeNotice" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ will be kept as a note. This API does not save barcodes for custom foods."
+          }
+        }
+      }
+    },
+    "library.assistant.prefillFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The assistant draft could not be applied. Review the fields."
+          }
+        }
+      }
+    },
+    "library.common.done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "library.common.required" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Required"
+          }
+        }
+      }
+    },
+    "library.detail.defaultPortion" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default portion"
+          }
+        }
+      }
+    },
+    "library.detail.delete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+    "library.detail.delete.confirmAction" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete food"
+          }
+        }
+      }
+    },
+    "library.detail.delete.confirmMessage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This food will be removed from your library. Diary entries keep their saved nutrition."
+          }
+        }
+      }
+    },
+    "library.detail.delete.confirmTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete food?"
+          }
+        }
+      }
+    },
+    "library.detail.delete.footnote" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Existing diary entries are not changed."
+          }
+        }
+      }
+    },
+    "library.detail.deleteFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The food could not be deleted."
+          }
+        }
+      }
+    },
+    "library.detail.deleteUncertain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The delete may not have completed. Refresh before trying again."
+          }
+        }
+      }
+    },
+    "library.detail.deleting" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting\u2026"
+          }
+        }
+      }
+    },
+    "library.detail.edit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit"
+          }
+        }
+      }
+    },
+    "library.detail.gramsPerServing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ g per serving"
+          }
+        }
+      }
+    },
+    "library.detail.loadFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The food could not be loaded."
+          }
+        }
+      }
+    },
+    "library.detail.notFound" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This food no longer exists."
+          }
+        }
+      }
+    },
+    "library.detail.nutrients" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutrition"
+          }
+        }
+      }
+    },
+    "library.detail.servings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servings"
+          }
+        }
+      }
+    },
+    "library.editor.brand" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brand"
+          }
+        }
+      }
+    },
+    "library.editor.brand.placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional brand"
+          }
+        }
+      }
+    },
+    "library.editor.categories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Categories"
+          }
+        }
+      }
+    },
+    "library.editor.categories.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comma-separated; saved in lowercase."
+          }
+        }
+      }
+    },
+    "library.editor.categories.placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e.g. breakfast, dairy"
+          }
+        }
+      }
+    },
+    "library.editor.create.servingsNote" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can add servings and a default portion after creating this food."
+          }
+        }
+      }
+    },
+    "library.editor.create.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create Custom Food"
+          }
+        }
+      }
+    },
+    "library.editor.default.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used when you start logging this food."
+          }
+        }
+      }
+    },
+    "library.editor.default.quantity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default amount"
+          }
+        }
+      }
+    },
+    "library.editor.default.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default portion"
+          }
+        }
+      }
+    },
+    "library.editor.default.unit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default unit"
+          }
+        }
+      }
+    },
+    "library.editor.edit.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Custom Food"
+          }
+        }
+      }
+    },
+    "library.editor.error.defaultAmount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid default amount."
+          }
+        }
+      }
+    },
+    "library.editor.error.defaultIncomplete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter both a default amount and unit."
+          }
+        }
+      }
+    },
+    "library.editor.error.defaultUnit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is not available for this food."
+          }
+        }
+      }
+    },
+    "library.editor.error.name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a food name."
+          }
+        }
+      }
+    },
+    "library.editor.error.servingDuplicate" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The serving unit \"%@\" is already in use."
+          }
+        }
+      }
+    },
+    "library.editor.error.servingGrams" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid gram weight for %@."
+          }
+        }
+      }
+    },
+    "library.editor.error.servingUnit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a serving unit."
+          }
+        }
+      }
+    },
+    "library.editor.loadFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The custom food could not be loaded."
+          }
+        }
+      }
+    },
+    "library.editor.name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        }
+      }
+    },
+    "library.editor.name.placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food name"
+          }
+        }
+      }
+    },
+    "library.editor.nutrients.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Values are per 100 g. Required nutrients must be present."
+          }
+        }
+      }
+    },
+    "library.editor.nutrients.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutrition per 100 g"
+          }
+        }
+      }
+    },
+    "library.editor.optionalAdd" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add optional nutrient"
+          }
+        }
+      }
+    },
+    "library.editor.save" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        }
+      }
+    },
+    "library.editor.servings.add" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add serving"
+          }
+        }
+      }
+    },
+    "library.editor.servings.grams" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grams per serving"
+          }
+        }
+      }
+    },
+    "library.editor.servings.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional serving sizes for this food."
+          }
+        }
+      }
+    },
+    "library.editor.servings.remove" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove serving"
+          }
+        }
+      }
+    },
+    "library.editor.servings.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servings"
+          }
+        }
+      }
+    },
+    "library.editor.servings.unit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serving unit"
+          }
+        }
+      }
+    },
+    "library.editor.snapshotNote" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edits and deletion do not change nutrition already logged in the diary."
+          }
+        }
+      }
+    },
+    "library.empty.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create a custom food to reuse it in your diary."
+          }
+        }
+      }
+    },
+    "library.empty.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Custom Foods"
+          }
+        }
+      }
+    },
+    "library.error.load" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The library could not be loaded."
+          }
+        }
+      }
+    },
+    "library.error.request" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The request could not be completed."
+          }
+        }
+      }
+    },
+    "library.error.server" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server could not complete the request."
+          }
+        }
+      }
+    },
+    "library.error.uncertain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The request may have completed. Refresh before trying again."
+          }
+        }
+      }
+    },
+    "library.loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading library\u2026"
+          }
+        }
+      }
+    },
+    "library.log.failed.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food was not logged"
+          }
+        }
+      }
+    },
+    "library.log.logged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food logged"
+          }
+        }
+      }
+    },
+    "library.log.logging" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logging\u2026"
+          }
+        }
+      }
+    },
+    "library.log.pending.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log may not have completed"
+          }
+        }
+      }
+    },
+    "library.log.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry log"
+          }
+        }
+      }
+    },
+    "library.log.saved.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The food was saved. Retrying logs that saved food instead of creating another."
+          }
+        }
+      }
+    },
+    "library.log.saved.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food saved"
+          }
+        }
+      }
+    },
+    "library.log.savedFoodID" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved food ID: %@"
+          }
+        }
+      }
+    },
+    "library.log.savedOnly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Food saved without a log"
+          }
+        }
+      }
+    },
+    "library.nutrient.duplicate" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is listed twice."
+          }
+        }
+      }
+    },
+    "library.nutrient.invalid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid amount for %@."
+          }
+        }
+      }
+    },
+    "library.nutrient.missing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter required nutrients: %@."
+          }
+        }
+      }
+    },
+    "library.nutrient.remove" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove %@"
+          }
+        }
+      }
+    },
+    "library.nutrient.unknown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown nutrient: %@."
+          }
+        }
+      }
+    },
+    "library.reconcile.candidates" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Matching foods"
+          }
+        }
+      }
+    },
+    "library.reconcile.discard" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard"
+          }
+        }
+      }
+    },
+    "library.reconcile.discard.action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard attempt"
+          }
+        }
+      }
+    },
+    "library.reconcile.discard.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only discard after confirming the food was not created."
+          }
+        }
+      }
+    },
+    "library.reconcile.discard.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard this saved create attempt? Another create may then be attempted."
+          }
+        }
+      }
+    },
+    "library.reconcile.discard.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard create attempt?"
+          }
+        }
+      }
+    },
+    "library.reconcile.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A previous attempt to create %@ may have succeeded."
+          }
+        }
+      }
+    },
+    "library.reconcile.noMatches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching food found yet."
+          }
+        }
+      }
+    },
+    "library.reconcile.pendingBlocksSave" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review the earlier create attempt before saving another food."
+          }
+        }
+      }
+    },
+    "library.reconcile.pendingExists" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An earlier custom-food create may have succeeded. Review it before creating another."
+          }
+        }
+      }
+    },
+    "library.reconcile.refresh" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh matches"
+          }
+        }
+      }
+    },
+    "library.reconcile.refreshing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refreshing\u2026"
+          }
+        }
+      }
+    },
+    "library.reconcile.reset" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset local save state"
+          }
+        }
+      }
+    },
+    "library.reconcile.reset.action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset"
+          }
+        }
+      }
+    },
+    "library.reconcile.reset.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This clears the local create-attempt record. Confirm the server state before creating the food again."
+          }
+        }
+      }
+    },
+    "library.reconcile.reset.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset local save state?"
+          }
+        }
+      }
+    },
+    "library.reconcile.review" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review"
+          }
+        }
+      }
+    },
+    "library.reconcile.storeUnavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The local custom-food safety record is unreadable."
+          }
+        }
+      }
+    },
+    "library.reconcile.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review custom-food create"
+          }
+        }
+      }
+    },
+    "library.reconcile.uncertainMessage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The create may have completed. Review matches before retrying."
+          }
+        }
+      }
+    },
+    "library.reconcile.use" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use this food"
+          }
+        }
+      }
+    },
+    "library.row.calories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kcal per 100 g"
+          }
+        }
+      }
+    },
+    "library.search.placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search foods"
+          }
+        }
+      }
+    },
+    "library.submission.unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The shared log journal is unavailable."
+          }
+        }
+      }
+    },
+    "meals.error.forbidden" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You do not have permission to change meals."
+          }
+        }
+      }
+    },
+    "meals.error.missingComponents" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some ingredients in this meal are unavailable."
+          }
+        }
+      }
+    },
+    "meals.error.network" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You appear to be offline. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "meals.error.notFound" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This meal no longer exists."
+          }
+        }
+      }
+    },
+    "meals.error.rateLimited" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many requests. Please wait and try again."
+          }
+        }
+      }
+    },
+    "meals.error.server" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server could not complete the meal request."
+          }
+        }
+      }
+    },
+    "search.barcode.notFound.create" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create custom food"
+          }
+        }
+      }
+    },
+    "diary.latest.tooMany" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This meal has %lld items. Log at most 50 at once."
+          }
+        }
+      }
+    },
+    "foodDetail.error.invalidResponse" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server returned an unexpected result. Check the diary before retrying."
+          }
+        }
+      }
+    },
+    "journal.blocked.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The local log journal is locked because a previous file could not be read. New log submissions are disabled."
+          }
+        }
+      }
+    },
+    "journal.blocked.reset" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review"
+          }
+        }
+      }
+    },
+    "journal.blocked.resetTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset local log journal?"
+          }
+        }
+      }
+    },
+    "journal.blocked.resetMessage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This permanently discards the unreadable local pending-log record. Check your diary for saved logs before continuing."
+          }
+        }
+      }
+    },
+    "journal.blocked.resetAction" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset journal"
+          }
+        }
+      }
+    },
+    "foodDetail.pending.serverChanged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This earlier attempt was saved for a different API server and cannot be retried here. Discard it after checking the other server."
+          }
+        }
+      }
+    },
+    "submission.reconciliationOnly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This earlier log attempt was saved before durable server idempotency was verified. It will not be retried automatically. Check the diary and discard it if the log is already there."
+          }
+        }
+      }
+    },
+    "foodDetail.error.capabilityUnavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This server has not confirmed safe batch or ad-hoc retry support. Nothing was sent. Check the server version and try again."
+          }
+        }
+      }
+    },
+    "meals.reconcile.candidates" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Possible matches"
+          }
+        }
+      }
+    },
+    "meals.reconcile.discard" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard create attempt"
+          }
+        }
+      }
+    },
+    "meals.reconcile.discard.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard"
+          }
+        }
+      }
+    },
+    "meals.reconcile.discard.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only discard after checking your meals."
+          }
+        }
+      }
+    },
+    "meals.reconcile.discard.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only discard after confirming the meal was not created. Another create may then be attempted."
+          }
+        }
+      }
+    },
+    "meals.reconcile.discard.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard create attempt?"
+          }
+        }
+      }
+    },
+    "meals.reconcile.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching meal found yet."
+          }
+        }
+      }
+    },
+    "meals.reconcile.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A previous attempt to create %@ may have succeeded. Review matches before trying again."
+          }
+        }
+      }
+    },
+    "meals.reconcile.refresh" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh matches"
+          }
+        }
+      }
+    },
+    "meals.reconcile.refreshFailed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not refresh matches."
+          }
+        }
+      }
+    },
+    "meals.reconcile.refreshing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refreshing\u2026"
+          }
+        }
+      }
+    },
+    "meals.reconcile.reset" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset local save state"
+          }
+        }
+      }
+    },
+    "meals.reconcile.reset.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset"
+          }
+        }
+      }
+    },
+    "meals.reconcile.reset.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This clears the local meal create-attempt record. Confirm the meal list before creating again."
+          }
+        }
+      }
+    },
+    "meals.reconcile.reset.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset local save state?"
+          }
+        }
+      }
+    },
+    "meals.reconcile.storeUnavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The local meal safety record is unreadable."
+          }
+        }
+      }
+    },
+    "meals.reconcile.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meal may already have been created"
+          }
+        }
+      }
+    },
+    "meals.reconcile.use" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use this meal"
+          }
+        }
+      }
+    },
+    "meals.reconcile.uncertainMessage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The meal create may have completed. Review matches before retrying."
+          }
+        }
+      }
+    },
+    "foodDetail.error.capabilityTemporarilyUnavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server could not confirm safe log retry support right now. Nothing was sent; your saved attempt is unchanged. Try again after the connection recovers."
+          }
+        }
+      }
+    },
+    "library.adHoc.error.unitConversion" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The suggested portion unit cannot be converted safely. Review the portion and weight before logging."
+          }
+        }
+      }
+    },
+    "library.assistant.barcodeNotPersisted" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcode %@ is shown for reference only; this server does not store barcodes for custom foods."
+          }
+        }
+      }
+    },
+    "library.log.intent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ %@ on %@ \u00b7 %@"
+          }
+        }
+      }
+    },
+    "library.log.resumeMessage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The food was already created. Resume logging it without creating another food."
+          }
+        }
+      }
+    },
+    "meals.list.missing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some ingredients are unavailable"
+          }
+        }
+      }
+    },
+    "meals.detail.missingBadge" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unavailable"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.acknowledge" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acknowledge Without Revoking"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.acknowledge.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The possible key will stay active, still consume a key slot, and its secret cannot be recovered."
+          }
+        }
+      }
+    },
+    "apiKeys.intent.details" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Interrupted request: %@ \u00b7 %@ \u00b7 %@"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A create may have completed, but its secret cannot be shown again. Review the keys below. If you see one you did not expect, revoke it and create a new key."
+          }
+        }
+      }
+    },
+    "apiKeys.intent.noOrphans" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No unrecognized keys were found in the latest list. Refresh after confirming the create has finished."
+          }
+        }
+      }
+    },
+    "apiKeys.intent.orphan" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Possible orphan: %@ (%@)"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.orphan.revoke" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoke Possible Key"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.pending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Another window has an unresolved API-key creation. Review it before creating another key."
+          }
+        }
+      }
+    },
+    "apiKeys.intent.persistence" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The API-key safety record could not be saved or read. Key creation is disabled until it is resolved."
+          }
+        }
+      }
+    },
+    "apiKeys.intent.refresh" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh Keys"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API Key Creation Interrupted"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.unreadable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The API-key safety record is unreadable. Key creation stays disabled. Review the key list for a possible orphan, then reset the safety record only if you accept that a key may exist without a recoverable secret."
+          }
+        }
+      }
+    },
+    "apiKeys.intent.reset" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset Safety Record\u2026"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.reset.refreshHint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh keys successfully and review the list before resetting."
+          }
+        }
+      }
+    },
+    "apiKeys.intent.reset.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset Unreadable Safety Record?"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.reset.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset Safety Record"
+          }
+        }
+      }
+    },
+    "apiKeys.intent.reset.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A key may exist, but its secret cannot be recovered. Review and revoke any unrecognized key first. This removes only this account's unreadable safety record."
+          }
+        }
+      }
+    },
+    "apiKeys.intent.reset.stale" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The safety record changed in another window. Review the refreshed warning before resetting."
+          }
+        }
+      }
+    },
+    "apiKeys.intent.reset.failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The unreadable safety record could not be reset. Try again."
+          }
+        }
+      }
+    },
+    "meals.detail.keyboardDone" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
           }
         }
       }

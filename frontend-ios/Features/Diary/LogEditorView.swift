@@ -218,6 +218,7 @@ public struct LogEditorView: View {
             .padding(.horizontal)
             .padding(.vertical, 10)
             .background(.bar)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("diary.editor.actions")
         }
     }
