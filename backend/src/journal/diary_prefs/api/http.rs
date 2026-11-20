@@ -4,7 +4,7 @@ use axum::{Json, Router, extract::State, response::IntoResponse, routing::get};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::auth::api::http::{AccountBoundReadUser, AccountBoundWriteUser};
+use crate::auth::api::http::{ReadUser, WriteUser};
 use crate::journal::diary_prefs::domain::{DiaryPrefs, EnabledMealSlots};
 use crate::journal::error::JournalError;
 use crate::journal::food_log::domain::MealSlot;
@@ -30,7 +30,7 @@ pub struct DiaryPrefsResponse {
 }
 
 async fn get_prefs_handler(
-    auth: AccountBoundReadUser,
+    auth: ReadUser,
     State(state): State<DiaryPrefsModule>,
 ) -> impl IntoResponse {
     match state.diary_prefs_services.get(auth.0.id).await {
@@ -40,7 +40,7 @@ async fn get_prefs_handler(
 }
 
 async fn put_prefs_handler(
-    auth: AccountBoundWriteUser,
+    auth: WriteUser,
     State(state): State<DiaryPrefsModule>,
     Json(request): Json<PutDiaryPrefsRequest>,
 ) -> impl IntoResponse {

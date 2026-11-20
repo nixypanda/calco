@@ -16,14 +16,12 @@ use uuid::Uuid;
 
 struct MockFoodLogRepo {
     logs: Mutex<Vec<FoodLog>>,
-    operations: Mutex<Vec<FoodLogCreateOperation>>,
 }
 
 impl MockFoodLogRepo {
     fn new() -> Self {
         Self {
             logs: Mutex::new(vec![]),
-            operations: Mutex::new(vec![]),
         }
     }
 }
@@ -40,55 +38,23 @@ impl FoodLogRepo for MockFoodLogRepo {
         Ok(())
     }
 
-    async fn create_operation(
-        &self,
-        operation: &FoodLogCreateOperation,
-        logs: &[FoodLog],
-    ) -> Result<(), JournalError> {
-        let mut operations = self.operations.lock().unwrap();
-        if operations.iter().any(|existing| {
-            existing.user_id() == operation.user_id()
-                && existing.idempotency_key() == operation.idempotency_key()
-        }) {
-            return Err(JournalError::DuplicateIdempotencyKey);
-        }
-        operations.push(operation.clone());
-        self.logs.lock().unwrap().extend_from_slice(logs);
-        Ok(())
-    }
-
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, JournalError> {
         let logs = self.logs.lock().unwrap();
         Ok(logs.iter().find(|l| l.id() == id).cloned())
     }
 
-    async fn find_operation_by_user_and_key(
+    async fn find_by_user_and_key(
         &self,
         user_id: Uuid,
         idempotency_key: &IdempotencyKey,
-    ) -> Result<Option<FoodLogCreateOperation>, JournalError> {
-        Ok(self
-            .operations
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|operation| {
-                operation.user_id() == user_id && operation.idempotency_key() == idempotency_key
-            })
-            .cloned())
-    }
-
-    async fn list_by_ids(
-        &self,
-        user_id: Uuid,
-        ids: &[FoodLogId],
-    ) -> Result<Vec<FoodLog>, JournalError> {
+    ) -> Result<Option<FoodLog>, JournalError> {
         let logs = self.logs.lock().unwrap();
         Ok(logs
             .iter()
-            .filter(|log| log.user_id() == user_id && ids.contains(&log.id()))
-            .cloned()
-            .collect())
+            .find(|log| {
+                log.user_id() == user_id && log.idempotency_key() == Some(idempotency_key.as_str())
+            })
+            .cloned())
     }
 
     async fn list_by_user_and_date(
@@ -209,14 +175,6 @@ impl CatalogReadPort for MockCatalogReadPort {
             .filter(|product| ids.contains(&product.id))
             .map(|product| vec![(product.id, product)])
             .unwrap_or_default())
-    }
-
-    async fn resolve_products_available(
-        &self,
-        actor_id: Uuid,
-        ids: &[ProductId],
-    ) -> Result<Vec<(ProductId, Product)>, CatalogError> {
-        self.resolve_products(actor_id, ids).await
     }
 }
 

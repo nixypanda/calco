@@ -243,8 +243,7 @@ These notes capture endpoint choices surfaced during feature mapping.
   creates copied logs for the target date and same slot.
 - `GET /logs/latest-slots` returns `{ "slots": [...] }`. Meal slots with no
   logs inside the lookback window are absent from the array rather than present
-  with an empty item list. Each item uses the full `LogResponse` shape,
-  including `notes`, device timezone, and snapshots.
+  with an empty item list.
 - `GET /logs/latest-slots` should use a bounded lookback window. The frontend
   currently requests 30 days.
 - `POST /logs/batch` should construct new logs through the same application
@@ -260,24 +259,6 @@ These notes capture endpoint choices surfaced during feature mapping.
   `GET /exports/{id}`, and `GET /exports/{id}/download`.
 - Use the username/password auth flow from this document; OAuth/OIDC/Tailscale
   auth is out of scope.
-
-### Custom-Food Create Reconciliation
-
-`POST /foods/custom` is not idempotent. A client that loses the response cannot
-tell whether the food was created, and retrying the same body can create a
-duplicate custom food. No current catalog field is a safe natural idempotency
-key: names are not unique, and barcode is optional and not accepted for every
-custom food workflow.
-
-The later "save food and log" workflow should not blindly retry an uncertain
-create. If server support is added, follow the log-operation shape: a durable
-operation key for custom-food creation, a normalized request fingerprint, a
-replay response containing the same product ID, conflict on changed payload,
-and a deletion/reconciliation policy that does not resurrect deleted food. That
-requires a catalog-owned operation table and an atomic product-plus-children
-write; the current food-log operation journal cannot safely represent catalog
-creates. Until then, clients should recover by refreshing `GET /foods/custom`
-and asking the user to reconcile rather than issuing another create.
 
 ### Aggregate Roots
 
@@ -385,39 +366,6 @@ insufficient scope returns `403 insufficient_scope`. `SessionUser` always uses
 the browser session path and ignores `Authorization`; API keys cannot
 authenticate key-management or assistant routes. `AuthAdmin` remains cookie-only
 and likewise ignores `Authorization`.
-
-### Expected Account Binding
-
-Normal-user protected routes optionally accept:
-
-```text
-X-CalCo-Account-ID: <user_profiles.id UUID>
-```
-
-This is an assertion, never an authentication mechanism. The server resolves
-the principal from the cookie or bearer key first, then compares the header to
-that principal's `user_profiles.id`. It never uses the header to select or
-impersonate a user.
-
-- Header absent: allowed for backward compatibility.
-- Header present and matching: request proceeds.
-- Header present but not a single valid profile UUID: `400 invalid_account_header`.
-- Header present, valid, but different from the authenticated profile:
-  `401 session_account_changed`. The response does not include either profile ID.
-- API-key scope and expiry are checked before account binding. A header cannot
-  elevate a `read` key to a write route.
-
-The guard is implemented with reusable account-bound extractors for
-`ReadUser`, `WriteUser`, and `SessionUser`, so it runs before handler reads or
-side effects. It applies to the normal-user routes in the scope mapping below,
-including logs, catalog, meals, goals, diary preferences, nutrition details,
-API-key create/list/revoke, assistant, and capabilities. `/auth/login`,
-`/auth/session`, `/auth/logout`, admin routes, and import routes do not require
-the header.
-
-API keys are bound to the profile resolved from their claims, not to the
-header. Assistant routes remain browser-session-only and use the same profile
-comparison.
 
 ### Route Scope Mapping
 
@@ -549,9 +497,8 @@ rejection, normally `401 unauthorized`, not `invalid_api_key`.
 - Keys remain subject to normal ownership checks, so cross-user access fails.
 - API keys cannot manage keys, use admin or import routes, or use assistant
   routes.
-- `AUTHORIZATION` and `X-CalCo-Account-ID` are included in the allowed CORS
-  headers. This permits trusted tools to send bearer tokens and account
-  bindings; it does not make embedded browser secrets safe.
+- `AUTHORIZATION` is included in the allowed CORS headers. This permits trusted
+  tools to send bearer tokens; it does not make embedded browser secrets safe.
 - Raw tokens are never logged or returned outside the create response.
 
 > **Warning:** `CORS_ALLOWED_ORIGINS` is a credential-minting trust boundary.
@@ -565,18 +512,12 @@ rejection, normally `401 unauthorized`, not `invalid_api_key`.
 
 All routes are mounted under `/api`.
 
-### Health And Capabilities
+### Health
 
 ```text
 GET /health
 GET /version
-GET /capabilities
 ```
-
-`GET /health` and `GET /version` are unauthenticated. `GET /capabilities` uses
-`ReadUser` and is the authoritative feature/migration gate described under
-Idempotent Log Creation; do not infer keyed-log readiness from `/health` or
-`/version`.
 
 ### Auth
 
@@ -702,255 +643,63 @@ item.type = product
 item.type = meal
 ```
 
-#### Capabilities Discovery
-
-`GET /capabilities` is authenticated and accepts the same `ReadUser` credentials
-as log reads: a browser session or a `read`/`read_write` API key. It is the
-rollout gate for keyed batch and ad-hoc retries. The `single`, `ad_hoc`, and
-`batch` booleans mean keyed create support on those routes; unkeyed creates are
-unaffected. `request_account_binding` is `"x-calco-account-id"` only on a
-ready v2 server. Native logging must require that exact value before sending
-requests; a missing field or an older server must be treated as unable to
-enforce expected-account binding.
-
-When the operation journal migration is present and complete:
-
-```json
-{
-  "log_creation_idempotency": {
-    "version": 2,
-    "single": true,
-    "ad_hoc": true,
-    "batch": true,
-    "batch_key_location": "top_level",
-    "deleted_operation_replay": "conflict",
-    "pre_migration_deleted_keys": "reconciliation_only",
-    "request_account_binding": "x-calco-account-id"
-  }
-}
-```
-
-If the new binary starts before the journal migration, the route still responds
-`200` but reports:
-
-```json
-{
-  "log_creation_idempotency": {
-    "version": 0,
-    "single": false,
-    "ad_hoc": false,
-    "batch": false,
-    "batch_key_location": null,
-    "deleted_operation_replay": "unavailable",
-    "pre_migration_deleted_keys": "reconciliation_only",
-    "request_account_binding": null
-  }
-}
-```
-
-An older backend has no `/capabilities` route and returns `404` (or a non-JSON
-not-found response). Clients must treat `404`, a missing field, a non-`200`
-response, or `version < 2` as "do not send ad-hoc or batch idempotency keys".
-Do not infer capability from `/health` or `/version`; those routes do not prove
-the database migration exists.
-
-If the readiness query itself fails, the route returns `503` with
-`error.code = "capability_unavailable"`. A `503` is transient: retry and keep
-the pending operation body. It does not mean version `0`, does not prove the
-migration is missing, and must not trigger reconciliation-only cleanup.
-
-Version 2 readiness is authoritative and checks the expected operation and
-child columns, the unique `(user_id, idempotency_key)` index by its columns and
-uniqueness (not by index name), the child primary key and `(operation_id,
-food_log_id)` uniqueness, the prerequisite `food_logs` key columns/index,
-`log_count` non-null, the `1..50` check, and the user/child foreign keys.
-
-Rollout order is mandatory: apply all log-idempotency migrations, deploy the
-backend, verify `GET /capabilities` reports version 2, then enable native
-batch/ad-hoc keyed submissions. A client holding an uncertain entry created
-before version 2 was verified must mark it reconciliation-only and must not
-replay it. The server cannot reconstruct a key whose log was deleted before the
-operation journal existed.
-
 #### Idempotent Log Creation
 
-Apply `20261115000001_food_log_idempotency.sql`,
-`20261119000000_food_log_create_operations.sql`, and
-`20261119000001_food_log_create_operations_log_count.sql` before starting the
-updated backend. The NixOS deployment runs migrations before the backend, while
-local development uses `just migrate-backend`. The first migration adds the
-nullable key columns on `food_logs`; the second adds the durable operation
-journal and backfills existing keyed logs; the third additively upgrades a
-pre-`log_count` journal by deriving the expected child count from existing
-links. Do not infer an original fingerprint from an edited log.
+CalCo deliberately does not provide automatic replay or duplicate-submission
+protection for food-log creation. If a create is retried or submitted twice, a
+duplicate food log is acceptable: the user can see it and delete it manually.
+See the accepted no-replay-protection decision (2026-11-20).
+Do not add durable operation journals, request fingerprints for new write paths,
+tombstones, capability negotiation, or expected-account binding as a default
+requirement for new write paths. Atomic writes, ownership, and ordinary
+validation still apply.
 
-Never drop or rewrite `_sqlx_migrations` history, and never delete/recreate the
-operation tables to force an upgrade. The additive migration preserves keys and
-tombstones.
+The optional single-log `idempotency_key` support described below is pre-existing
+behavior retained for compatibility. It is not a general replay-protection
+contract, and `POST /logs/ad-hoc` and `POST /logs/batch` are not retry-safe.
 
-Supported upgrade paths:
+Apply `20261115000001_food_log_idempotency.sql` before starting the updated
+backend; it adds two nullable columns to `food_logs`. The NixOS deployment runs
+migrations before the backend, while local development uses
+`just migrate-backend`.
+The migration also accepts an `idempotency_key` column from an earlier local
+trial; those rows have no original-request fingerprint and return `409` if the
+key is retried. Do not infer an original fingerprint from an edited log.
 
-- Fresh install: run `20261115000001`, `20261119000000`, then the additive
-  `20261119000001`.
-- Existing install that recorded the original `20261119000000` operation
-  journal without `log_count`: run the additive `20261119000001`; it derives
-  `log_count` from each operation's existing child links.
-- Existing install with the original journal and legacy keyed logs: the initial
-  migration's backfill and the additive migration are safe in that order.
+`POST /logs` accepts an optional `idempotency_key`. Omitting it, or sending
+`null`, preserves the existing non-idempotent behavior. A supplied key must be 1
+to 128 characters, must not be blank, and must not contain control characters.
+Keys are scoped to the authenticated user profile and are never returned in log
+responses.
 
-Unsupported without explicit reconciliation:
-
-- An install that recorded a different modified checksum for
-  `20261119000000`: do not edit applied migration files or reset SQLx history;
-  SQLx checksum validation will reject the changed baseline. Reconcile that
-  environment explicitly.
-- An operation with zero or more than 50 child links when the additive
-  migration runs: the migration intentionally aborts rather than guessing a
-  count. Repair the corrupt operation before retrying.
-
-`POST /logs`, `POST /logs/ad-hoc`, and `POST /logs/batch` accept an optional
-top-level `idempotency_key`. Omitting it, or sending `null`, preserves the
-existing non-idempotent behavior. A supplied key must be 1 to 128 characters,
-must not be blank, and must not contain control characters. Keys are scoped to
-the authenticated user profile across all three logging routes and are never
-returned in log responses.
-
-`POST /logs/batch` accepts the key beside `items`, not inside an item. An item
-level `idempotency_key`, including an explicit `null`, remains a validation
-error rather than a silently ignored field. The batch key identifies the
-complete ordered batch.
-
-Request shapes:
-
-```json
-POST /api/logs
-{
-  "log_date": "2026-11-19",
-  "meal_slot": "breakfast",
-  "device_timezone": "Asia/Kolkata",
-  "item": { "type": "product", "id": "..." },
-  "quantity": { "amount": 150, "unit": "g" },
-  "notes": "optional",
-  "idempotency_key": "client-generated-key"
-}
-```
-
-```json
-POST /api/logs/ad-hoc
-{
-  "log_date": "2026-11-19",
-  "meal_slot": "lunch",
-  "device_timezone": "Asia/Kolkata",
-  "name": "Ad-hoc food",
-  "brand": null,
-  "quantity": { "amount": 1, "unit": "serving" },
-  "nutrients": [
-    { "code": "ENERGY_KCAL", "amount": 520, "unit": "kcal" },
-    { "code": "PROTEIN_G", "amount": 24, "unit": "g" },
-    { "code": "CARBS_G", "amount": 48, "unit": "g" },
-    { "code": "FAT_G", "amount": 25, "unit": "g" }
-  ],
-  "notes": null,
-  "idempotency_key": "client-generated-key"
-}
-```
-
-```json
-POST /api/logs/batch
-{
-  "idempotency_key": "client-generated-key",
-  "items": [
-    {
-      "log_date": "2026-11-19",
-      "meal_slot": "breakfast",
-      "device_timezone": "Asia/Kolkata",
-      "item": { "type": "product", "id": "..." },
-      "quantity": { "amount": 70, "unit": "g" },
-      "notes": null
-    }
-  ]
-}
-```
-
-Keyed creation contract:
-
-- The first successful create returns `201 Created` with the normal response
-  shape: one log for `POST /logs` and `POST /logs/ad-hoc`, or
-  `{ "items": [...] }` for `POST /logs/batch`.
+- The first successful create returns `201 Created`.
 - A retry with the same key and the same normalized create input returns
-  `200 OK` with the operation's logs in their original order. This is the
-  original **operation identity and order**, not a stored response snapshot:
-  logs are read from current rows, so later edits are visible. Nutrient
-  snapshots remain the snapshots stored on those rows; replay does not
-  recalculate nutrition or restore edited fields.
-- Reusing the key with a different normalized payload, a different batch order,
-  or a different logging route returns `409 conflict`.
-- If any log created by the operation has since been deleted, replay returns
-  `409 conflict` and creates nothing. A new intentional submission must use a
-  new key.
-- A malformed or incomplete operation also returns `409 conflict` and creates
-  nothing. This includes zero child links, duplicate links, a child count that
-  differs from the operation's stored `log_count`, a linked log owned by another
-  user, or a linked log that can no longer be loaded. Replay never returns a
-  partial list or an empty success.
-- Validation, ownership, catalog, and persistence failures do not reserve the
-  key unless the whole operation committed. The operation row, ordered child
-  links, every food log, and every nutrient snapshot share one transaction. A
-  database failure after an earlier log or nutrient insert rolls all of them
-  back, so a failed batch leaves no partial rows and the key remains usable for
-  a corrected retry.
+  `200 OK` with the existing log.
+- Reusing the key with a different create input returns `409 conflict`.
+- Deleting the log deletes its key, so a delayed retry with the same key and
+  input can create a new log with `201 Created`.
 
-The durable `food_log_create_operations` and
-`food_log_create_operation_logs` tables store the key, a SHA-256 request
-fingerprint, the operation kind, the expected log count, and the ordered log
-IDs. Replay requires the child-link count to equal `log_count`, so independently
-removing one link cannot turn a two-item batch into a valid-looking one-item
-replay. Log lookups are scoped by the authenticated user in PostgreSQL as
-defense in depth, and replay rechecks each returned log's owner and identity.
-Operation child rows deliberately have no foreign key to `food_logs`, so
-deleting a log leaves a tombstone instead of silently shrinking the operation.
-The unique index on `(user_id, idempotency_key)` serializes concurrent retries;
-the losing request reads the winning operation and replays it or returns a
-conflict. The operation, every food log, and every nutrient snapshot are written
-in one database transaction by `FoodLogRepo::create_operation`.
+`food_logs.idempotency_key` and `food_logs.request_fingerprint` store the
+original key and a SHA-256 fingerprint of the validated create request: log
+date, meal slot, normalized device timezone, item type and ID, normalized
+quantity amount, exact quantity unit code, and notes. Notes and keys are
+compared byte-for-byte rather than Unicode-normalized. The database constrains
+the key to 1 to 128 characters and the fingerprint to 64 lowercase hex
+characters.
 
-Retention is explicit and indefinite. Operation rows, keys, and their child
-links are permanent for the lifetime of the user profile. There is no TTL,
-pruning job, admin cleanup, or log-deletion path that removes a key or an
-individual child link. Deleting a user profile cascades the operation and all
-of its child links together; no other supported path deletes them. A future
-retention protocol must replace the tombstone mechanism before any cleanup is
-allowed to delete these rows. Adding a naive cleanup that frees keys would make
-late client retries unsafe.
+The fingerprint does not store resolved catalog names or nutrient snapshots, so
+later log edits and catalog changes do not change it. Updates preserve the
+stored key and fingerprint. The key, fingerprint, food log, and nutrient
+snapshots are written atomically by the existing `FoodLogRepo::create`
+transaction. Reads of a food log and its nutrient snapshots use one
+repeatable-read transaction, so a replay cannot combine a row from before an
+update or delete with snapshots from after it.
 
-Single-create fingerprints are unchanged from the first migration: log date,
-meal slot, normalized device timezone, item type and ID, normalized quantity
-amount, exact quantity unit code, and notes. Ad-hoc fingerprints add the
-trimmed name and brand, normalized quantity, and nutrients sorted by nutrient
-code with normalized amounts and exact units. Batch fingerprints hash the
-ordered list of single-item create inputs. Notes and keys are compared
-byte-for-byte rather than Unicode-normalized. The fingerprint deliberately does
-not store resolved catalog names or nutrient snapshots, so log edits and catalog
-changes do not change it. Updates preserve the stored key and fingerprint.
-
-`food_logs.idempotency_key` and `food_logs.request_fingerprint` remain populated
-for keyed single and ad-hoc rows for backward compatibility, but the operation
-journal is the replay source of truth. Migration backfill gives a legacy keyed
-row with no fingerprint an impossible fingerprint so retrying it still returns
-`409 conflict`. The backfill can only preserve keys whose logs still exist when
-the migration runs; a key whose log was already deleted before the migration
-cannot be reconstructed. Such a key can otherwise look unused and create a new
-log, so a client must never replay an uncertain entry that was created before
-version-2 capability was verified. Mark those entries reconciliation-only.
-
-The migration must run before the backend binary is exposed to clients. After
-deployment, verify `GET /capabilities` reports `version: 2`; only then enable
-keyed ad-hoc and batch submissions in the native client. Applying the migration
-after clients resume replays reopens the deleted-key window.
-
-Reads of a food log and its nutrient snapshots use one repeatable-read
-transaction, so a replay cannot combine a row from before an update or delete
-with snapshots from after it.
+Concurrent retries rely on the partial unique index on
+`(user_id, idempotency_key)`. When a retry loses the insert race, it reads the
+winning log and replays it or returns a conflict. `POST /logs/batch` does not
+support idempotency keys; supplying one, including an explicit `null`, is a
+validation error rather than a silently ignored field.
 
 ### Nutrition Details
 
@@ -974,72 +723,6 @@ GET    /meals/{id}/nutrients?amount=&unit=
 
 Meal requests are aggregate-shaped. There are no standalone meal-component
 mutation routes. Meal reads use `ReadUser`; meal mutations use `WriteUser`.
-
-#### Meals With Missing Ingredients
-
-Catalog products are soft-deleted, but a meal keeps its typed component
-references and quantities. `GET /meals` and `GET /meals/{id}` do not fail the
-whole request when one component cannot be resolved. Each meal is returned in a
-degraded but complete shape:
-
-```json
-{
-  "id": "meal-id",
-  "name": "Broken Porridge",
-  "nutrition_summary": null,
-  "has_missing_components": true,
-  "components": [
-    {
-      "id": "component-id",
-      "item": { "type": "product", "id": "deleted-product-id" },
-      "quantity": { "amount": "200", "unit": "g" },
-      "nutrition_summary": null,
-      "missing": true,
-      "missing_reason": "product_unavailable",
-      "name": "Unavailable food"
-    }
-  ]
-}
-```
-
-- Healthy components keep their normal `item`, `quantity`, and
-  `nutrition_summary`; `missing`, `missing_reason`, and `name` are omitted.
-- Healthy meals omit `has_missing_components`; clients must default it to
-  `false`.
-- A meal with any missing component has `nutrition_summary: null`; a component
-  with a missing product has `nutrition_summary: null`. No partial nutrition is
-  reported as complete.
-- The component ID, typed product ID, and quantity are preserved. Do not drop
-  the component or send it to update without an explicit replacement.
-- The meal remains editable and deleteable. Repair by `PUT /meals/{id}` with a
-  full `components` array containing only available products; a successful
-  repair removes the missing markers and restores nutrition.
-- `GET /meals/{id}/nutrients` and meal-based `POST /logs` / `PUT /logs/{id}`
-  return `409` with `error.code = "missing_components"` instead of calculating
-  false nutrition:
-
-```json
-{
-  "error": {
-    "code": "missing_components",
-    "message": "meal has components that are no longer available; replace them before previewing or logging",
-    "meal_id": "meal-id",
-    "missing_components": [
-      {
-        "component_id": "component-id",
-        "item": { "type": "product", "id": "deleted-product-id" },
-        "quantity": { "amount": "200", "unit": "g" },
-        "name": "Unavailable food",
-        "missing_reason": "product_unavailable"
-      }
-    ]
-  }
-}
-```
-
-Existing meal-based food logs remain immutable snapshots. Deleting or repairing
-a catalog product or meal does not rewrite stored log names, quantities, or
-nutrient snapshots.
 
 ### Goals
 
@@ -1135,29 +818,27 @@ Run migrations explicitly with:
 DATABASE_URL=postgres://calco:calco@localhost:5432/calco just migrate-backend
 ```
 
+The abandoned durable-operation migrations
+`20261119000000_food_log_create_operations.sql` and
+`20261119000001_food_log_create_operations_log_count.sql` were removed after
+confirming they had not been applied outside isolated tests. The pre-existing
+`20261115000001_food_log_idempotency.sql` remains in place. Do not recreate the
+operation-journal schema for this service.
+
 Important tables:
 
 - Auth: `identities`, `user_profiles`, `sessions`, `api_keys`,
   `auth_audit_events`
 - Catalog: `products`, `product_nutrients`, `product_servings`, `nutrients`, `units`
-- Logs: `food_logs`, `food_log_nutrients`, `food_log_create_operations`,
-  `food_log_create_operation_logs`
+- Logs: `food_logs`, `food_log_nutrients`
 - Meals: `meals`, `meal_components`
 - Goals: `goal_target_versions`
 - Diary preferences: `diary_preferences`
 - Imports: `imports`, `staging_products`, `staging_product_nutrients`, `staging_product_servings`, `import_errors`
 
 `food_logs` stores an optional idempotency key and request fingerprint directly
-on keyed single and ad-hoc logs. A partial unique index on
-`(user_id, idempotency_key)` enforces per-profile uniqueness for those rows.
-`food_log_create_operations` is the durable replay record for every keyed create
-route. Its unique index on `(user_id, idempotency_key)` spans single, ad-hoc,
-and batch operations. `log_count` records the expected number of child links so
-partial link deletion is detectable, and child rows retain ordered log IDs after
-log deletion so a late retry cannot recreate a removed log. Operation and child
-rows are retained indefinitely; only deleting the owning profile cascades the
-whole journal. Do not add TTL or cleanup code that deletes keys or individual
-links.
+on the log. A partial unique index on `(user_id, idempotency_key)` enforces
+per-profile key uniqueness for keyed logs, and deleting the log frees the key.
 
 Catalog search fetches storage-filtered candidate rows (scope and category
 filters) from the repository. Matching and ranking are pure Rust in

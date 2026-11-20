@@ -11,10 +11,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::auth::api::http::{AccountBoundReadUser, AccountBoundWriteUser};
+use crate::auth::api::http::{ReadUser, WriteUser};
 use crate::catalog::domain::calculation::Quantity;
 use crate::catalog::domain::{Product, ProductId, UnitCode};
-use crate::journal::error::{JournalError, MissingMealComponent};
+use crate::journal::error::JournalError;
 use crate::journal::meal::app::*;
 use crate::journal::meal::domain::*;
 use crate::journal::module::MealModule;
@@ -33,7 +33,7 @@ pub fn meal_routes(state: AppState) -> Router {
 }
 
 use crate::journal::api::http::{
-    NutrientSummaryDto, is_summary_nutrient_code, nutrient_summary_from_entries,
+    NutrientSummaryDto, internal_error, is_summary_nutrient_code, nutrient_summary_from_entries,
 };
 
 #[derive(Deserialize)]
@@ -70,8 +70,6 @@ pub struct MealResponse {
     pub notes: Option<String>,
     pub total_quantity: Option<QuantityDto>,
     pub nutrition_summary: Option<NutrientSummaryDto>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub has_missing_components: Option<bool>,
     pub components: Vec<MealComponentDto>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -83,12 +81,6 @@ pub struct MealComponentDto {
     pub item: ItemDto,
     pub quantity: QuantityDto,
     pub nutrition_summary: Option<NutrientSummaryDto>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub missing: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub missing_reason: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -133,7 +125,7 @@ pub struct UpdateMealRequest {
 }
 
 async fn create_meal_handler(
-    auth: AccountBoundWriteUser,
+    auth: WriteUser,
     State(state): State<MealModule>,
     Json(req): Json<CreateMealRequest>,
 ) -> impl IntoResponse {
@@ -147,41 +139,38 @@ async fn create_meal_handler(
     match services.create_meal(auth.0.id, input).await {
         Ok(meal) => match meal_to_response(&state.meal_services, auth.0.id, &meal).await {
             Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
-            Err(e) => e.into_response(),
+            Err(e) => internal_error(e).into_response(),
         },
         Err(e) => e.into_response(),
     }
 }
 
 async fn get_meal_handler(
-    auth: AccountBoundReadUser,
+    auth: ReadUser,
     State(state): State<MealModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.meal_services.get_meal(auth.0.id, MealId(id)).await {
         Ok(meal) => match meal_to_response(&state.meal_services, auth.0.id, &meal).await {
             Ok(resp) => Json(resp).into_response(),
-            Err(e) => e.into_response(),
+            Err(e) => internal_error(e).into_response(),
         },
         Err(e) => e.into_response(),
     }
 }
 
-async fn list_meals_handler(
-    auth: AccountBoundReadUser,
-    State(state): State<MealModule>,
-) -> impl IntoResponse {
+async fn list_meals_handler(auth: ReadUser, State(state): State<MealModule>) -> impl IntoResponse {
     match state.meal_services.list_meals(auth.0.id).await {
         Ok(meals) => match meals_to_list_response(&state.meal_services, auth.0.id, meals).await {
             Ok(resp) => Json(resp).into_response(),
-            Err(e) => e.into_response(),
+            Err(e) => internal_error(e).into_response(),
         },
-        Err(e) => e.into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
 async fn update_meal_handler(
-    auth: AccountBoundWriteUser,
+    auth: WriteUser,
     State(state): State<MealModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateMealRequest>,
@@ -196,14 +185,14 @@ async fn update_meal_handler(
     match services.update_meal(MealId(id), auth.0.id, input).await {
         Ok(meal) => match meal_to_response(&state.meal_services, auth.0.id, &meal).await {
             Ok(resp) => Json(resp).into_response(),
-            Err(e) => e.into_response(),
+            Err(e) => internal_error(e).into_response(),
         },
         Err(e) => e.into_response(),
     }
 }
 
 async fn delete_meal_handler(
-    auth: AccountBoundWriteUser,
+    auth: WriteUser,
     State(state): State<MealModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
@@ -216,7 +205,7 @@ async fn delete_meal_handler(
 }
 
 async fn meal_nutrients_handler(
-    auth: AccountBoundReadUser,
+    auth: ReadUser,
     State(state): State<MealModule>,
     Path(id): Path<Uuid>,
     Query(query): Query<MealNutrientQuery>,
@@ -317,11 +306,10 @@ async fn meal_to_response(
     actor_id: Uuid,
     meal: &Meal,
 ) -> Result<MealResponse, JournalError> {
-    let resolution = services.resolve_meal_products(actor_id, meal).await?;
+    let products = services.load_products(actor_id, meal).await?;
     Ok(meal_to_response_with_products(
         meal,
-        &resolution.products,
-        &resolution.missing,
+        &products,
         services.unit_converter(),
     ))
 }
@@ -329,7 +317,6 @@ async fn meal_to_response(
 fn meal_to_response_with_products(
     meal: &Meal,
     products: &[(ProductId, Product)],
-    missing: &[MissingMealComponent],
     unit_converter: &crate::catalog::domain::units::UnitConverter,
 ) -> MealResponse {
     MealResponse {
@@ -337,16 +324,11 @@ fn meal_to_response_with_products(
         name: meal.name.as_str().to_string(),
         notes: meal.notes.as_ref().map(|n| n.0.clone()),
         total_quantity: meal_total_quantity_to_dto(meal),
-        nutrition_summary: if missing.is_empty() {
-            meal_declared_nutrition_summary(meal, products, unit_converter)
-        } else {
-            None
-        },
-        has_missing_components: (!missing.is_empty()).then_some(true),
+        nutrition_summary: meal_declared_nutrition_summary(meal, products, unit_converter),
         components: meal
             .components
             .iter()
-            .map(|component| meal_component_to_dto(component, products, missing, unit_converter))
+            .map(|component| meal_component_to_dto(component, products, unit_converter))
             .collect(),
         created_at: meal.created_at,
         updated_at: meal.updated_at,
@@ -367,25 +349,14 @@ fn meal_total_quantity_to_dto(meal: &Meal) -> Option<QuantityDto> {
 fn meal_component_to_dto(
     component: &MealComponent,
     products: &[(ProductId, Product)],
-    missing: &[MissingMealComponent],
     unit_converter: &crate::catalog::domain::units::UnitConverter,
 ) -> MealComponentDto {
     let (item_type, item_id) = meal_component_item_to_parts(&component.item);
-    let is_missing = missing
-        .iter()
-        .any(|missing| missing.component_id == component.id);
     MealComponentDto {
         id: component.id,
         item: item_parts_to_dto(item_type, item_id),
         quantity: quantity_to_dto(component.quantity_amount, component.quantity_unit.0.clone()),
-        nutrition_summary: if is_missing {
-            None
-        } else {
-            meal_component_nutrition_summary(component, products, unit_converter)
-        },
-        missing: is_missing.then_some(true),
-        missing_reason: is_missing.then_some("product_unavailable"),
-        name: is_missing.then(|| "Unavailable food".to_string()),
+        nutrition_summary: meal_component_nutrition_summary(component, products, unit_converter),
     }
 }
 

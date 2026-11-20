@@ -48,15 +48,6 @@ pub trait CatalogReadPort: Send + Sync {
         actor_id: Uuid,
         ids: &[ProductId],
     ) -> Result<Vec<(ProductId, Product)>, CatalogError>;
-
-    /// Resolves only products that still exist and are visible to the actor.
-    /// Missing products are omitted rather than failing the whole read, which
-    /// lets callers render degraded aggregates without hiding healthy items.
-    async fn resolve_products_available(
-        &self,
-        actor_id: Uuid,
-        ids: &[ProductId],
-    ) -> Result<Vec<(ProductId, Product)>, CatalogError>;
 }
 
 /// Application-level write access for replacing external catalog aggregates.
@@ -386,22 +377,6 @@ impl CatalogReadPort for CatalogService {
         let mut products = Vec::with_capacity(ids.len());
         for id in ids {
             products.push((*id, self.get_product(actor_id, *id).await?));
-        }
-        Ok(products)
-    }
-
-    async fn resolve_products_available(
-        &self,
-        actor_id: Uuid,
-        ids: &[ProductId],
-    ) -> Result<Vec<(ProductId, Product)>, CatalogError> {
-        let mut products = Vec::with_capacity(ids.len());
-        for id in ids {
-            match self.get_product(actor_id, *id).await {
-                Ok(product) => products.push((*id, product)),
-                Err(CatalogError::NotFound(_)) => {}
-                Err(error) => return Err(error),
-            }
         }
         Ok(products)
     }

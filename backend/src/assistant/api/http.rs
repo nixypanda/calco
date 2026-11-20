@@ -21,7 +21,7 @@ use crate::assistant::domain::{
     FoodDraftPurpose, FoodDraftTurn, SuggestedLog,
 };
 use crate::assistant::infra::AdmissionRejection;
-use crate::auth::api::http::AccountBoundSessionUser;
+use crate::auth::api::http::SessionUser;
 
 const MAX_REQUEST_BYTES: usize = 41 * 1024 * 1024;
 const MAX_CONVERSATION_FIELD_BYTES: usize = 92 * 1024;
@@ -168,7 +168,7 @@ struct ErrorBody {
 }
 
 async fn status_handler(
-    _user: AccountBoundSessionUser,
+    _user: SessionUser,
     State(components): State<AssistantComponents>,
 ) -> Json<AssistantStatusResponse> {
     Json(AssistantStatusResponse {
@@ -178,7 +178,7 @@ async fn status_handler(
 }
 
 async fn draft_handler(
-    user: AccountBoundSessionUser,
+    user: SessionUser,
     State(components): State<AssistantComponents>,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> Response {

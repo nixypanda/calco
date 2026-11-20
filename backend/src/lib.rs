@@ -1,12 +1,10 @@
 pub mod assistant;
 pub mod auth;
-pub mod capabilities;
 pub mod catalog;
 pub mod config;
 pub mod import;
 pub mod journal;
-use axum::extract::FromRef;
-use axum::http::{HeaderName, HeaderValue, Method, header};
+use axum::http::{HeaderValue, Method, header};
 use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -17,7 +15,6 @@ use crate::auth::api::SessionCookieConfig;
 use crate::auth::api::http::auth_routes;
 use crate::auth::domain::SessionPolicy;
 use crate::auth::module::AuthModule;
-use crate::capabilities::{CapabilityModule, capability_routes};
 use crate::catalog::api::http::catalog_routes;
 use crate::catalog::module::CatalogModule;
 use crate::config::{AppConfig, ServerConfig};
@@ -37,19 +34,11 @@ pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// decoupled from the others while sharing a single router state.
 #[derive(Clone)]
 pub struct AppState {
-    pub pool: PgPool,
-    pub capabilities: CapabilityModule,
     pub auth: AuthModule,
     pub catalog: CatalogModule,
     pub journal: JournalModule,
     pub import: ImportModule,
     pub assistant: AssistantComponents,
-}
-
-impl FromRef<AppState> for PgPool {
-    fn from_ref(state: &AppState) -> Self {
-        state.pool.clone()
-    }
 }
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
@@ -65,11 +54,8 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let journal = JournalModule::build(&pool, &catalog).await?;
     let import = ImportModule::build(&pool, catalog.services.clone(), catalog.services.clone());
     let assistant = AssistantComponents::from_config(&config.assistant, &catalog)?;
-    let capabilities = CapabilityModule::pg(&pool);
 
     Ok(AppState {
-        pool,
-        capabilities,
         auth,
         catalog,
         journal,
@@ -92,7 +78,6 @@ pub fn build_router_from_state(auth_state: AppState) -> Router {
     let api = Router::new()
         .route("/health", get(health))
         .route("/version", get(version))
-        .merge(capability_routes(auth_state.clone()))
         .merge(auth_routes(auth_state.auth.clone()))
         .merge(catalog_routes(auth_state.clone()))
         .merge(food_log_routes(auth_state.clone()))
@@ -115,12 +100,7 @@ fn build_cors_layer(config: &ServerConfig) -> CorsLayer {
         Method::PATCH,
         Method::OPTIONS,
     ];
-    let headers = [
-        header::CONTENT_TYPE,
-        header::ACCEPT,
-        header::AUTHORIZATION,
-        HeaderName::from_static("x-calco-account-id"),
-    ];
+    let headers = [header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION];
 
     if config.cors_allowed_origins.is_empty() {
         return CorsLayer::new()

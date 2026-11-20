@@ -114,116 +114,6 @@ where
     }
 }
 
-// ─── Expected Account Binding ────────────────────────────────
-
-pub const ACCOUNT_BINDING_HEADER: &str = "x-calco-account-id";
-
-/// Read-scoped user extractor that optionally verifies an expected account ID.
-///
-/// Missing header preserves legacy clients. A present header must be a single
-/// profile UUID matching the authenticated principal; it never authenticates
-/// the supplied user by itself.
-pub struct AccountBoundReadUser(pub UserProfile);
-
-impl<S> FromRequestParts<S> for AccountBoundReadUser
-where
-    S: Send + Sync,
-    SessionCookieConfig: FromRef<S>,
-    AuthModule: FromRef<S>,
-{
-    type Rejection = AuthErrorResponse;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let ReadUser(profile) = ReadUser::from_request_parts(parts, state).await?;
-        verify_expected_account(parts, profile.id)?;
-        Ok(Self(profile))
-    }
-}
-
-pub struct AccountBoundWriteUser(pub UserProfile);
-
-impl<S> FromRequestParts<S> for AccountBoundWriteUser
-where
-    S: Send + Sync,
-    SessionCookieConfig: FromRef<S>,
-    AuthModule: FromRef<S>,
-{
-    type Rejection = AuthErrorResponse;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let WriteUser(profile) = WriteUser::from_request_parts(parts, state).await?;
-        verify_expected_account(parts, profile.id)?;
-        Ok(Self(profile))
-    }
-}
-
-pub struct AccountBoundSessionUser {
-    pub identity: Identity,
-    pub profile: UserProfile,
-}
-
-impl<S> FromRequestParts<S> for AccountBoundSessionUser
-where
-    S: Send + Sync,
-    SessionCookieConfig: FromRef<S>,
-    AuthModule: FromRef<S>,
-{
-    type Rejection = AuthErrorResponse;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let SessionUser { identity, profile } =
-            SessionUser::from_request_parts(parts, state).await?;
-        verify_expected_account(parts, profile.id)?;
-        Ok(Self { identity, profile })
-    }
-}
-
-fn verify_expected_account(
-    parts: &Parts,
-    actual_profile_id: Uuid,
-) -> Result<(), AuthErrorResponse> {
-    let mut values = parts.headers.get_all(ACCOUNT_BINDING_HEADER).iter();
-    let Some(value) = values.next() else {
-        return Ok(());
-    };
-    if values.next().is_some() {
-        return Err(invalid_account_header_response());
-    }
-    let raw = value
-        .to_str()
-        .map_err(|_| invalid_account_header_response())?;
-    let expected_profile_id =
-        Uuid::parse_str(raw.trim()).map_err(|_| invalid_account_header_response())?;
-    if expected_profile_id != actual_profile_id {
-        return Err(session_account_changed_response());
-    }
-    Ok(())
-}
-
-fn invalid_account_header_response() -> AuthErrorResponse {
-    AuthErrorResponse {
-        status: StatusCode::BAD_REQUEST,
-        body: ErrorResponse {
-            error: ErrorBody {
-                code: "invalid_account_header".into(),
-                message: "X-CalCo-Account-ID must be a single user profile UUID".into(),
-            },
-        },
-    }
-}
-
-fn session_account_changed_response() -> AuthErrorResponse {
-    AuthErrorResponse {
-        status: StatusCode::UNAUTHORIZED,
-        body: ErrorResponse {
-            error: ErrorBody {
-                code: "session_account_changed".into(),
-                message: "authenticated account changed; retry with the current account".into(),
-            },
-        },
-    }
-}
-
 pub struct AuthAdmin;
 
 impl<S> FromRequestParts<S> for AuthAdmin
@@ -505,7 +395,7 @@ async fn logout_handler(
 }
 
 async fn list_api_keys_handler(
-    user: AccountBoundSessionUser,
+    user: SessionUser,
     State(state): State<AuthModule>,
 ) -> Result<Json<ApiKeyListResponse>, AuthErrorResponse> {
     let keys = state
@@ -520,7 +410,7 @@ async fn list_api_keys_handler(
 }
 
 async fn create_api_key_handler(
-    user: AccountBoundSessionUser,
+    user: SessionUser,
     State(state): State<AuthModule>,
     Json(body): Json<CreateApiKeyRequest>,
 ) -> Result<
@@ -560,7 +450,7 @@ async fn create_api_key_handler(
 }
 
 async fn delete_api_key_handler(
-    user: AccountBoundSessionUser,
+    user: SessionUser,
     State(state): State<AuthModule>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AuthErrorResponse> {

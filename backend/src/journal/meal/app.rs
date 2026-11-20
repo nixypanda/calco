@@ -7,7 +7,6 @@ use crate::catalog::app::CatalogReadPort;
 use crate::catalog::domain::calculation::Quantity;
 use crate::catalog::domain::units::UnitConverter;
 use crate::catalog::domain::*;
-use crate::journal::error::MissingMealComponent;
 use crate::journal::meal::domain::*;
 
 pub struct CreateMealInput {
@@ -47,11 +46,6 @@ pub struct MealNutrientEntry {
 pub struct ResolvedMeal {
     pub meal: Meal,
     pub products: Vec<(ProductId, Product)>,
-}
-
-pub struct MealProductResolution {
-    pub products: Vec<(ProductId, Product)>,
-    pub missing: Vec<MissingMealComponent>,
 }
 
 /// Application-level meal access for downstream logging workflows.
@@ -103,11 +97,11 @@ impl MealService {
         Ok(meals)
     }
 
-    pub async fn resolve_meal_products(
+    pub async fn load_products(
         &self,
         actor_id: Uuid,
         meal: &Meal,
-    ) -> Result<MealProductResolution, JournalError> {
+    ) -> Result<Vec<(ProductId, Product)>, JournalError> {
         let product_ids = meal
             .components
             .iter()
@@ -115,29 +109,10 @@ impl MealService {
                 MealComponentItem::Product(id) => id,
             })
             .collect::<Vec<_>>();
-        let products = self
-            .catalog
-            .resolve_products_available(actor_id, &product_ids)
+        self.catalog
+            .resolve_products(actor_id, &product_ids)
             .await
-            .map_err(JournalError::from)?;
-        let missing = meal
-            .components
-            .iter()
-            .filter_map(|component| {
-                let MealComponentItem::Product(product_id) = component.item;
-                if products.iter().any(|(id, _)| id == &product_id) {
-                    None
-                } else {
-                    Some(MissingMealComponent {
-                        component_id: component.id,
-                        product_id: product_id.0,
-                        quantity_amount: component.quantity_amount,
-                        quantity_unit: component.quantity_unit.0.clone(),
-                    })
-                }
-            })
-            .collect();
-        Ok(MealProductResolution { products, missing })
+            .map_err(JournalError::from)
     }
 
     pub fn unit_converter(&self) -> &UnitConverter {
@@ -206,10 +181,11 @@ impl MealService {
         id: MealId,
         quantity: Quantity,
     ) -> Result<MealNutritionOutput, JournalError> {
-        let resolved = self.resolve_loggable_meal(actor_id, id).await?;
-        let calculated = resolved
-            .meal
-            .nutrition_for(&quantity, &resolved.products, &self.unit_converter)
+        let meal = self.get_meal(actor_id, id).await?;
+
+        let products = self.load_products(actor_id, &meal).await?;
+        let calculated = meal
+            .nutrition_for(&quantity, &products, &self.unit_converter)
             .map_err(JournalError::Validation)?;
         let nutrients: Vec<MealNutrientEntry> = calculated
             .amounts
@@ -267,17 +243,8 @@ impl MealReadPort for MealService {
         id: MealId,
     ) -> Result<ResolvedMeal, JournalError> {
         let meal = self.get_meal(actor_id, id).await?;
-        let resolution = self.resolve_meal_products(actor_id, &meal).await?;
-        if !resolution.missing.is_empty() {
-            return Err(JournalError::MissingMealComponents {
-                meal_id: meal.id.0,
-                components: resolution.missing,
-            });
-        }
-        Ok(ResolvedMeal {
-            meal,
-            products: resolution.products,
-        })
+        let products = self.load_products(actor_id, &meal).await?;
+        Ok(ResolvedMeal { meal, products })
     }
 }
 
@@ -365,18 +332,6 @@ mod tests {
                 Some(product) => Ok(ids.iter().map(|id| (*id, product.clone())).collect()),
                 None => Err(CatalogError::NotFound("product not found".into())),
             }
-        }
-
-        async fn resolve_products_available(
-            &self,
-            _actor_id: Uuid,
-            ids: &[ProductId],
-        ) -> Result<Vec<(ProductId, Product)>, CatalogError> {
-            Ok(self
-                .product
-                .as_ref()
-                .map(|product| ids.iter().map(|id| (*id, product.clone())).collect())
-                .unwrap_or_default())
         }
     }
 
