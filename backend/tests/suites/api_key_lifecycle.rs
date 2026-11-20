@@ -602,11 +602,13 @@ async fn bearer_key_owner_wins_over_cookie_and_read_key_stays_read_only(pool: Pg
     let log_b = seed_log(&router, &user_b, &product_id, "2026-06-04").await;
     let read_token = create_api_key_token(&router, &user_a, "Read precedence", Some("read")).await;
 
+    let account_a = remembered_cookie_account(&user_a).unwrap();
     let request = Request::builder()
         .method(Method::GET)
         .uri("/api/logs?log_date=2026-06-04")
         .header(header::COOKIE, &user_b)
         .header(header::AUTHORIZATION, format!("Bearer {read_token}"))
+        .header(ACCOUNT_HEADER, account_a.clone())
         .body(Body::empty())
         .unwrap();
     let (status, _headers, bytes) = send(&router, request).await;
@@ -625,7 +627,8 @@ async fn bearer_key_owner_wins_over_cookie_and_read_key_stays_read_only(pool: Pg
         "log_date": "2026-06-04",
         "meal_slot": "lunch",
         "item": { "type": "product", "id": product_id },
-        "quantity": { "amount": 10, "unit": "g" }
+        "quantity": { "amount": 10, "unit": "g" },
+        "idempotency_key": "api-key-read-write-rejected"
     }))
     .unwrap();
     let request = Request::builder()
@@ -634,6 +637,7 @@ async fn bearer_key_owner_wins_over_cookie_and_read_key_stays_read_only(pool: Pg
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::COOKIE, &user_b)
         .header(header::AUTHORIZATION, format!("Bearer {read_token}"))
+        .header(ACCOUNT_HEADER, account_a)
         .body(Body::from(body))
         .unwrap();
     let (status, _headers, bytes) = send(&router, request).await;

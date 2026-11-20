@@ -9,7 +9,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::auth::api::http::ReadUser;
+use crate::auth::api::http::AccountBoundReadUser;
 use crate::journal::error::JournalError;
 use crate::journal::guidance::app::{
     NutrientCoverage, NutritionDetails, NutritionDetailsEntry, NutritionDetailsStatus,
@@ -93,7 +93,7 @@ pub enum NutritionDetailsStatusDto {
 }
 
 async fn get_nutrition_details_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<GuidanceModule>,
     Query(query): Query<NutritionDetailsQuery>,
 ) -> impl IntoResponse {

@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
+use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::ops::Bound;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -60,6 +62,232 @@ impl IdempotencyKey {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for IdempotencyKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        Self::new(raw).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Validated SHA-256 digest of a canonicalized create request.
+///
+/// The database stores the lowercase hexadecimal form. Keeping this as a
+/// distinct type prevents arbitrary strings, uppercase spellings, or truncated
+/// digests from entering operation rows or replay comparisons.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestFingerprint(String);
+
+impl RequestFingerprint {
+    pub fn from_request_bytes(bytes: &[u8]) -> Self {
+        Self(hex::encode(Sha256::digest(bytes)))
+    }
+
+    pub fn new(raw: impl Into<String>) -> Result<Self, JournalError> {
+        let value = raw.into();
+        if value.len() != 64
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(JournalError::Validation(
+                "request fingerprint must be exactly 64 lowercase hexadecimal characters".into(),
+            ));
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoodLogOperationKind {
+    Single,
+    AdHoc,
+    Batch,
+}
+
+impl FoodLogOperationKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Single => "single",
+            Self::AdHoc => "ad_hoc",
+            Self::Batch => "batch",
+        }
+    }
+}
+
+/// Durable record of one keyed create operation. It outlives the logs it
+/// created so a late retry can never turn a deleted log back into a new row.
+#[derive(Debug, Clone)]
+pub struct FoodLogCreateOperation {
+    id: Uuid,
+    user_id: Uuid,
+    idempotency_key: IdempotencyKey,
+    request_fingerprint: RequestFingerprint,
+    kind: FoodLogOperationKind,
+    log_count: usize,
+    log_ids: Vec<FoodLogId>,
+    created_at: DateTime<Utc>,
+}
+
+impl FoodLogCreateOperation {
+    fn new(
+        user_id: Uuid,
+        idempotency_key: IdempotencyKey,
+        request_fingerprint: RequestFingerprint,
+        kind: FoodLogOperationKind,
+        log_ids: Vec<FoodLogId>,
+    ) -> Result<Self, JournalError> {
+        let log_count = log_ids.len();
+        if !operation_shape_is_valid(kind, log_count) {
+            return Err(JournalError::Internal(format!(
+                "{kind:?} operation has an invalid log count: {log_count}"
+            )));
+        }
+        Ok(Self {
+            id: Uuid::new_v4(),
+            user_id,
+            idempotency_key,
+            request_fingerprint,
+            kind,
+            log_count,
+            log_ids,
+            created_at: Utc::now(),
+        })
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    pub fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    pub fn idempotency_key(&self) -> &IdempotencyKey {
+        &self.idempotency_key
+    }
+
+    pub fn request_fingerprint(&self) -> &RequestFingerprint {
+        &self.request_fingerprint
+    }
+
+    pub fn kind(&self) -> FoodLogOperationKind {
+        self.kind
+    }
+
+    pub fn log_count(&self) -> usize {
+        self.log_count
+    }
+
+    pub fn log_ids(&self) -> &[FoodLogId] {
+        &self.log_ids
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn restore(
+        id: Uuid,
+        user_id: Uuid,
+        idempotency_key: IdempotencyKey,
+        request_fingerprint: RequestFingerprint,
+        kind: FoodLogOperationKind,
+        log_count: usize,
+        log_ids: Vec<FoodLogId>,
+        created_at: DateTime<Utc>,
+    ) -> Result<Self, JournalError> {
+        if log_count != log_ids.len() || !operation_shape_is_valid(kind, log_count) {
+            return Err(JournalError::Conflict(
+                "idempotency_key refers to an invalid operation; use a new key".into(),
+            ));
+        }
+        Ok(Self {
+            id,
+            user_id,
+            idempotency_key,
+            request_fingerprint,
+            kind,
+            log_count,
+            log_ids,
+            created_at,
+        })
+    }
+}
+
+/// One validated journal write: the operation owns exactly the food-log rows
+/// supplied here, and its child links are derived from those rows.
+///
+/// Constructing this aggregate is the only way to reach the repository create
+/// path, so a caller cannot persist a child-count, row-count, order, or owner
+/// mismatch.
+#[derive(Debug)]
+pub struct FoodLogCreateOperationWrite {
+    operation: FoodLogCreateOperation,
+    logs: Vec<FoodLog>,
+}
+
+impl FoodLogCreateOperationWrite {
+    pub fn new(
+        user_id: Uuid,
+        idempotency_key: IdempotencyKey,
+        request_fingerprint: RequestFingerprint,
+        kind: FoodLogOperationKind,
+        logs: Vec<FoodLog>,
+    ) -> Result<Self, JournalError> {
+        let mut unique_ids = HashSet::with_capacity(logs.len());
+        let mut log_ids = Vec::with_capacity(logs.len());
+        for log in &logs {
+            if log.user_id() != user_id {
+                return Err(JournalError::Internal(
+                    "operation and food log owners must match".into(),
+                ));
+            }
+            if !unique_ids.insert(log.id()) {
+                return Err(JournalError::Internal(
+                    "operation food logs must have unique ids".into(),
+                ));
+            }
+            log_ids.push(log.id());
+        }
+
+        let operation = FoodLogCreateOperation::new(
+            user_id,
+            idempotency_key,
+            request_fingerprint,
+            kind,
+            log_ids,
+        )?;
+        Ok(Self { operation, logs })
+    }
+
+    pub fn operation(&self) -> &FoodLogCreateOperation {
+        &self.operation
+    }
+
+    pub fn logs(&self) -> &[FoodLog] {
+        &self.logs
+    }
+
+    pub fn into_logs(self) -> Vec<FoodLog> {
+        self.logs
+    }
+}
+
+fn operation_shape_is_valid(kind: FoodLogOperationKind, log_count: usize) -> bool {
+    match kind {
+        FoodLogOperationKind::Single | FoodLogOperationKind::AdHoc => log_count == 1,
+        FoodLogOperationKind::Batch => (1..=50).contains(&log_count),
     }
 }
 
@@ -141,8 +369,8 @@ impl FoodLogItemSnapshot {
 
     pub fn from_meal(meal: &Meal) -> Self {
         Self::Meal {
-            id: meal.id,
-            name: meal.name.as_str().to_string(),
+            id: meal.id(),
+            name: meal.name().as_str().to_string(),
         }
     }
 
@@ -191,8 +419,6 @@ pub struct FoodLog {
     quantity_unit: UnitCode,
     nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
     notes: Option<String>,
-    idempotency_key: Option<String>,
-    request_fingerprint: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -207,8 +433,6 @@ pub struct FoodLogBuilder {
     meal_slot: Option<MealSlot>,
     device_timezone: Option<String>,
     notes: Option<String>,
-    idempotency_key: Option<String>,
-    request_fingerprint: Option<String>,
 }
 
 impl FoodLogBuilder {
@@ -228,8 +452,6 @@ impl FoodLogBuilder {
             meal_slot: None,
             device_timezone: None,
             notes: None,
-            idempotency_key: None,
-            request_fingerprint: None,
         }
     }
 
@@ -267,8 +489,6 @@ impl FoodLogBuilder {
             meal_slot: None,
             device_timezone: None,
             notes: None,
-            idempotency_key: None,
-            request_fingerprint: None,
         })
     }
 
@@ -287,12 +507,6 @@ impl FoodLogBuilder {
         self
     }
 
-    pub fn idempotency(mut self, key: IdempotencyKey, request_fingerprint: String) -> Self {
-        self.idempotency_key = Some(key.as_str().to_owned());
-        self.request_fingerprint = Some(request_fingerprint);
-        self
-    }
-
     pub fn build(self) -> FoodLog {
         let now = Utc::now();
         let (quantity_amount, quantity_unit) = self.quantity.into_parts();
@@ -308,8 +522,6 @@ impl FoodLogBuilder {
             quantity_unit,
             nutrient_snapshots: snapshots_from_calculated(self.nutrition),
             notes: self.notes,
-            idempotency_key: self.idempotency_key,
-            request_fingerprint: self.request_fingerprint,
             created_at: now,
             updated_at: now,
         }
@@ -421,14 +633,6 @@ impl FoodLog {
         self.notes.as_deref()
     }
 
-    pub fn idempotency_key(&self) -> Option<&str> {
-        self.idempotency_key.as_deref()
-    }
-
-    pub fn request_fingerprint(&self) -> Option<&str> {
-        self.request_fingerprint.as_deref()
-    }
-
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
@@ -470,13 +674,9 @@ impl FoodLog {
         device_timezone: Option<String>,
         meal: &Meal,
         quantity: Quantity,
-        products: &[(ProductId, Product)],
-        unit_converter: &UnitConverter,
+        nutrition: CalculatedNutrition,
         notes: Option<String>,
     ) -> Result<Self, JournalError> {
-        let nutrition = meal
-            .nutrition_for(&quantity, products, unit_converter)
-            .map_err(JournalError::Validation)?;
         Ok(self.update(
             log_date,
             meal_slot,
@@ -529,8 +729,6 @@ impl FoodLog {
                 })
                 .collect(),
             notes,
-            idempotency_key: self.idempotency_key.clone(),
-            request_fingerprint: self.request_fingerprint.clone(),
             created_at: self.created_at,
             updated_at: Utc::now(),
         })
@@ -552,8 +750,6 @@ impl FoodLog {
         quantity_unit: UnitCode,
         nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
         notes: Option<String>,
-        idempotency_key: Option<String>,
-        request_fingerprint: Option<String>,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
     ) -> Self {
@@ -568,8 +764,6 @@ impl FoodLog {
             quantity_unit,
             nutrient_snapshots,
             notes,
-            idempotency_key,
-            request_fingerprint,
             created_at,
             updated_at,
         }
@@ -598,8 +792,6 @@ impl FoodLog {
             quantity_unit,
             nutrient_snapshots: snapshots_from_calculated(nutrition),
             notes,
-            idempotency_key: self.idempotency_key.clone(),
-            request_fingerprint: self.request_fingerprint.clone(),
             created_at: self.created_at,
             updated_at: Utc::now(),
         }
@@ -688,14 +880,21 @@ pub use crate::journal::error::JournalError;
 
 #[async_trait]
 pub trait FoodLogRepo: Send + Sync {
-    async fn create(&self, log: &FoodLog) -> Result<(), JournalError>;
-    async fn create_many(&self, logs: &[FoodLog]) -> Result<(), JournalError>;
+    async fn create_operation(
+        &self,
+        write: &FoodLogCreateOperationWrite,
+    ) -> Result<(), JournalError>;
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, JournalError>;
-    async fn find_by_user_and_key(
+    async fn find_operation_by_user_and_key(
         &self,
         user_id: Uuid,
         idempotency_key: &IdempotencyKey,
-    ) -> Result<Option<FoodLog>, JournalError>;
+    ) -> Result<Option<FoodLogCreateOperation>, JournalError>;
+    async fn list_by_ids(
+        &self,
+        user_id: Uuid,
+        ids: &[FoodLogId],
+    ) -> Result<Vec<FoodLog>, JournalError>;
     async fn list_by_user_and_date(
         &self,
         user_id: Uuid,
@@ -1104,6 +1303,29 @@ mod tests {
                 prop_assert_eq!(&snapshot.unit, &original.unit);
                 prop_assert_eq!(snapshot.amount, original.amount * scale);
             }
+        }
+    }
+
+    #[test]
+    fn request_fingerprint_accepts_only_lowercase_sha256_hex() {
+        let digest = "0123456789abcdef".repeat(4);
+        assert_eq!(
+            RequestFingerprint::new(digest.clone()).unwrap().as_str(),
+            digest
+        );
+
+        for invalid in [
+            String::new(),
+            "0".repeat(63),
+            "0".repeat(65),
+            "A".repeat(64),
+            "g".repeat(64),
+            format!("{} ", "0".repeat(63)),
+        ] {
+            assert!(
+                RequestFingerprint::new(invalid.clone()).is_err(),
+                "accepted invalid fingerprint: {invalid:?}"
+            );
         }
     }
 }

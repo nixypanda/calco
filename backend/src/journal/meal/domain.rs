@@ -3,9 +3,9 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::catalog::domain::calculation::{CalculatedNutrition, NutrientAmount, Quantity};
+use crate::catalog::domain::calculation::Quantity;
 use crate::catalog::domain::units::UnitConverter;
-use crate::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
+use crate::catalog::domain::{ProductId, UnitCode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MealId(pub Uuid);
@@ -52,6 +52,66 @@ impl MealName {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MealNotes(pub String);
 
+/// A structurally validated meal quantity.
+///
+/// The amount is positive and the unit is nonblank. Catalog conversion is a
+/// separate, dynamic concern: a structurally valid quantity can still become
+/// unconvertible when a product serving disappears.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MealQuantity {
+    amount: Decimal,
+    unit: UnitCode,
+}
+
+impl MealQuantity {
+    pub fn new(amount: Decimal, unit: UnitCode) -> Result<Self, JournalError> {
+        if amount <= Decimal::ZERO {
+            return Err(JournalError::Validation(
+                "meal quantity amount must be positive".into(),
+            ));
+        }
+        if unit.0.trim().is_empty() {
+            return Err(JournalError::Validation(
+                "meal quantity unit must not be blank".into(),
+            ));
+        }
+        Ok(Self { amount, unit })
+    }
+
+    pub fn amount(&self) -> Decimal {
+        self.amount
+    }
+
+    pub fn unit(&self) -> &UnitCode {
+        &self.unit
+    }
+
+    pub fn to_quantity(&self) -> Result<Quantity, JournalError> {
+        Quantity::new(self.amount, self.unit.clone()).map_err(JournalError::from)
+    }
+
+    pub fn into_parts(self) -> (Decimal, UnitCode) {
+        (self.amount, self.unit)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MealTotalQuantityPatch {
+    Unchanged,
+    Clear,
+    Set(MealQuantity),
+}
+
+impl MealTotalQuantityPatch {
+    fn apply(&self, current: Option<MealQuantity>) -> Option<MealQuantity> {
+        match self {
+            Self::Unchanged => current,
+            Self::Clear => None,
+            Self::Set(quantity) => Some(quantity.clone()),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum MealComponentItem {
     Product(ProductId),
@@ -59,35 +119,59 @@ pub enum MealComponentItem {
 
 #[derive(Debug, Clone)]
 pub struct MealComponent {
-    pub id: Uuid,
-    pub item: MealComponentItem,
-    pub quantity_amount: Decimal,
-    pub quantity_unit: UnitCode,
+    id: Uuid,
+    item: MealComponentItem,
+    quantity: MealQuantity,
 }
 
 impl MealComponent {
-    pub fn new(item: MealComponentItem, quantity: Quantity) -> Self {
-        let (quantity_amount, quantity_unit) = quantity.into_parts();
+    pub fn new(item: MealComponentItem, quantity: MealQuantity) -> Self {
         Self {
             id: Uuid::new_v4(),
             item,
-            quantity_amount,
-            quantity_unit,
+            quantity,
         }
+    }
+
+    pub(crate) fn from_stored(id: Uuid, item: MealComponentItem, quantity: MealQuantity) -> Self {
+        Self { id, item, quantity }
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    pub fn item(&self) -> &MealComponentItem {
+        &self.item
+    }
+
+    pub fn quantity(&self) -> &MealQuantity {
+        &self.quantity
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Meal {
-    pub id: MealId,
-    pub user_id: Uuid,
-    pub name: MealName,
-    pub notes: Option<MealNotes>,
-    pub total_quantity_amount: Option<Decimal>,
-    pub total_quantity_unit: Option<UnitCode>,
-    pub components: Vec<MealComponent>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    id: MealId,
+    user_id: Uuid,
+    name: MealName,
+    notes: Option<MealNotes>,
+    total_quantity: Option<MealQuantity>,
+    components: Vec<MealComponent>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+/// Validated fields read from the meal tables before aggregate reconstruction.
+pub(crate) struct StoredMeal {
+    pub(crate) id: MealId,
+    pub(crate) user_id: Uuid,
+    pub(crate) name: String,
+    pub(crate) notes: Option<String>,
+    pub(crate) total_quantity: Option<MealQuantity>,
+    pub(crate) components: Vec<MealComponent>,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) updated_at: DateTime<Utc>,
 }
 
 impl Meal {
@@ -95,8 +179,7 @@ impl Meal {
         user_id: Uuid,
         name: String,
         notes: Option<String>,
-        total_quantity_amount: Option<Decimal>,
-        total_quantity_unit: Option<UnitCode>,
+        total_quantity: Option<MealQuantity>,
         components: Vec<MealComponent>,
         now: DateTime<Utc>,
     ) -> Result<Self, JournalError> {
@@ -108,11 +191,28 @@ impl Meal {
             user_id,
             name,
             notes: notes.map(MealNotes),
-            total_quantity_amount,
-            total_quantity_unit,
+            total_quantity,
             components,
             created_at: now,
             updated_at: now,
+        })
+    }
+
+    pub(crate) fn from_stored(stored: StoredMeal) -> Result<Self, JournalError> {
+        if stored.components.is_empty() {
+            return Err(JournalError::Internal(
+                "stored meal has no components".into(),
+            ));
+        }
+        Ok(Self {
+            id: stored.id,
+            user_id: stored.user_id,
+            name: MealName::new(&stored.name)?,
+            notes: stored.notes.map(MealNotes),
+            total_quantity: stored.total_quantity,
+            components: stored.components,
+            created_at: stored.created_at,
+            updated_at: stored.updated_at,
         })
     }
 
@@ -120,8 +220,7 @@ impl Meal {
         &self,
         name: Option<String>,
         notes: Option<Option<String>>,
-        total_quantity_amount: Option<Option<Decimal>>,
-        total_quantity_unit: Option<Option<UnitCode>>,
+        total_quantity: MealTotalQuantityPatch,
         components: Option<Vec<MealComponent>>,
         now: DateTime<Utc>,
     ) -> Result<Self, JournalError> {
@@ -136,6 +235,7 @@ impl Meal {
             }
             None => self.components.clone(),
         };
+        let total_quantity = total_quantity.apply(self.total_quantity.clone());
         Ok(Self {
             id: self.id,
             user_id: self.user_id,
@@ -143,12 +243,43 @@ impl Meal {
             notes: notes
                 .map(|n| n.map(MealNotes))
                 .unwrap_or(self.notes.clone()),
-            total_quantity_amount: total_quantity_amount.unwrap_or(self.total_quantity_amount),
-            total_quantity_unit: total_quantity_unit.unwrap_or(self.total_quantity_unit.clone()),
+            total_quantity,
             components,
             created_at: self.created_at,
             updated_at: now,
         })
+    }
+
+    pub fn id(&self) -> MealId {
+        self.id
+    }
+
+    pub fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    pub fn name(&self) -> &MealName {
+        &self.name
+    }
+
+    pub fn notes(&self) -> Option<&MealNotes> {
+        self.notes.as_ref()
+    }
+
+    pub fn total_quantity(&self) -> Option<&MealQuantity> {
+        self.total_quantity.as_ref()
+    }
+
+    pub fn components(&self) -> &[MealComponent] {
+        &self.components
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    pub fn updated_at(&self) -> DateTime<Utc> {
+        self.updated_at
     }
 
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
@@ -159,102 +290,42 @@ impl Meal {
         &self,
         quantity: &Quantity,
         unit_converter: &UnitConverter,
-    ) -> Result<Decimal, String> {
+    ) -> Result<Decimal, MealQuantityConversionError> {
         let amount = quantity.amount();
         let unit = quantity.unit();
         if let Some(grams) = unit_converter.mass_to_grams(amount, unit) {
             return Ok(grams);
         }
-        match (&self.total_quantity_amount, &self.total_quantity_unit) {
-            (Some(total_amount), Some(total_unit))
-                if total_unit.0 == unit.0 && *total_amount > Decimal::ZERO =>
-            {
-                Ok(amount / *total_amount * self.declared_grams(unit_converter)?)
+        match &self.total_quantity {
+            Some(total) if total.unit().0 == unit.0 && total.amount() > Decimal::ZERO => {
+                Ok(amount / total.amount() * self.declared_grams(unit_converter)?)
             }
-            _ => Err(format!(
-                "cannot convert {} {} to grams for meal logging",
-                amount, unit.0
-            )),
+            _ => Err(MealQuantityConversionError::UnsupportedQuantity),
         }
     }
 
-    fn declared_grams(&self, unit_converter: &UnitConverter) -> Result<Decimal, String> {
-        match (&self.total_quantity_amount, &self.total_quantity_unit) {
-            (Some(amount), Some(unit)) if *amount > Decimal::ZERO => {
-                unit_converter.mass_to_grams(*amount, unit).ok_or_else(|| {
-                    "meal total quantity must be defined in a mass unit for non-mass logging".into()
-                })
-            }
-            _ => Err(
-                "meal total quantity must be defined in a mass unit for non-mass logging".into(),
-            ),
-        }
-    }
-
-    pub fn nutrition_for(
+    fn declared_grams(
         &self,
-        scale_quantity: &Quantity,
-        products: &[(ProductId, Product)],
         unit_converter: &UnitConverter,
-    ) -> Result<CalculatedNutrition, String> {
-        let scale_grams = self.quantity_to_grams(scale_quantity, unit_converter)?;
-
-        let mut total_nutrients: Vec<(NutrientCode, Decimal, UnitCode)> = Vec::new();
-        let mut total_component_grams = Decimal::ZERO;
-
-        for component in &self.components {
-            match &component.item {
-                MealComponentItem::Product(product_id) => {
-                    let product = products
-                        .iter()
-                        .find(|(id, _)| id == product_id)
-                        .map(|(_, product)| product)
-                        .ok_or_else(|| {
-                            format!("product {} in meal {} not found", product_id.0, self.id.0)
-                        })?;
-
-                    let component_qty =
-                        Quantity::new(component.quantity_amount, component.quantity_unit.clone())
-                            .map_err(|e| e.to_string())?;
-                    let component_grams =
-                        product.quantity_to_grams(&component_qty, unit_converter)?;
-                    total_component_grams += component_grams;
-
-                    let contribution_ratio = component_grams / Decimal::new(100, 0);
-                    for pn in &product.nutrients {
-                        let contributed_amount = pn.amount_per_100g.value() * contribution_ratio;
-                        match total_nutrients
-                            .iter_mut()
-                            .find(|(code, _, _)| code == &pn.nutrient_code)
-                        {
-                            Some((_, existing_amount, _)) => *existing_amount += contributed_amount,
-                            None => total_nutrients.push((
-                                pn.nutrient_code.clone(),
-                                contributed_amount,
-                                pn.unit.clone(),
-                            )),
-                        }
-                    }
-                }
-            }
+    ) -> Result<Decimal, MealQuantityConversionError> {
+        let total = self
+            .total_quantity
+            .as_ref()
+            .ok_or(MealQuantityConversionError::UnsupportedDeclaredTotal)?;
+        if total.amount() <= Decimal::ZERO {
+            return Err(MealQuantityConversionError::UnsupportedDeclaredTotal);
         }
-
-        if total_component_grams <= Decimal::ZERO {
-            return Err("meal total quantity must be positive".into());
-        }
-
-        let scale_factor = scale_grams / total_component_grams;
-        Ok(CalculatedNutrition {
-            amounts: total_nutrients
-                .into_iter()
-                .map(|(code, amount, unit)| NutrientAmount {
-                    nutrient_code: code,
-                    amount: amount * scale_factor,
-                    unit,
-                })
-                .collect(),
-        })
+        unit_converter
+            .mass_to_grams(total.amount(), total.unit())
+            .filter(|grams| *grams > Decimal::ZERO)
+            .ok_or(MealQuantityConversionError::UnsupportedDeclaredTotal)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MealQuantityConversionError {
+    UnsupportedQuantity,
+    UnsupportedDeclaredTotal,
 }
 
 fn validate_meal_components(components: &[MealComponent]) -> Result<(), JournalError> {
@@ -305,21 +376,37 @@ mod tests {
     fn sample_component() -> MealComponent {
         MealComponent::new(
             MealComponentItem::Product(ProductId(Uuid::nil())),
-            Quantity::new(Decimal::ONE, UnitCode("g".into())).unwrap(),
+            MealQuantity::new(Decimal::ONE, UnitCode("g".into())).unwrap(),
         )
     }
 
-    fn make_meal(total_amount: Option<Decimal>, total_unit: Option<UnitCode>) -> Meal {
+    fn make_meal(total_quantity: Option<MealQuantity>) -> Meal {
         Meal::create(
             Uuid::nil(),
             "Meal".into(),
             None,
-            total_amount,
-            total_unit,
+            total_quantity,
             vec![sample_component()],
             Utc::now(),
         )
         .expect("meal should be valid")
+    }
+
+    fn make_stored_meal(amount: Decimal, unit: UnitCode) -> Meal {
+        let now = Utc::now();
+        Meal::from_stored(StoredMeal {
+            id: MealId::new(),
+            user_id: Uuid::nil(),
+            name: "Meal".into(),
+            notes: None,
+            total_quantity: Some(
+                MealQuantity::new(amount, unit).expect("stored quantity should be valid"),
+            ),
+            components: vec![sample_component()],
+            created_at: now,
+            updated_at: now,
+        })
+        .expect("stored meal should load")
     }
 
     fn mass_converter() -> UnitConverter {
@@ -327,6 +414,48 @@ mod tests {
             ("g".to_string(), Decimal::ONE),
             ("kg".to_string(), Decimal::new(1000, 0)),
         ])
+    }
+
+    #[test]
+    fn meal_quantity_rejects_nonpositive_amounts_and_blank_units() {
+        assert!(matches!(
+            MealQuantity::new(Decimal::ZERO, UnitCode("g".into())),
+            Err(JournalError::Validation(_))
+        ));
+        assert!(matches!(
+            MealQuantity::new(Decimal::new(-1, 0), UnitCode("g".into())),
+            Err(JournalError::Validation(_))
+        ));
+        assert!(matches!(
+            MealQuantity::new(Decimal::ONE, UnitCode("   ".into())),
+            Err(JournalError::Validation(_))
+        ));
+    }
+
+    #[test]
+    fn stored_meal_quantity_can_preserve_nonmass_units() {
+        let meal = make_stored_meal(Decimal::ONE, UnitCode("cup".into()));
+        assert_eq!(
+            meal.total_quantity().map(MealQuantity::unit),
+            Some(&UnitCode("cup".into()))
+        );
+    }
+
+    #[test]
+    fn stored_meal_restore_rejects_empty_components() {
+        let now = Utc::now();
+        let error = Meal::from_stored(StoredMeal {
+            id: MealId::new(),
+            user_id: Uuid::nil(),
+            name: "Empty".into(),
+            notes: None,
+            total_quantity: None,
+            components: vec![],
+            created_at: now,
+            updated_at: now,
+        })
+        .expect_err("stored meals must contain at least one component");
+        assert!(matches!(error, JournalError::Internal(_)));
     }
 
     proptest! {
@@ -342,30 +471,32 @@ mod tests {
         ) {
             let amount = Decimal::new(amount, 0);
             let total_amount = Decimal::new(total_amount, 0);
-            let meal = make_meal(Some(total_amount), Some(UnitCode("serving".into())));
+            let meal = make_meal(Some(
+                MealQuantity::new(total_amount, UnitCode("serving".into())).unwrap(),
+            ));
             let uc = mass_converter();
             let quantity = Quantity::new(amount, UnitCode("serving".into())).unwrap();
             prop_assert!(meal.quantity_to_grams(&quantity, &uc).is_err());
         }
 
-        // Property: Declared grams rejects missing totals, zero-gram totals, and positive
-        // totals expressed in servings.
+        // Property: Declared grams rejects missing totals and positive totals
+        // expressed in servings.
         // Why: Weight-dependent calculations require a known, positive mass total.
         #[test]
         fn meal_declared_grams_rejects_non_mass_or_missing_total(
-            total_amount in 0i64..=1_000_000i64,
+            total_amount in 1i64..=1_000_000i64,
         ) {
             let uc = mass_converter();
-            let meal = make_meal(None, None);
+            let meal = make_meal(None);
             prop_assert!(meal.declared_grams(&uc).is_err());
 
-            let meal = make_meal(Some(Decimal::ZERO), Some(UnitCode("g".into())));
-            prop_assert!(meal.declared_grams(&uc).is_err());
-
-            let meal = make_meal(
-                Some(Decimal::new(total_amount.max(1), 0)),
-                Some(UnitCode("serving".into())),
-            );
+            let meal = make_meal(Some(
+                MealQuantity::new(
+                    Decimal::new(total_amount, 0),
+                    UnitCode("serving".into()),
+                )
+                .unwrap(),
+            ));
             prop_assert!(meal.declared_grams(&uc).is_err());
         }
     }

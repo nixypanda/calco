@@ -72,7 +72,7 @@ assistant -> catalog (read-only catalog vocabulary)
 journal -> catalog, auth
 ```
 
-`auth` depends on nothing. `catalog` depends on nothing. `journal` depends on `catalog` and on `auth` only at the API edge (its HTTP handlers use the `ReadUser` and `WriteUser` extractors), never in domain or app. `import` depends on `catalog`. `assistant` depends on `catalog` for read-only vocabulary. Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
+`auth` depends on nothing. `catalog` depends on nothing. `journal` depends on `catalog` and on `auth` only at the API edge (its HTTP handlers use the `AccountBoundReadUser` and `AccountBoundWriteUser` extractors), never in domain or app. `import` depends on `catalog`. `assistant` depends on `catalog` for read-only vocabulary. Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
 
 ### Auth
 

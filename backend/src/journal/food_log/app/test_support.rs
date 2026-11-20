@@ -16,25 +16,33 @@ use uuid::Uuid;
 
 struct MockFoodLogRepo {
     logs: Mutex<Vec<FoodLog>>,
+    operations: Mutex<Vec<FoodLogCreateOperation>>,
 }
 
 impl MockFoodLogRepo {
     fn new() -> Self {
         Self {
             logs: Mutex::new(vec![]),
+            operations: Mutex::new(vec![]),
         }
     }
 }
 
 #[async_trait]
 impl FoodLogRepo for MockFoodLogRepo {
-    async fn create(&self, log: &FoodLog) -> Result<(), JournalError> {
-        self.logs.lock().unwrap().push(log.clone());
-        Ok(())
-    }
-
-    async fn create_many(&self, logs: &[FoodLog]) -> Result<(), JournalError> {
-        self.logs.lock().unwrap().extend_from_slice(logs);
+    async fn create_operation(
+        &self,
+        write: &FoodLogCreateOperationWrite,
+    ) -> Result<(), JournalError> {
+        let mut operations = self.operations.lock().unwrap();
+        if operations.iter().any(|existing| {
+            existing.user_id() == write.operation().user_id()
+                && existing.idempotency_key() == write.operation().idempotency_key()
+        }) {
+            return Err(JournalError::DuplicateIdempotencyKey);
+        }
+        operations.push(write.operation().clone());
+        self.logs.lock().unwrap().extend_from_slice(write.logs());
         Ok(())
     }
 
@@ -43,18 +51,33 @@ impl FoodLogRepo for MockFoodLogRepo {
         Ok(logs.iter().find(|l| l.id() == id).cloned())
     }
 
-    async fn find_by_user_and_key(
+    async fn find_operation_by_user_and_key(
         &self,
         user_id: Uuid,
         idempotency_key: &IdempotencyKey,
-    ) -> Result<Option<FoodLog>, JournalError> {
+    ) -> Result<Option<FoodLogCreateOperation>, JournalError> {
+        Ok(self
+            .operations
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|operation| {
+                operation.user_id() == user_id && operation.idempotency_key() == idempotency_key
+            })
+            .cloned())
+    }
+
+    async fn list_by_ids(
+        &self,
+        user_id: Uuid,
+        ids: &[FoodLogId],
+    ) -> Result<Vec<FoodLog>, JournalError> {
         let logs = self.logs.lock().unwrap();
         Ok(logs
             .iter()
-            .find(|log| {
-                log.user_id() == user_id && log.idempotency_key() == Some(idempotency_key.as_str())
-            })
-            .cloned())
+            .filter(|log| log.user_id() == user_id && ids.contains(&log.id()))
+            .cloned()
+            .collect())
     }
 
     async fn list_by_user_and_date(
@@ -176,6 +199,14 @@ impl CatalogReadPort for MockCatalogReadPort {
             .map(|product| vec![(product.id, product)])
             .unwrap_or_default())
     }
+
+    async fn resolve_products_available(
+        &self,
+        actor_id: Uuid,
+        ids: &[ProductId],
+    ) -> Result<Vec<(ProductId, Product)>, CatalogError> {
+        self.resolve_products(actor_id, ids).await
+    }
 }
 
 struct MockMealReadPort {
@@ -209,7 +240,7 @@ impl NutrientCatalogReadPort for MockNutrientCatalogReadPort {
 impl MockMealReadPort {
     fn with_meal(meal: Meal) -> Self {
         Self {
-            meal_id: meal.id,
+            meal_id: meal.id(),
             meal: Some(meal),
         }
     }
@@ -234,10 +265,10 @@ impl MealReadPort for MockMealReadPort {
                 .meal
                 .clone()
                 .ok_or_else(|| JournalError::NotFound("meal not found".into()))?;
-            Ok(ResolvedMeal {
+            Ok(ResolvedMeal::from_parts(
                 meal,
-                products: vec![(ProductId(Uuid::nil()), sample_product())],
-            })
+                vec![(ProductId(Uuid::nil()), sample_product())],
+            ))
         } else {
             Err(JournalError::NotFound("meal not found".into()))
         }
@@ -279,22 +310,22 @@ pub(super) fn sample_product_with_serving() -> Product {
 }
 
 pub(super) fn sample_meal() -> Meal {
-    Meal {
+    Meal::from_stored(StoredMeal {
         id: MealId(Uuid::nil()),
         user_id: Uuid::nil(),
-        name: MealName::new("Test Meal").unwrap(),
+        name: "Test Meal".to_string(),
         notes: None,
-        total_quantity_amount: None,
-        total_quantity_unit: None,
-        components: vec![MealComponent {
-            id: Uuid::new_v4(),
-            item: MealComponentItem::Product(ProductId(Uuid::nil())),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: UnitCode("g".to_string()),
-        }],
+        total_quantity: None,
+        components: vec![MealComponent::from_stored(
+            Uuid::new_v4(),
+            MealComponentItem::Product(ProductId(Uuid::nil())),
+            MealQuantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                .expect("sample quantity should be valid"),
+        )],
         created_at: Utc::now(),
         updated_at: Utc::now(),
-    }
+    })
+    .expect("sample meal should load")
 }
 
 fn sample_unit_converter() -> Arc<UnitConverter> {

@@ -23,6 +23,7 @@ pub fn auth_routes(state: AuthModule) -> Router {
         )
         .route("/auth/login", post(login_handler))
         .route("/auth/session", get(session_handler))
+        .route("/auth/identity", get(identity_handler))
         .route("/auth/logout", post(logout_handler))
         .route(
             "/auth/api-keys",
@@ -64,14 +65,61 @@ where
     }
 }
 
-// ─── Auth Extractors ──────────────────────────────────────────
+// ─── Account-Bound Auth Extractors ────────────────────────────
 
-pub struct SessionUser {
+pub const ACCOUNT_BINDING_HEADER: &str = "x-calco-account-id";
+
+struct SessionPrincipal {
+    identity: Identity,
+    profile: UserProfile,
+}
+
+/// Read-scoped account extractor for normal-user routes.
+///
+/// The principal is authenticated first, then the required
+/// `X-CalCo-Account-ID` header must name exactly that principal's profile.
+/// The header is never an authentication mechanism.
+pub struct AccountBoundReadUser(pub UserProfile);
+
+impl<S> FromRequestParts<S> for AccountBoundReadUser
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
+    type Rejection = AuthErrorResponse;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let profile = resolve_read_user(parts, state).await?;
+        verify_expected_account(parts, profile.id)?;
+        Ok(Self(profile))
+    }
+}
+
+pub struct AccountBoundWriteUser(pub UserProfile);
+
+impl<S> FromRequestParts<S> for AccountBoundWriteUser
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
+    type Rejection = AuthErrorResponse;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let profile = resolve_write_user(parts, state).await?;
+        verify_expected_account(parts, profile.id)?;
+        Ok(Self(profile))
+    }
+}
+
+/// Browser-session-only account extractor for normal-user routes.
+pub struct AccountBoundSessionUser {
     pub identity: Identity,
     pub profile: UserProfile,
 }
 
-impl<S> FromRequestParts<S> for SessionUser
+impl<S> FromRequestParts<S> for AccountBoundSessionUser
 where
     S: Send + Sync,
     SessionCookieConfig: FromRef<S>,
@@ -80,28 +128,85 @@ where
     type Rejection = AuthErrorResponse;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        resolve_session_user(parts, state).await
+        let principal = resolve_session_user(parts, state).await?;
+        verify_expected_account(parts, principal.profile.id)?;
+        Ok(Self {
+            identity: principal.identity,
+            profile: principal.profile,
+        })
     }
 }
 
-pub struct ReadUser(pub UserProfile);
+fn verify_expected_account(
+    parts: &Parts,
+    actual_profile_id: Uuid,
+) -> Result<(), AuthErrorResponse> {
+    let mut values = parts.headers.get_all(ACCOUNT_BINDING_HEADER).iter();
+    let Some(value) = values.next() else {
+        return Err(missing_account_header_response());
+    };
+    if values.next().is_some() {
+        return Err(invalid_account_header_response());
+    }
+    let raw = value
+        .to_str()
+        .map_err(|_| invalid_account_header_response())?;
+    let expected_profile_id =
+        Uuid::parse_str(raw.trim()).map_err(|_| invalid_account_header_response())?;
+    if expected_profile_id != actual_profile_id {
+        return Err(session_account_changed_response());
+    }
+    Ok(())
+}
 
-impl<S> FromRequestParts<S> for ReadUser
-where
-    S: Send + Sync,
-    SessionCookieConfig: FromRef<S>,
-    AuthModule: FromRef<S>,
-{
-    type Rejection = AuthErrorResponse;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        Ok(ReadUser(resolve_read_user(parts, state).await?))
+fn missing_account_header_response() -> AuthErrorResponse {
+    AuthErrorResponse {
+        status: StatusCode::BAD_REQUEST,
+        body: ErrorResponse {
+            error: ErrorBody {
+                code: "missing_account_header".into(),
+                message: "X-CalCo-Account-ID is required for this account-scoped route".into(),
+            },
+        },
     }
 }
 
-pub struct WriteUser(pub UserProfile);
+fn invalid_account_header_response() -> AuthErrorResponse {
+    AuthErrorResponse {
+        status: StatusCode::BAD_REQUEST,
+        body: ErrorResponse {
+            error: ErrorBody {
+                code: "invalid_account_header".into(),
+                message: "X-CalCo-Account-ID must be a single user profile UUID".into(),
+            },
+        },
+    }
+}
 
-impl<S> FromRequestParts<S> for WriteUser
+fn session_account_changed_response() -> AuthErrorResponse {
+    AuthErrorResponse {
+        status: StatusCode::UNAUTHORIZED,
+        body: ErrorResponse {
+            error: ErrorBody {
+                code: "session_account_changed".into(),
+                message: "authenticated account changed; retry with the current account".into(),
+            },
+        },
+    }
+}
+
+/// Authenticated identity discovery for API-key-only clients.
+///
+/// This extractor accepts a bearer key or a browser session but does not
+/// require an expected account binding header. It is intentionally limited to
+/// read-only identity discovery so a client can learn its own profile UUID and
+/// then use the normal account-bound routes.
+pub struct IdentityDiscoveryUser {
+    pub identity: Identity,
+    pub profile: Option<UserProfile>,
+}
+
+impl<S> FromRequestParts<S> for IdentityDiscoveryUser
 where
     S: Send + Sync,
     SessionCookieConfig: FromRef<S>,
@@ -110,7 +215,30 @@ where
     type Rejection = AuthErrorResponse;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        Ok(WriteUser(resolve_write_user(parts, state).await?))
+        let auth = AuthModule::from_ref(state);
+        if let Some(value) = parts.headers.get(header::AUTHORIZATION) {
+            let raw_token = parse_bearer_token(value)?;
+            let authenticated = auth
+                .api_keys
+                .authenticate(raw_token, Utc::now())
+                .await
+                .map_err(|e| auth_error_to_response(&e))?;
+            return Ok(Self {
+                identity: authenticated.identity,
+                profile: Some(authenticated.profile),
+            });
+        }
+
+        let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
+        let result = auth
+            .sessions
+            .get_session(&token)
+            .await
+            .map_err(|e| auth_error_to_response(&e))?;
+        Ok(Self {
+            identity: result.identity,
+            profile: result.profile,
+        })
     }
 }
 
@@ -380,6 +508,13 @@ async fn session_handler(
     )))
 }
 
+async fn identity_handler(user: IdentityDiscoveryUser) -> Json<LoginSessionResponse> {
+    Json(identity_and_profile_to_response(
+        user.identity,
+        user.profile,
+    ))
+}
+
 async fn logout_handler(
     State(state): State<AuthModule>,
     RawSessionToken(token): RawSessionToken,
@@ -395,7 +530,7 @@ async fn logout_handler(
 }
 
 async fn list_api_keys_handler(
-    user: SessionUser,
+    user: AccountBoundSessionUser,
     State(state): State<AuthModule>,
 ) -> Result<Json<ApiKeyListResponse>, AuthErrorResponse> {
     let keys = state
@@ -410,7 +545,7 @@ async fn list_api_keys_handler(
 }
 
 async fn create_api_key_handler(
-    user: SessionUser,
+    user: AccountBoundSessionUser,
     State(state): State<AuthModule>,
     Json(body): Json<CreateApiKeyRequest>,
 ) -> Result<
@@ -450,7 +585,7 @@ async fn create_api_key_handler(
 }
 
 async fn delete_api_key_handler(
-    user: SessionUser,
+    user: AccountBoundSessionUser,
     State(state): State<AuthModule>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AuthErrorResponse> {
@@ -691,7 +826,7 @@ fn user_with_profile_to_item_dto(user: UserWithProfile) -> UserItemDto {
 async fn resolve_session_user<S>(
     parts: &mut Parts,
     state: &S,
-) -> Result<SessionUser, AuthErrorResponse>
+) -> Result<SessionPrincipal, AuthErrorResponse>
 where
     S: Send + Sync,
     SessionCookieConfig: FromRef<S>,
@@ -711,7 +846,7 @@ where
 
     let profile = result.profile.ok_or_else(forbidden_auth_error_response)?;
 
-    Ok(SessionUser {
+    Ok(SessionPrincipal {
         identity: result.identity,
         profile,
     })

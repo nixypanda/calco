@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::NaiveDate;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -11,7 +11,7 @@ use crate::catalog::domain::units::UnitConverter;
 use crate::journal::food_log::domain::*;
 use crate::journal::meal::app::MealReadPort;
 
-pub struct LogFoodInput {
+pub struct LogFoodItemInput {
     pub log_date: NaiveDate,
     pub meal_slot: Option<MealSlot>,
     pub device_timezone: Option<String>,
@@ -20,7 +20,18 @@ pub struct LogFoodInput {
     pub notes: Option<String>,
 }
 
+pub struct LogFoodInput {
+    pub idempotency_key: IdempotencyKey,
+    pub item: LogFoodItemInput,
+}
+
+pub struct LogFoodBatchInput {
+    pub idempotency_key: IdempotencyKey,
+    pub items: Vec<LogFoodItemInput>,
+}
+
 pub struct LogAdHocFoodInput {
+    pub idempotency_key: IdempotencyKey,
     pub log_date: NaiveDate,
     pub meal_slot: Option<MealSlot>,
     pub device_timezone: Option<String>,
@@ -40,9 +51,22 @@ pub struct UpdateFoodInput {
     pub notes: Option<Option<String>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoodLogCreateDisposition {
+    Created,
+    Replayed,
+}
+
+#[derive(Debug)]
 pub struct FoodLogCreateOutcome {
+    pub disposition: FoodLogCreateDisposition,
     pub log: FoodLog,
-    pub replayed: bool,
+}
+
+#[derive(Debug)]
+pub struct FoodLogBatchCreateOutcome {
+    pub disposition: FoodLogCreateDisposition,
+    pub logs: Vec<FoodLog>,
 }
 
 #[derive(Clone)]
@@ -77,65 +101,178 @@ impl FoodLogService {
         &self,
         actor_id: Uuid,
         input: LogFoodInput,
-    ) -> Result<FoodLog, JournalError> {
-        let log = self.build_log(actor_id, input, None).await?;
-        self.food_log_repo.create(&log).await?;
-        Ok(log)
-    }
-
-    pub async fn log_item_idempotent(
-        &self,
-        actor_id: Uuid,
-        input: LogFoodInput,
-        idempotency_key: Option<IdempotencyKey>,
     ) -> Result<FoodLogCreateOutcome, JournalError> {
-        let Some(idempotency_key) = idempotency_key else {
-            let log = self.log_item(actor_id, input).await?;
-            return Ok(FoodLogCreateOutcome {
-                log,
-                replayed: false,
-            });
-        };
+        let LogFoodInput {
+            idempotency_key,
+            item,
+        } = input;
+        let fingerprint = food_log_create_fingerprint(&item);
 
-        let fingerprint = food_log_create_fingerprint(&input);
-
-        if let Some(log) = self
+        if let Some(operation) = self
             .food_log_repo
-            .find_by_user_and_key(actor_id, &idempotency_key)
+            .find_operation_by_user_and_key(actor_id, &idempotency_key)
             .await?
         {
-            return replay_existing_log(log, &fingerprint);
+            return self
+                .replay_single_log_operation(actor_id, &operation, &fingerprint)
+                .await;
         }
 
-        let log = self
-            .build_log(
-                actor_id,
-                input,
-                Some((idempotency_key.clone(), fingerprint.clone())),
-            )
-            .await?;
-        match self.food_log_repo.create(&log).await {
-            Ok(()) => Ok(FoodLogCreateOutcome {
-                log,
-                replayed: false,
+        let log = self.build_log(actor_id, item).await?;
+        self.finish_single_creation(
+            actor_id,
+            idempotency_key,
+            fingerprint,
+            FoodLogOperationKind::Single,
+            log,
+        )
+        .await
+    }
+
+    pub async fn log_ad_hoc_food(
+        &self,
+        actor_id: Uuid,
+        input: LogAdHocFoodInput,
+    ) -> Result<FoodLogCreateOutcome, JournalError> {
+        let idempotency_key = input.idempotency_key.clone();
+        let fingerprint = ad_hoc_food_log_create_fingerprint(&input);
+
+        if let Some(operation) = self
+            .food_log_repo
+            .find_operation_by_user_and_key(actor_id, &idempotency_key)
+            .await?
+        {
+            return self
+                .replay_single_log_operation(actor_id, &operation, &fingerprint)
+                .await;
+        }
+
+        let log = self.build_ad_hoc_log(actor_id, input).await?;
+        self.finish_single_creation(
+            actor_id,
+            idempotency_key,
+            fingerprint,
+            FoodLogOperationKind::AdHoc,
+            log,
+        )
+        .await
+    }
+
+    pub async fn log_items(
+        &self,
+        actor_id: Uuid,
+        input: LogFoodBatchInput,
+    ) -> Result<FoodLogBatchCreateOutcome, JournalError> {
+        let LogFoodBatchInput {
+            idempotency_key,
+            items,
+        } = input;
+        if items.is_empty() {
+            return Err(JournalError::Validation(
+                "batch must contain at least one log".into(),
+            ));
+        }
+        if items.len() > 50 {
+            return Err(JournalError::Validation(
+                "batch cannot contain more than 50 logs".into(),
+            ));
+        }
+
+        let fingerprint = food_log_batch_create_fingerprint(&items);
+
+        if let Some(operation) = self
+            .food_log_repo
+            .find_operation_by_user_and_key(actor_id, &idempotency_key)
+            .await?
+        {
+            let logs = self
+                .replay_log_operation(actor_id, &operation, &fingerprint)
+                .await?;
+            return Ok(FoodLogBatchCreateOutcome {
+                disposition: FoodLogCreateDisposition::Replayed,
+                logs,
+            });
+        }
+
+        let mut logs = Vec::with_capacity(items.len());
+        for item in items {
+            logs.push(self.build_log(actor_id, item).await?);
+        }
+        let write = FoodLogCreateOperationWrite::new(
+            actor_id,
+            idempotency_key.clone(),
+            fingerprint.clone(),
+            FoodLogOperationKind::Batch,
+            logs,
+        )?;
+        match self.food_log_repo.create_operation(&write).await {
+            Ok(()) => Ok(FoodLogBatchCreateOutcome {
+                disposition: FoodLogCreateDisposition::Created,
+                logs: write.into_logs(),
             }),
             Err(JournalError::DuplicateIdempotencyKey) => {
-                let log = self
+                let operation = self
                     .food_log_repo
-                    .find_by_user_and_key(actor_id, &idempotency_key)
+                    .find_operation_by_user_and_key(actor_id, &idempotency_key)
                     .await?
                     .ok_or_else(|| {
                         JournalError::Conflict(
                             "idempotency key changed during a concurrent request; retry".into(),
                         )
                     })?;
-                replay_existing_log(log, &fingerprint)
+                let logs = self
+                    .replay_log_operation(actor_id, &operation, &fingerprint)
+                    .await?;
+                Ok(FoodLogBatchCreateOutcome {
+                    disposition: FoodLogCreateDisposition::Replayed,
+                    logs,
+                })
             }
             Err(error) => Err(error),
         }
     }
 
-    pub async fn log_ad_hoc_food(
+    async fn finish_single_creation(
+        &self,
+        actor_id: Uuid,
+        idempotency_key: IdempotencyKey,
+        fingerprint: RequestFingerprint,
+        kind: FoodLogOperationKind,
+        log: FoodLog,
+    ) -> Result<FoodLogCreateOutcome, JournalError> {
+        let write = FoodLogCreateOperationWrite::new(
+            actor_id,
+            idempotency_key.clone(),
+            fingerprint.clone(),
+            kind,
+            vec![log],
+        )?;
+        match self.food_log_repo.create_operation(&write).await {
+            Ok(()) => Ok(FoodLogCreateOutcome {
+                disposition: FoodLogCreateDisposition::Created,
+                log: write
+                    .into_logs()
+                    .pop()
+                    .expect("single operation write owns exactly one log"),
+            }),
+            Err(JournalError::DuplicateIdempotencyKey) => {
+                let operation = self
+                    .food_log_repo
+                    .find_operation_by_user_and_key(actor_id, &idempotency_key)
+                    .await?
+                    .ok_or_else(|| {
+                        JournalError::Conflict(
+                            "idempotency key changed during a concurrent request; retry".into(),
+                        )
+                    })?;
+                self.replay_single_log_operation(actor_id, &operation, &fingerprint)
+                    .await
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn build_ad_hoc_log(
         &self,
         actor_id: Uuid,
         input: LogAdHocFoodInput,
@@ -157,7 +294,7 @@ impl FoodLogService {
                 )));
             }
         }
-        let log = FoodLogBuilder::new_ad_hoc(
+        Ok(FoodLogBuilder::new_ad_hoc(
             actor_id,
             input.log_date,
             input.name,
@@ -168,29 +305,82 @@ impl FoodLogService {
         .meal_slot(input.meal_slot)
         .device_timezone(input.device_timezone)
         .notes(input.notes)
-        .build();
-        self.food_log_repo.create(&log).await?;
-        Ok(log)
+        .build())
     }
 
-    pub async fn log_items(
+    async fn replay_single_log_operation(
         &self,
         actor_id: Uuid,
-        inputs: Vec<LogFoodInput>,
-    ) -> Result<Vec<FoodLog>, JournalError> {
-        let mut logs = Vec::with_capacity(inputs.len());
-        for input in inputs {
-            logs.push(self.build_log(actor_id, input, None).await?);
+        operation: &FoodLogCreateOperation,
+        fingerprint: &RequestFingerprint,
+    ) -> Result<FoodLogCreateOutcome, JournalError> {
+        let mut logs = self
+            .replay_log_operation(actor_id, operation, fingerprint)
+            .await?;
+        if logs.len() != 1 {
+            return Err(JournalError::Conflict(
+                "idempotency_key was already used for a different operation shape".into(),
+            ));
         }
-        self.food_log_repo.create_many(&logs).await?;
-        Ok(logs)
+        Ok(FoodLogCreateOutcome {
+            disposition: FoodLogCreateDisposition::Replayed,
+            log: logs.remove(0),
+        })
+    }
+
+    async fn replay_log_operation(
+        &self,
+        actor_id: Uuid,
+        operation: &FoodLogCreateOperation,
+        fingerprint: &RequestFingerprint,
+    ) -> Result<Vec<FoodLog>, JournalError> {
+        if operation.user_id() != actor_id {
+            return Err(invalid_operation_conflict());
+        }
+        if operation.request_fingerprint() != fingerprint {
+            return Err(JournalError::Conflict(
+                "idempotency_key was already used with a different request".into(),
+            ));
+        }
+
+        let log_ids = operation.log_ids();
+        if operation.log_count() == 0 || log_ids.len() != operation.log_count() {
+            return Err(invalid_operation_conflict());
+        }
+
+        let mut unique_ids = HashSet::with_capacity(log_ids.len());
+        for id in log_ids {
+            if !unique_ids.insert(*id) {
+                return Err(invalid_operation_conflict());
+            }
+        }
+
+        let current_logs = self.food_log_repo.list_by_ids(actor_id, log_ids).await?;
+        if current_logs.len() != log_ids.len() {
+            return Err(JournalError::Conflict(
+                "idempotency_key was already used and one or more created logs are missing or deleted; use a new key".into(),
+            ));
+        }
+
+        let mut ordered = Vec::with_capacity(log_ids.len());
+        for id in log_ids {
+            let log = current_logs
+                .iter()
+                .find(|log| log.id() == *id && log.user_id() == actor_id)
+                .ok_or_else(|| {
+                    JournalError::Conflict(
+                        "idempotency_key was already used and one or more created logs are missing or deleted; use a new key".into(),
+                    )
+                })?;
+            ordered.push(log.clone());
+        }
+        Ok(ordered)
     }
 
     async fn build_log(
         &self,
         actor_id: Uuid,
-        input: LogFoodInput,
-        idempotency: Option<(IdempotencyKey, String)>,
+        input: LogFoodItemInput,
     ) -> Result<FoodLog, JournalError> {
         let builder = match input.item {
             FoodLogItemRef::Product(product_id) => {
@@ -217,14 +407,11 @@ impl FoodLogService {
             }
             FoodLogItemRef::Meal(meal_id) => {
                 let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
-                let nutrition = resolved
-                    .meal
-                    .nutrition_for(&input.quantity, &resolved.products, &self.unit_converter)
-                    .map_err(JournalError::Validation)?;
+                let nutrition = resolved.nutrition_for(&input.quantity, &self.unit_converter)?;
                 FoodLogBuilder::new(
                     actor_id,
                     input.log_date,
-                    FoodLogItemSnapshot::from_meal(&resolved.meal),
+                    FoodLogItemSnapshot::from_meal(resolved.meal()),
                     input.quantity,
                     nutrition,
                 )
@@ -232,10 +419,6 @@ impl FoodLogService {
                 .device_timezone(input.device_timezone)
                 .notes(input.notes)
             }
-        };
-        let builder = match idempotency {
-            Some((key, fingerprint)) => builder.idempotency(key, fingerprint),
-            None => builder,
         };
         Ok(builder.build())
     }
@@ -296,14 +479,14 @@ impl FoodLogService {
                 }
                 Some(FoodLogItemRef::Meal(meal_id)) => {
                     let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
+                    let nutrition = resolved.nutrition_for(&quantity, &self.unit_converter)?;
                     existing.update_meal_log(
                         log_date,
                         meal_slot,
                         device_timezone,
-                        &resolved.meal,
+                        resolved.meal(),
                         quantity,
-                        &resolved.products,
-                        &self.unit_converter,
+                        nutrition,
                         notes,
                     )?
                 }
@@ -352,45 +535,116 @@ struct CanonicalFoodLogCreateRequest<'a> {
     device_timezone: Option<&'a str>,
     item_type: &'static str,
     item_id: Uuid,
-    quantity_amount: &'a str,
+    quantity_amount: String,
     quantity_unit: &'a str,
     notes: Option<&'a str>,
 }
 
-fn food_log_create_fingerprint(input: &LogFoodInput) -> String {
+fn canonical_food_log_create_request(
+    input: &LogFoodItemInput,
+) -> CanonicalFoodLogCreateRequest<'_> {
     let (item_type, item_id) = match &input.item {
         FoodLogItemRef::Product(id) => ("product", id.0),
         FoodLogItemRef::Meal(id) => ("meal", id.0),
     };
-    let quantity_amount = input.quantity.amount().normalize().to_string();
-    let canonical = CanonicalFoodLogCreateRequest {
+    CanonicalFoodLogCreateRequest {
         log_date: input.log_date,
         meal_slot: input.meal_slot.map(|slot| slot.as_str()),
         device_timezone: input.device_timezone.as_deref(),
         item_type,
         item_id,
-        quantity_amount: &quantity_amount,
+        quantity_amount: input.quantity.amount().normalize().to_string(),
         quantity_unit: input.quantity.unit().0.as_str(),
         notes: input.notes.as_deref(),
-    };
-    let bytes =
-        serde_json::to_vec(&canonical).expect("canonical food-log create request must serialize");
-    hex::encode(Sha256::digest(bytes))
+    }
 }
 
-fn replay_existing_log(
-    log: FoodLog,
-    fingerprint: &str,
-) -> Result<FoodLogCreateOutcome, JournalError> {
-    if log.request_fingerprint() != Some(fingerprint) {
-        return Err(JournalError::Conflict(
-            "idempotency_key was already used with a different request".into(),
-        ));
-    }
-    Ok(FoodLogCreateOutcome {
-        log,
-        replayed: true,
-    })
+fn fingerprint_bytes(bytes: Vec<u8>) -> RequestFingerprint {
+    RequestFingerprint::from_request_bytes(&bytes)
+}
+
+fn food_log_create_fingerprint(input: &LogFoodItemInput) -> RequestFingerprint {
+    let canonical = canonical_food_log_create_request(input);
+    let bytes =
+        serde_json::to_vec(&canonical).expect("canonical food-log create request must serialize");
+    fingerprint_bytes(bytes)
+}
+
+#[derive(Serialize)]
+struct CanonicalFoodLogBatchCreateRequest<'a> {
+    operation: &'static str,
+    items: Vec<CanonicalFoodLogCreateRequest<'a>>,
+}
+
+fn food_log_batch_create_fingerprint(inputs: &[LogFoodItemInput]) -> RequestFingerprint {
+    let canonical = CanonicalFoodLogBatchCreateRequest {
+        operation: "batch",
+        items: inputs
+            .iter()
+            .map(canonical_food_log_create_request)
+            .collect(),
+    };
+    let bytes = serde_json::to_vec(&canonical)
+        .expect("canonical batch food-log create request must serialize");
+    fingerprint_bytes(bytes)
+}
+
+#[derive(Serialize)]
+struct CanonicalAdHocNutrient<'a> {
+    code: &'a str,
+    amount: String,
+    unit: &'a str,
+}
+
+#[derive(Serialize)]
+struct CanonicalAdHocFoodLogCreateRequest<'a> {
+    operation: &'static str,
+    log_date: NaiveDate,
+    meal_slot: Option<&'a str>,
+    device_timezone: Option<&'a str>,
+    item_type: &'static str,
+    name: &'a str,
+    brand: Option<&'a str>,
+    quantity_amount: String,
+    quantity_unit: &'a str,
+    notes: Option<&'a str>,
+    nutrients: Vec<CanonicalAdHocNutrient<'a>>,
+}
+
+fn ad_hoc_food_log_create_fingerprint(input: &LogAdHocFoodInput) -> RequestFingerprint {
+    let name = input.name.trim();
+    let brand = input
+        .brand
+        .as_deref()
+        .map(str::trim)
+        .filter(|brand| !brand.is_empty());
+    let mut nutrients: Vec<_> = input
+        .nutrients
+        .iter()
+        .map(|snapshot| CanonicalAdHocNutrient {
+            code: snapshot.nutrient_code.0.as_str(),
+            amount: snapshot.amount.normalize().to_string(),
+            unit: snapshot.unit.0.as_str(),
+        })
+        .collect();
+    nutrients.sort_by(|left, right| left.code.cmp(right.code));
+
+    let canonical = CanonicalAdHocFoodLogCreateRequest {
+        operation: "ad_hoc",
+        log_date: input.log_date,
+        meal_slot: input.meal_slot.map(|slot| slot.as_str()),
+        device_timezone: input.device_timezone.as_deref(),
+        item_type: "ad_hoc",
+        name,
+        brand,
+        quantity_amount: input.quantity.amount().normalize().to_string(),
+        quantity_unit: input.quantity.unit().0.as_str(),
+        notes: input.notes.as_deref(),
+        nutrients,
+    };
+    let bytes =
+        serde_json::to_vec(&canonical).expect("canonical ad-hoc create request must serialize");
+    fingerprint_bytes(bytes)
 }
 
 #[async_trait]
@@ -411,6 +665,12 @@ impl FoodLogQueryPort for FoodLogService {
     ) -> Result<Vec<FoodLog>, JournalError> {
         self.list_food_logs(actor_id, date).await
     }
+}
+
+fn invalid_operation_conflict() -> JournalError {
+    JournalError::Conflict(
+        "idempotency_key refers to an invalid or incomplete operation; use a new key".into(),
+    )
 }
 
 #[cfg(test)]
@@ -440,6 +700,7 @@ mod tests {
             .log_ad_hoc_food(
                 Uuid::new_v4(),
                 LogAdHocFoodInput {
+                    idempotency_key: IdempotencyKey::new("unknown-ad-hoc-nutrient").unwrap(),
                     log_date: sample_log_date(),
                     meal_slot: None,
                     device_timezone: None,
@@ -494,13 +755,20 @@ mod tests {
             .log_item(
                 Uuid::new_v4(),
                 LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: Some(MealSlot::Lunch),
-                    item,
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
+                    idempotency_key: IdempotencyKey::new(format!(
+                        "missing-item-{}",
+                        Uuid::new_v4()
+                    ))
+                    .unwrap(),
+                    item: LogFoodItemInput {
+                        log_date: sample_log_date(),
+                        device_timezone: None,
+                        meal_slot: Some(MealSlot::Lunch),
+                        item,
+                        quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                            .unwrap(),
+                        notes: None,
+                    },
                 },
             )
             .await;
@@ -521,17 +789,25 @@ mod tests {
             .log_item(
                 owner,
                 LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: Some(MealSlot::Breakfast),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
+                    idempotency_key: IdempotencyKey::new(format!(
+                        "owner-visibility-{}",
+                        Uuid::new_v4()
+                    ))
+                    .unwrap(),
+                    item: LogFoodItemInput {
+                        log_date: sample_log_date(),
+                        device_timezone: None,
+                        meal_slot: Some(MealSlot::Breakfast),
+                        item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                        quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                            .unwrap(),
+                        notes: None,
+                    },
                 },
             )
             .await
-            .unwrap();
+            .unwrap()
+            .log;
 
         assert!(matches!(
             services.get_food_log(created.id(), other).await,
@@ -549,17 +825,25 @@ mod tests {
             .log_item(
                 user_id,
                 LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: Some("Asia/Kolkata".to_string()),
-                    meal_slot: Some(MealSlot::Lunch),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: Some("clear me".to_string()),
+                    idempotency_key: IdempotencyKey::new(format!(
+                        "clear-optional-{}",
+                        Uuid::new_v4()
+                    ))
+                    .unwrap(),
+                    item: LogFoodItemInput {
+                        log_date: sample_log_date(),
+                        device_timezone: Some("Asia/Kolkata".to_string()),
+                        meal_slot: Some(MealSlot::Lunch),
+                        item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                        quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                            .unwrap(),
+                        notes: Some("clear me".to_string()),
+                    },
                 },
             )
             .await
-            .unwrap();
+            .unwrap()
+            .log;
 
         let updated = services
             .update_food_log(
@@ -612,20 +896,29 @@ mod tests {
             .log_item(
                 Uuid::new_v4(),
                 LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: None,
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::from(amount), UnitCode(unit.to_string()))
-                        .unwrap(),
-                    notes: None,
+                    idempotency_key: IdempotencyKey::new(format!(
+                        "unit-conversion-{}",
+                        Uuid::new_v4()
+                    ))
+                    .unwrap(),
+                    item: LogFoodItemInput {
+                        log_date: sample_log_date(),
+                        device_timezone: None,
+                        meal_slot: None,
+                        item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                        quantity: Quantity::new(Decimal::from(amount), UnitCode(unit.to_string()))
+                            .unwrap(),
+                        notes: None,
+                    },
                 },
             )
             .await;
 
         match expected {
             ExpectedLogOutcome::Energy(expected_energy) => {
-                let log = result.expect("quantity with a known unit should be logged");
+                let log = result
+                    .expect("quantity with a known unit should be logged")
+                    .log;
                 assert_eq!(log.nutrient_snapshots().len(), 1);
                 assert_eq!(log.nutrient_snapshots()[0].nutrient_code.0, "ENERGY_KCAL");
                 assert_eq!(
@@ -651,17 +944,22 @@ mod tests {
             .log_item(
                 user_id,
                 LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: Some(MealSlot::Dinner),
-                    item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                    idempotency_key: IdempotencyKey::new(format!("meal-update-{}", Uuid::new_v4()))
                         .unwrap(),
-                    notes: None,
+                    item: LogFoodItemInput {
+                        log_date: sample_log_date(),
+                        device_timezone: None,
+                        meal_slot: Some(MealSlot::Dinner),
+                        item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
+                        quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                            .unwrap(),
+                        notes: None,
+                    },
                 },
             )
             .await
-            .unwrap();
+            .unwrap()
+            .log;
 
         let updated = services
             .update_food_log(

@@ -1,3 +1,4 @@
+mod account_binding_lifecycle;
 mod ad_hoc_log_lifecycle;
 mod api_key_lifecycle;
 mod assistant_http;
@@ -7,7 +8,13 @@ mod diary_lifecycle;
 mod diary_prefs_lifecycle;
 mod goal_lifecycle;
 mod import_lifecycle;
+mod log_create_contract_lifecycle;
+mod log_idempotency_lifecycle;
+mod log_operation_integrity_lifecycle;
 mod meal_lifecycle;
+mod meal_migration_lifecycle;
+mod meal_missing_component_lifecycle;
+mod meal_quantity_lifecycle;
 mod nutrition_details_lifecycle;
 mod product_lifecycle;
 mod product_repo;

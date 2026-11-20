@@ -8,7 +8,7 @@ use crate::catalog::error::CatalogError;
 pub const SUMMARY_NUTRIENT_CODES: [&str; 5] =
     ["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G"];
 
-#[derive(Serialize, Clone, Default)]
+#[derive(Serialize, Clone, Debug, Default)]
 pub struct NutrientSummaryDto {
     pub energy_kcal: Option<Decimal>,
     pub protein_g: Option<Decimal>,

@@ -4,7 +4,7 @@ pub mod catalog;
 pub mod config;
 pub mod import;
 pub mod journal;
-use axum::http::{HeaderValue, Method, header};
+use axum::http::{HeaderName, HeaderValue, Method, header};
 use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -42,6 +42,8 @@ pub struct AppState {
 }
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
+    crate::journal::food_log::infra::validate_schema(&pool).await?;
+
     let auth = AuthModule::build(
         &pool,
         SessionCookieConfig {
@@ -100,7 +102,12 @@ fn build_cors_layer(config: &ServerConfig) -> CorsLayer {
         Method::PATCH,
         Method::OPTIONS,
     ];
-    let headers = [header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION];
+    let headers = [
+        header::CONTENT_TYPE,
+        header::ACCEPT,
+        header::AUTHORIZATION,
+        HeaderName::from_static("x-calco-account-id"),
+    ];
 
     if config.cors_allowed_origins.is_empty() {
         return CorsLayer::new()

@@ -22,7 +22,9 @@ Personal API keys provide:
 - Immediate revocation from the web app.
 - Access only to the owner's user-owned data, through the existing authorization
   and owner checks.
-- Optional idempotency keys on `POST /api/logs` for safe create retries.
+- A required `X-CalCo-Account-ID` assertion that binds every account-scoped
+  request to the authenticated profile.
+- Required idempotency keys on every log create route for safe retries.
 
 Current limitations:
 
@@ -68,6 +70,20 @@ cannot open Settings or API key management:
    and closing the tab are not intercepted.
 4. Store the secret in a password manager, secret manager, or environment
    variable on the machine that runs the script.
+5. If the client has only the key, discover its own profile UUID before calling
+   account-scoped routes:
+
+```bash
+curl -sS "$CALCO_BASE_URL/api/auth/identity" \
+  -H "Authorization: Bearer $CALCO_API_KEY"
+```
+
+The response is the same `{ "identity": ..., "profile": ... }` envelope as
+login/session, and `profile.id` is the value to send as `X-CalCo-Account-ID`.
+`GET /api/auth/identity` requires no account-binding header, returns only the
+authenticated principal, and is available to both bearer keys and browser
+sessions. It is read-only discovery; it does not unlock API-key management,
+assistant, admin, import, or write routes.
 
 Key names are trimmed and must contain visible text. They reject control and
 invisible formatting characters such as bidi controls, zero-width space,
@@ -100,6 +116,7 @@ Send the secret as a bearer token on every request:
 GET /api/logs?log_date=2026-10-26 HTTP/1.1
 Host: calco.example.com
 Authorization: Bearer calco_pat_<random secret>
+X-CalCo-Account-ID: <user-profile-id>
 Accept: application/json
 ```
 
@@ -107,23 +124,40 @@ Accept: application/json
 tokens and `X-API-Key` are not supported. Browser cookies authenticate the web
 app, not API-key clients.
 
-On user-data routes that accept API keys (`ReadUser` and `WriteUser` routes such
-as logs, foods, meals, goals, diary preferences, and nutrition details), an
-`Authorization` header takes precedence: CalCo authenticates with that bearer
-token and does not fall back to a browser session cookie. A malformed, invalid,
-expired, revoked, or security-stamp-invalidated key returns
-`401 invalid_api_key`.
+Every account-scoped user-data route also requires
+`X-CalCo-Account-ID: <user_profiles.id UUID>`. It is not an API key and does not
+authenticate anything by itself. The server authenticates the bearer token or
+cookie first, then requires the header to name exactly that principal's profile
+UUID. Send the profile ID returned in `profile.id` from `GET /api/auth/identity`
+or from the browser-only `GET /api/auth/session`. A missing header returns
+`400 missing_account_header`; a malformed, blank, or repeated header returns
+`400 invalid_account_header`; a valid header for another profile returns
+`401 session_account_changed`.
+
+The binding applies to logs, foods, meals, goals, diary preferences, nutrition
+details, API-key management, and assistant routes. Login, identity discovery,
+session, logout, bootstrap, admin, and import routes do not require it.
+API-key scope and expiry are checked before the account binding, so the header
+cannot elevate a `read` key to a write route.
+
+On user-data routes that accept API keys (`AccountBoundReadUser` and
+`AccountBoundWriteUser` routes such as logs, foods, meals, goals, diary
+preferences, and nutrition details), an `Authorization` header takes precedence:
+CalCo authenticates with that bearer token and does not fall back to a browser
+session cookie. A malformed, invalid, expired, revoked, or
+security-stamp-invalidated key returns `401 invalid_api_key`.
 
 Key management, assistant, admin, and import routes are browser-session-only.
 They ignore `Authorization`; a request with only a bearer token and no valid
 session cookie returns `401 unauthorized` (or the relevant session rejection),
 not `invalid_api_key`. API keys never authenticate these routes.
 
-Set the base URL and key once in a shell:
+Set the base URL, key, and profile ID once in a shell:
 
 ```bash
 export CALCO_BASE_URL="https://calco.example.com"
 export CALCO_API_KEY="calco_pat_<random secret>"
+export CALCO_ACCOUNT_ID="<user-profile-id>"
 ```
 
 ## Read Examples
@@ -132,7 +166,8 @@ List the owner's logs for a date:
 
 ```bash
 curl -sS "$CALCO_BASE_URL/api/logs?log_date=2026-10-26" \
-  -H "Authorization: Bearer $CALCO_API_KEY"
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID"
 ```
 
 Read the day's calorie and macro summary:
@@ -140,7 +175,8 @@ Read the day's calorie and macro summary:
 ```bash
 curl -sS \
   "$CALCO_BASE_URL/api/logs/summary?from_date=2026-10-26&to_date=2026-10-26" \
-  -H "Authorization: Bearer $CALCO_API_KEY"
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID"
 ```
 
 Search the shared catalog or list meals:
@@ -148,10 +184,12 @@ Search the shared catalog or list meals:
 ```bash
 curl -sS -G "$CALCO_BASE_URL/api/foods/search" \
   --data-urlencode "q=paneer" \
-  -H "Authorization: Bearer $CALCO_API_KEY"
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID"
 
 curl -sS "$CALCO_BASE_URL/api/meals" \
-  -H "Authorization: Bearer $CALCO_API_KEY"
+  -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID"
 ```
 
 Read endpoints include `GET /api/logs`, `GET /api/logs/summary`,
@@ -169,12 +207,14 @@ A `read_write` key can create a food log for the owner:
 ```bash
 curl -sS -X POST "$CALCO_BASE_URL/api/logs" \
   -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID" \
   -H "Content-Type: application/json" \
   -d '{
     "log_date": "2026-10-26",
     "meal_slot": "lunch",
     "item": { "type": "product", "id": "<product-id>" },
-    "quantity": { "amount": 150, "unit": "g" }
+    "quantity": { "amount": 150, "unit": "g" },
+    "idempotency_key": "lunch-2026-10-26-product-id-1"
   }'
 ```
 
@@ -192,14 +232,102 @@ A `read` key calling one of these routes receives `403 insufficient_scope`; the
 request is rejected before any user data is changed. Key metadata such as
 `last_used_at` may still be updated during authentication.
 
-### Safe Log Create Retries
+### Meals With Unavailable Ingredients
 
-Scripts can make `POST /api/logs` retry-safe by supplying an optional
-`idempotency_key`:
+A meal keeps its component IDs and quantities when a catalog product is
+soft-deleted. `GET /api/meals` and `GET /api/meals/{id}` return `200` with an
+explicit degraded shape instead of failing the list:
+
+```json
+{
+  "id": "meal-id",
+  "name": "Broken Porridge",
+  "total_quantity": { "amount": "250", "unit": "g" },
+  "nutrition": {
+    "status": "unavailable",
+    "unavailable_components": [
+      {
+        "component_id": "component-id",
+        "item": { "type": "product", "id": "deleted-product-id" },
+        "quantity": { "amount": "200", "unit": "g" },
+        "reason": "product_unavailable"
+      }
+    ]
+  },
+  "components": [
+    {
+      "availability": "available",
+      "id": "oats-component-id",
+      "item": { "type": "product", "id": "oats-id" },
+      "quantity": { "amount": "50", "unit": "g" },
+      "nutrition_summary": { "energy_kcal": "190", "protein_g": "2.5", "carbs_g": "5", "fat_g": "1", "fiber_g": null }
+    },
+    {
+      "availability": "unavailable",
+      "id": "component-id",
+      "item": { "type": "product", "id": "deleted-product-id" },
+      "quantity": { "amount": "200", "unit": "g" },
+      "reason": "product_unavailable"
+    }
+  ]
+}
+```
+
+Healthy meals use `"nutrition": { "status": "available", "summary": {...} }`.
+A meal without a declared `total_quantity` uses
+`"nutrition": { "status": "not_declared" }`; this is legitimate and not an
+error. A meal whose stored `total_quantity` can no longer be converted to grams
+uses `"nutrition": { "status": "total_quantity_unavailable", "reason":
+"quantity_not_convertible", "total_quantity": ... }`.
+
+Every `available` component carries computed `nutrition_summary`. A component
+keeps its identity and quantity and becomes `"availability": "unavailable"` with
+a typed reason when it can no longer be used:
+
+- `product_unavailable`: the product no longer exists or is no longer visible.
+- `quantity_not_convertible`: the product exists, but its current servings and
+  mass units cannot convert the stored quantity (for example, a product no
+  longer defines the `cup` serving that the meal recorded).
+
+This is a breaking wire-contract change from the earlier preview round:
+`missing_components` is now `unavailable_components`, the component tag
+`missing` is now `unavailable`, and `quantity_not_convertible` is a new reason.
+Clients must switch on the typed reason rather than treating every degradation
+as a deleted product.
+
+Meal writes validate before persistence. The optional `total_quantity` must be a
+positive amount with a nonblank unit supported as a mass quantity. Every supplied
+component quantity must be convertible against the currently resolved product.
+Invalid creates and updates return `400 validation` and write nothing. A later
+catalog change can still invalidate a stored meal; that is reported by the
+degraded read shape above, not by rejecting the whole list.
+
+The meal quantity migration adds validated structural constraints. If a legacy
+database contains a non-positive amount, blank unit, half-paired total, or meal
+without components, the upgrade fails before schema mutation and reports the
+affected row IDs. Blank means empty or containing only Unicode White_Space,
+matching Rust `trim`. Repair those source rows explicitly; the server does not
+delete or rewrite them. Structurally valid legacy quantities, including
+non-mass declared totals, remain readable as dynamic degraded states, and
+catalog-degraded meals remain readable.
+
+Repair a broken meal with `PUT /api/meals/{id}` and a complete `components` array
+using currently convertible products and quantities. `GET /api/meals/{id}/nutrients`
+and meal-based log creates return `409 unavailable_components` with `meal_id` and
+the same non-empty component objects. If the requested meal log/preview quantity
+itself cannot be converted, they return `409 meal_quantity_not_convertible` with
+the offending `quantity` and a typed `reason`.
+
+### Durable Log Create Retries
+
+Every log create requires a top-level `idempotency_key`. This applies to
+`POST /api/logs`, `POST /api/logs/ad-hoc`, and `POST /api/logs/batch`. There is
+no unkeyed fallback.
 
 ```bash
 curl -sS -X POST "$CALCO_BASE_URL/api/logs" \
   -H "Authorization: Bearer $CALCO_API_KEY" \
+  -H "X-CalCo-Account-ID: $CALCO_ACCOUNT_ID" \
   -H "Content-Type: application/json" \
   -d '{
     "log_date": "2026-10-26",
@@ -210,21 +338,51 @@ curl -sS -X POST "$CALCO_BASE_URL/api/logs" \
   }'
 ```
 
+For a batch, put one key beside `items`:
+
+```json
+{
+  "idempotency_key": "breakfast-2026-10-26-1",
+  "items": [
+    {
+      "log_date": "2026-10-26",
+      "meal_slot": "breakfast",
+      "item": { "type": "product", "id": "<product-id>" },
+      "quantity": { "amount": 70, "unit": "g" }
+    }
+  ]
+}
+```
+
 Keys are 1 to 128 characters, must not be blank, and reject control characters.
-They are scoped to your profile, may be reused by another user, and are never
-included in responses. The server stores a SHA-256 fingerprint of the validated
-request on the log. The first create returns `201 Created`. Retrying the same
-validated input with the same key returns `200 OK` and the existing log, even if
-that log was edited later or its catalog item changed. Reusing the key with a
-different input returns `409 conflict`.
+Omitting the key, sending `null`, sending a non-string JSON value, or sending an
+invalid string value returns `400 validation` and writes nothing. Keys are
+scoped to your profile, may be reused by another user, and are never included
+in responses. A key on an individual batch item, including an explicit `null`
+or a non-string value, is a validation error.
 
-Deleting the log also deletes its key. A delayed retry with the same key and
-input after a successful delete creates a new log with `201 Created`, so do not
-rely on a key to detect a delete that happened between retries.
+The first successful create returns `201 Created`. Retrying the same key,
+logging route, and normalized input returns `200 OK` with the operation's logs
+in their original order. The response reads the current stored log rows, not a
+stored snapshot: later edits are visible, and stored nutrient snapshots are not
+recalculated. Reusing the key with a different payload, a different batch order,
+or a different logging route returns `409 conflict`.
 
-`POST /api/logs/batch` does not accept idempotency keys. Supplying
-`idempotency_key` in a batch item, including an explicit `null`, is a validation
-error; it is not silently ignored.
+Deleting a journal-backed created log does not free its key. A delayed replay
+returns `409 conflict` and creates nothing. This guarantee covers operations
+recorded by the durable journal. A key whose only legacy log was deleted before
+the journal migration has no recoverable operation; the server does not guess
+or reconstruct it, so a retry with that key can create a new log. Use a new key
+for a new intentional submission. A malformed or incomplete operation also
+returns `409 conflict` and never returns an empty or partial success. This
+includes a stored fingerprint that is not a valid lowercase SHA-256 digest.
+Operation rows and child links are retained indefinitely for the life of the
+profile. There is no cleanup window after which a key becomes reusable.
+
+Log create retries do not require a capability probe or version negotiation.
+The routes are always keyed in this API contract; do not infer behavior from
+`/api/health` or `/api/version`. If the server starts against an incompatible
+database, it fails before serving rather than exposing an unkeyed path.
 
 ## Revocation
 
@@ -257,9 +415,9 @@ Never put a CalCo API key in browser JavaScript, a single-page app, a mobile app
 `localStorage`, or any other client distributed to other people. Anyone who can
 load the app can read the key and act as the owner.
 
-The backend allows the `Authorization` header through CORS so trusted tools can
-call the API, but CORS does not make an embedded secret safe. Browser clients
-should use the normal CalCo login and session cookie.
+The backend allows the `Authorization` and `X-CalCo-Account-ID` headers through
+CORS so trusted tools can call the API, but CORS does not make an embedded secret
+safe. Browser clients should use the normal CalCo login and session cookie.
 
 > **Warning:** `CORS_ALLOWED_ORIGINS` is a credential-minting trust boundary.
 > When it is non-empty, the backend enables credentialed CORS for exactly those
@@ -295,8 +453,13 @@ product change. Do not rely on API-key scopes to provide that isolation.
 | `401` | `invalid_api_key` | The bearer token on a user-data route is malformed, invalid, expired, revoked, or invalidated by a security-stamp change. |
 | `401` | `unauthorized` (or session error) | A bearer token was sent to a browser-session-only route (key management, assistant, admin, or import) without a valid session cookie. These routes ignore `Authorization`. |
 | `403` | `insufficient_scope` | The key is valid but its scope does not permit the route. |
+| `400` | `missing_account_header` | The account-scoped route was called without `X-CalCo-Account-ID`. |
+| `400` | `invalid_account_header` | `X-CalCo-Account-ID` was blank, malformed, non-UUID, non-UTF-8, or supplied more than once. |
+| `401` | `session_account_changed` | `X-CalCo-Account-ID` does not match the authenticated cookie/API-key profile. The response does not disclose either profile ID. |
 | `404` | `api_key_not_found` | A key-management route referenced a key that does not exist for this user. |
-| `409` | `conflict` | A log `idempotency_key` was reused with a different request. |
+| `409` | `conflict` | A log `idempotency_key` was reused with a changed payload, changed batch order, different logging route, a deleted operation log, or a malformed/incomplete operation. |
+| `409` | `unavailable_components` | A meal preview or meal-based log references products or component quantities that can no longer be used. The error lists `meal_id` and the non-empty unavailable components with typed reasons; repair the meal or use another meal. |
+| `409` | `meal_quantity_not_convertible` | The requested meal log/preview quantity cannot be converted to grams. The error lists `meal_id`, `quantity`, and reason `quantity_not_convertible`. |
 | `409` | `api_key_limit_reached` | The account is at its soft limit of 10 active keys; revoke an unused key and retry. |
 | `400` | `invalid_api_key_name` | The key name is empty, whitespace-only/invisible-only, too long, or contains a forbidden control/invisible formatting character. |
 | `400` | `invalid_api_key_scope` | The scope is not `read` or `read_write`. |

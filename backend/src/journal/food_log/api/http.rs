@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    extract::{Path, Query, State},
+    extract::{Path, Query, State, rejection::JsonRejection},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{get, post},
@@ -14,7 +14,7 @@ use uuid::Uuid;
 use std::str::FromStr;
 
 use crate::AppState;
-use crate::auth::api::http::{ReadUser, WriteUser};
+use crate::auth::api::http::{AccountBoundReadUser, AccountBoundWriteUser};
 use crate::catalog::domain::calculation::Quantity;
 use crate::catalog::domain::{ProductId, UnitCode};
 use crate::journal::error::JournalError;
@@ -54,11 +54,12 @@ pub struct CreateLogRequest {
     pub item: ItemRefDto,
     pub quantity: QuantityDto,
     pub notes: Option<String>,
-    pub idempotency_key: Option<String>,
+    pub idempotency_key: IdempotencyKey,
 }
 
 #[derive(Deserialize)]
 pub struct CreateLogsBatchRequest {
+    pub idempotency_key: IdempotencyKey,
     pub items: Vec<CreateLogsBatchItemRequest>,
 }
 
@@ -84,6 +85,7 @@ pub struct CreateAdHocLogRequest {
     pub quantity: QuantityDto,
     pub nutrients: Vec<NutrientSnapshotRequest>,
     pub notes: Option<String>,
+    pub idempotency_key: IdempotencyKey,
 }
 
 #[derive(Deserialize)]
@@ -148,27 +150,24 @@ pub struct UpdateLogRequest {
 use crate::journal::api::http::{ErrorResponse, error_response, internal_error};
 
 async fn create_log_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
-    Json(req): Json<CreateLogRequest>,
+    body: Result<Json<CreateLogRequest>, JsonRejection>,
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
+    let req = match required_json(body) {
+        Ok(req) => req,
+        Err(response) => return *response,
+    };
 
-    let (input, idempotency_key) = match food_log_create_request_to_input(req) {
+    let input = match food_log_create_request_to_input(req) {
         Ok(input) => input,
         Err(err) => return err.into_response(),
     };
 
-    match services
-        .log_item_idempotent(auth.0.id, input, idempotency_key)
-        .await
-    {
+    match services.log_item(auth.0.id, input).await {
         Ok(created) => {
-            let status = if created.replayed {
-                StatusCode::OK
-            } else {
-                StatusCode::CREATED
-            };
+            let status = create_status(created.disposition);
             (status, Json(food_log_to_response(&created.log))).into_response()
         }
         Err(e) => e.into_response(),
@@ -176,10 +175,14 @@ async fn create_log_handler(
 }
 
 async fn create_ad_hoc_log_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
-    Json(req): Json<CreateAdHocLogRequest>,
+    body: Result<Json<CreateAdHocLogRequest>, JsonRejection>,
 ) -> impl IntoResponse {
+    let req = match required_json(body) {
+        Ok(req) => req,
+        Err(response) => return *response,
+    };
     let input = match ad_hoc_log_create_request_to_input(req) {
         Ok(input) => input,
         Err(err) => return err.into_response(),
@@ -190,16 +193,23 @@ async fn create_ad_hoc_log_handler(
         .log_ad_hoc_food(auth.0.id, input)
         .await
     {
-        Ok(log) => (StatusCode::CREATED, Json(food_log_to_response(&log))).into_response(),
+        Ok(created) => {
+            let status = create_status(created.disposition);
+            (status, Json(food_log_to_response(&created.log))).into_response()
+        }
         Err(err) => err.into_response(),
     }
 }
 
 async fn create_logs_batch_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
-    Json(req): Json<CreateLogsBatchRequest>,
+    body: Result<Json<CreateLogsBatchRequest>, JsonRejection>,
 ) -> impl IntoResponse {
+    let req = match required_json(body) {
+        Ok(req) => req,
+        Err(response) => return *response,
+    };
     if req.items.is_empty() {
         return error_response("validation", "batch must contain at least one log".into())
             .into_response();
@@ -212,30 +222,35 @@ async fn create_logs_batch_handler(
         .into_response();
     }
 
-    let inputs = match req
-        .items
-        .into_iter()
-        .map(batch_item_request_to_input)
-        .collect::<Result<Vec<_>, _>>()
-    {
-        Ok(inputs) => inputs,
+    let input = match batch_log_create_request_to_inputs(req) {
+        Ok(input) => input,
         Err(err) => return err.into_response(),
     };
 
-    match state.food_log_services.log_items(auth.0.id, inputs).await {
-        Ok(created) => (
-            StatusCode::CREATED,
-            Json(BatchLogResponse {
-                items: created.iter().map(food_log_to_response).collect(),
-            }),
-        )
-            .into_response(),
+    match state.food_log_services.log_items(auth.0.id, input).await {
+        Ok(created) => {
+            let status = create_status(created.disposition);
+            (
+                status,
+                Json(BatchLogResponse {
+                    items: created.logs.iter().map(food_log_to_response).collect(),
+                }),
+            )
+                .into_response()
+        }
         Err(err) => err.into_response(),
     }
 }
 
+fn create_status(disposition: FoodLogCreateDisposition) -> StatusCode {
+    match disposition {
+        FoodLogCreateDisposition::Created => StatusCode::CREATED,
+        FoodLogCreateDisposition::Replayed => StatusCode::OK,
+    }
+}
+
 async fn latest_slots_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Query(query): Query<LatestSlotsQuery>,
 ) -> impl IntoResponse {
@@ -259,7 +274,7 @@ async fn latest_slots_handler(
 }
 
 async fn recent_items_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Query(query): Query<RecentItemsQuery>,
 ) -> impl IntoResponse {
@@ -284,7 +299,7 @@ async fn recent_items_handler(
 }
 
 async fn summary_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Query(query): Query<SummaryQuery>,
 ) -> impl IntoResponse {
@@ -308,7 +323,7 @@ async fn summary_handler(
 }
 
 async fn last_used_items_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Json(req): Json<LastUsedItemsRequest>,
 ) -> impl IntoResponse {
@@ -341,7 +356,7 @@ async fn last_used_items_handler(
 }
 
 async fn get_log_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
@@ -356,7 +371,7 @@ async fn get_log_handler(
 }
 
 async fn list_logs_handler(
-    auth: ReadUser,
+    auth: AccountBoundReadUser,
     State(state): State<FoodLogModule>,
     Query(query): Query<LogQuery>,
 ) -> impl IntoResponse {
@@ -376,7 +391,7 @@ async fn list_logs_handler(
 }
 
 async fn update_log_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateLogRequest>,
@@ -401,7 +416,7 @@ async fn update_log_handler(
 }
 
 async fn delete_log_handler(
-    auth: WriteUser,
+    auth: AccountBoundWriteUser,
     State(state): State<FoodLogModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
@@ -484,11 +499,16 @@ where
     Value::deserialize(deserializer).map(Some)
 }
 
-fn food_log_create_request_to_input(
-    req: CreateLogRequest,
-) -> Result<(LogFoodInput, Option<IdempotencyKey>), JournalError> {
-    let idempotency_key = req.idempotency_key.map(IdempotencyKey::new).transpose()?;
-    let input = create_log_input(
+fn required_json<T>(
+    body: Result<Json<T>, JsonRejection>,
+) -> Result<T, Box<axum::response::Response>> {
+    body.map(|Json(value)| value).map_err(|rejection| {
+        Box::new(error_response("validation", rejection.body_text()).into_response())
+    })
+}
+
+fn food_log_create_request_to_input(req: CreateLogRequest) -> Result<LogFoodInput, JournalError> {
+    let item = create_log_input(
         req.log_date,
         req.meal_slot,
         req.device_timezone,
@@ -496,15 +516,32 @@ fn food_log_create_request_to_input(
         req.quantity,
         req.notes,
     )?;
-    Ok((input, idempotency_key))
+    Ok(LogFoodInput {
+        idempotency_key: req.idempotency_key,
+        item,
+    })
+}
+
+fn batch_log_create_request_to_inputs(
+    req: CreateLogsBatchRequest,
+) -> Result<LogFoodBatchInput, JournalError> {
+    let items = req
+        .items
+        .into_iter()
+        .map(batch_item_request_to_input)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(LogFoodBatchInput {
+        idempotency_key: req.idempotency_key,
+        items,
+    })
 }
 
 fn batch_item_request_to_input(
     req: CreateLogsBatchItemRequest,
-) -> Result<LogFoodInput, JournalError> {
+) -> Result<LogFoodItemInput, JournalError> {
     if req.idempotency_key.is_some() {
         return Err(JournalError::Validation(
-            "idempotency_key is not supported for batch log creation".into(),
+            "idempotency_key belongs on the batch request, not on individual items".into(),
         ));
     }
     create_log_input(
@@ -524,8 +561,8 @@ fn create_log_input(
     item: ItemRefDto,
     quantity: QuantityDto,
     notes: Option<String>,
-) -> Result<LogFoodInput, JournalError> {
-    Ok(LogFoodInput {
+) -> Result<LogFoodItemInput, JournalError> {
+    Ok(LogFoodItemInput {
         log_date: parse_log_date(&log_date)?,
         meal_slot: meal_slot.as_deref().map(parse_meal_slot).transpose()?,
         device_timezone: normalize_device_timezone(device_timezone)?,
@@ -539,6 +576,7 @@ fn ad_hoc_log_create_request_to_input(
     req: CreateAdHocLogRequest,
 ) -> Result<LogAdHocFoodInput, JournalError> {
     Ok(LogAdHocFoodInput {
+        idempotency_key: req.idempotency_key,
         log_date: parse_log_date(&req.log_date)?,
         meal_slot: req.meal_slot.as_deref().map(parse_meal_slot).transpose()?,
         device_timezone: normalize_device_timezone(req.device_timezone)?,

@@ -343,13 +343,13 @@ fn item_name(item: &FoodLogItemSnapshot) -> &str {
 #[cfg(test)]
 mod tests {
     use super::super::test_support::*;
-    use super::super::{FoodLogService, LogFoodInput};
+    use super::super::{FoodLogService, LogFoodInput, LogFoodItemInput};
     use super::{MAX_TOP_QUANTITIES, item_name, recent_items_from_logs};
     use crate::catalog::domain::calculation::Quantity;
     use crate::catalog::domain::{NutrientCode, ProductId, UnitCode};
     use crate::journal::food_log::domain::{
         FoodLog, FoodLogBuilder, FoodLogId, FoodLogItemRef, FoodLogItemSnapshot,
-        FoodLogNutrientSnapshot, JournalError, MealSlot, QuantityUsage,
+        FoodLogNutrientSnapshot, IdempotencyKey, JournalError, MealSlot, QuantityUsage,
     };
     use crate::journal::meal::domain::MealId;
     use chrono::{DateTime, Duration, NaiveDate};
@@ -1167,8 +1167,6 @@ mod tests {
             UnitCode(unit.to_string()),
             nutrient_snapshots,
             None,
-            None,
-            None,
             created_at,
             created_at,
         )
@@ -1199,8 +1197,6 @@ mod tests {
             built.quantity_amount(),
             built.quantity_unit().clone(),
             built.nutrient_snapshots().to_vec(),
-            None,
-            None,
             None,
             created_at,
             created_at,
@@ -1273,8 +1269,6 @@ mod tests {
             UnitCode("g".to_string()),
             Vec::new(),
             None,
-            None,
-            None,
             created_at,
             created_at,
         )
@@ -1298,8 +1292,6 @@ mod tests {
             Decimal::from_str(amount).unwrap(),
             UnitCode("g".to_string()),
             Vec::new(),
-            None,
-            None,
             None,
             created_at,
             created_at,
@@ -1335,16 +1327,24 @@ mod tests {
             .log_item(
                 user_id,
                 LogFoodInput {
-                    log_date,
-                    device_timezone: None,
-                    meal_slot: Some(meal_slot),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(amount_g, 0), UnitCode("g".to_string()))
+                    idempotency_key: IdempotencyKey::new(format!("history-{}", Uuid::new_v4()))
                         .unwrap(),
-                    notes: None,
+                    item: LogFoodItemInput {
+                        log_date,
+                        device_timezone: None,
+                        meal_slot: Some(meal_slot),
+                        item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                        quantity: Quantity::new(
+                            Decimal::new(amount_g, 0),
+                            UnitCode("g".to_string()),
+                        )
+                        .unwrap(),
+                        notes: None,
+                    },
                 },
             )
             .await
             .unwrap()
+            .log
     }
 }

@@ -4,30 +4,70 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::catalog::app::CatalogReadPort;
-use crate::catalog::domain::calculation::Quantity;
+use crate::catalog::domain::calculation::{CalculatedNutrition, Quantity};
 use crate::catalog::domain::units::UnitConverter;
 use crate::catalog::domain::*;
+use crate::journal::error::{
+    MealComponentUnavailableReason, MealQuantityUnavailableReason, UnavailableMealComponent,
+    UnavailableMealComponents,
+};
 use crate::journal::meal::domain::*;
 
 pub struct CreateMealInput {
-    pub name: String,
-    pub notes: Option<String>,
-    pub total_quantity_amount: Option<Decimal>,
-    pub total_quantity_unit: Option<UnitCode>,
-    pub components: Vec<CreateMealComponentInput>,
+    name: String,
+    notes: Option<String>,
+    total_quantity: Option<MealQuantity>,
+    components: Vec<CreateMealComponentInput>,
+}
+
+impl CreateMealInput {
+    pub fn new(
+        name: String,
+        notes: Option<String>,
+        total_quantity: Option<MealQuantity>,
+        components: Vec<CreateMealComponentInput>,
+    ) -> Self {
+        Self {
+            name,
+            notes,
+            total_quantity,
+            components,
+        }
+    }
 }
 
 pub struct CreateMealComponentInput {
-    pub item: MealComponentItem,
-    pub quantity: Quantity,
+    item: MealComponentItem,
+    quantity: MealQuantity,
+}
+
+impl CreateMealComponentInput {
+    pub fn new(item: MealComponentItem, quantity: MealQuantity) -> Self {
+        Self { item, quantity }
+    }
 }
 
 pub struct UpdateMealInput {
-    pub name: Option<String>,
-    pub notes: Option<Option<String>>,
-    pub total_quantity_amount: Option<Option<Decimal>>,
-    pub total_quantity_unit: Option<Option<UnitCode>>,
-    pub components: Option<Vec<CreateMealComponentInput>>,
+    name: Option<String>,
+    notes: Option<Option<String>>,
+    total_quantity: MealTotalQuantityPatch,
+    components: Option<Vec<CreateMealComponentInput>>,
+}
+
+impl UpdateMealInput {
+    pub fn new(
+        name: Option<String>,
+        notes: Option<Option<String>>,
+        total_quantity: MealTotalQuantityPatch,
+        components: Option<Vec<CreateMealComponentInput>>,
+    ) -> Self {
+        Self {
+            name,
+            notes,
+            total_quantity,
+            components,
+        }
+    }
 }
 
 pub struct MealNutritionOutput {
@@ -44,8 +84,306 @@ pub struct MealNutrientEntry {
 }
 
 pub struct ResolvedMeal {
-    pub meal: Meal,
-    pub products: Vec<(ProductId, Product)>,
+    meal: Meal,
+    products: Vec<(ProductId, Product)>,
+}
+
+impl ResolvedMeal {
+    pub(crate) fn from_parts(meal: Meal, products: Vec<(ProductId, Product)>) -> Self {
+        Self { meal, products }
+    }
+
+    pub fn meal(&self) -> &Meal {
+        &self.meal
+    }
+
+    pub fn products(&self) -> &[(ProductId, Product)] {
+        &self.products
+    }
+
+    pub fn nutrition_for(
+        &self,
+        quantity: &Quantity,
+        unit_converter: &UnitConverter,
+    ) -> Result<CalculatedNutrition, JournalError> {
+        self.resolution(unit_converter)?
+            .nutrition_for(&self.meal, quantity, unit_converter)
+            .map_err(|error| error.into_journal(self.meal.id().0))
+    }
+
+    fn resolution(
+        &self,
+        unit_converter: &UnitConverter,
+    ) -> Result<MealProductResolution, JournalError> {
+        MealProductResolution::from_products(&self.meal, &self.products, unit_converter)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedMealComponent {
+    component: MealComponent,
+    availability: ResolvedMealComponentAvailability,
+}
+
+impl ResolvedMealComponent {
+    pub fn component(&self) -> &MealComponent {
+        &self.component
+    }
+
+    pub fn availability(&self) -> &ResolvedMealComponentAvailability {
+        &self.availability
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ResolvedMealComponentAvailability {
+    Available {
+        product: Box<Product>,
+        nutrition: CalculatedNutrition,
+        grams: Decimal,
+    },
+    Unavailable {
+        reason: MealComponentUnavailableReason,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct MealProductResolution {
+    components: Vec<ResolvedMealComponent>,
+}
+
+impl MealProductResolution {
+    pub fn components(&self) -> &[ResolvedMealComponent] {
+        &self.components
+    }
+
+    pub fn unavailable_components(&self) -> Option<UnavailableMealComponents> {
+        UnavailableMealComponents::new(
+            self.components
+                .iter()
+                .filter_map(|resolved| match resolved.availability() {
+                    ResolvedMealComponentAvailability::Unavailable { reason } => {
+                        let MealComponentItem::Product(product_id) = resolved.component().item();
+                        let quantity = resolved.component().quantity();
+                        Some(UnavailableMealComponent {
+                            component_id: resolved.component().id(),
+                            product_id: product_id.0,
+                            quantity_amount: quantity.amount(),
+                            quantity_unit: quantity.unit().0.clone(),
+                            reason: *reason,
+                        })
+                    }
+                    ResolvedMealComponentAvailability::Available { .. } => None,
+                })
+                .collect(),
+        )
+    }
+
+    pub fn is_complete(&self) -> bool {
+        self.unavailable_components().is_none()
+    }
+
+    pub fn products(&self) -> Vec<(ProductId, Product)> {
+        self.components
+            .iter()
+            .filter_map(|resolved| match resolved.availability() {
+                ResolvedMealComponentAvailability::Available { product, .. } => {
+                    let MealComponentItem::Product(product_id) = resolved.component().item();
+                    Some((*product_id, (**product).clone()))
+                }
+                ResolvedMealComponentAvailability::Unavailable { .. } => None,
+            })
+            .collect()
+    }
+
+    pub fn nutrition_for(
+        &self,
+        meal: &Meal,
+        scale_quantity: &Quantity,
+        unit_converter: &UnitConverter,
+    ) -> Result<CalculatedNutrition, MealNutritionResolutionError> {
+        if let Some(unavailable) = self.unavailable_components() {
+            return Err(MealNutritionResolutionError::UnavailableComponents(
+                unavailable,
+            ));
+        }
+        let scale_grams = meal
+            .quantity_to_grams(scale_quantity, unit_converter)
+            .map_err(|_| MealNutritionResolutionError::QuantityNotConvertible {
+                amount: scale_quantity.amount(),
+                unit: scale_quantity.unit().clone(),
+            })?;
+        self.scaled_nutrition(scale_grams)
+    }
+
+    pub fn declared_nutrition(
+        &self,
+        meal: &Meal,
+        unit_converter: &UnitConverter,
+    ) -> Result<CalculatedNutrition, MealNutritionResolutionError> {
+        if let Some(unavailable) = self.unavailable_components() {
+            return Err(MealNutritionResolutionError::UnavailableComponents(
+                unavailable,
+            ));
+        }
+        let total = meal.total_quantity().ok_or_else(|| {
+            MealNutritionResolutionError::Internal("meal has no declared total quantity".into())
+        })?;
+        let quantity = total.to_quantity().map_err(|_| {
+            MealNutritionResolutionError::QuantityNotConvertible {
+                amount: total.amount(),
+                unit: total.unit().clone(),
+            }
+        })?;
+        self.nutrition_for(meal, &quantity, unit_converter)
+    }
+
+    fn scaled_nutrition(
+        &self,
+        scale_grams: Decimal,
+    ) -> Result<CalculatedNutrition, MealNutritionResolutionError> {
+        let mut total_nutrients: Vec<(NutrientCode, Decimal, UnitCode)> = Vec::new();
+        let mut total_component_grams = Decimal::ZERO;
+
+        for resolved in &self.components {
+            let ResolvedMealComponentAvailability::Available {
+                nutrition, grams, ..
+            } = resolved.availability()
+            else {
+                return Err(MealNutritionResolutionError::Internal(
+                    "complete resolution contained an unavailable component".into(),
+                ));
+            };
+            total_component_grams += *grams;
+            for nutrient in &nutrition.amounts {
+                match total_nutrients
+                    .iter_mut()
+                    .find(|(code, _, _)| code == &nutrient.nutrient_code)
+                {
+                    Some((_, amount, _)) => *amount += nutrient.amount,
+                    None => total_nutrients.push((
+                        nutrient.nutrient_code.clone(),
+                        nutrient.amount,
+                        nutrient.unit.clone(),
+                    )),
+                }
+            }
+        }
+
+        if total_component_grams <= Decimal::ZERO {
+            return Err(MealNutritionResolutionError::Internal(
+                "meal component total must be positive".into(),
+            ));
+        }
+
+        let scale_factor = scale_grams / total_component_grams;
+        Ok(CalculatedNutrition {
+            amounts: total_nutrients
+                .into_iter()
+                .map(
+                    |(code, amount, unit)| crate::catalog::domain::calculation::NutrientAmount {
+                        nutrient_code: code,
+                        amount: amount * scale_factor,
+                        unit,
+                    },
+                )
+                .collect(),
+        })
+    }
+
+    pub(crate) fn from_products(
+        meal: &Meal,
+        products: &[(ProductId, Product)],
+        unit_converter: &UnitConverter,
+    ) -> Result<Self, JournalError> {
+        let components = meal
+            .components()
+            .iter()
+            .map(|component| {
+                let MealComponentItem::Product(product_id) = component.item();
+                let Some((_, product)) = products.iter().find(|(id, _)| id == product_id) else {
+                    return Ok(ResolvedMealComponent {
+                        component: component.clone(),
+                        availability: ResolvedMealComponentAvailability::Unavailable {
+                            reason: MealComponentUnavailableReason::ProductUnavailable,
+                        },
+                    });
+                };
+
+                let quantity = match component.quantity().to_quantity() {
+                    Ok(quantity) => quantity,
+                    Err(_) => {
+                        return Ok(ResolvedMealComponent {
+                            component: component.clone(),
+                            availability: ResolvedMealComponentAvailability::Unavailable {
+                                reason: MealComponentUnavailableReason::QuantityNotConvertible,
+                            },
+                        });
+                    }
+                };
+
+                let grams = match product.quantity_to_grams(&quantity, unit_converter) {
+                    Ok(grams) => grams,
+                    Err(_) => {
+                        return Ok(ResolvedMealComponent {
+                            component: component.clone(),
+                            availability: ResolvedMealComponentAvailability::Unavailable {
+                                reason: MealComponentUnavailableReason::QuantityNotConvertible,
+                            },
+                        });
+                    }
+                };
+
+                // Conversion already succeeded. A later nutrition error is not an
+                // expected catalog-state degradation, so propagate it instead of
+                // presenting it as an unavailable quantity.
+                let nutrition = product.nutrition_for(&quantity, unit_converter).map_err(
+                    |error| {
+                        JournalError::Internal(format!(
+                            "product nutrition failed after quantity conversion succeeded: {error}"
+                        ))
+                    },
+                )?;
+
+                Ok(ResolvedMealComponent {
+                    component: component.clone(),
+                    availability: ResolvedMealComponentAvailability::Available {
+                        product: Box::new(product.clone()),
+                        nutrition,
+                        grams,
+                    },
+                })
+            })
+            .collect::<Result<Vec<_>, JournalError>>()?;
+        Ok(Self { components })
+    }
+}
+
+#[derive(Debug)]
+pub enum MealNutritionResolutionError {
+    UnavailableComponents(UnavailableMealComponents),
+    QuantityNotConvertible { amount: Decimal, unit: UnitCode },
+    Internal(String),
+}
+
+impl MealNutritionResolutionError {
+    fn into_journal(self, meal_id: Uuid) -> JournalError {
+        match self {
+            Self::UnavailableComponents(unavailable) => JournalError::UnavailableMealComponents {
+                meal_id,
+                unavailable,
+            },
+            Self::QuantityNotConvertible { amount, unit } => {
+                JournalError::MealQuantityNotConvertible {
+                    meal_id,
+                    amount,
+                    unit: unit.0,
+                    reason: MealQuantityUnavailableReason::QuantityNotConvertible,
+                }
+            }
+            Self::Internal(message) => JournalError::Internal(message),
+        }
+    }
 }
 
 /// Application-level meal access for downstream logging workflows.
@@ -97,22 +435,24 @@ impl MealService {
         Ok(meals)
     }
 
-    pub async fn load_products(
+    pub async fn resolve_meal_products(
         &self,
         actor_id: Uuid,
         meal: &Meal,
-    ) -> Result<Vec<(ProductId, Product)>, JournalError> {
+    ) -> Result<MealProductResolution, JournalError> {
         let product_ids = meal
-            .components
+            .components()
             .iter()
-            .map(|component| match component.item {
-                MealComponentItem::Product(id) => id,
+            .map(|component| match component.item() {
+                MealComponentItem::Product(id) => *id,
             })
             .collect::<Vec<_>>();
-        self.catalog
-            .resolve_products(actor_id, &product_ids)
+        let products = self
+            .catalog
+            .resolve_products_available(actor_id, &product_ids)
             .await
-            .map_err(JournalError::from)
+            .map_err(JournalError::from)?;
+        MealProductResolution::from_products(meal, &products, &self.unit_converter)
     }
 
     pub fn unit_converter(&self) -> &UnitConverter {
@@ -124,18 +464,18 @@ impl MealService {
         actor_id: Uuid,
         input: CreateMealInput,
     ) -> Result<Meal, JournalError> {
-        let components = self.build_components(actor_id, input.components).await?;
-
-        let now = Utc::now();
-        let meal = Meal::create(
-            actor_id,
-            input.name,
-            input.notes,
-            input.total_quantity_amount,
-            input.total_quantity_unit,
+        let CreateMealInput {
+            name,
+            notes,
+            total_quantity,
             components,
-            now,
-        )?;
+        } = input;
+        if let Some(total) = &total_quantity {
+            self.validate_supported_total(total)?;
+        }
+        let components = self.build_components(actor_id, components).await?;
+        let now = Utc::now();
+        let meal = Meal::create(actor_id, name, notes, total_quantity, components, now)?;
 
         self.meal_repo.create(&meal).await?;
         Ok(meal)
@@ -150,20 +490,21 @@ impl MealService {
         let existing = self.load_meal(id).await?;
         self.policy.authorize_mutation(user_id, &existing)?;
 
-        let components = match input.components {
+        let UpdateMealInput {
+            name,
+            notes,
+            total_quantity,
+            components,
+        } = input;
+        if let MealTotalQuantityPatch::Set(total) = &total_quantity {
+            self.validate_supported_total(total)?;
+        }
+        let components = match components {
             Some(components) => Some(self.build_components(user_id, components).await?),
             None => None,
         };
 
-        let updated = existing.update(
-            input.name,
-            input.notes,
-            input.total_quantity_amount,
-            input.total_quantity_unit,
-            components,
-            Utc::now(),
-        )?;
-
+        let updated = existing.update(name, notes, total_quantity, components, Utc::now())?;
         self.meal_repo.update(&updated).await?;
         Ok(updated)
     }
@@ -181,12 +522,8 @@ impl MealService {
         id: MealId,
         quantity: Quantity,
     ) -> Result<MealNutritionOutput, JournalError> {
-        let meal = self.get_meal(actor_id, id).await?;
-
-        let products = self.load_products(actor_id, &meal).await?;
-        let calculated = meal
-            .nutrition_for(&quantity, &products, &self.unit_converter)
-            .map_err(JournalError::Validation)?;
+        let resolved = self.resolve_loggable_meal(actor_id, id).await?;
+        let calculated = resolved.nutrition_for(&quantity, &self.unit_converter)?;
         let nutrients: Vec<MealNutrientEntry> = calculated
             .amounts
             .into_iter()
@@ -213,25 +550,65 @@ impl MealService {
             .ok_or_else(|| JournalError::NotFound("meal not found".into()))
     }
 
+    fn validate_supported_total(&self, total: &MealQuantity) -> Result<(), JournalError> {
+        self.unit_converter
+            .mass_to_grams(total.amount(), total.unit())
+            .filter(|grams| *grams > Decimal::ZERO)
+            .map(|_| ())
+            .ok_or_else(|| {
+                JournalError::Validation(
+                    "meal total quantity must use a supported mass unit".into(),
+                )
+            })
+    }
+
     async fn build_components(
         &self,
         actor_id: Uuid,
         inputs: Vec<CreateMealComponentInput>,
     ) -> Result<Vec<MealComponent>, JournalError> {
+        if inputs.is_empty() {
+            return Ok(Vec::new());
+        }
         let product_ids: Vec<ProductId> = inputs
             .iter()
-            .map(|i| match &i.item {
-                MealComponentItem::Product(id) => *id,
+            .map(|input| match input.item {
+                MealComponentItem::Product(id) => id,
             })
             .collect();
-        self.catalog
+        let products = self
+            .catalog
             .resolve_products(actor_id, &product_ids)
             .await?;
 
-        Ok(inputs
+        inputs
             .into_iter()
-            .map(|input| MealComponent::new(input.item, input.quantity))
-            .collect())
+            .map(|input| {
+                let CreateMealComponentInput { item, quantity } = input;
+                let MealComponentItem::Product(product_id) = item;
+                let product = products
+                    .iter()
+                    .find(|(id, _)| id == &product_id)
+                    .map(|(_, product)| product)
+                    .ok_or_else(|| JournalError::NotFound("product not found".into()))?;
+                let quantity_in_grams = quantity.to_quantity().map_err(|error| {
+                    JournalError::Validation(format!(
+                        "meal component quantity is invalid: {error}"
+                    ))
+                })?;
+                product
+                    .quantity_to_grams(&quantity_in_grams, &self.unit_converter)
+                    .map_err(|error| {
+                        JournalError::Validation(format!(
+                            "meal component quantity {} {} cannot be converted for product {}: {error}",
+                            quantity_in_grams.amount(),
+                            quantity_in_grams.unit().0,
+                            product_id.0
+                        ))
+                    })?;
+                Ok(MealComponent::new(item, quantity))
+            })
+            .collect()
     }
 }
 
@@ -243,8 +620,14 @@ impl MealReadPort for MealService {
         id: MealId,
     ) -> Result<ResolvedMeal, JournalError> {
         let meal = self.get_meal(actor_id, id).await?;
-        let products = self.load_products(actor_id, &meal).await?;
-        Ok(ResolvedMeal { meal, products })
+        let resolution = self.resolve_meal_products(actor_id, &meal).await?;
+        if let Some(unavailable) = resolution.unavailable_components() {
+            return Err(JournalError::UnavailableMealComponents {
+                meal_id: meal.id().0,
+                unavailable,
+            });
+        }
+        Ok(ResolvedMeal::from_parts(meal, resolution.products()))
     }
 }
 
@@ -265,6 +648,10 @@ mod tests {
                 meals: Mutex::new(vec![]),
             }
         }
+
+        fn len(&self) -> usize {
+            self.meals.lock().unwrap().len()
+        }
     }
 
     #[async_trait]
@@ -276,7 +663,7 @@ mod tests {
 
         async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, JournalError> {
             let meals = self.meals.lock().unwrap();
-            Ok(meals.iter().find(|m| m.id == id).cloned())
+            Ok(meals.iter().find(|m| m.id() == id).cloned())
         }
 
         async fn list_all(&self) -> Result<Vec<Meal>, JournalError> {
@@ -286,7 +673,7 @@ mod tests {
 
         async fn update(&self, meal: &Meal) -> Result<(), JournalError> {
             let mut meals = self.meals.lock().unwrap();
-            if let Some(existing) = meals.iter_mut().find(|m| m.id == meal.id) {
+            if let Some(existing) = meals.iter_mut().find(|m| m.id() == meal.id()) {
                 *existing = meal.clone();
                 Ok(())
             } else {
@@ -298,7 +685,7 @@ mod tests {
             let mut meals = self.meals.lock().unwrap();
             let idx = meals
                 .iter()
-                .position(|m| m.id == id)
+                .position(|m| m.id() == id)
                 .ok_or_else(|| JournalError::NotFound("not found".into()))?;
             meals.remove(idx);
             Ok(())
@@ -332,6 +719,18 @@ mod tests {
                 Some(product) => Ok(ids.iter().map(|id| (*id, product.clone())).collect()),
                 None => Err(CatalogError::NotFound("product not found".into())),
             }
+        }
+
+        async fn resolve_products_available(
+            &self,
+            _actor_id: Uuid,
+            ids: &[ProductId],
+        ) -> Result<Vec<(ProductId, Product)>, CatalogError> {
+            Ok(self
+                .product
+                .as_ref()
+                .map(|product| ids.iter().map(|id| (*id, product.clone())).collect())
+                .unwrap_or_default())
         }
     }
 
@@ -381,10 +780,10 @@ mod tests {
     }
 
     fn sample_component() -> CreateMealComponentInput {
-        CreateMealComponentInput {
-            item: MealComponentItem::Product(ProductId(Uuid::nil())),
-            quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-        }
+        CreateMealComponentInput::new(
+            MealComponentItem::Product(ProductId(Uuid::nil())),
+            MealQuantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
+        )
     }
 
     #[derive(Clone, Copy, Debug)]
@@ -407,44 +806,60 @@ mod tests {
         Some(sample_product()),
         "",
         vec![sample_component()],
+        None,
         ExpectedCreateMealError::Validation
     )]
     #[case::no_components(
         Some(sample_product()),
         "Empty Meal",
         vec![],
+        None,
         ExpectedCreateMealError::Validation
     )]
     #[case::product_not_found(
         None,
         "Test Meal",
         vec![sample_component()],
+        None,
         ExpectedCreateMealError::NotFound
+    )]
+    #[case::unconvertible_component(
+        Some(sample_product()),
+        "Bad Component",
+        vec![CreateMealComponentInput::new(
+            MealComponentItem::Product(ProductId(Uuid::nil())),
+            MealQuantity::new(Decimal::ONE, UnitCode("banana".to_string())).unwrap(),
+        )],
+        None,
+        ExpectedCreateMealError::Validation
+    )]
+    #[case::non_mass_total(
+        Some(sample_product()),
+        "Bad Total",
+        vec![sample_component()],
+        Some(MealQuantity::new(Decimal::ONE, UnitCode("cup".to_string())).unwrap()),
+        ExpectedCreateMealError::Validation
     )]
     #[tokio::test]
     async fn create_meal_rejects_invalid_request(
         #[case] product: Option<Product>,
         #[case] name: &str,
         #[case] components: Vec<CreateMealComponentInput>,
+        #[case] total_quantity: Option<MealQuantity>,
         #[case] expected: ExpectedCreateMealError,
     ) {
-        let services = make_services(product);
+        let (services, repo) = make_services_with_repo(product);
 
         let result = services
             .create_meal(
                 Uuid::new_v4(),
-                CreateMealInput {
-                    name: name.to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components,
-                },
+                CreateMealInput::new(name.to_string(), None, total_quantity, components),
             )
             .await;
 
         let error = result.expect_err("create_meal should reject invalid input");
         assert_create_meal_error(expected, error);
+        assert_eq!(repo.len(), 0, "invalid meals must not be persisted");
     }
 
     #[tokio::test]
@@ -455,35 +870,98 @@ mod tests {
         let created = services
             .create_meal(
                 user_id,
-                CreateMealInput {
-                    name: "Original".to_string(),
-                    notes: Some("clear me".to_string()),
-                    total_quantity_amount: Some(Decimal::new(100, 0)),
-                    total_quantity_unit: Some(UnitCode("g".to_string())),
-                    components: vec![sample_component()],
-                },
+                CreateMealInput::new(
+                    "Original".to_string(),
+                    Some("clear me".to_string()),
+                    Some(
+                        MealQuantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
+                    ),
+                    vec![sample_component()],
+                ),
             )
             .await
             .unwrap();
 
         let updated = services
             .update_meal(
-                created.id,
+                created.id(),
                 user_id,
-                UpdateMealInput {
-                    name: None,
-                    notes: Some(None),
-                    total_quantity_amount: Some(None),
-                    total_quantity_unit: Some(None),
-                    components: None,
-                },
+                UpdateMealInput::new(None, Some(None), MealTotalQuantityPatch::Clear, None),
             )
             .await
             .unwrap();
 
-        assert_eq!(updated.notes, None);
-        assert_eq!(updated.total_quantity_amount, None);
-        assert_eq!(updated.total_quantity_unit, None);
+        assert_eq!(updated.notes(), None);
+        assert_eq!(updated.total_quantity(), None);
+    }
+
+    #[tokio::test]
+    async fn update_meal_rejects_invalid_changes_without_writing() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+
+        let created = services
+            .create_meal(
+                user_id,
+                CreateMealInput::new(
+                    "Original".to_string(),
+                    None,
+                    Some(
+                        MealQuantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
+                    ),
+                    vec![sample_component()],
+                ),
+            )
+            .await
+            .unwrap();
+
+        let invalid_total = services
+            .update_meal(
+                created.id(),
+                user_id,
+                UpdateMealInput::new(
+                    Some("Changed".to_string()),
+                    None,
+                    MealTotalQuantityPatch::Set(
+                        MealQuantity::new(Decimal::ONE, UnitCode("cup".to_string())).unwrap(),
+                    ),
+                    None,
+                ),
+            )
+            .await;
+        assert!(matches!(invalid_total, Err(JournalError::Validation(_))));
+
+        let invalid_component = services
+            .update_meal(
+                created.id(),
+                user_id,
+                UpdateMealInput::new(
+                    Some("Changed".to_string()),
+                    None,
+                    MealTotalQuantityPatch::Unchanged,
+                    Some(vec![CreateMealComponentInput::new(
+                        MealComponentItem::Product(ProductId(Uuid::nil())),
+                        MealQuantity::new(Decimal::ONE, UnitCode("banana".to_string())).unwrap(),
+                    )]),
+                ),
+            )
+            .await;
+        assert!(matches!(
+            invalid_component,
+            Err(JournalError::Validation(_))
+        ));
+
+        let reloaded = services.get_meal(user_id, created.id()).await.unwrap();
+        assert_eq!(reloaded.name().as_str(), "Original");
+        assert_eq!(
+            reloaded.total_quantity().map(MealQuantity::amount),
+            Some(Decimal::new(100, 0))
+        );
+        assert_eq!(reloaded.components().len(), 1);
+        assert_eq!(
+            reloaded.components()[0].quantity().unit().0,
+            "g".to_string()
+        );
     }
 
     #[derive(Clone, Copy, Debug)]
@@ -504,13 +982,7 @@ mod tests {
         let created = services
             .create_meal(
                 owner,
-                CreateMealInput {
-                    name: "My Meal".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![sample_component()],
-                },
+                CreateMealInput::new("My Meal".to_string(), None, None, vec![sample_component()]),
             )
             .await
             .unwrap();
@@ -518,19 +990,13 @@ mod tests {
         let result = match mutation {
             MealMutation::Update => services
                 .update_meal(
-                    created.id,
+                    created.id(),
                     other,
-                    UpdateMealInput {
-                        name: None,
-                        notes: None,
-                        total_quantity_amount: None,
-                        total_quantity_unit: None,
-                        components: None,
-                    },
+                    UpdateMealInput::new(None, None, MealTotalQuantityPatch::Unchanged, None),
                 )
                 .await
                 .map(|_| ()),
-            MealMutation::Delete => services.delete_meal(created.id, other).await,
+            MealMutation::Delete => services.delete_meal(created.id(), other).await,
         };
 
         assert!(
@@ -547,23 +1013,19 @@ mod tests {
         let meal = services
             .create_meal(
                 user_id,
-                CreateMealInput {
-                    name: "Double Food".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![
+                CreateMealInput::new(
+                    "Double Food".to_string(),
+                    None,
+                    None,
+                    vec![
                         sample_component(),
-                        CreateMealComponentInput {
-                            item: MealComponentItem::Product(ProductId(Uuid::nil())),
-                            quantity: Quantity::new(
-                                Decimal::new(200, 0),
-                                UnitCode("g".to_string()),
-                            )
-                            .unwrap(),
-                        },
+                        CreateMealComponentInput::new(
+                            MealComponentItem::Product(ProductId(Uuid::nil())),
+                            MealQuantity::new(Decimal::new(200, 0), UnitCode("g".to_string()))
+                                .unwrap(),
+                        ),
                     ],
-                },
+                ),
             )
             .await
             .unwrap();
@@ -571,13 +1033,13 @@ mod tests {
         let nutrition = services
             .get_meal_nutrients(
                 user_id,
-                meal.id,
+                meal.id(),
                 Quantity::new(Decimal::new(150, 0), UnitCode("g".to_string())).unwrap(),
             )
             .await
             .unwrap();
 
-        assert_eq!(nutrition.meal_id, meal.id.0);
+        assert_eq!(nutrition.meal_id, meal.id().0);
         assert_eq!(nutrition.nutrients.len(), 1);
         assert_eq!(nutrition.nutrients[0].code, "ENERGY_KCAL");
 

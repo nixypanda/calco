@@ -330,6 +330,12 @@ truth.
 
 See [api-access.md](api-access.md) for the user-facing workflow and examples.
 
+An API-key-only client can call `GET /auth/identity` with its bearer key and no
+`X-CalCo-Account-ID` header to discover its own `profile.id`. The response is
+the same identity/profile envelope as login. The route is read-only and returns
+only the authenticated principal; it does not make key management, assistant,
+admin, import, or write routes key-accessible.
+
 ### Token Model
 
 - Token format is `calco_pat_` followed by 32 random bytes encoded as
@@ -346,13 +352,14 @@ See [api-access.md](api-access.md) for the user-facing workflow and examples.
 
 | Extractor | Authentication | Key scope | Use |
 | --- | --- | --- | --- |
-| `SessionUser` | Browser session cookie only | Not applicable | API-key management and assistant routes |
-| `ReadUser` | Bearer key or browser session | `read` or `read_write` for keys | Read routes |
-| `WriteUser` | Bearer key or browser session | `read_write` for keys | Mutating user-data routes |
+| `IdentityDiscoveryUser` | Bearer key or browser session, no expected account | Any valid key scope | `GET /auth/identity` only |
+| `AccountBoundSessionUser` | Browser session cookie plus required expected account | Not applicable | API-key management and assistant routes |
+| `AccountBoundReadUser` | Bearer key or browser session plus required expected account | `read` or `read_write` for keys | Read routes |
+| `AccountBoundWriteUser` | Bearer key or browser session plus required expected account | `read_write` for keys | Mutating user-data routes |
 | `AuthAdmin` | Admin session cookie only | Not applicable | Admin and import routes |
 | `RawSessionToken` | Session cookie only | Not applicable | Session and logout routes |
 
-`ReadUser` and `WriteUser` resolve authentication in this order:
+`AccountBoundReadUser` and `AccountBoundWriteUser` resolve authentication in this order:
 
 1. If an `Authorization` header is present, require a valid `Bearer <token>`
    form. Authenticate through `ApiKeyService`, which returns `ApiKeyAuth` with
@@ -362,14 +369,51 @@ See [api-access.md](api-access.md) for the user-facing workflow and examples.
 2. Otherwise, use the existing browser session path.
 
 An invalid bearer key returns `401 invalid_api_key`. A valid key with
-insufficient scope returns `403 insufficient_scope`. `SessionUser` always uses
-the browser session path and ignores `Authorization`; API keys cannot
+insufficient scope returns `403 insufficient_scope`. `AccountBoundSessionUser`
+always uses the browser session path and ignores `Authorization`; API keys cannot
 authenticate key-management or assistant routes. `AuthAdmin` remains cookie-only
 and likewise ignores `Authorization`.
 
+### Required Expected Account
+
+Every account-scoped normal-user route requires:
+
+```text
+X-CalCo-Account-ID: <user_profiles.id UUID>
+```
+
+The header is an assertion, never an authentication mechanism. The server first
+resolves the principal from the cookie or bearer key. It then requires exactly
+one header whose value is the profile UUID of that principal. The header cannot
+select, replace, or impersonate a user.
+
+- Header absent: `400 missing_account_header`.
+- Header present but not exactly one valid nonblank UUID:
+  `400 invalid_account_header`.
+- Header present, valid, but different from the authenticated profile:
+  `401 session_account_changed`. The response does not disclose either profile
+  ID.
+- API-key scope and expiry are checked before account binding. A binding header
+  cannot elevate a `read` key to a write route.
+
+The extractors are the only normal-user auth extractors; there is no unbound
+legacy variant that a route can accidentally use. The boundary is:
+
+- Bound: all catalog, log, meal, goal, diary-preference, nutrition-detail,
+  API-key-management, and assistant routes.
+- Not bound: `/auth/login`, `/auth/identity`, `/auth/session`, `/auth/logout`,
+  `/auth/bootstrap/status`, `/auth/bootstrap/admin`, admin routes, and import
+  routes. Those routes authenticate without an expected account header.
+  `/auth/identity` accepts either a bearer key or a browser session and returns
+  only the authenticated principal, so an API-key-only client can discover its
+  own profile UUID before calling bound data routes.
+
+`AUTHORIZATION` and `X-CalCo-Account-ID` are included in the allowed CORS
+headers for trusted tools. CORS does not make embedded browser secrets safe.
+
 ### Route Scope Mapping
 
-Read routes use `ReadUser`:
+Read routes use `AccountBoundReadUser`:
 
 - Catalog: `GET /foods/search`, `GET /foods/categories`,
   `GET /foods/barcode/{barcode}`, `GET /foods/{id}`, `GET /foods/custom`,
@@ -382,7 +426,7 @@ Read routes use `ReadUser`:
 - Goals: `GET /goal`.
 - Diary preferences: `GET /diary-preferences`.
 
-Write routes use `WriteUser`:
+Write routes use `AccountBoundWriteUser`:
 
 - Catalog: `POST /foods/custom`, `PUT /foods/custom/{id}`,
   `DELETE /foods/custom/{id}`.
@@ -393,7 +437,7 @@ Write routes use `WriteUser`:
 - Diary preferences: `PUT /diary-preferences`.
 
 `POST /logs/last-used` is read-scoped even though it uses POST because it only
-returns prefill data. Assistant routes remain `SessionUser` in v1. Admin and
+returns prefill data. Assistant routes remain `AccountBoundSessionUser` in v1. Admin and
 import routes remain `AuthAdmin`, so no API key can use them.
 
 `GET /foods/barcode/{barcode}` can persist an Open Food Facts product on a cache
@@ -401,7 +445,7 @@ miss. This existing read-path side effect is allowed for `read` keys.
 
 ### Management Routes
 
-All three routes use `SessionUser`:
+All three routes use `AccountBoundSessionUser`:
 
 ```text
 GET    /auth/api-keys
@@ -490,7 +534,7 @@ rejection, normally `401 unauthorized`, not `invalid_api_key`.
 
 - Key authentication requires a normal, active user identity and an existing
   profile. Admin identities and missing profiles fail closed.
-- On `ReadUser`/`WriteUser` user-data routes, a malformed `Authorization` header
+- On `AccountBoundReadUser`/`AccountBoundWriteUser` user-data routes, a malformed `Authorization` header
   is rejected and CalCo does not fall back to a cookie. Key-management,
   assistant, admin, and import routes ignore `Authorization` and use their
   session/cookie authentication.
@@ -525,9 +569,15 @@ GET /version
 GET  /auth/bootstrap/status
 POST /auth/bootstrap/admin
 POST /auth/login
+GET  /auth/identity
 GET  /auth/session
 POST /auth/logout
 ```
+
+`GET /auth/identity` accepts a bearer key or browser session without requiring
+`X-CalCo-Account-ID` and returns the same identity/profile envelope as login. It
+returns only the caller's principal. It does not make API-key management,
+assistant, admin, import, or write routes key-accessible.
 
 Personal API key management (browser session only):
 
@@ -572,7 +622,7 @@ GET    /nutrients/{code}
 GET    /units
 ```
 
-Food detail includes product nutrients and servings. There are no separate public nutrient/serving detail endpoints. Catalog reads use `ReadUser`; custom-food writes use `WriteUser`.
+Food detail includes product nutrients and servings. There are no separate public nutrient/serving detail endpoints. Catalog reads use `AccountBoundReadUser`; custom-food writes use `AccountBoundWriteUser`.
 
 `GET /foods/barcode/{barcode}` trims the path value and uses local-first lookup.
 Locally cached values are returned without an external request. Only an
@@ -628,7 +678,7 @@ GET    /logs/summary?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
 ```
 
 Use the same date for `from_date` and `to_date` for a single-day view. Log reads and
-`POST /logs/last-used` use `ReadUser`; log mutations use `WriteUser`.
+`POST /logs/last-used` use `AccountBoundReadUser`; log mutations use `AccountBoundWriteUser`.
 
 `GET /logs/recent-items` dedups logs to one entry per item and orders both the
 items and each item's `top_quantities` by time-decayed usage frequency. Log age
@@ -643,50 +693,187 @@ item.type = product
 item.type = meal
 ```
 
-#### Idempotent Log Creation
+#### Durable Idempotent Log Creation
 
-Apply `20261115000001_food_log_idempotency.sql` before starting the updated
-backend; it adds two nullable columns to `food_logs`. The NixOS deployment runs
-migrations before the backend, while local development uses
-`just migrate-backend`.
-The migration also accepts an `idempotency_key` column from an earlier local
-trial; those rows have no original-request fingerprint and return `409` if the
-key is retried. Do not infer an original fingerprint from an edited log.
+Every log create requires a top-level `idempotency_key`:
 
-`POST /logs` accepts an optional `idempotency_key`. Omitting it, or sending
-`null`, preserves the existing non-idempotent behavior. A supplied key must be 1
+- `POST /logs` creates one product or meal log.
+- `POST /logs/ad-hoc` creates one ad-hoc log.
+- `POST /logs/batch` creates one ordered batch and accepts the key beside
+  `items`, never inside an item.
+
+Omitting the key, sending `null`, sending a non-string JSON value, or sending
+an invalid string key is `400 validation` and writes nothing. A key must be 1
 to 128 characters, must not be blank, and must not contain control characters.
-Keys are scoped to the authenticated user profile and are never returned in log
-responses.
+Keys are scoped to the authenticated user profile and are never returned in
+log responses. An item-level key in a batch, including an explicit `null` or a
+non-string value, is a validation error.
+
+There is no unkeyed create fallback at HTTP, application, or repository level.
+The request DTOs deserialize the key directly into `IdempotencyKey`; malformed
+JSON is translated from the extractor rejection into the normal `400 validation`
+envelope instead of leaking a framework `422`. The application command types
+always carry an `IdempotencyKey`, and `FoodLogRepo` has no standalone food-log
+create method; the only creation path is the operation journal transaction.
 
 - The first successful create returns `201 Created`.
-- A retry with the same key and the same normalized create input returns
-  `200 OK` with the existing log.
-- Reusing the key with a different create input returns `409 conflict`.
-- Deleting the log deletes its key, so a delayed retry with the same key and
-  input can create a new log with `201 Created`.
+- A retry with the same key, logging route, and normalized input returns
+  `200 OK` with the operation's logs in their original order.
+- Reusing the key with a different normalized payload, a different batch order,
+  or a different logging route returns `409 conflict`.
+- If any log created by the operation has since been deleted, replay returns
+  `409 conflict` and creates nothing. Use a new key for a new intentional
+  submission.
+- A malformed or incomplete operation returns `409 conflict` and creates
+  nothing. This includes zero child links, duplicate links, a child count that
+  differs from the stored `log_count`, a linked log owned by another user, an
+  invalid operation kind, or a linked log that can no longer be loaded.
+- Validation, ownership, catalog, and persistence failures do not reserve the
+  key. The operation row, every ordered child link, every food log, and every
+  nutrient snapshot share one transaction. A failed batch leaves no partial
+  rows and the key remains usable for a corrected retry.
 
-`food_logs.idempotency_key` and `food_logs.request_fingerprint` store the
-original key and a SHA-256 fingerprint of the validated create request: log
-date, meal slot, normalized device timezone, item type and ID, normalized
-quantity amount, exact quantity unit code, and notes. Notes and keys are
-compared byte-for-byte rather than Unicode-normalized. The database constrains
-the key to 1 to 128 characters and the fingerprint to 64 lowercase hex
-characters.
+The operation journal is the sole owner of the key and request fingerprint.
+Food logs do not store either value. The durable
+`food_log_create_operations` and `food_log_create_operation_logs` tables store
+the key, a validated lowercase SHA-256 request fingerprint, the operation kind,
+the expected log count, and the ordered log IDs. Replay reads the current stored
+log rows, not a stored response snapshot: later edits are visible, and nutrient
+snapshots are not recalculated. Log lookups are scoped by the authenticated user
+in PostgreSQL, and replay rechecks every returned log's owner.
 
-The fingerprint does not store resolved catalog names or nutrient snapshots, so
-later log edits and catalog changes do not change it. Updates preserve the
-stored key and fingerprint. The key, fingerprint, food log, and nutrient
-snapshots are written atomically by the existing `FoodLogRepo::create`
-transaction. Reads of a food log and its nutrient snapshots use one
-repeatable-read transaction, so a replay cannot combine a row from before an
-update or delete with snapshots from after it.
+`RequestFingerprint` only accepts a 64-character lowercase hexadecimal digest,
+and fingerprints are produced by hashing the canonical request bytes. The
+repository accepts one `FoodLogCreateOperationWrite` aggregate that owns both
+the operation and its food-log rows; child IDs are derived from that row slice
+and every row owner must match the operation user. There is no separate
+operation/log-slice write API that could persist a count, order, owner, or
+child-ID mismatch.
 
-Concurrent retries rely on the partial unique index on
-`(user_id, idempotency_key)`. When a retry loses the insert race, it reads the
-winning log and replays it or returns a conflict. `POST /logs/batch` does not
-support idempotency keys; supplying one, including an explicit `null`, is a
-validation error rather than a silently ignored field.
+Child rows deliberately have no foreign key to `food_logs`, so deleting a log
+leaves a tombstone instead of silently shrinking the operation. The unique index
+on `(user_id, idempotency_key)` serializes concurrent retries across all three
+routes; the losing request reads the winning operation and replays it or returns
+a conflict. Duplicate insertion uses an explicit `ON CONFLICT` target instead of
+matching an operator-visible index name, so a renamed equivalent unique index
+keeps the same replay behavior. Single and ad-hoc operations require exactly one
+child; batch operations require 1 to 50 children. A database shape constraint
+enforces that relationship.
+
+Operation rows, keys, and child links are permanent for the lifetime of the user
+profile. There is no TTL, pruning job, admin cleanup, or log-deletion path that
+removes a key or an individual child link. Deleting a user profile cascades the
+operation and all child links together. A future retention protocol must replace
+the tombstone mechanism before any cleanup is allowed to delete these rows.
+
+Fingerprints cover log date, meal slot, normalized device timezone, item type
+and ID, normalized quantity amount, exact quantity unit code, and notes. Ad-hoc
+fingerprints add the trimmed name and brand, normalized quantity, and nutrients
+sorted by code. Batch fingerprints hash the ordered list of item create inputs.
+Notes and keys are compared byte-for-byte rather than Unicode-normalized. The
+fingerprint deliberately does not store resolved catalog names or nutrient
+snapshots, so log edits and catalog changes do not change it.
+
+#### Log Create Migrations And Startup
+
+The final schema has no legacy key or fingerprint columns on `food_logs`.
+Migration history is:
+
+- `20261115000001_food_log_idempotency.sql` is historical. It added the old
+  nullable columns and index on `food_logs`. Do not edit an applied migration
+  file; SQLx validates its checksum.
+- `20261119000000_food_log_create_operations.sql` is the historical first
+  journal migration. Keep it byte-for-byte if it was ever applied.
+- `20261119000001_food_log_create_operations_log_count.sql` is the historical
+  additive `log_count` upgrade for that first journal.
+- `20261120000000_food_log_create_operations.sql` creates or upgrades the
+  durable journal idempotently. It is safe whether or not either historical
+  journal migration was applied, adds and backfills `log_count` when needed.
+- `20261120000001_drop_food_log_legacy_idempotency.sql` moves keys still present
+  on surviving legacy log rows into the journal and drops the legacy columns and
+  index. It takes `ACCESS EXCLUSIVE` on `food_logs` before reading the candidate
+  snapshot, so an in-flight old writer cannot commit a keyed row between the
+  snapshot and the column drop. Drain old backends before running it anyway:
+  the lock serializes in-flight statements, then old binaries either finish
+  before the drop or fail cleanly against the new schema.
+- `20261121000001_food_log_create_operation_shape.sql` follows the meal
+  quantity constraints migration at `20261121000000`; the two migrations touch
+  disjoint tables. It adds the explicit single/ad-hoc exactly-one and batch
+  1-to-50 shape constraint. It first aborts the migration if an existing
+  operation violates the shape; it never guesses a repair. The older
+  log-count-only constraint is subsumed and removed.
+
+Run migrations explicitly before starting the backend:
+
+```bash
+just migrate-backend
+```
+
+`build_app_state` validates the required journal schema before the router is
+served. Readiness requires all of the following:
+
+- The required columns exist with their exact PostgreSQL types and `NOT NULL`
+  where applicable: operation ID/user/key/fingerprint/kind/count/created time,
+  child operation/log/position, and the `food_logs` ID/user columns.
+- The operation primary key, user/key unique index, child primary key, and
+  child operation/log unique index have the required key columns and are valid,
+  ready, live, and immediate (non-deferrable). A deferrable unique index on an
+  `ON CONFLICT` arbiter column fails readiness even when an immediate index also
+  exists, because it can make keyed inserts fail at runtime. The validator
+  accepts an equivalent renamed unique index.
+- The operation user foreign key and child operation foreign key match the
+  canonical migration definitions exactly, are valid, and cascade on
+  profile/operation deletion; child `food_log_id` has no foreign key to
+  `food_logs`.
+- Key length, fingerprint format, operation kind, operation shape, and child
+  position check constraints match the canonical validated definitions exactly.
+  Readiness compares normalized `pg_get_expr` output, not token substrings, so a
+  weaker check that merely mentions the same columns or operators is rejected.
+- Neither legacy key nor fingerprint column remains on `food_logs`.
+
+Canonical comparisons use the PostgreSQL 16 `pg_get_expr` and
+`pg_get_constraintdef` output produced by the migrations, normalized only for
+whitespace. A logically equivalent but textually different check or foreign-key
+constraint is intentionally rejected; recreate the canonical constraint instead
+of relying on a hand-written variant.
+
+A failure produces `database schema is incompatible` with instructions to run
+migrations. The backend never runs migrations and never serves a partially
+upgraded database. `/health` and `/version` are liveness/version endpoints only;
+clients must not use them to negotiate log create behavior.
+
+Upgrade behavior:
+
+- Fresh install: run the full migration chain; the journal is created and the
+  legacy columns are removed.
+- Existing install with legacy keyed logs: surviving keys are transferred to
+  the journal before the columns are dropped. A key whose log was already
+  deleted before this migration cannot be reconstructed, and no API claims
+  otherwise.
+- Existing install that recorded a pre-`log_count` journal: the operation
+  journal migration derives the count from existing child links and aborts on
+  a zero or oversized operation rather than guessing. The later shape migration
+  performs the same fail-closed check for kind/count pairs.
+- Supported upgrade sources are fresh databases, databases following the
+  published main migration order through
+  `20261115000001_food_log_idempotency.sql`, and databases that recorded only
+  the earlier `20261119000000`/`20261119000001` journal chain. The historical
+  `20261119000000` and `20261119000001` files remain byte-for-byte for checksum
+  compatibility; do not renumber, edit, or splice only a subset of the chain.
+  Databases bootstrapped from an unpublished intermediate migration set are not
+  a supported baseline.
+- `20261120000001_drop_food_log_legacy_idempotency.sql` was amended before
+  merge to take the `ACCESS EXCLUSIVE` lock. A database that applied an earlier
+  revision of that unpublished file has a different SQLx checksum and is not a
+  supported baseline. Recreate it from the published main baseline, the
+  supported `190` journal chain, or a fresh database; do not edit
+  `_sqlx_migrations`. No production or shared database is known to have applied
+  the pre-merge revision; only ephemeral test databases have.
+- An install with an edited published historical migration checksum must be
+  reconciled explicitly. Do not reset SQLx history or delete/recreate the
+  journal to force an upgrade.
+
+Do not add TTL or cleanup code that deletes keys or individual links.
 
 ### Nutrition Details
 
@@ -695,7 +882,7 @@ GET /nutrition/details?date=YYYY-MM-DD
 ```
 
 Returns per-nutrient known amounts, reference guidance, item counts, coverage,
-and status for the requested day. It uses `ReadUser`.
+and status for the requested day. It uses `AccountBoundReadUser`.
 
 ### Meals
 
@@ -709,7 +896,116 @@ GET    /meals/{id}/nutrients?amount=&unit=
 ```
 
 Meal requests are aggregate-shaped. There are no standalone meal-component
-mutation routes. Meal reads use `ReadUser`; meal mutations use `WriteUser`.
+mutation routes. Meal reads use `AccountBoundReadUser`; meal mutations use `AccountBoundWriteUser`.
+
+#### Meal Availability And Nutrition
+
+Meal responses use explicit tagged values instead of nullable marker fields.
+The top-level `nutrition` object has one of four statuses:
+
+- `available`: `summary` contains the computed nutrition for the declared
+  `total_quantity`.
+- `not_declared`: the meal has no `total_quantity`; this is a legitimate
+  absence, not an error or partial calculation.
+- `unavailable`: one or more components cannot be resolved. The object contains
+  a non-empty `unavailable_components` array, each entry with `component_id`,
+  typed `item`, preserved `quantity`, and typed `reason`.
+- `total_quantity_unavailable`: all components are usable, but the stored
+  `total_quantity` cannot be converted to grams. The object includes the typed
+  `reason` (`quantity_not_convertible`) and the preserved `total_quantity`.
+
+Each component is tagged by `availability`:
+
+- `available`: includes the required computed `nutrition_summary`.
+- `unavailable`: includes a typed `reason`: `product_unavailable` when the
+  product cannot be resolved, or `quantity_not_convertible` when the current
+  product servings/mass units cannot convert the stored quantity. No display
+  name is invented for a product that cannot be loaded.
+
+This is a breaking wire-contract change from the earlier preview round:
+`missing_components` is now `unavailable_components`, the component tag
+`missing` is now `unavailable`, and `quantity_not_convertible` is a new reason.
+
+Example degraded meal:
+
+```json
+{
+  "id": "meal-id",
+  "name": "Broken Porridge",
+  "notes": "needs milk",
+  "total_quantity": { "amount": "250", "unit": "g" },
+  "nutrition": {
+    "status": "unavailable",
+    "unavailable_components": [
+      {
+        "component_id": "component-id",
+        "item": { "type": "product", "id": "deleted-product-id" },
+        "quantity": { "amount": "200", "unit": "g" },
+        "reason": "product_unavailable"
+      }
+    ]
+  },
+  "components": [
+    {
+      "availability": "available",
+      "id": "oats-component-id",
+      "item": { "type": "product", "id": "oats-id" },
+      "quantity": { "amount": "50", "unit": "g" },
+      "nutrition_summary": {
+        "energy_kcal": "190",
+        "protein_g": "2.5",
+        "carbs_g": "5",
+        "fat_g": "1",
+        "fiber_g": null
+      }
+    },
+    {
+      "availability": "unavailable",
+      "id": "component-id",
+      "item": { "type": "product", "id": "deleted-product-id" },
+      "quantity": { "amount": "200", "unit": "g" },
+      "reason": "product_unavailable"
+    }
+  ],
+  "created_at": "2026-06-10T08:00:00Z",
+  "updated_at": "2026-06-10T08:00:00Z"
+}
+```
+
+`GET /meals` and `GET /meals/{id}` keep broken meals in the response and preserve
+component identity and quantity for repair. The meal remains editable and
+deleteable. Repair it with `PUT /meals/{id}` and a complete `components` array
+using currently convertible products and quantities.
+
+`GET /meals/{id}/nutrients` and meal-based `POST /logs` or `PUT /logs/{id}`
+return `409 unavailable_components` instead of calculating false nutrition. The
+error body lists `meal_id` and the same non-empty unavailable-component objects,
+with typed `reason` rather than a free-form string. If the requested preview/log
+quantity itself cannot be converted, the error is `409
+meal_quantity_not_convertible` with `meal_id`, `quantity`, and reason.
+
+Meal creates and updates validate before persistence. The optional
+`total_quantity` must provide both a positive amount and a nonblank unit
+supported as mass, or neither. Every supplied component quantity must convert
+against its currently resolved product. Invalid input returns `400 validation`
+and writes no meal or component row. Catalog changes after a successful write can
+still make a stored meal degraded; that is handled as a read-time typed state,
+not a global list failure. The database adds validated structural check
+constraints, so upgrades never preserve structurally invalid rows.
+
+The meal quantity migration fails fast if legacy data contains a non-positive
+amount, a blank unit, a half-paired total, or a meal without components. It
+aborts before schema mutation and reports the affected row IDs; operators must
+repair those source rows explicitly. Blank means empty or containing only
+Unicode White_Space, matching Rust `trim` (including tab, newline, NBSP, and the
+other Unicode space separators). The server does not delete or rewrite those
+rows and does not serve structurally invalid meals. Structurally valid legacy
+quantities remain readable: a positive, nonblank non-mass declared total is
+reported as `total_quantity_unavailable`, and catalog-degraded components remain
+dynamically unavailable.
+
+Meal nutrition is computed from the current catalog only for preview and new
+log creation. Existing meal-based food logs remain immutable snapshots.
 
 ### Goals
 
@@ -719,7 +1015,7 @@ PUT /goal
 ```
 
 `GET /goal` resolves the target snapshot effective for the requested local date
-and uses `ReadUser`. `PUT /goal` uses `WriteUser`.
+and uses `AccountBoundReadUser`. `PUT /goal` uses `AccountBoundWriteUser`.
 
 `PUT /goal` saves the current day's target values using:
 
@@ -742,7 +1038,7 @@ PUT /diary-preferences
 ```
 
 The update replaces the authenticated user's enabled meal slots. At least one
-known slot must remain enabled. `GET` uses `ReadUser`; `PUT` uses `WriteUser`.
+known slot must remain enabled. `GET` uses `AccountBoundReadUser`; `PUT` uses `AccountBoundWriteUser`.
 
 ### Imports
 
@@ -761,7 +1057,7 @@ GET  /imports/{id}/errors
 
 ### Assistant
 
-Authenticated user routes (browser session only through `SessionUser`; API keys
+Authenticated user routes (browser session only through `AccountBoundSessionUser`; API keys
 cannot use these routes in v1):
 
 ```text
@@ -810,15 +1106,21 @@ Important tables:
 - Auth: `identities`, `user_profiles`, `sessions`, `api_keys`,
   `auth_audit_events`
 - Catalog: `products`, `product_nutrients`, `product_servings`, `nutrients`, `units`
-- Logs: `food_logs`, `food_log_nutrients`
+- Logs: `food_logs`, `food_log_nutrients`, `food_log_create_operations`,
+  `food_log_create_operation_logs`
 - Meals: `meals`, `meal_components`
 - Goals: `goal_target_versions`
 - Diary preferences: `diary_preferences`
 - Imports: `imports`, `staging_products`, `staging_product_nutrients`, `staging_product_servings`, `import_errors`
 
-`food_logs` stores an optional idempotency key and request fingerprint directly
-on the log. A partial unique index on `(user_id, idempotency_key)` enforces
-per-profile key uniqueness for keyed logs, and deleting the log frees the key.
+`food_log_create_operations` is the durable replay record for every log create
+route. Its unique index on `(user_id, idempotency_key)` spans single, ad-hoc, and
+batch operations. `log_count` records the expected number of child links, and a
+shape constraint requires exactly one child for single/ad-hoc operations and
+between 1 and 50 for batch operations. Child rows retain ordered log IDs after
+log deletion so a late retry cannot recreate a removed log. `food_logs` stores
+no key or fingerprint columns. Operation and child rows are retained
+indefinitely; only deleting the owning profile cascades the whole journal.
 
 Catalog search fetches storage-filtered candidate rows (scope and category
 filters) from the repository. Matching and ranking are pure Rust in
