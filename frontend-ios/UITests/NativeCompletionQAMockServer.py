@@ -394,6 +394,11 @@ class FixtureState:
                 "carbs_target_g": 250,
                 "fat_target_g": 70,
             }
+            # Goal versions model the backend contract: a save takes effect
+            # from its local_date; earlier dates keep the previous target.
+            self.goal_history: list[tuple[str | None, dict]] = [
+                (None, copy.deepcopy(self.goal))
+            ]
             self.enabled_slots = [
                 "breakfast",
                 "lunch",
@@ -718,8 +723,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/goal":
             date = (self._query().get("date") or [self.state.today])[0]
             with self.state.lock:
-                payload = copy.deepcopy(self.state.goal)
+                chosen, chosen_effective = self.state.goal_history[0]
+                for effective, version in self.state.goal_history:
+                    if effective is None or effective <= date:
+                        chosen, chosen_effective = version, effective
+                payload = copy.deepcopy(chosen)
             payload["requested_date"] = date
+            payload["effective_from"] = chosen_effective
             self._send(200, payload)
             return
         if path == "/api/diary-preferences":
@@ -1245,6 +1255,16 @@ class Handler(BaseHTTPRequestHandler):
                             "fat_target_g", self.state.goal["fat_target_g"]
                         ),
                     }
+                )
+                effective = str(body.get("local_date") or self.state.today)
+                self.state.goal["effective_from"] = effective
+                self.state.goal_history = [
+                    (when, version)
+                    for when, version in self.state.goal_history
+                    if when != effective
+                ]
+                self.state.goal_history.append(
+                    (effective, copy.deepcopy(self.state.goal))
                 )
                 self._send(200, copy.deepcopy(self.state.goal))
             return

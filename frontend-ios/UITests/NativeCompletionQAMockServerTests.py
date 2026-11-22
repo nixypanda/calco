@@ -149,6 +149,32 @@ class MockContractTests(unittest.TestCase):
         status, _, _ = self.request("GET", "/api/goal")
         self.assertEqual(status, 200)
 
+    def test_goal_save_is_effective_only_from_its_local_date(self) -> None:
+        historical = "2026-11-18"  # reset(today=2026-11-19) sets historical -1 day
+        status, baseline, _ = self.request("GET", f"/api/goal?date={historical}")
+        self.assertEqual(status, 200)
+        self.assertEqual(baseline["calorie_target"], 2000)
+        self.assertIsNone(baseline["effective_from"])
+
+        status, saved, _ = self.request(
+            "PUT",
+            "/api/goal",
+            {"local_date": "2026-11-19", "calorie_target": 2230},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(saved["effective_from"], "2026-11-19")
+
+        status, before, _ = self.request("GET", f"/api/goal?date={historical}")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            before["calorie_target"],
+            2000,
+            "A save effective today must not rewrite an earlier day's goal.",
+        )
+        status, today, _ = self.request("GET", "/api/goal?date=2026-11-19")
+        self.assertEqual(today["calorie_target"], 2230)
+        self.assertEqual(today["effective_from"], "2026-11-19")
+
     def test_capabilities_endpoint_is_absent(self) -> None:
         status, payload, _ = self.request("GET", "/api/capabilities")
         self.assertEqual(status, 404)

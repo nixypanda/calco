@@ -126,6 +126,8 @@ enum CalCoE2E {
     }
 
     static func isLoadedDiary(in app: XCUIApplication) -> Bool {
+        // Strict stable-child readiness restored for final acceptance after
+        // the Diary source fix; do not fall back to the container identifier.
         app.descendants(matching: .any)["diary.summary.calories"].exists
     }
 

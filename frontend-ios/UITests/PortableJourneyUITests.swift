@@ -405,9 +405,16 @@ final class PortableJourneyUITests: XCTestCase {
         XCTAssertTrue(waitFor("diary.summary.calories"), "The diary did not return.")
 
         XCTAssertTrue(openSearchFromDiary(), "Search did not open.")
-        let scope = app.segmentedControls["search.scope"]
-        XCTAssertTrue(scope.waitForExistence(timeout: Timeout.normal))
-        scope.buttons["Barcode"].tap()
+        // Contextual Add Food uses History/Custom/All scopes; barcode is a
+        // labelled lookup card rather than a scope segment.
+        let barcodeEntry = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Barcode lookup")
+        ).firstMatch
+        XCTAssertTrue(
+            barcodeEntry.waitForExistence(timeout: Timeout.normal) && barcodeEntry.isHittable,
+            "The Barcode lookup entry is missing."
+        )
+        barcodeEntry.tap()
         guard let barcode = waitForElement("search.barcode.field") else {
             XCTFail("The manual barcode field did not appear.")
             return
@@ -857,13 +864,81 @@ final class PortableJourneyUITests: XCTestCase {
     // MARK: - Feature entry
 
     private func openLibrary() -> Bool {
-        guard tap("diary.library") else { return false }
-        return waitFor("library.list") || waitFor("library.empty") || waitFor("library.add")
+        let entries = [
+            "app.sidebar.library", "app.tab.library", "sidebar.library",
+            "library.tab", "tab.library", "diary.library",
+        ]
+        if tapAny(entries, labels: ["Library"]) { return finishOpenLibrary() }
+        // Expanded NavigationSplitView starts with the sidebar collapsed: the
+        // row exists in AX but is not hittable. Reveal it with the standard
+        // leading-edge swipe gesture, then retry the Library row.
+        let row = app.descendants(matching: .any)["app.sidebar.library"]
+        if row.exists, !row.isHittable {
+            let window = app.windows.firstMatch
+            let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5))
+            let end = window.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        if tapAny(["app.sidebar.library"], labels: []) { return finishOpenLibrary() }
+        print("NATIVE_QA_LIBRARY_SIDEBAR_AX\n\(app.debugDescription)")
+        return false
+    }
+
+    private func finishOpenLibrary() -> Bool {
+        selectLibrarySection("Foods", identifier: "library.foods")
+        // Expanded layouts keep a sidebar and may present the Library root
+        // through its segmented control / section surface rather than a list.
+        return waitFor("library.list") || waitFor("library.empty")
+            || waitFor("library.add") || waitFor("library.foods")
+            || waitFor("library.section") || waitFor("library.meals")
     }
 
     private func openMeals() -> Bool {
-        guard tap("diary.meals") else { return false }
+        guard tapAny(
+            [
+                "app.tab.library", "app.sidebar.library", "sidebar.library",
+                "meals.tab", "tab.meals", "diary.meals",
+            ],
+            labels: ["Library"]
+        ) else { return false }
+        selectLibrarySection("Meals", identifier: "library.meals")
         return waitFor("meals.list") || waitFor("meals.list.row.qa-meal-1")
+            || waitFor("library.meals")
+    }
+
+    /// Tap the first reachable native tab identifier, with an accessibility
+    /// label fallback for the tab-bar item.
+    private func tapAny(_ identifiers: [String], labels: [String]) -> Bool {
+        for identifier in identifiers where tap(identifier) { return true }
+        for label in labels {
+            let candidate = app.buttons.matching(
+                NSPredicate(format: "label ==[c] %@", label)
+            ).firstMatch
+            if candidate.waitForExistence(timeout: 3), candidate.isHittable {
+                candidate.tap()
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Switch the Library segmented control when the native root is present.
+    /// The native Picker is a SegmentedControl with button options; query that
+    /// AX type before falling back to a generic labelled button.
+    private func selectLibrarySection(_ label: String, identifier: String) {
+        guard waitFor("library.section") else { return }
+        if waitFor(identifier) { return }
+        let predicate = NSPredicate(format: "label ==[c] %@", label)
+        var option = app.segmentedControls["library.section"].buttons.matching(predicate).firstMatch
+        if !option.exists || !option.isHittable {
+            option = app.buttons.matching(predicate).firstMatch
+        }
+        if option.exists, option.isHittable {
+            option.tap()
+        } else if let section = waitForElement("library.section") {
+            section.tap()
+            if option.waitForExistence(timeout: 3), option.isHittable { option.tap() }
+        }
     }
 
     private func openNutrition() -> Bool {
@@ -931,27 +1006,34 @@ final class PortableJourneyUITests: XCTestCase {
     }
 
     private func openAssistant(_ purposeIdentifier: String) -> Bool {
-        guard waitFor("search.assistant") else { return false }
-        guard tapAny("search.assistant") else { return false }
-        if tapAny(purposeIdentifier) { return true }
-        let labels = purposeIdentifier.hasSuffix("adHocLog")
-            ? ["Draft a meal log"]
-            : ["Draft custom food"]
-        for label in labels {
-            let predicate = NSPredicate(format: "label ==[c] %@", label)
-            for query in [
-                app.buttons.matching(predicate),
-                app.menuItems.matching(predicate),
-            ] {
-                let candidate = query.firstMatch
-                if candidate.waitForExistence(timeout: Timeout.short),
-                   candidate.isHittable {
-                    candidate.tap()
-                    return true
-                }
+        // Contextual Search hides the toolbar assistant menu, so the AI entry is
+        // one native Menu (search.quickEntry.assistant) that offers both shipped
+        // purposes (search.assistant.customFood / .adHocLog). Opening that row
+        // is NOT the end of the journey: the requested purpose action must be
+        // tapped before reporting success, otherwise no disabled gate and no
+        // composer is ever presented.
+        if !tapAny(["search.assistant"], labels: []),
+           !tapAny(["search.quickEntry.assistant"], labels: []) {
+            guard waitFor("search.assistant")
+                    || waitFor("search.quickEntry.assistant") else {
+                return false
+            }
+            guard tapAny(["search.assistant"], labels: [])
+                    || tapAny(["search.quickEntry.assistant"], labels: []) else {
+                return false
             }
         }
-        return false
+        let purpose = app.descendants(matching: .any)[purposeIdentifier]
+        guard purpose.waitForExistence(timeout: Timeout.normal), purpose.isHittable else {
+            return false
+        }
+        purpose.tap()
+        // A real selection yields either the disabled-gate sheet or the enabled
+        // composer. The caller still owns the exact gate / review assertions.
+        return CalCoE2E.waitUntil(timeout: Timeout.long) {
+            self.app.descendants(matching: .any)["assistant.status.disabled"].exists
+                || self.app.descendants(matching: .any)["assistant.composer"].exists
+        }
     }
 
     private func waitForLibraryList() -> Bool {
@@ -1067,9 +1149,23 @@ final class PortableJourneyUITests: XCTestCase {
         let current = element.value as? String ?? ""
         let placeholder = element.placeholderValue ?? ""
         if !current.isEmpty, current != placeholder {
-            element.typeText(
-                String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
-            )
+            // Select All is the reliable clear path. Delete-key counts depend
+            // on cursor placement: a centre tap can leave the caret before the
+            // existing text, so the new value is PREPENDED instead of replacing
+            // it (QA-only regression, not a product save/refresh defect).
+            let selectAll = app.menuItems.matching(
+                NSPredicate(format: "label CONTAINS[c] %@", "Select All")
+            ).firstMatch
+            if selectAll.waitForExistence(timeout: 2), selectAll.isHittable {
+                selectAll.tap()
+            } else {
+                element.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)
+                ).tap()
+                for _ in 0..<current.count {
+                    element.typeText(XCUIKeyboardKey.delete.rawValue)
+                }
+            }
         }
         element.typeText(value)
     }
@@ -1108,8 +1204,16 @@ final class PortableJourneyUITests: XCTestCase {
     }
 
     private func hittable(_ identifier: String) -> XCUIElement? {
+        let query = app.descendants(matching: .any).matching(identifier: identifier)
+        // Stable IDs can decorate both an image and a text/row (e.g. sidebar
+        // rows). firstMatch may be a non-hittable child, so pick the first
+        // hittable instance instead of assuming one AX node.
+        if let hit = query.allElementsBoundByIndex
+            .first(where: { $0.exists && $0.isHittable }) {
+            return hit
+        }
         let target = element(identifier)
-        if target.waitForExistence(timeout: Timeout.normal), target.isHittable {
+        if target.waitForExistence(timeout: Timeout.short), target.isHittable {
             return target
         }
         return nil

@@ -45,6 +45,11 @@ final class NativeCompletionUITests: XCTestCase {
         static let previousDay = "diary.previousDay"
         static let nextDay = "diary.nextDay"
         static let addFoodPrefix = "diary.addFood."
+        static let latestPrefix = "diary.latest."
+        static let addFoodLabel = "Add food"
+        static let latestLabel = "Log latest"
+        static let nutritionDetails = "nutrition.details"
+        static let nutritionClose = "nutrition.close"
         static let historicalLog = "diary.log.hist-log-001"
         static let searchField = "search.field"
         static let searchResult = "search.result.qa-apple"
@@ -64,6 +69,10 @@ final class NativeCompletionUITests: XCTestCase {
         static let editorDeleteCancel = "diary.editor.delete.cancel"
         static let settingsSheet = "settings.sheet"
         static let settingsCancel = "settings.cancel"
+        static let settingsDiscardConfirm = "settings.discard.confirm"
+        static let settingsDiscardCancel = "settings.discard.cancel"
+        static let editorDiscardConfirm = "diary.editor.discard.confirm"
+        static let editorDiscardCancel = "diary.editor.discard.cancel"
         static let settingsKeyboardDone = "settings.keyboard.done"
         static let goalCalories = "settings.goals.calories"
         static let goalProtein = "settings.goals.protein"
@@ -436,6 +445,7 @@ final class NativeCompletionUITests: XCTestCase {
             app.descendants(matching: .any)[Identifier.macros].exists,
             "The macro section is missing at the accessibility size."
         )
+        attachScreenshot(named: "iPhone-13-mini-dynamic-type-diary")
 
         let actions = [
             Identifier.settings,
@@ -653,9 +663,14 @@ final class NativeCompletionUITests: XCTestCase {
         )
 
         navigateToHistoricalFixtureDay()
-        let macroMode = app.segmentedControls["diary.summary.macroMode"]
-        XCTAssertTrue(macroMode.exists, "The macro mode picker is missing.")
-        macroMode.buttons["Percent"].tap()
+        // The compact summary renders the macro mode as a Menu, not a
+        // SegmentedControl; query the stable identifier on any AX type.
+        let macroMode = app.descendants(matching: .any)[Identifier.macros]
+        XCTAssertTrue(
+            macroMode.waitForExistence(timeout: Timeout.normal),
+            "The macro mode picker is missing."
+        )
+        XCTAssertTrue(selectOption("Percent", from: macroMode), "Percent mode was not selectable.")
         let protein = app.descendants(matching: .any)["diary.summary.protein"]
         XCTAssertTrue(protein.waitForExistence(timeout: Timeout.normal))
         XCTAssertTrue(
@@ -670,9 +685,16 @@ final class NativeCompletionUITests: XCTestCase {
         try assertIPhone13Mini()
         openSearchFromDiary()
 
-        let scope = app.segmentedControls["search.scope"]
-        XCTAssertTrue(scope.exists, "The search scope picker is missing.")
-        scope.buttons["Barcode"].tap()
+        // The contextual Add Food sheet uses History/Custom/All scopes;
+        // barcode is a labelled lookup card, not a scope segment.
+        let barcodeEntry = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Barcode lookup")
+        ).firstMatch
+        XCTAssertTrue(
+            barcodeEntry.waitForExistence(timeout: Timeout.normal) && barcodeEntry.isHittable,
+            "The Barcode lookup entry is missing."
+        )
+        barcodeEntry.tap()
         let field = app.textFields["search.barcode.field"]
         XCTAssertTrue(
             field.waitForExistence(timeout: Timeout.normal),
@@ -711,11 +733,11 @@ final class NativeCompletionUITests: XCTestCase {
             editorNameValue.isEmpty || editorNameValue == "Food name",
             "The Library editor unexpectedly prefilled a name: \(editorNameValue)"
         )
-        // Leave no draft behind; a dirty draft asks for explicit discard.
-        if app.buttons["Cancel"].exists {
-            app.buttons["Cancel"].tap()
-            let discard = app.buttons["library.editor.discard.confirm"]
-            if discard.waitForExistence(timeout: 2) {
+        // Leave no draft behind; scope Cancel to the presented sheet/alert.
+        if let cancel = confirmationButton(label: "Cancel"), cancel.isHittable {
+            cancel.tap()
+            if let discard = confirmationButton("library.editor.discard.confirm"),
+               discard.isHittable {
                 discard.tap()
             }
         }
@@ -727,15 +749,17 @@ final class NativeCompletionUITests: XCTestCase {
         try assertIPhone13Mini()
         openSearchFromDiary()
 
-        guard let assistant = laidOutElement(identifier: "search.assistant") else {
-            XCTFail("The assistant menu is not present in Search.")
+        let entry = hittableElement(identifier: "search.assistant")
+            ?? hittableElement(identifier: "search.quickEntry.assistant")
+        guard let entry else {
+            XCTFail("No assistant entry is present in Search.")
             return
         }
-        assistant.tap()
-        let customFood = app.buttons["search.assistant.customFood"]
+        entry.tap()
+        let customFood = app.descendants(matching: .any)["search.assistant.customFood"]
         XCTAssertTrue(
             customFood.waitForExistence(timeout: Timeout.normal),
-            "The assistant custom-food action is missing."
+            "The assistant custom-food purpose is missing."
         )
         customFood.tap()
         XCTAssertTrue(
@@ -837,11 +861,30 @@ final class NativeCompletionUITests: XCTestCase {
         )
     }
 
-    func testMiniQuickAddAndBatchSubmitOneRequestPerIntent() throws {
+    /// Recents no longer expose batch selection. One quantity chip is a single
+    /// individual log intent: one POST, one row, carrying the fixture's date
+    /// and meal slot. (The shared submit transport is irrelevant here; this
+    /// case asserts the removed UI entries are gone and one row was written.)
+    func testMiniRecentQuickAddWritesExactlyOneLogIntent() throws {
         try resetFixture()
         XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
         try assertIPhone13Mini()
+        let baseline = try mockState()
         openSearchFromDiary()
+
+        // Removed recent-batch surface must not be rendered.
+        XCTAssertFalse(
+            app.descendants(matching: .any)["search.recent.select.product:qa-apple"].exists,
+            "A removed recent-row select control was reintroduced."
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["search.batch.reviewButton"].exists,
+            "The removed batch review toolbar was reintroduced."
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["search.batch.submit"].exists,
+            "The removed batch submit sheet was reintroduced."
+        )
 
         let quickAdd = app.buttons["search.quickAdd.product:qa-apple.100.g"]
         XCTAssertTrue(
@@ -854,33 +897,20 @@ final class NativeCompletionUITests: XCTestCase {
                 .waitForExistence(timeout: Timeout.long),
             "Quick add did not report success."
         )
-        assertMockLogCount(9)
+        assertMockLogCount(baseline.logCount + 1)
 
-        app.buttons["search.recent.select.product:qa-apple"].tap()
-        app.buttons["search.recent.select.product:qa-pear"].tap()
-        let review = app.buttons["search.batch.reviewButton"]
-        XCTAssertTrue(
-            review.waitForExistence(timeout: Timeout.normal),
-            "Batch review did not appear after selecting two rows."
-        )
-        review.tap()
-        let submit = app.buttons["search.batch.submit"]
-        XCTAssertTrue(
-            submit.waitForExistence(timeout: Timeout.normal),
-            "The batch review sheet did not expose Submit."
-        )
-        submit.tap()
-        XCTAssertTrue(
-            CalCoE2E.waitUntil(timeout: Timeout.long) {
-                self.tryLogCount() >= 11
-            },
-            "The batch did not write both selected items."
-        )
+        let final = try mockState()
         XCTAssertEqual(
-            try mockState().logPostAttempts,
-            2,
-            "Quick add plus batch should be exactly two POST operations."
+            final.logPostAttempts,
+            baseline.logPostAttempts + 1,
+            "One quantity chip must be exactly one log POST, not a batch."
         )
+        let created = final.logs.last
+        XCTAssertNotNil(created, "The quick-add row was not written to the fixture.")
+        XCTAssertEqual(created?.date, Self.isoDay(Date()),
+                       "The quick-added log lost the fixture's today date.")
+        XCTAssertNotNil(created?.mealSlot,
+                        "The quick-added log lost its origin meal slot.")
     }
 
     func testMiniRepeatLatestRequiresReviewAndWritesOnce() throws {
@@ -888,14 +918,42 @@ final class NativeCompletionUITests: XCTestCase {
         XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
         try assertIPhone13Mini()
 
+        // The approved Diary design keeps "Log latest" only for an empty,
+        // enabled slot that has earlier history. The fixture's selected day is
+        // empty while the previous day carries the seeded Breakfast rows.
+        let baseline = try mockState()
+        XCTAssertEqual(baseline.logCount, 8, "Unexpected fixture log baseline.")
+        XCTAssertTrue(
+            baseline.logs.allSatisfy { $0.date != Self.isoDay(Date()) },
+            "The selected day was not empty at the start of the journey."
+        )
+
         guard let latest = scrollToElement(
-            "diary.latest.breakfast",
+            "\(Identifier.latestPrefix)breakfast",
             marker: Identifier.diarySummary,
             direction: .up
         ) else {
-            XCTFail("Log latest is not reachable for Breakfast.")
+            XCTFail("Log latest is not reachable for an empty Breakfast with history.")
             return
         }
+        XCTAssertTrue(
+            latest.label.localizedCaseInsensitiveContains(Identifier.latestLabel),
+            "The empty slot's repeat control is not labelled \(Identifier.latestLabel)."
+        )
+        guard let addFood = scrollToElement(
+            "\(Identifier.addFoodPrefix)breakfast",
+            marker: Identifier.diarySummary,
+            direction: .up
+        ) else {
+            XCTFail("The labelled Add food action is not reachable for Breakfast.")
+            return
+        }
+        XCTAssertTrue(
+            addFood.label.localizedCaseInsensitiveContains(Identifier.addFoodLabel),
+            "The Add food control is not labelled with text \(Identifier.addFoodLabel)."
+        )
+        attachScreenshot(named: "iPhone-13-mini-diary-empty-slot-with-history")
+
         latest.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["diary.latest.review"]
@@ -916,6 +974,396 @@ final class NativeCompletionUITests: XCTestCase {
             try mockState().logCount,
             10,
             "Log latest should copy exactly the two Breakfast rows."
+        )
+
+        // Once the slot is populated, its repeat control must disappear while
+        // the still-empty Lunch slot keeps its own "Log latest" affordance.
+        XCTAssertTrue(
+            CalCoE2E.waitUntil(timeout: Timeout.normal) {
+                !self.app.descendants(matching: .any)["\(Identifier.latestPrefix)breakfast"].exists
+            },
+            "Log latest stayed visible after the slot was populated."
+        )
+        guard let lunchLatest = scrollToElement(
+            "\(Identifier.latestPrefix)lunch",
+            marker: Identifier.diarySummary,
+            direction: .up
+        ), lunchLatest.isHittable else {
+            XCTFail("An untouched empty slot lost its visible Log latest affordance.")
+            return
+        }
+        let windowFrame = app.windows.firstMatch.frame
+        XCTAssertTrue(
+            lunchLatest.frame.width > 0 && lunchLatest.frame.height > 0
+                && lunchLatest.frame.minY >= windowFrame.minY - 1
+                && lunchLatest.frame.maxY <= windowFrame.maxY + 1,
+            "The Lunch Log latest control is offscreen or has an empty frame."
+        )
+        attachScreenshot(named: "iPhone-13-mini-diary-latest-hidden-after-log")
+    }
+
+    func testMiniDiarySummaryNutritionAndContextualSearchRetainTarget() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
+        try assertIPhone13Mini()
+
+        // The summary is the entry point for the selected-day nutrition report.
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.diarySummary].exists,
+            "The Diary summary is missing."
+        )
+        guard let nutrition = scrollToElement(
+            "diary.nutrition",
+            marker: Identifier.diarySummary,
+            direction: .up
+        ) else {
+            XCTFail("The nutrition entry is not reachable from the Diary.")
+            return
+        }
+        nutrition.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.nutritionDetails]
+                .waitForExistence(timeout: Timeout.normal),
+            "The selected-day nutrition report did not open."
+        )
+        attachScreenshot(named: "iPhone-13-mini-nutrition-details")
+        let close = hittableElement(identifier: Identifier.nutritionClose)
+        XCTAssertNotNil(close, "The nutrition report has no reachable Close action.")
+        close?.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.diarySummary]
+                .waitForExistence(timeout: Timeout.normal),
+            "Closing nutrition did not return to the Diary."
+        )
+
+        // Starting from a historical slot must carry the date/slot target into
+        // the contextual Search surface and then into Food Detail.
+        navigateToHistoricalFixtureDay()
+        guard let addFood = scrollToElement(
+            "\(Identifier.addFoodPrefix)lunch",
+            marker: Identifier.diarySummary,
+            direction: .up
+        ) else {
+            XCTFail("The historical Lunch Add food action is not reachable.")
+            return
+        }
+        addFood.tap()
+        let search = app.descendants(matching: .any)[Identifier.searchField]
+        XCTAssertTrue(
+            search.waitForExistence(timeout: Timeout.normal),
+            "Search did not open for the selected slot."
+        )
+
+        // New native navigation exposes the origin date and slot as a labelled
+        // context strip. Accept either shipped identifier spelling; never treat
+        // a missing strip as a pass.
+        let contextIdentifiers = ["search.context", "search.header.context", "addFood.context"]
+        let context = contextIdentifiers.first {
+            app.descendants(matching: .any)[$0].exists
+        }.map { app.descendants(matching: .any)[$0] }
+        XCTAssertNotNil(
+            context,
+            "No \(contextIdentifiers.joined(separator: " / ")) context was exposed; "
+                + "the selected date/slot target is not observable."
+        )
+        XCTAssertTrue(
+            (context?.label ?? "").localizedCaseInsensitiveContains("Lunch"),
+            "The contextual Search strip did not retain the Lunch slot target."
+        )
+        attachScreenshot(named: "iPhone-13-mini-contextual-search")
+
+        typeSearchQuery("Native QA", in: search)
+        selectFixtureSearchResult()
+        let slotPicker = app.descendants(matching: .any)["foodDetail.mealSlot.picker"]
+        XCTAssertTrue(
+            slotPicker.waitForExistence(timeout: Timeout.normal),
+            "Food Detail did not open with a meal-slot picker."
+        )
+        let slotValue = (slotPicker.value as? String ?? "") + slotPicker.label
+        XCTAssertTrue(
+            slotValue.localizedCaseInsensitiveContains("Lunch"),
+            "Food Detail did not retain the Lunch slot target."
+        )
+        attachScreenshot(named: "iPhone-13-mini-contextual-food-detail")
+
+        dismissToDiary()
+        XCTAssertTrue(isHistoricalDateVisible(), "The historical date was not retained.")
+    }
+
+    func testMiniMealCardHeaderTitleAndSubtotalStayVisible() throws {
+        // Default text size, populated historical day: the card header title
+        // and kcal subtotal must be visible and inside their card viewport.
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
+        try assertIPhone13Mini()
+        navigateToHistoricalFixtureDay()
+        assertVisibleMealHeadersInsideCards(variant: "default")
+        attachScreenshot(named: "iPhone-13-mini-meal-card-header-visible")
+
+        // Largest accessibility text size: a fixed-height header used to crop
+        // the title/subtotal. Require the grown header to stay inside the card.
+        XCTAssertTrue(
+            try launchSignedIn(dynamicType: QA.dynamicTypeAccessibility),
+            "The diary did not load at the accessibility content size."
+        )
+        assertVisibleMealHeadersInsideCards(variant: "AX5")
+        attachScreenshot(named: "iPhone-13-mini-meal-card-header-accessibility")
+    }
+
+    func testMiniDirtyLogEditorNativeTabDiscardGuard() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
+        try assertIPhone13Mini()
+        navigateToHistoricalFixtureDay()
+        openHistoricalLogRow()
+
+        let amount = app.descendants(matching: .any)[Identifier.editorAmount]
+        XCTAssertTrue(amount.waitForExistence(timeout: Timeout.normal), "The log editor did not open.")
+        replaceText(in: amount, with: "175")
+        XCTAssertEqual(amount.value as? String, "175", "The editor was not made dirty.")
+
+        // The pushed editor hides the native tab bar; its visible exit is the
+        // back button. The shell guard must still require explicit discard.
+        let editorBack = app.buttons["diary.editor.back"]
+        XCTAssertTrue(
+            editorBack.waitForExistence(timeout: Timeout.normal) && editorBack.isHittable,
+            "The dirty editor has no reachable back action."
+        )
+        editorBack.tap()
+        // SwiftUI exposes a nested duplicate of the destructive button; use
+        // the single outer match for both existence and the tap.
+        let discard = app.buttons.matching(identifier: Identifier.editorDiscardConfirm).firstMatch
+        XCTAssertTrue(
+            discard.waitForExistence(timeout: Timeout.normal),
+            "The dirty editor was left without an explicit discard confirmation."
+        )
+        // Scope Cancel to the presented confirmation, not every button on
+        // the screen (the editor and tab bar also expose Cancel-like labels).
+        // The discard action sheet exposes only the destructive
+        // "Discard changes" node in AX (verified via live hierarchy); its
+        // cancel-role button has no AX node. The faithful cancel path for this
+        // native confirmationDialog is a tap outside the sheet.
+        XCTAssertTrue(
+            app.sheets.firstMatch.waitForExistence(timeout: Timeout.short),
+            "The discard confirmation sheet is not presented."
+        )
+        app.windows.firstMatch.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)
+        ).tap()
+        XCTAssertTrue(amount.waitForExistence(timeout: Timeout.normal), "Cancel left the dirty editor.")
+        XCTAssertEqual(amount.value as? String, "175", "Cancel discarded the edited value.")
+
+        editorBack.tap()
+        XCTAssertTrue(discard.waitForExistence(timeout: Timeout.normal), "The discard dialog did not reappear.")
+        discard.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.diarySummary]
+                .waitForExistence(timeout: Timeout.normal),
+            "Confirming discard did not return to the diary."
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)[Identifier.editorAmount].exists,
+            "The discarded editor remained open."
+        )
+    }
+
+    func testMiniSettingsDirtyCancelGuard() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
+        try assertIPhone13Mini()
+        openSettings()
+        guard let calories = scrollToElement(
+            Identifier.goalCalories,
+            marker: Identifier.settingsSheet,
+            direction: .up
+        ) else {
+            XCTFail("The calorie goal field is not reachable.")
+            return
+        }
+        replaceText(in: calories, with: "2230")
+        XCTAssertEqual(calories.value as? String, "2230", "The Settings draft was not made dirty.")
+
+        app.buttons[Identifier.settingsCancel].tap()
+        guard let confirm = confirmationButton(Identifier.settingsDiscardConfirm) else {
+            XCTFail("Dirty Settings closed without an explicit discard confirmation.")
+            return
+        }
+        guard let cancel = confirmationButton(Identifier.settingsDiscardCancel) else {
+            XCTFail("The Settings discard dialog has no scoped Cancel.")
+            return
+        }
+        XCTAssertTrue(cancel.isHittable, "The Settings discard Cancel is not hittable.")
+        cancel.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.settingsSheet]
+                .waitForExistence(timeout: Timeout.normal),
+            "Cancel closed dirty Settings."
+        )
+        XCTAssertEqual(calories.value as? String, "2230", "Cancel lost the dirty Settings value.")
+
+        app.buttons[Identifier.settingsCancel].tap()
+        guard let confirmAgain = confirmationButton(Identifier.settingsDiscardConfirm) else {
+            XCTFail("The discard dialog did not reappear.")
+            return
+        }
+        confirmAgain.tap()
+        XCTAssertTrue(
+            CalCoE2E.waitUntil(timeout: Timeout.normal) {
+                !self.app.descendants(matching: .any)[Identifier.settingsSheet].exists
+            },
+            "Confirming discard did not close Settings."
+        )
+    }
+
+    func testMiniLibraryDraftSurvivesTabAndDateChange() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
+        try assertIPhone13Mini()
+        XCTAssertTrue(
+            tapFirstReachable(
+                ["app.tab.library", "library.tab", "tab.library", "diary.library"],
+                labels: ["Library"]
+            ),
+            "The native Library tab is not reachable."
+        )
+        XCTAssertTrue(selectLibrarySection("Foods", identifier: "library.foods"), "Foods did not open.")
+        // `library.add` is the Menu label button; selecting the custom-food
+        // editor requires tapping the `library.add.custom` menu item it opens.
+        let addButton = app.buttons["library.add"]
+        XCTAssertTrue(
+            addButton.waitForExistence(timeout: Timeout.normal) && addButton.isHittable,
+            "The Library Add menu is not reachable."
+        )
+        addButton.tap()
+        let customItem = app.buttons["library.add.custom"]
+        XCTAssertTrue(
+            customItem.waitForExistence(timeout: Timeout.normal) && customItem.isHittable,
+            "The custom-food Add menu item is not reachable."
+        )
+        customItem.tap()
+        let name = app.descendants(matching: .any)["library.editor.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: Timeout.normal), "The custom-food editor did not open.")
+        replaceText(in: name, with: "QA Draft Food")
+        XCTAssertEqual(name.value as? String, "QA Draft Food", "The draft name was not entered.")
+
+        XCTAssertTrue(tapFirstReachable(["app.tab.diary", "diary.tab", "tab.diary"], labels: ["Diary"]), "Could not return to Diary.")
+        XCTAssertTrue(tapToolbarAction(Identifier.previousDay), "Could not change the selected date.")
+        XCTAssertTrue(
+            tapFirstReachable(
+                ["app.tab.library", "library.tab", "tab.library", "diary.library"],
+                labels: ["Library"]
+            ),
+            "Could not return to Library."
+        )
+        let retained = app.descendants(matching: .any)["library.editor.name"]
+        XCTAssertTrue(retained.waitForExistence(timeout: Timeout.normal), "The Library draft was recreated after the tab/date change.")
+        XCTAssertEqual(
+            (retained.value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            "QA Draft Food",
+            "The Library draft value was lost."
+        )
+
+        let libraryCancel = app.buttons["diary.common.cancel"]
+        if libraryCancel.exists, libraryCancel.isHittable { libraryCancel.tap() }
+        let discard = app.buttons["library.editor.discard.confirm"]
+        if discard.waitForExistence(timeout: 2), discard.isHittable { discard.tap() }
+    }
+
+    func testMiniLibraryLogDraftKeepsCapturedDateAfterDiaryDateChange() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
+        try assertIPhone13Mini()
+        navigateToHistoricalFixtureDay()
+
+        // The log flow captures the date/slot when it is opened. Changing the
+        // Diary date afterwards must not retarget an already-open draft.
+        XCTAssertTrue(
+            tapFirstReachable(
+                ["app.tab.library", "library.tab", "tab.library", "diary.library"],
+                labels: ["Library"]
+            ),
+            "The native Library tab is not reachable."
+        )
+        XCTAssertTrue(selectLibrarySection("Foods", identifier: "library.foods"), "Foods did not open.")
+        app.buttons["library.add"].tap()
+        app.buttons["library.add.adhoc"].tap()
+        let dateField = app.descendants(matching: .any)["library.adHoc.date"]
+        XCTAssertTrue(dateField.waitForExistence(timeout: Timeout.normal), "The ad-hoc date control is missing.")
+        let originalDate = (dateField.value as? String ?? dateField.label)
+        XCTAssertFalse(originalDate.isEmpty, "The ad-hoc date control has no value.")
+
+        let name = app.textFields["library.adHoc.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: Timeout.normal), "The ad-hoc form did not open.")
+        name.tap()
+        name.typeText("QA Ad hoc Draft")
+        dismissLibraryKeyboard("library.adHoc.keyboard.done")
+
+        XCTAssertTrue(tapFirstReachable(["app.tab.diary", "diary.tab", "tab.diary"], labels: ["Diary"]), "Could not return to Diary.")
+        XCTAssertTrue(tapToolbarAction(Identifier.nextDay), "Could not change the Diary date.")
+        XCTAssertTrue(
+            tapFirstReachable(
+                ["app.tab.library", "library.tab", "tab.library", "diary.library"],
+                labels: ["Library"]
+            ),
+            "Could not return to Library."
+        )
+        let retained = app.descendants(matching: .any)["library.adHoc.date"]
+        XCTAssertTrue(retained.waitForExistence(timeout: Timeout.normal), "The open ad-hoc draft was recreated.")
+        let retainedDate = (retained.value as? String ?? retained.label)
+        XCTAssertEqual(retainedDate, originalDate, "An open log draft was retargeted by a Diary date change.")
+        XCTAssertEqual(
+            (app.textFields["library.adHoc.name"].value as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            "QA Ad hoc Draft",
+            "The open log draft lost its name."
+        )
+
+        app.buttons["library.adHoc.cancel"].tap()
+        let discard = app.buttons["library.editor.discard.confirm"]
+        if discard.waitForExistence(timeout: 2), discard.isHittable { discard.tap() }
+    }
+
+    func testMiniSignOutReloginLandsFreshDiary() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
+        try assertIPhone13Mini()
+        navigateToHistoricalFixtureDay()
+        XCTAssertTrue(isHistoricalDateVisible(), "Prerequisite historical selection was not active.")
+        XCTAssertTrue(tapToolbarAction("auth.signOut"), "Sign Out is not reachable.")
+        XCTAssertTrue(
+            CalCoE2E.waitForLogin(in: app, timeout: Timeout.normal),
+            "Sign Out did not return to the login form."
+        )
+        // The login form must be the live surface, and no session-sensitive
+        // diary rows may survive Sign Out. The username may legitimately be
+        // remembered, so it is deliberately not asserted as empty.
+        XCTAssertTrue(
+            app.textFields["auth.login.username"].waitForExistence(timeout: Timeout.short),
+            "The login form is not actually visible after Sign Out."
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)[Identifier.diarySummary].exists,
+            "A diary summary survived Sign Out."
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)[Identifier.historicalLog].exists,
+            "Session-sensitive historical rows survived Sign Out."
+        )
+
+        try signInFixture()
+        XCTAssertTrue(
+            CalCoE2E.waitForLoadedDiary(in: app, timeout: Timeout.long),
+            "Re-login did not reach the diary."
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.diarySummary].exists,
+            "The diary summary is missing after re-login."
+        )
+        XCTAssertTrue(waitForFetchCount(atLeast: 1), "Re-login did not fetch a fresh diary.")
+        XCTAssertFalse(isHistoricalDateVisible(), "Re-login restored the previous historical selection.")
+        XCTAssertFalse(
+            app.descendants(matching: .any)[Identifier.historicalLog].exists,
+            "The prior session's historical rows reappeared after re-login."
         )
     }
 
@@ -1726,6 +2174,111 @@ final class NativeCompletionUITests: XCTestCase {
         XCTAssertTrue(isHistoricalDateVisible(), "The selected historical date was not held.")
     }
 
+    func testMiniNativeLibraryMealsAndSettingsAccess() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
+        try assertIPhone13Mini()
+        navigateToHistoricalFixtureDay()
+        attachScreenshot(named: "iPhone-13-mini-diary-populated-meal-cards")
+
+        // Three native tabs replace the old in-diary feature bar. Library owns
+        // Foods and Meals as two sections of a single root.
+        XCTAssertTrue(
+            tapFirstReachable(
+                ["app.tab.library", "library.tab", "tab.library", "diary.library"],
+                labels: ["Library"]
+            ),
+            "The native Library tab is not reachable on the mini."
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["library.section"]
+                .waitForExistence(timeout: Timeout.normal),
+            "The Library Foods/Meals segmented control is missing."
+        )
+        XCTAssertTrue(
+            selectLibrarySection("Foods", identifier: "library.foods"),
+            "The Library Foods section did not open."
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["library.foods"].exists,
+            "The Foods surface is not present."
+        )
+        attachScreenshot(named: "iPhone-13-mini-library-foods")
+
+        XCTAssertTrue(
+            selectLibrarySection("Meals", identifier: "library.meals"),
+            "The Library Meals section did not open."
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["meals.list"]
+                .waitForExistence(timeout: Timeout.normal),
+            "The Meals list did not open inside Library."
+        )
+        attachScreenshot(named: "iPhone-13-mini-library-meals")
+
+        XCTAssertTrue(
+            tapFirstReachable(
+                ["app.tab.settings", "settings.tab", "tab.settings", Identifier.settings],
+                labels: ["Settings"]
+            ),
+            "The native Settings tab is not reachable on the mini."
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.settingsSheet]
+                .waitForExistence(timeout: Timeout.normal),
+            "The Settings surface did not open."
+        )
+        attachScreenshot(named: "iPhone-13-mini-settings")
+        app.buttons[Identifier.settingsCancel].tap()
+        XCTAssertTrue(
+            CalCoE2E.waitUntil(timeout: Timeout.normal) {
+                !self.app.descendants(matching: .any)[Identifier.settingsSheet].exists
+            },
+            "Settings did not close."
+        )
+        XCTAssertTrue(
+            tapFirstReachable(["app.tab.diary", "diary.tab", "tab.diary"], labels: ["Diary"]),
+            "Could not return to the Diary tab."
+        )
+        XCTAssertTrue(isHistoricalDateVisible(), "The selected date was lost across native tabs.")
+    }
+
+    /// Tap the first reachable entry from a list of current/legacy identifiers.
+    /// The bounded second pass covers in-list entries without an unbounded swipe.
+    private func tapFirstReachable(
+        _ identifiers: [String],
+        labels: [String] = []
+    ) -> Bool {
+        for identifier in identifiers {
+            let element = app.descendants(matching: .any)[identifier]
+            if element.exists, element.isHittable {
+                element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                return true
+            }
+        }
+        for identifier in identifiers {
+            guard let element = scrollToElement(
+                identifier,
+                marker: Identifier.diarySummary,
+                direction: .up,
+                maxSwipes: 6
+            ), element.isHittable else { continue }
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            return true
+        }
+        for label in labels {
+            let candidate = app.buttons.matching(
+                NSPredicate(format: "label ==[c] %@", label)
+            ).firstMatch
+            if candidate.waitForExistence(timeout: 3), candidate.isHittable {
+                candidate.tap()
+                return true
+            }
+        }
+        print("NATIVE_QA_NAV_MISS \(identifiers.joined(separator: ","))\n\(app.debugDescription)")
+        return false
+    }
+
     // MARK: - Feature destination discovery
 
     private enum FeatureDestination {
@@ -1734,29 +2287,76 @@ final class NativeCompletionUITests: XCTestCase {
         case nutrition
         case apiKeys
 
-        var identifier: String {
+        /// Native tab-bar spellings are tried first; the old in-diary feature
+        /// bar identifiers are kept only as a fallback for older builds.
+        var identifiers: [String] {
             switch self {
             case .library:
-                return "diary.library"
+                return ["app.tab.library", "library.tab", "tab.library", "diary.library"]
             case .meals:
-                return "diary.meals"
+                return ["app.tab.library", "meals.tab", "tab.meals", "diary.meals"]
             case .nutrition:
-                return "diary.nutrition"
+                return ["diary.nutrition"]
             case .apiKeys:
-                return "settings.apiKeys.entry"
+                return ["settings.apiKeys.entry"]
             }
         }
     }
 
-    /// The persistent feature bar exposes Library, Meals, and Nutrition
-    /// directly. The old `diary.more` overflow was removed, so these journeys
-    /// must never depend on a private menu that XCUITest cannot observe.
+    /// The native tab bar (or the Diary summary for Nutrition) exposes these
+    /// destinations directly. Library owns Foods and Meals, so Meals journeys
+    /// switch that segmented control after entering the Library tab.
     private func openDirectFeatureDestination(_ destination: FeatureDestination) -> Bool {
-        guard let entry = hittableElement(identifier: destination.identifier) else {
+        guard tapFirstReachable(
+            destination.identifiers,
+            labels: destination == .library || destination == .meals ? ["Library"] : []
+        ) else {
             return false
         }
-        entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        if app.descendants(matching: .any)["library.section"].exists {
+            switch destination {
+            case .library:
+                guard selectLibrarySection("Foods", identifier: "library.foods") else {
+                    return false
+                }
+            case .meals:
+                guard selectLibrarySection("Meals", identifier: "library.meals") else {
+                    return false
+                }
+            case .nutrition, .apiKeys:
+                break
+            }
+        }
         return waitForFeatureSurface()
+    }
+
+    /// Select a Library section via the native segmented control. Its AX
+    /// type is a SegmentedControl whose options are buttons, so query that
+    /// type before falling back to a generic labelled button.
+    private func selectLibrarySection(_ label: String, identifier: String) -> Bool {
+        if app.descendants(matching: .any)[identifier].exists { return true }
+        let optionPredicate = NSPredicate(format: "label ==[c] %@", label)
+        let segmented = app.segmentedControls["library.section"]
+        var option: XCUIElement?
+        if segmented.exists {
+            option = segmented.buttons.matching(optionPredicate)
+                .allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
+        }
+        if option == nil {
+            guard let section = hittableElement(identifier: "library.section") else { return false }
+            option = app.buttons.matching(optionPredicate)
+                .allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
+            if option == nil {
+                section.tap()
+                option = app.buttons.matching(optionPredicate)
+                    .allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
+            }
+        }
+        guard let choice = option, choice.isHittable else { return false }
+        choice.tap()
+        return CalCoE2E.waitUntil(timeout: Timeout.short) {
+            self.app.descendants(matching: .any)[identifier].exists
+        }
     }
 
     private func openFeatureDestination(_ destination: FeatureDestination) -> Bool {
@@ -1764,7 +2364,10 @@ final class NativeCompletionUITests: XCTestCase {
             return openAPIKeysFromSettings()
         }
         guard openDirectFeatureDestination(destination) else {
-            print("NATIVE_QA_FEATURE_MISS \(destination.identifier)\n\(app.debugDescription)")
+            print(
+                "NATIVE_QA_FEATURE_MISS \(destination.identifiers.joined(separator: ","))"
+                    + "\n\(app.debugDescription)"
+            )
             return false
         }
         return true
@@ -2205,8 +2808,16 @@ final class NativeCompletionUITests: XCTestCase {
 
     private func waitForFeatureSurface() -> Bool {
         CalCoE2E.waitUntil(timeout: Timeout.short) {
-            !self.app.descendants(matching: .any)[Identifier.diarySummary].exists
-                || self.app.descendants(matching: .any)[Identifier.settingsSheet].exists
+            let ax = self.app.descendants(matching: .any)
+            return !ax[Identifier.diarySummary].exists
+                || ax[Identifier.settingsSheet].exists
+                || ax["nutrition.details"].exists
+                || ax["library.section"].exists
+                || ax["library.foods"].exists
+                || ax["library.meals"].exists
+                || ax["library.add"].exists
+                || ax["library.detail"].exists
+                || ax["meals.list"].exists
                 || self.app.navigationBars.count > 1
         }
     }
@@ -2230,6 +2841,20 @@ final class NativeCompletionUITests: XCTestCase {
                app.descendants(matching: .any)[Identifier.diarySummary].exists,
                app.buttons[Identifier.settings].exists {
                 return true
+            }
+            // Native tab destinations return through the Diary tab. Only do
+            // this when a different tab's surface is present; on a pushed
+            // Search/FoodDetail screen the tab item is still visible and a
+            // tab tap would loop forever without using the real Back button.
+            let otherTabSurface = app.descendants(matching: .any)["library.section"].exists
+                || app.descendants(matching: .any)["meals.list"].exists
+                || app.descendants(matching: .any)[Identifier.settingsSheet].exists
+            if otherTabSurface,
+               tapFirstReachable(["app.tab.diary", "diary.tab", "tab.diary"], labels: ["Diary"]) {
+                _ = CalCoE2E.waitUntil(timeout: Timeout.short) {
+                    self.app.descendants(matching: .any)[Identifier.diarySummary].exists
+                }
+                continue
             }
             if app.descendants(matching: .any)[Identifier.settingsSheet].exists {
                 let cancel = app.buttons[Identifier.settingsCancel]
@@ -2265,8 +2890,12 @@ final class NativeCompletionUITests: XCTestCase {
                 self.app.descendants(matching: .any)[Identifier.diarySummary].exists
             }
         }
-        return app.descendants(matching: .any)[Identifier.diarySummary].exists
+        let onDiary = app.descendants(matching: .any)[Identifier.diarySummary].exists
             && app.buttons[Identifier.settings].exists
+        if !onDiary {
+            print("NATIVE_QA_RETURN_TO_DIARY_FAILED\n\(app.debugDescription)")
+        }
+        return onDiary
     }
 
     private func leftmostNavigationBackButton() -> XCUIElement? {
@@ -2425,6 +3054,94 @@ final class NativeCompletionUITests: XCTestCase {
     private enum ScrollDirection {
         case up
         case down
+    }
+
+    /// Existence alone can hide a clipped header: an offscreen label still
+    /// appears in the accessibility tree. Require a hittable title and kcal
+    /// subtotal whose frames sit inside the meal-slot card viewport.
+    private func assertVisibleMealHeadersInsideCards(variant: String) {
+        let metadata = [
+            "variant=\(variant)",
+            "launchArguments=\(app.launchArguments.joined(separator: " "))",
+            "capturedAt=\(ISO8601DateFormatter().string(from: Date()))",
+        ].joined(separator: "\n")
+        let metadataAttachment = XCTAttachment(string: metadata)
+        metadataAttachment.name = "visual-metadata-\(variant)"
+        metadataAttachment.lifetime = .keepAlways
+        add(metadataAttachment)
+
+        // Derive header geometry from leaf text and the artwork image only.
+        // Do NOT depend on a card container identifier: the shipped source
+        // propagated that identifier to descendants and hid the stable
+        // per-leaf IDs. This check must not force reintroducing it.
+        let slots: [(String, (String) -> Bool)] = [
+            ("Breakfast", { $0.localizedCaseInsensitiveContains("breakfast") }),
+            ("Lunch", { $0.localizedCaseInsensitiveContains("lunch") }),
+            ("Dinner", { $0.localizedCaseInsensitiveContains("dinner") }),
+            ("Snack", { $0.caseInsensitiveCompare("snack") == .orderedSame }),
+            ("Late-night snack", {
+                $0.localizedCaseInsensitiveContains("late-night snack")
+                    || $0.localizedCaseInsensitiveContains("late night snack")
+            }),
+        ]
+        // Spacious layouts allow cards below the fold; bring one into view
+        // using a stable leaf ID instead of assuming every card is on screen.
+        _ = scrollToElement(
+            matchingPrefix: Identifier.addFoodPrefix,
+            marker: Identifier.diarySummary,
+            direction: .up
+        )
+        let window = app.windows.firstMatch.frame
+        let visibleText = app.staticTexts.allElementsBoundByIndex.filter {
+            $0.exists && $0.isHittable && $0.frame.intersects(window)
+        }
+        let images = app.images.allElementsBoundByIndex.filter { $0.exists }
+
+        var checked = 0
+        for (label, matches) in slots {
+            guard let title = visibleText.first(where: { matches($0.label) }) else { continue }
+            // The approved header places title and kcal side by side on the
+            // same baseline, so match by vertical overlap, not horizontal
+            // proximity to the title.
+            guard let kcal = visibleText.first(where: { text in
+                text.label.localizedCaseInsensitiveContains("kcal")
+                    && text.frame.maxY >= title.frame.minY - 2
+                    && text.frame.minY <= title.frame.maxY + 2
+                    && text.frame.minY >= title.frame.minY - 40
+            }) else {
+                XCTFail("The \(label) header has no visible kcal subtotal.")
+                continue
+            }
+            // Prefer the real artwork frame when it contains the title; fall
+            // back to the title+subtotal union if no artwork node is exposed.
+            var group = title.frame.union(kcal.frame)
+            if let art = images.first(where: { image in
+                image.frame.width > 20 && image.frame.height > 20
+                    && image.frame.contains(CGPoint(x: title.frame.midX, y: title.frame.midY))
+            }) {
+                group = art.frame
+            }
+            for (name, element) in [("title", title), ("subtotal", kcal)] {
+                XCTAssertTrue(
+                    element.frame.minY >= group.minY - 2,
+                    "\(label) \(name) starts above its art header group."
+                )
+                XCTAssertTrue(
+                    element.frame.maxY <= group.maxY + 2,
+                    "\(label) \(name) is clipped below its art header group."
+                )
+                XCTAssertTrue(
+                    element.frame.minX >= group.minX - 2,
+                    "\(label) \(name) starts left of its art header group."
+                )
+                XCTAssertTrue(
+                    element.frame.maxX <= group.maxX + 2,
+                    "\(label) \(name) is clipped right of its art header group."
+                )
+            }
+            checked += 1
+        }
+        XCTAssertGreaterThan(checked, 0, "No meal card header was visible and hittable.")
     }
 
     private func scrollToElement(
@@ -2593,9 +3310,19 @@ final class NativeCompletionUITests: XCTestCase {
         let current = element.value as? String ?? ""
         let placeholder = element.placeholderValue ?? ""
         if !current.isEmpty, current != placeholder {
-            element.typeText(
-                String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)
-            )
+            // Select All is the reliable clear path: delete-key counts depend
+            // on cursor placement and left "12.5100" in the quantity field.
+            let selectAll = app.menuItems.matching(
+                NSPredicate(format: "label CONTAINS[c] %@", "Select All")
+            ).firstMatch
+            if selectAll.waitForExistence(timeout: 2), selectAll.isHittable {
+                selectAll.tap()
+            } else {
+                element.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+                for _ in 0..<current.count {
+                    element.typeText(XCUIKeyboardKey.delete.rawValue)
+                }
+            }
         }
         element.typeText(value)
     }
@@ -2729,16 +3456,25 @@ final class NativeCompletionUITests: XCTestCase {
 
     private func openAssistant(_ purposeIdentifier: String) {
         openSearchFromDiary()
-        guard let assistant = hittableElement(identifier: "search.assistant") else {
+        // Native compact Add Food exposes one AI row whose Menu offers the two
+        // shipped purposes (search.assistant.customFood / .adHocLog). Open the
+        // row, then tap the exact requested purpose; never substitute a
+        // different purpose just to reach the composer.
+        let entry = hittableElement(identifier: "search.assistant")
+            ?? hittableElement(identifier: "search.quickEntry.assistant")
+        guard let entry else {
             XCTFail("Assistant entry is not reachable from Search.")
             return
         }
-        assistant.tap()
-        let purpose = app.buttons[purposeIdentifier]
+        entry.tap()
+        let purpose = app.descendants(matching: .any)[purposeIdentifier]
         XCTAssertTrue(
             purpose.waitForExistence(timeout: Timeout.normal),
             "Assistant purpose \(purposeIdentifier) is missing."
         )
+        XCTAssertTrue(purpose.isHittable, "Assistant purpose \(purposeIdentifier) is not hittable.")
+        // Evidence of the compact native AI-purpose Menu before selection.
+        attachScreenshot(named: "iPhone-13-mini-ai-purpose-menu-\(purposeIdentifier)")
         purpose.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["assistant.composer"]

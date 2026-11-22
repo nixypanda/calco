@@ -130,10 +130,32 @@ final class LibraryRouteStabilityUITests: XCTestCase {
                 .waitForExistence(timeout: 40),
             "Ad-hoc logging did not complete."
         )
+        // Keyboard toolbar Done uses the distinct `library.adHoc.keyboard.done`
+        // identifier (AdHocLogView.swift:49); the canonical completion Done is
+        // `library.adHoc.done` (lines 320/349). Count only hittable instances:
+        // a scrolled-off/stale AX node still exists but is not an actionable
+        // duplicate. Keep the original uniqueness contract: exactly one
+        // reachable canonical Done, not a softened "at least one".
+        dismissKeyboard(identifier: "library.adHoc.keyboard.done")
+        let doneQuery = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == %@", "library.adHoc.done")
+        )
+        var hittableDone = doneQuery.allElementsBoundByIndex.filter {
+            $0.exists && $0.isHittable
+        }
+        if hittableDone.isEmpty {
+            for _ in 0..<6 {
+                app.swipeUp()
+                hittableDone = doneQuery.allElementsBoundByIndex.filter {
+                    $0.exists && $0.isHittable
+                }
+                if !hittableDone.isEmpty { break }
+            }
+        }
         XCTAssertEqual(
-            app.buttons.matching(identifier: "library.adHoc.done").count,
+            hittableDone.count,
             1,
-            "Ad-hoc completion must expose exactly one canonical Done action."
+            "Ad-hoc completion must expose exactly one hittable canonical Done action."
         )
         XCTAssertEqual(
             try mockStateLogCount(),
@@ -194,9 +216,41 @@ final class LibraryRouteStabilityUITests: XCTestCase {
     }
 
     private func openLibrary() {
-        let library = app.buttons["diary.library"]
-        XCTAssertTrue(library.waitForExistence(timeout: 20))
-        library.tap()
+        // The old in-diary feature bar was replaced by a native Library tab.
+        var opened = false
+        for identifier in ["app.tab.library", "library.tab", "tab.library", "diary.library"] {
+            let entry = app.descendants(matching: .any)[identifier]
+            if entry.waitForExistence(timeout: 3), entry.isHittable {
+                entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                opened = true
+                break
+            }
+        }
+        if !opened {
+            let tab = app.buttons.matching(
+                NSPredicate(format: "label ==[c] %@", "Library")
+            ).firstMatch
+            XCTAssertTrue(
+                tab.waitForExistence(timeout: 5) && tab.isHittable,
+                "No native Library tab is reachable."
+            )
+            tab.tap()
+        }
+        if app.descendants(matching: .any)["library.section"].exists {
+            let foods = app.buttons.matching(
+                NSPredicate(format: "label ==[c] %@", "Foods")
+            ).firstMatch
+            XCTAssertTrue(
+                foods.waitForExistence(timeout: 10) && foods.isHittable,
+                "The Foods segment is not reachable in the native Library root."
+            )
+            foods.tap()
+            XCTAssertTrue(
+                app.descendants(matching: .any)["library.foods"]
+                    .waitForExistence(timeout: 10),
+                "Selecting Foods did not open the Foods section."
+            )
+        }
         let empty = app.descendants(matching: .any)["library.empty"]
         let row = app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "library.row.")
