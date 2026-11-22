@@ -106,6 +106,10 @@ public final class MealDetailViewModel: ObservableObject {
             && !isDeleting
     }
 
+    public var supportsLogging: Bool {
+        onSubmitDrafts != nil
+    }
+
     public var isLogging: Bool {
         if case .submitting = logState { return true }
         return false

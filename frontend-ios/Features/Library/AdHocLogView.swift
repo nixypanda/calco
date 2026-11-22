@@ -197,6 +197,7 @@ public struct AdHocLogView: View {
             )
             .disabled(viewModel.isFormDisabled)
             .accessibilityIdentifier("library.adHoc.date")
+            .accessibilityValue(viewModel.date.formatted)
         } header: {
             Text(String(localized: "library.adHoc.details"))
         }

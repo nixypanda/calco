@@ -34,7 +34,10 @@ public struct MealsListView: View {
                 }
             }
         }
-        .navigationTitle(String(localized: "meals.title"))
+        .navigationTitle("My Meals")
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.large)
+#endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {

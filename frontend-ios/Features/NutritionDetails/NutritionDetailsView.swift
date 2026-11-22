@@ -16,7 +16,6 @@ public struct NutritionDetailsView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                dateHeader
                 stateContent
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -29,66 +28,6 @@ public struct NutritionDetailsView: View {
             await viewModel.loadIfNeeded()
         }
         .accessibilityIdentifier("nutrition.details")
-    }
-
-    // MARK: - Date context
-
-    @ViewBuilder
-    private var dateHeader: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 8) {
-                dateTitle
-                HStack(spacing: 8) {
-                    previousDayButton
-                    nextDayButton
-                    Spacer(minLength: 0)
-                }
-            }
-        } else {
-            HStack(spacing: 8) {
-                previousDayButton
-                dateTitle
-                    .frame(maxWidth: .infinity)
-                nextDayButton
-            }
-        }
-    }
-
-    private var dateTitle: some View {
-        Text(NutritionDetailsCopy.dateTitle(viewModel.selectedDate))
-            .font(.headline)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("nutrition.date")
-    }
-
-    private var previousDayButton: some View {
-        Button {
-            Task { await viewModel.previousDay() }
-        } label: {
-            Image(systemName: "chevron.left")
-                .frame(width: 44, height: 36)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.bordered)
-        .disabled(viewModel.isSessionExpired)
-        .accessibilityLabel(NutritionDetailsCopy.previousDay)
-        .accessibilityIdentifier("nutrition.previousDay")
-        .help(NutritionDetailsCopy.previousDay)
-    }
-
-    private var nextDayButton: some View {
-        Button {
-            Task { await viewModel.nextDay() }
-        } label: {
-            Image(systemName: "chevron.right")
-                .frame(width: 44, height: 36)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.bordered)
-        .disabled(!viewModel.canGoNext)
-        .accessibilityLabel(NutritionDetailsCopy.nextDay)
-        .accessibilityIdentifier("nutrition.nextDay")
-        .help(NutritionDetailsCopy.nextDay)
     }
 
     // MARK: - States

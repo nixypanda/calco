@@ -18,8 +18,16 @@ public struct LibraryView: View {
     private let onLogged: (LocalDiaryDate, MealSlot?) -> Void
     private let onSessionExpired: () -> Void
     private let onClose: (() -> Void)?
+    /// One native Back-to-hub control rendered on the list screen of this
+    /// view's own NavigationStack (nil when embedded without a hub owner).
+    private let onBack: (() -> Void)?
+    private let backDisabled: Bool
+    private let onDirtyChange: ((Bool) -> Void)?
+    private let onCreateWithAI: (() -> Void)?
     private let initialAssistantDraft: AssistantReviewedDraft?
     private let initialBarcode: String?
+    /// Reads the live diary target only when a new logging flow is opened.
+    private let currentContextProvider: () -> LibraryLogContext
 
     @MainActor
     public init(
@@ -33,21 +41,34 @@ public struct LibraryView: View {
         onLogged: @escaping (LocalDiaryDate, MealSlot?) -> Void = { _, _ in },
         onSessionExpired: @escaping () -> Void = {},
         onClose: (() -> Void)? = nil,
+        onBack: (() -> Void)? = nil,
+        backDisabled: Bool = false,
+        onDirtyChange: ((Bool) -> Void)? = nil,
+        onCreateWithAI: (() -> Void)? = nil,
         assistantDraft: AssistantReviewedDraft? = nil,
-        initialBarcode: String? = nil
+        initialBarcode: String? = nil,
+        currentContextProvider: (() -> LibraryLogContext)? = nil
     ) {
+        let resolvedDate = min(initialDate, today)
+        let resolvedSlot = initialMealSlot
         self.service = service
         self.submissionService = submissionService
         self.accountID = accountID
         self.today = today
-        self.initialDate = min(initialDate, today)
-        self.initialMealSlot = initialMealSlot
+        self.initialDate = resolvedDate
+        self.initialMealSlot = resolvedSlot
         self.baseURL = baseURL
         self.onLogged = onLogged
         self.onSessionExpired = onSessionExpired
         self.onClose = onClose
+        self.onBack = onBack
+        self.backDisabled = backDisabled
+        self.onDirtyChange = onDirtyChange
+        self.onCreateWithAI = onCreateWithAI
         self.initialAssistantDraft = assistantDraft
         self.initialBarcode = initialBarcode
+        self.currentContextProvider = currentContextProvider
+            ?? { LibraryLogContext(date: resolvedDate, mealSlot: resolvedSlot) }
         let initialRoute: [LibraryRoute]
         let initialToken: UUID?
         switch assistantDraft?.purpose {
@@ -57,7 +78,15 @@ public struct LibraryView: View {
             initialToken = token
         case .adHocLog:
             let token = UUID()
-            initialRoute = [.adHoc(token: token)]
+            let captured = currentContextProvider?()
+                ?? LibraryLogContext(date: resolvedDate, mealSlot: resolvedSlot)
+            initialRoute = [.adHoc(
+                token: token,
+                context: LibraryLogContext(
+                    date: min(captured.date, today),
+                    mealSlot: captured.mealSlot
+                )
+            )]
             initialToken = token
         case nil:
             if initialBarcode == nil {
@@ -80,85 +109,71 @@ public struct LibraryView: View {
         )
     }
 
+    /// Captures the live diary target at the moment a new logging flow opens.
+    /// The returned value is stored in the route and never refreshed, so an
+    /// open draft and its awaited POST keep the date/slot the user started with.
+    private func captureContext() -> LibraryLogContext {
+        let captured = currentContextProvider()
+        return LibraryLogContext(date: min(captured.date, today), mealSlot: captured.mealSlot)
+    }
+
     public var body: some View {
         NavigationStack(path: $path) {
             listView
-                .navigationTitle(Text(String(localized: "library.title")))
+                .navigationTitle(Text("My Foods"))
 #if os(iOS)
                 .navigationBarTitleDisplayMode(.large)
 #endif
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        if path.isEmpty, let onClose {
-                            Button(String(localized: "library.common.done")) {
-                                onClose()
+                    // Only on the list root: pushed detail/editor screens use
+                    // the system back button, so there is never a second Back.
+                    if let onBack, path.isEmpty {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button {
+                                onBack()
+                            } label: {
+                                Label(
+                                    String(localized: "library.common.back"),
+                                    systemImage: "chevron.left"
+                                )
                             }
-                            .accessibilityIdentifier("library.close")
+                            .disabled(backDisabled)
+                            .accessibilityIdentifier("library.back")
                         }
                     }
-                    ToolbarItem(placement: .primaryAction) {
-#if os(iOS)
-                        Menu {
-                            Button {
-                                path.append(.create(token: UUID()))
-                            } label: {
-                                Label(
-                                    String(localized: "library.add.custom"),
-                                    systemImage: "plus.circle"
-                                )
-                            }
-                            .accessibilityIdentifier("library.add.custom")
+                    // One native trailing PLUS menu, matching My Meals. Both
+                    // entries reuse the existing route/assistant plumbing, so
+                    // drafts, AI purpose and dirty-edit guards stay intact.
+                    if path.isEmpty, !hasDirtyEditor {
+                        ToolbarItem(placement: .primaryAction) {
+                            Menu {
+                                Button {
+                                    path.append(.create(token: UUID()))
+                                } label: {
+                                    Label(
+                                        String(localized: "library.create.manually"),
+                                        systemImage: "square.and.pencil"
+                                    )
+                                }
+                                .accessibilityIdentifier("library.add.custom")
 
-                            Button {
-                                path.append(.adHoc(token: UUID()))
+                                if onCreateWithAI != nil {
+                                    Button {
+                                        onCreateWithAI?()
+                                    } label: {
+                                        Label(
+                                            String(localized: "library.create.withAI"),
+                                            systemImage: "sparkles"
+                                        )
+                                    }
+                                    .accessibilityIdentifier("library.createWithAI")
+                                }
                             } label: {
-                                Label(
-                                    String(localized: "library.add.adhoc"),
-                                    systemImage: "fork.knife"
-                                )
+                                Image(systemName: "plus")
                             }
-                            .accessibilityIdentifier("library.add.adhoc")
-                        } label: {
-                            Label(
-                                String(localized: "library.add"),
-                                systemImage: "plus"
-                            )
+                            .accessibilityLabel(String(localized: "library.add"))
+                            .accessibilityIdentifier("library.add")
                         }
-                        .menuStyle(.button)
-                        .buttonStyle(.plain)
-                        .frame(width: 44, height: 44)
-                        .fixedSize()
-                        .contentShape(Rectangle())
-                        .accessibilityIdentifier("library.add")
-#else
-                        Menu {
-                            Button {
-                                path.append(.create(token: UUID()))
-                            } label: {
-                                Label(
-                                    String(localized: "library.add.custom"),
-                                    systemImage: "plus.circle"
-                                )
-                            }
-                            .accessibilityIdentifier("library.add.custom")
-
-                            Button {
-                                path.append(.adHoc(token: UUID()))
-                            } label: {
-                                Label(
-                                    String(localized: "library.add.adhoc"),
-                                    systemImage: "fork.knife"
-                                )
-                            }
-                            .accessibilityIdentifier("library.add.adhoc")
-                        } label: {
-                            Label(
-                                String(localized: "library.add"),
-                                systemImage: "plus"
-                            )
-                        }
-                        .accessibilityIdentifier("library.add")
-#endif
                     }
                 }
                 .navigationDestination(for: LibraryRoute.self) { route in
@@ -300,7 +315,7 @@ public struct LibraryView: View {
                         ? initialAssistantDraft
                         : nil,
                     initialBarcode: isInitialRoute ? initialBarcode : nil,
-                    onDirtyChange: { hasDirtyEditor = $0 }
+                    onDirtyChange: { hasDirtyEditor = $0; onDirtyChange?($0) }
                 )
             case .edit(let foodID, _):
                 CustomFoodEditorRouteView(
@@ -313,16 +328,16 @@ public struct LibraryView: View {
                     onSessionExpired: onSessionExpired,
                     assistantDraft: nil,
                     initialBarcode: nil,
-                    onDirtyChange: { hasDirtyEditor = $0 }
+                    onDirtyChange: { hasDirtyEditor = $0; onDirtyChange?($0) }
                 )
-            case .adHoc(let token):
+            case .adHoc(let token, let context):
                 AdHocRouteView(
                     service: service,
                     submissionService: submissionService,
                     accountID: accountID,
-                    initialDate: initialDate,
+                    initialDate: context.date,
                     today: today,
-                    initialMealSlot: initialMealSlot,
+                    initialMealSlot: context.mealSlot,
                     baseURL: baseURL,
                     onLogged: onLogged,
                     onSessionExpired: onSessionExpired,
@@ -330,7 +345,7 @@ public struct LibraryView: View {
                         && initialAssistantDraft?.purpose == .adHocLog
                         ? initialAssistantDraft
                         : nil,
-                    onDirtyChange: { hasDirtyEditor = $0 }
+                    onDirtyChange: { hasDirtyEditor = $0; onDirtyChange?($0) }
                 )
             }
         }
@@ -342,7 +357,7 @@ private enum LibraryRoute: Hashable {
     case detail(foodID: String, token: UUID)
     case create(token: UUID)
     case edit(foodID: String, token: UUID)
-    case adHoc(token: UUID)
+    case adHoc(token: UUID, context: LibraryLogContext)
 }
 
 private struct LibraryRouteIdentity: Hashable {

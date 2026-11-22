@@ -12,15 +12,18 @@ private enum MealEditorField: Hashable {
 public struct MealEditorView: View {
     @ObservedObject private var viewModel: MealEditorViewModel
     private let onCancel: () -> Void
+    private let onDirtyChange: ((Bool) -> Void)?
     @FocusState private var focusedField: MealEditorField?
     @State private var confirmDiscard = false
 
     public init(
         viewModel: MealEditorViewModel,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        onDirtyChange: ((Bool) -> Void)? = nil
     ) {
         self.viewModel = viewModel
         self.onCancel = onCancel
+        self.onDirtyChange = onDirtyChange
     }
 
     public var body: some View {
@@ -68,6 +71,11 @@ public struct MealEditorView: View {
             }
         }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges || viewModel.isSaving)
+        .onAppear { onDirtyChange?(viewModel.hasUnsavedChanges) }
+        .onChange(of: viewModel.hasUnsavedChanges) { _, dirty in
+            onDirtyChange?(dirty)
+        }
+        .onDisappear { onDirtyChange?(false) }
         .alert(
             String(localized: "meals.editor.discard.title"),
             isPresented: $confirmDiscard

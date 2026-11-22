@@ -125,6 +125,9 @@ public enum AppShellLayout {
 public enum PrimarySection: Equatable, Hashable, Sendable {
     case diary
     case search
+    /// Expanded layouts expose Library (Foods + Meals) as a sidebar destination
+    /// because the Diary feature-links bar was removed in the redesign.
+    case library
 }
 
 // MARK: - Navigation state

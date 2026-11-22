@@ -2,6 +2,19 @@
 
 import Foundation
 
+/// Immutable diary target captured when a Library/Meals logging flow is opened.
+/// Routes keep this value for their whole lifetime so a later diary date or
+/// slot change cannot silently retarget an already-open draft or its POST.
+public struct LibraryLogContext: Equatable, Hashable, Sendable {
+    public let date: LocalDiaryDate
+    public let mealSlot: MealSlot?
+
+    public init(date: LocalDiaryDate, mealSlot: MealSlot? = nil) {
+        self.date = date
+        self.mealSlot = mealSlot
+    }
+}
+
 public enum CustomFoodServiceError: Error, Equatable, Sendable {
     case unauthorized
     case notFound(String)

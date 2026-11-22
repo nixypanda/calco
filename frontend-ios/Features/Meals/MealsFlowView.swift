@@ -5,7 +5,9 @@
 import SwiftUI
 
 private enum MealRoute: Hashable {
-    case detail(mealID: String)
+    /// The diary target is captured when the detail flow opens and kept for the
+    /// route's whole life; a later diary change cannot retarget an open draft.
+    case detail(mealID: String, context: LibraryLogContext)
 }
 
 private enum MealEditorTarget: Identifiable {
@@ -32,6 +34,7 @@ public struct MealsFlowView: View {
     @State private var path: [MealRoute]
     @State private var editorTarget: MealEditorTarget?
     @State private var detailRefreshToken = 0
+    @State private var hasDirtyEditor = false
 
     private let date: LocalDiaryDate
     private let mealSlot: MealSlot?
@@ -42,6 +45,12 @@ public struct MealsFlowView: View {
     private let onSessionExpired: () -> Void
     private let onLogged: ((LocalDiaryDate, MealSlot?) -> Void)?
     private let onClose: (() -> Void)?
+    /// One native Back-to-hub control rendered on the list screen of this
+    /// view's own NavigationStack (nil when embedded without a hub owner).
+    private let onBack: (() -> Void)?
+    private let backDisabled: Bool
+    private let currentContextProvider: () -> LibraryLogContext
+    private let onDirtyChange: ((Bool) -> Void)?
 
     public init(
         date: LocalDiaryDate,
@@ -52,8 +61,12 @@ public struct MealsFlowView: View {
         onSessionExpired: @escaping () -> Void = {},
         onLogged: ((LocalDiaryDate, MealSlot?) -> Void)? = nil,
         onClose: (() -> Void)? = nil,
+        onBack: (() -> Void)? = nil,
+        backDisabled: Bool = false,
         initialMealID: String? = nil,
-        initialPortion: NutritionQuantity? = nil
+        initialPortion: NutritionQuantity? = nil,
+        currentContextProvider: (() -> LibraryLogContext)? = nil,
+        onDirtyChange: ((Bool) -> Void)? = nil
     ) {
         self.date = date
         self.mealSlot = mealSlot
@@ -64,6 +77,12 @@ public struct MealsFlowView: View {
         self.onSessionExpired = onSessionExpired
         self.onLogged = onLogged
         self.onClose = onClose
+        self.onBack = onBack
+        self.backDisabled = backDisabled
+        let fallbackContext = LibraryLogContext(date: date, mealSlot: mealSlot)
+        let resolvedProvider = currentContextProvider ?? { fallbackContext }
+        self.currentContextProvider = resolvedProvider
+        self.onDirtyChange = onDirtyChange
         _listViewModel = StateObject(
             wrappedValue: MealsListViewModel(
                 date: date,
@@ -71,12 +90,20 @@ public struct MealsFlowView: View {
                 service: service,
                 onSubmitDrafts: onSubmitDrafts,
                 onSessionExpired: onSessionExpired,
-                onLogged: onLogged
+                onLogged: onLogged,
+                currentContextProvider: resolvedProvider
             )
         )
+        let initialContext = resolvedProvider()
         _path = State(
-            initialValue: initialMealID.map { [.detail(mealID: $0)] } ?? []
+            initialValue: initialMealID.map {
+                [.detail(mealID: $0, context: initialContext)]
+            } ?? []
         )
+    }
+
+    private func captureContext() -> LibraryLogContext {
+        currentContextProvider()
     }
 
     private var closeButton: some View {
@@ -93,26 +120,38 @@ public struct MealsFlowView: View {
             MealsListView(
                 viewModel: listViewModel,
                 onOpenMeal: { meal in
-                    path.append(.detail(mealID: meal.id))
+                    path.append(.detail(mealID: meal.id, context: captureContext()))
                 },
                 onCreateMeal: {
                     editorTarget = .create
                 }
             )
+            // The Back control belongs to this NavigationStack's list root.
+            // `path.isEmpty` matches LibraryView: once a detail is pushed the
+            // system back chevron is the only Back, so no duplicate remains.
             .toolbar {
-                if onClose != nil {
-                    ToolbarItem(placement: .cancellationAction) {
-                        closeButton
+                if let onBack, path.isEmpty {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
+                            onBack()
+                        } label: {
+                            Label(
+                                String(localized: "library.common.back"),
+                                systemImage: "chevron.left"
+                            )
+                        }
+                        .disabled(backDisabled)
+                        .accessibilityIdentifier("library.back")
                     }
                 }
             }
             .navigationDestination(for: MealRoute.self) { route in
                 switch route {
-                case .detail(let mealID):
+                case .detail(let mealID, let context):
                     MealDetailScreen(
                         mealID: mealID,
-                        date: date,
-                        mealSlot: mealSlot,
+                        date: context.date,
+                        mealSlot: context.mealSlot,
                         initialPortion: initialPortion,
                         service: service,
                         onSubmitDrafts: onSubmitDrafts,
@@ -127,13 +166,7 @@ public struct MealsFlowView: View {
                             Task { await listViewModel.refresh() }
                         }
                     )
-                    .toolbar {
-                        if onClose != nil {
-                            ToolbarItem(placement: .cancellationAction) {
-                                closeButton
-                            }
-                        }
-                    }
+
                 }
             }
         }
@@ -146,16 +179,26 @@ public struct MealsFlowView: View {
                     onSessionExpired: onSessionExpired,
                     onCancel: {
                         editorTarget = nil
+                        onDirtyChange?(false)
                     },
                     onSaved: { meal in
                         let wasEditing = target.mode.mealID != nil
+                        onDirtyChange?(false)
                         editorTarget = nil
                         Task { await listViewModel.refresh() }
                         if wasEditing {
                             detailRefreshToken += 1
-                        } else if !path.contains(.detail(mealID: meal.id)) {
-                            path.append(.detail(mealID: meal.id))
+                        } else if !path.contains(where: { route in
+                            if case .detail(let id, _) = route { return id == meal.id }
+                            return false
+                        }) {
+                            path.append(
+                                .detail(mealID: meal.id, context: captureContext())
+                            )
                         }
+                    },
+                    onDirtyChange: { dirty in
+                        onDirtyChange?(dirty)
                     }
                 )
             }
@@ -209,6 +252,7 @@ private struct MealDetailScreen: View {
 private struct MealEditorScreen: View {
     @StateObject private var viewModel: MealEditorViewModel
     private let onCancel: () -> Void
+    private let onDirtyChange: ((Bool) -> Void)?
 
     init(
         target: MealEditorTarget,
@@ -216,9 +260,11 @@ private struct MealEditorScreen: View {
         service: MealsServicing,
         onSessionExpired: @escaping () -> Void,
         onCancel: @escaping () -> Void,
-        onSaved: @escaping (Meal) -> Void
+        onSaved: @escaping (Meal) -> Void,
+        onDirtyChange: ((Bool) -> Void)? = nil
     ) {
         self.onCancel = onCancel
+        self.onDirtyChange = onDirtyChange
         _viewModel = StateObject(
             wrappedValue: MealEditorViewModel(
                 mode: target.mode,
@@ -231,6 +277,6 @@ private struct MealEditorScreen: View {
     }
 
     var body: some View {
-        MealEditorView(viewModel: viewModel, onCancel: onCancel)
+        MealEditorView(viewModel: viewModel, onCancel: onCancel, onDirtyChange: onDirtyChange)
     }
 }

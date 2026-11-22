@@ -18,6 +18,9 @@ public final class MealsListViewModel: ObservableObject {
     private let onSessionExpired: () -> Void
     private let onLogged: ((LocalDiaryDate, MealSlot?) -> Void)?
     private let timeZoneProvider: () -> String
+    /// Reads the live diary target at the moment quick-add is prepared. The
+    /// captured value is then used for the draft and its completion callback.
+    private let currentContextProvider: () -> LibraryLogContext
     private var loadToken = 0
 
     public init(
@@ -27,7 +30,8 @@ public final class MealsListViewModel: ObservableObject {
         onSubmitDrafts: LogSubmissionHandler? = nil,
         onSessionExpired: @escaping () -> Void = {},
         onLogged: ((LocalDiaryDate, MealSlot?) -> Void)? = nil,
-        timeZoneProvider: @escaping () -> String = { TimeZone.current.identifier }
+        timeZoneProvider: @escaping () -> String = { TimeZone.current.identifier },
+        currentContextProvider: (() -> LibraryLogContext)? = nil
     ) {
         self.date = date
         self.mealSlot = mealSlot
@@ -36,6 +40,12 @@ public final class MealsListViewModel: ObservableObject {
         self.onSessionExpired = onSessionExpired
         self.onLogged = onLogged
         self.timeZoneProvider = timeZoneProvider
+        let fallback = LibraryLogContext(date: date, mealSlot: mealSlot)
+        self.currentContextProvider = currentContextProvider ?? { fallback }
+    }
+
+    private func capturedContext() -> LibraryLogContext {
+        currentContextProvider()
     }
 
     public var meals: [Meal] { state.meals }
@@ -127,10 +137,11 @@ public final class MealsListViewModel: ObservableObject {
         guard onSubmitDrafts != nil,
               !meal.isDegraded,
               !isSubmittingQuickAdd else { return false }
+        let context = capturedContext()
         return MealLogDraftBuilder.makeDraft(
             meal: meal,
-            date: date,
-            mealSlot: mealSlot,
+            date: context.date,
+            mealSlot: context.mealSlot,
             timeZone: timeZoneProvider()
         ) != nil
     }
@@ -141,10 +152,11 @@ public final class MealsListViewModel: ObservableObject {
             quickAddState = .failed(String(localized: "meals.error.missingComponents"))
             return
         }
+        let context = capturedContext()
         guard let draft = MealLogDraftBuilder.makeDraft(
             meal: meal,
-            date: date,
-            mealSlot: mealSlot,
+            date: context.date,
+            mealSlot: context.mealSlot,
             amount: portion?.amount,
             unit: portion?.unit,
             timeZone: timeZoneProvider()
@@ -159,7 +171,7 @@ public final class MealsListViewModel: ObservableObject {
             switch result {
             case .success:
                 self.quickAddState = .added(mealID: meal.id)
-                self.onLogged?(self.date, self.mealSlot)
+                self.onLogged?(context.date, context.mealSlot)
             case .failure(.unauthorized):
                 self.onSessionExpired()
                 self.quickAddState = .failed(

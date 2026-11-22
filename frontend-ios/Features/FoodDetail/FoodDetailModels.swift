@@ -236,6 +236,75 @@ public func makeNutritionPreview(for food: FoodDetail, amount: String, unit: Str
     return nutrients
 }
 
+// MARK: - Log screen nutrition display
+
+/// Derived, display-ready values for the Log Food screen. It never changes the
+/// submission payload or the server-calculated preview; it only formats the
+/// already-scaled nutrients so the live energy/macro summary can stay in sync
+/// with the quantity the user is editing.
+public struct LogNutritionSummary: Equatable, Sendable {
+    public let energy: String?
+    public let protein: String?
+    public let carbs: String?
+    public let fat: String?
+    public let fiber: String?
+    /// All scaled nutrients, kept for the secondary "full nutrition" list.
+    public let nutrients: [NutrientAmount]
+
+    public var hasPrimaryValues: Bool {
+        energy != nil || protein != nil || carbs != nil || fat != nil
+    }
+}
+
+public func makeLogNutritionSummary(from nutrients: [NutrientAmount]?) -> LogNutritionSummary? {
+    guard let nutrients, !nutrients.isEmpty else { return nil }
+
+    func displayed(_ code: String) -> String? {
+        guard let match = nutrients.first(where: {
+            $0.code.caseInsensitiveCompare(code) == .orderedSame
+        }) else { return nil }
+        let trimmed = match.amount.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Double(trimmed), value.isFinite else { return nil }
+        return formatNutritionAmount(value)
+    }
+
+    return LogNutritionSummary(
+        energy: displayed(NutrientCodes.energyKcal),
+        protein: displayed(NutrientCodes.proteinG),
+        carbs: displayed(NutrientCodes.carbsG),
+        fat: displayed(NutrientCodes.fatG),
+        fiber: displayed(NutrientCodes.fiberG),
+        nutrients: nutrients
+    )
+}
+
+private func formatNutritionAmount(_ value: Double) -> String {
+    guard value.isFinite else { return "0" }
+    if value.rounded(.toNearestOrAwayFromZero) == value {
+        return String(Int(value))
+    }
+    return value.formatted(.number.precision(.fractionLength(0...1)))
+}
+
+/// Stable, native labels for the nutrients shown on the Log Food screen.
+/// Unknown codes keep their raw code so no data is silently hidden.
+public func logNutritionLabel(for code: String) -> String {
+    switch code.uppercased() {
+    case NutrientCodes.energyKcal:
+        return String(localized: "meals.nutrient.energy")
+    case NutrientCodes.proteinG:
+        return String(localized: "meals.nutrient.protein")
+    case NutrientCodes.carbsG:
+        return String(localized: "meals.nutrient.carbs")
+    case NutrientCodes.fatG:
+        return String(localized: "meals.nutrient.fat")
+    case NutrientCodes.fiberG:
+        return String(localized: "meals.nutrient.fiber")
+    default:
+        return code
+    }
+}
+
 // MARK: - Service protocol
 
 public protocol FoodDetailServicing: Sendable {

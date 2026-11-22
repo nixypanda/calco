@@ -21,6 +21,10 @@ public enum EditorDiscardRequest: Equatable, Sendable {
     case showSearch
     case startLogging(slot: MealSlot, date: LocalDiaryDate)
     case openFoodDetail(foodID: String, date: LocalDiaryDate, mealSlot: MealSlot?)
+    /// A native tab change is an intent, not a direct selection write. It goes
+    /// through the same dirty/busy editor guard as every other route change so
+    /// an unsaved log editor cannot be silently discarded by the tab bar.
+    case switchTab(tab: AppShellTab)
 }
 
 public struct MealsSheetRequest: Identifiable, Equatable, Sendable {
@@ -67,6 +71,34 @@ public struct LibrarySheetRequest: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Compact iPhone top-level destinations. Search is deliberately not a tab:
+/// it is the contextual Add Food step pushed from the Diary tab so the selected
+/// date and meal slot are never lost.
+public enum AppShellTab: Hashable, Sendable {
+    case diary
+    case search
+    case library
+    case settings
+
+    public var title: String {
+        switch self {
+        case .diary: return "Diary"
+        case .search: return String(localized: "search.title")
+        case .library: return String(localized: "library.title")
+        case .settings: return "Settings"
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .diary: return "book.closed"
+        case .search: return "magnifyingglass"
+        case .library: return "books.vertical"
+        case .settings: return "gearshape"
+        }
+    }
+}
+
 public enum AppShellFeatureSheet: Identifiable {
     case nutrition(NutritionDetailsViewModel)
     case meals(MealsSheetRequest)
@@ -108,6 +140,17 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     public let configurationError: String?
 
     @Published public var navigationState: NavigationState
+    /// Compact tab selection is coordinator-owned so the tab bar can be routed
+    /// through `requestTabSwitch` and the existing discard/busy guard.
+    @Published public var selectedTab: AppShellTab = .diary
+    /// The Search tab owns its own native detail stack. Food detail selected
+    /// from the shared Search screen is pushed here so Back returns to Search
+    /// with its query, scope and diary context intact. The Diary Add Food push
+    /// keeps using `navigationState` and still returns to Diary.
+    @Published public private(set) var searchTabPath: [Pane] = []
+    /// Expanded layouts use a sidebar Library destination without changing the
+    /// established diary/search pane plan.
+    @Published public var expandedLibrarySelected: Bool = false
     @Published public private(set) var settingsViewModel: DiarySettingsViewModel?
     @Published public private(set) var accountSettingsViewModel: AccountSettingsViewModel?
     @Published public private(set) var featureSheet: AppShellFeatureSheet?
@@ -172,6 +215,15 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     }
 
     public var phase: SessionCoordinator.Phase { session.phase }
+
+    /// Live diary target read only when a new Library/Meals logging flow opens.
+    /// Session resets restore it to the current day with no stored target.
+    public var currentLibraryLogContext: LibraryLogContext {
+        LibraryLogContext(
+            date: navigationState.selectedDate,
+            mealSlot: navigationState.mealSlot
+        )
+    }
 
     public var screen: AppShellScreen {
         AppShellScreen(phase: session.phase, configurationError: configurationError)
@@ -375,6 +427,9 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         pendingSubmission = nil
         pendingSubmissions = []
         pendingEditorDiscard = nil
+        selectedTab = .diary
+        searchTabPath = []
+        expandedLibrarySelected = false
         previous.readyState?.diary.resetForSessionChange()
         previous.readyState?.search.invalidateSession()
         navigationState = NavigationState(date: todayProvider())
@@ -434,6 +489,9 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         pendingSubmission = nil
         pendingSubmissions = []
         pendingEditorDiscard = nil
+        selectedTab = .diary
+        searchTabPath = []
+        expandedLibrarySelected = false
 
         let today = todayProvider()
         navigationState = NavigationState(date: today)
@@ -634,6 +692,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     }
 
     private func performStartLogging(slot: MealSlot, date: LocalDiaryDate) {
+        clearExpandedLibrarySelection()
         var state = navigationState
         state.selectDate(date)
         state.startLogging(mealSlot: slot)
@@ -650,16 +709,45 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         performOpenFoodDetail(foodID, date: date, mealSlot: mealSlot)
     }
 
+    /// Diary Add Food push: detail stays on the Diary navigation stack so Back
+    /// steps Search -> Diary and the selected date/meal context is retained.
     private func performOpenFoodDetail(
         _ foodID: String,
         date: LocalDiaryDate,
         mealSlot: MealSlot?
     ) {
+        clearExpandedLibrarySelection()
         var state = navigationState
         state.showDetail(foodID: foodID, date: date, mealSlot: mealSlot)
         navigationState = state
         searchViewModel?.updateContext(date: state.selectedDate, mealSlot: state.mealSlot)
+        ensureFoodDetailViewModel(foodID: foodID, date: date, mealSlot: mealSlot)
+    }
 
+    /// Search tab selection: detail is pushed on the Search tab's own native
+    /// stack. `navigationState` (the hidden Diary stack) is deliberately left
+    /// untouched, so Back returns to Search and no hidden stack is stranded.
+    public func openSearchTabFoodDetail(_ foodID: String) {
+        guard featureGraph.readyState?.generation == session.sessionGeneration else { return }
+        searchTabPath = [.foodDetail(foodID: foodID)]
+        ensureFoodDetailViewModel(
+            foodID: foodID,
+            date: navigationState.selectedDate,
+            mealSlot: navigationState.mealSlot
+        )
+    }
+
+    /// The Search tab stack only ever holds one detail; a shorter path is the
+    /// system Back gesture/button popping that detail.
+    public func popSearchTabDetail() {
+        searchTabPath = []
+    }
+
+    private func ensureFoodDetailViewModel(
+        foodID: String,
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?
+    ) {
         guard var ready = featureGraph.readyState,
               ready.generation == session.sessionGeneration else { return }
         let generation = ready.generation
@@ -770,6 +858,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         date: LocalDiaryDate,
         generation: UInt64
     ) {
+        clearExpandedLibrarySelection()
         guard isCurrent(generation),
               let ready = featureGraph.readyState else { return }
 
@@ -915,6 +1004,42 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         return true
     }
 
+    /// Native tab selection must be an intent, never a direct write. A dirty
+    /// editor produces the existing discard dialog and keeps the current tab;
+    /// a busy editor is ignored. Only confirmation performs the exact target.
+    public func requestTabSwitch(to tab: AppShellTab) {
+        guard selectedTab != tab else { return }
+        guard !requestDiscardIfNeeded(for: .switchTab(tab: tab)) else { return }
+        performTabSwitch(to: tab)
+    }
+
+    private func performTabSwitch(to tab: AppShellTab) {
+        selectedTab = tab
+        if tab != .library { expandedLibrarySelected = false }
+        // The Search tab shows the same screen as Diary's Add Food push, so it
+        // must inherit the selected diary date/meal slot rather than keep a
+        // stale origin from an earlier entry.
+        if tab == .search {
+            searchViewModel?.updateContext(
+                date: navigationState.selectedDate,
+                mealSlot: navigationState.mealSlot
+            )
+        }
+    }
+
+    /// Selecting a diary/search route always leaves the expanded Library
+    /// destination so the sidebar selection cannot disagree with the detail.
+    private func clearExpandedLibrarySelection() {
+        expandedLibrarySelected = false
+    }
+
+    public func selectExpandedLibrary() {
+        guard let ready = featureGraph.readyState,
+              ready.generation == session.sessionGeneration else { return }
+        guard !requestDiscardIfNeeded(for: .switchTab(tab: .library)) else { return }
+        expandedLibrarySelected = true
+    }
+
     public func requestBack() {
         guard !requestDiscardIfNeeded(for: .back) else { return }
         back()
@@ -951,6 +1076,9 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             performStartLogging(slot: slot, date: date)
         case .openFoodDetail(let foodID, let date, let mealSlot):
             performOpenFoodDetail(foodID, date: date, mealSlot: mealSlot)
+        case .switchTab(let tab):
+            performTabSwitch(to: tab)
+            if tab == .library { expandedLibrarySelected = true }
         }
     }
 
@@ -973,6 +1101,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     }
 
     private func performShowDiary() {
+        clearExpandedLibrarySelection()
         var state = navigationState
         state.finishLogging()
         navigationState = state
@@ -981,6 +1110,13 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
 
     private func showDiary(date: LocalDiaryDate, generation: UInt64) {
         guard isCurrent(generation) else { return }
+        // "Check Diary" from a detail opened on the Search tab must actually
+        // show Diary: clear that tab's detail so its Back never lands on a
+        // hidden stack, then let the tab bar present the updated Diary.
+        if !searchTabPath.isEmpty {
+            searchTabPath = []
+            selectedTab = .diary
+        }
         var state = navigationState
         state.selectDate(date)
         navigationState = state
@@ -1010,6 +1146,16 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         // Re-tapping the toolbar while the sheet is open must preserve the
         // current draft rather than replace the view model.
         guard settingsViewModel == nil else { return }
+        ensureSettingsViewModel()
+    }
+
+    /// Creates and loads the one shared settings graph when it is absent. The
+    /// compact Settings tab calls this so it is usable even before the diary
+    /// finishes loading, while the diary toolbar keeps its original guard.
+    public func ensureSettingsViewModel() {
+        guard settingsViewModel == nil,
+              let ready = featureGraph.readyState,
+              ready.generation == session.sessionGeneration else { return }
 
         let generation = ready.generation
         let viewModel = DiarySettingsViewModel(
@@ -1311,6 +1457,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     }
 
     private func performShowSearch() {
+        clearExpandedLibrarySelection()
         var state = navigationState
         while state.hasDetail {
             _ = state.back()
@@ -1503,7 +1650,7 @@ enum AppShellPanePlan: Equatable {
 
     case split(primary: Pane, inspector: Pane?)
 
-    static let sidebarSections: [PrimarySection] = [.diary, .search]
+    static let sidebarSections: [PrimarySection] = [.diary, .search, .library]
 
     static func plan(for state: NavigationState, layout: PaneLayout) -> AppShellPanePlan {
         switch layout {
@@ -1517,6 +1664,10 @@ enum AppShellPanePlan: Equatable {
                 primary = .diary
             case .search:
                 primary = .foodSearch
+            case .library:
+                // Library is a sidebar destination, not a pane in the
+                // diary/search stack. The detail column renders it directly.
+                primary = .diary
             }
             return .split(
                 primary: primary,
@@ -1588,6 +1739,9 @@ public struct AppShell: View {
     @StateObject private var coordinator: AppShellCoordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var pendingBannerDiscard: PendingLogSubmission?
+    /// Tab selection lives on the coordinator so the native tab bar goes
+    /// through the shared discard/busy guard. Each destination still keeps its
+    /// own navigation stack and route-owned view models across tab switches.
 
     public init() {
         _coordinator = StateObject(wrappedValue: AppShellCoordinator())
@@ -1633,6 +1787,10 @@ public struct AppShell: View {
                 configurationErrorView(message)
             }
         }
+        // One root application of the branded accent color. The light/dark
+        // values come from the asset catalog, so no duplicate color constants
+        // or non-semantic background overrides are needed anywhere else.
+        .tint(Color.accentColor)
         .task {
             await coordinator.start()
         }
@@ -1718,61 +1876,66 @@ public struct AppShell: View {
                     pendingSubmissionBanner(pending)
                 }
                 if layout == .compact {
-                    compactShell
+                    compactTabShell
                 } else {
                     expandedShell
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .sheet(item: settingsSheetBinding) { settings in
-            DiarySettingsView(
-                viewModel: settings,
-                accountSettingsViewModel: coordinator.accountSettingsViewModel,
-                onClose: { coordinator.dismissSettings() },
-                onAccountSettingsDismissed: { coordinator.dismissAccountSettings() }
-            )
-        }
-        .sheet(
-            item: featureSheetBinding,
-            onDismiss: { coordinator.featureSheetDidDismiss() }
-        ) { sheet in
-            featureSheetView(sheet)
-        }
-        .alert(item: $pendingBannerDiscard) { pending in
-            Alert(
-                title: Text(String(localized: "foodDetail.pending.discard.confirmTitle")),
-                message: Text(String(localized: "foodDetail.pending.discard.confirmMessage")),
-                primaryButton: .destructive(
-                    Text(String(localized: "foodDetail.pending.discard.confirmAction"))
-                ) {
-                    coordinator.discardPendingSubmission(pending)
-                },
-                secondaryButton: .cancel(
-                    Text(String(localized: "foodDetail.pending.cancel"))
+            .sheet(item: settingsSheetBinding(for: layout)) { settings in
+                DiarySettingsView(
+                    viewModel: settings,
+                    accountSettingsViewModel: coordinator.accountSettingsViewModel,
+                    onClose: { coordinator.dismissSettings() },
+                    onAccountSettingsDismissed: { coordinator.dismissAccountSettings() }
                 )
-            )
-        }
-        .confirmationDialog(
-            String(localized: "diary.editor.discard.title"),
-            isPresented: discardConfirmationPresented,
-            titleVisibility: .visible
-        ) {
-            Button(String(localized: "diary.editor.discard.action"), role: .destructive) {
-                coordinator.confirmDiscardEditorChanges()
             }
-            .accessibilityIdentifier("diary.editor.discard.confirm")
-            Button(String(localized: "diary.common.cancel"), role: .cancel) {
-                coordinator.cancelDiscardEditorChanges()
+            .sheet(
+                item: featureSheetBinding,
+                onDismiss: { coordinator.featureSheetDidDismiss() }
+            ) { sheet in
+                featureSheetView(sheet)
             }
-        } message: {
-            Text(String(localized: "diary.editor.discard.message"))
+            .alert(item: $pendingBannerDiscard) { pending in
+                Alert(
+                    title: Text(String(localized: "foodDetail.pending.discard.confirmTitle")),
+                    message: Text(String(localized: "foodDetail.pending.discard.confirmMessage")),
+                    primaryButton: .destructive(
+                        Text(String(localized: "foodDetail.pending.discard.confirmAction"))
+                    ) {
+                        coordinator.discardPendingSubmission(pending)
+                    },
+                    secondaryButton: .cancel(
+                        Text(String(localized: "foodDetail.pending.cancel"))
+                    )
+                )
+            }
+            .confirmationDialog(
+                String(localized: "diary.editor.discard.title"),
+                isPresented: discardConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                Button(String(localized: "diary.editor.discard.action"), role: .destructive) {
+                    coordinator.confirmDiscardEditorChanges()
+                }
+                .accessibilityIdentifier("diary.editor.discard.confirm")
+                Button(String(localized: "diary.common.cancel"), role: .cancel) {
+                    coordinator.cancelDiscardEditorChanges()
+                }
+                .accessibilityIdentifier("diary.editor.discard.cancel")
+            } message: {
+                Text(String(localized: "diary.editor.discard.message"))
+            }
         }
     }
 
-    private var settingsSheetBinding: Binding<DiarySettingsViewModel?> {
+    /// Compact uses an embedded Settings tab, so the sheet is only available to
+    /// expanded layouts. This keeps one settings view model across both paths.
+    private func settingsSheetBinding(
+        for layout: PaneLayout
+    ) -> Binding<DiarySettingsViewModel?> {
         Binding(
-            get: { coordinator.settingsViewModel },
+            get: { layout == .compact ? nil : coordinator.settingsViewModel },
             set: { newValue in
                 if newValue == nil {
                     coordinator.dismissSettings()
@@ -1980,30 +2143,230 @@ public struct AppShell: View {
 
     // MARK: Compact
 
-    private var compactShell: some View {
+    /// Native three-tab iPhone shell. Diary owns the contextual Add Food push;
+    /// Library owns Foods and Meals; Settings owns goals, slots, and API keys.
+    private var tabSelection: Binding<AppShellTab> {
+        Binding(
+            get: { coordinator.selectedTab },
+            set: { coordinator.requestTabSwitch(to: $0) }
+        )
+    }
+
+    private var compactTabShell: some View {
+        TabView(selection: tabSelection) {
+            diaryTab
+                .tabItem {
+                    Label(AppShellTab.diary.title, systemImage: AppShellTab.diary.systemImage)
+                        .accessibilityIdentifier("app.tab.diary")
+                }
+                .tag(AppShellTab.diary)
+
+            searchTab
+                .tabItem {
+                    Label(AppShellTab.search.title, systemImage: AppShellTab.search.systemImage)
+                        .accessibilityIdentifier("app.tab.search")
+                }
+                .tag(AppShellTab.search)
+
+            // LibraryView and MealsFlowView own their NavigationStacks; do not
+            // wrap them in another one or a second, empty bar appears. Identity
+            // is account-scoped only: a diary date change must not destroy an
+            // in-progress editor or navigation path. The tab identifier belongs
+            // on the tabItem: putting it on the content overrides descendant
+            // identifiers such as the Foods/Meals segmented control.
+            libraryRoot(onClose: nil)
+                .id("library-\(coordinator.currentUser?.id ?? "none")")
+                .tabItem {
+                    Label(AppShellTab.library.title, systemImage: AppShellTab.library.systemImage)
+                        .accessibilityIdentifier("app.tab.library")
+                }
+                .tag(AppShellTab.library)
+
+            settingsTab
+                .tabItem {
+                    Label(AppShellTab.settings.title, systemImage: AppShellTab.settings.systemImage)
+                        .accessibilityIdentifier("app.tab.settings")
+                }
+                .tag(AppShellTab.settings)
+        }
+    }
+
+    private var diaryTab: some View {
         let plan = AppShellPanePlan.plan(
             for: coordinator.navigationState,
             layout: .compact
         )
         return NavigationStack(path: compactPath) {
-            paneView(plan.rootPane)
-                .toolbar { signOutToolbar }
+            paneView(plan.rootPane, compactStyle: true)
                 .navigationDestination(for: Pane.self) { pane in
                     compactDestination(pane)
                 }
         }
     }
 
+    private var searchTab: some View {
+        NavigationStack(path: searchTabPathBinding) {
+            searchScreen(compactStyle: true, isSearchTabRoot: true)
+                .navigationDestination(for: Pane.self) { pane in
+                    searchTabDestination(pane)
+                }
+        }
+    }
+
+    /// System Back pops the Search tab's own detail; it never mutates the Diary
+    /// navigation stack, so returning to Search keeps query/scope/context.
+    private var searchTabPathBinding: Binding<[Pane]> {
+        Binding(
+            get: { coordinator.searchTabPath },
+            set: { newPath in
+                guard newPath.count < coordinator.searchTabPath.count else { return }
+                coordinator.popSearchTabDetail()
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func searchTabDestination(_ pane: Pane) -> some View {
+        switch pane {
+        case .foodDetail(let foodID), .foodLog(let foodID):
+            if let vm = coordinator.foodDetailViewModel(for: foodID) {
+                FoodDetailView(viewModel: vm, compactStyle: true)
+                #if os(iOS)
+                .toolbar(.hidden, for: .tabBar)
+                #endif
+            } else {
+                ProgressView()
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    /// Single owner of the shared Search / Add Food screen. The Search tab and
+    /// Diary's Add Food push render this exact view over the one shared
+    /// SearchViewModel; only the hosting stack differs. The push gets the
+    /// native Back to Diary, the tab root uses its own detail stack with Back
+    /// to Search, and neither path strands a hidden stack. There is no Add Food
+    /// header, no Cancel, and no duplicate Back.
+    @ViewBuilder
+    private func searchScreen(compactStyle: Bool, isSearchTabRoot: Bool = false) -> some View {
+        if let vm = coordinator.searchViewModel {
+            SearchView(
+                viewModel: vm,
+                onOpenMeals: {
+                    if compactStyle {
+                        coordinator.requestTabSwitch(to: .library)
+                    } else {
+                        coordinator.openMealsList()
+                    }
+                },
+                onOpenAssistant: { purpose, barcode in
+                    coordinator.openAssistant(
+                        purpose: purpose,
+                        initialBarcode: barcode
+                    )
+                },
+                onDraftBarcodeWithAssistant: { barcode in
+                    coordinator.openAssistant(
+                        purpose: .customFood,
+                        initialBarcode: barcode
+                    )
+                },
+                onCreateCustomFoodFromBarcode: { barcode in
+                    coordinator.openLibrary(
+                        date: coordinator.navigationState.selectedDate,
+                        mealSlot: coordinator.navigationState.mealSlot,
+                        initialBarcode: barcode
+                    )
+                },
+                onSelectFoodID: isSearchTabRoot
+                    ? { foodID in coordinator.openSearchTabFoodDetail(foodID) }
+                    : nil
+            )
+        } else {
+            ProgressView()
+                .accessibilityIdentifier("app.search.loading")
+        }
+    }
+
+    @ViewBuilder
+    private func libraryRoot(onClose: (() -> Void)? = nil) -> some View {
+        LibraryRootView(
+            service: coordinator.currentLibraryService,
+            mealsService: coordinator.currentMealsService,
+            accountID: coordinator.currentUser?.id ?? "",
+            date: coordinator.navigationState.selectedDate,
+            mealSlot: coordinator.navigationState.mealSlot,
+            today: coordinator.todayProvider(),
+            submitDrafts: { [weak coordinator] drafts, names, summary, completion in
+                coordinator?.submitDraftsForFeature(
+                    drafts,
+                    itemNames: names,
+                    summary: summary,
+                    completion: completion
+                )
+            },
+            onLogged: { [weak coordinator] date, slot in
+                coordinator?.libraryDidLog(date: date, mealSlot: slot)
+            },
+            onSessionExpired: { [weak coordinator] in
+                coordinator?.featureSessionExpired()
+            },
+            onClose: onClose,
+            currentContextProvider: { coordinator.currentLibraryLogContext },
+            onCreateWithAI: { [weak coordinator] in
+                coordinator?.openAssistant(purpose: .customFood, initialBarcode: nil)
+            }
+        )
+    }
+
+    private func closeSettingsTab() {
+        coordinator.dismissSettings()
+        coordinator.requestTabSwitch(to: .diary)
+    }
+
+    @ViewBuilder
+    private var settingsTab: some View {
+        if let settings = coordinator.settingsViewModel {
+            DiarySettingsView(
+                viewModel: settings,
+                accountSettingsViewModel: coordinator.accountSettingsViewModel,
+                onClose: { closeSettingsTab() },
+                onAccountSettingsDismissed: { [weak coordinator] in
+                    coordinator?.dismissAccountSettings()
+                },
+                onSignOut: { [weak coordinator] in
+                    Task { await coordinator?.signOut() }
+                }
+            )
+        } else {
+            ProgressView()
+                .accessibilityIdentifier("app.settings.loading")
+                .task { coordinator.ensureSettingsViewModel() }
+        }
+    }
+
+    private func isContextualPane(_ pane: Pane) -> Bool {
+        switch pane {
+        case .diary: return false
+        case .foodSearch, .foodDetail, .foodLog, .logEditor: return true
+        }
+    }
+
     @ViewBuilder
     private func compactDestination(_ pane: Pane) -> some View {
         let isLogEditor = isLogEditorPane(pane)
-        paneView(pane)
+        paneView(pane, compactStyle: true)
             // Replace the system back gesture/button consistently on iOS and
             // macOS compact windows. Otherwise a system back action can bypass
             // the dirty/busy editor guard.
             .navigationBarBackButtonHidden(isLogEditor)
+        #if os(iOS)
+            // Contextual Add Food / Log Food / edit steps own the full screen;
+            // the root TabView bar must not sit on top of the bottom Log button.
+            .toolbar(isContextualPane(pane) ? .hidden : .automatic, for: .tabBar)
+        #endif
             .toolbar {
-                signOutToolbar
                 if isLogEditor {
                     ToolbarItem(placement: editorBackPlacement) {
                         editorBackButton
@@ -2069,9 +2432,13 @@ public struct AppShell: View {
         return NavigationSplitView {
             sidebar
         } detail: {
-            NavigationStack {
-                paneView(plan.primaryPane)
-                    .toolbar { signOutToolbar }
+            if coordinator.expandedLibrarySelected {
+                libraryRoot(onClose: nil)
+                    .id("library-\(coordinator.currentUser?.id ?? "none")")
+            } else {
+                NavigationStack {
+                    paneView(plan.primaryPane)
+                }
             }
         }
         .inspector(isPresented: inspectorPresented) {
@@ -2096,14 +2463,23 @@ public struct AppShell: View {
         switch section {
         case .diary:
             Label("Diary", systemImage: "book.closed")
+                .accessibilityIdentifier("app.sidebar.diary")
         case .search:
             Label(String(localized: "search.title"), systemImage: "magnifyingglass")
+                .accessibilityIdentifier("app.sidebar.search")
+        case .library:
+            Label(String(localized: "library.title"), systemImage: "books.vertical")
+                .accessibilityIdentifier("app.sidebar.library")
         }
     }
 
     private var sidebarSelection: Binding<PrimarySection?> {
         Binding(
-            get: { coordinator.navigationState.primarySection },
+            get: {
+                coordinator.expandedLibrarySelected
+                    ? .library
+                    : coordinator.navigationState.primarySection
+            },
             set: { section in
                 guard let section else { return }
                 switch section {
@@ -2111,6 +2487,8 @@ public struct AppShell: View {
                     coordinator.showDiary()
                 case .search:
                     coordinator.showSearch()
+                case .library:
+                    coordinator.selectExpandedLibrary()
                 }
             }
         )
@@ -2118,9 +2496,13 @@ public struct AppShell: View {
 
     private var inspectorPresented: Binding<Bool> {
         Binding(
-            get: { coordinator.navigationState.activePane.contextualFoodPane != nil },
+            get: {
+                !coordinator.expandedLibrarySelected
+                    && coordinator.navigationState.activePane.contextualFoodPane != nil
+            },
             set: { isPresented in
                 guard !isPresented,
+                      !coordinator.expandedLibrarySelected,
                       coordinator.navigationState.activePane.contextualFoodPane != nil
                 else { return }
                 coordinator.requestBack()
@@ -2145,83 +2527,46 @@ public struct AppShell: View {
         }
     }
 
-    // MARK: Sign out
-
-    @ToolbarContentBuilder
-    private var signOutToolbar: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            signOutButton
-        }
-    }
-
-    private var signOutButton: some View {
-        Button(role: .destructive) {
-            Task { await coordinator.signOut() }
-        } label: {
-            Label(
-                String(localized: "auth.signOut",
-                       comment: "Toolbar action that signs the user out"),
-                systemImage: "rectangle.portrait.and.arrow.right"
-            )
-        }
-        .accessibilityIdentifier("auth.signOut")
-        .help(String(localized: "auth.signOut",
-                     comment: "Toolbar action that signs the user out"))
-    }
-
     // MARK: Panes
 
     @ViewBuilder
-    private func paneView(_ pane: Pane) -> some View {
+    private func paneView(_ pane: Pane, compactStyle: Bool = false) -> some View {
         switch pane {
         case .diary:
             if let vm = coordinator.diaryViewModel {
                 DiaryView(
                     viewModel: vm,
-                    onOpenSettings: { coordinator.showSettings() },
+                    onOpenSettings: {
+                        coordinator.showSettings()
+                        if compactStyle { coordinator.requestTabSwitch(to: .settings) }
+                    },
                     onOpenNutrition: { coordinator.showNutritionDetails() },
-                    onOpenMeals: { coordinator.openMealsList() },
+                    onOpenMeals: {
+                        if compactStyle {
+                            coordinator.requestTabSwitch(to: .library)
+                        } else {
+                            coordinator.openMealsList()
+                        }
+                    },
                     onOpenLibrary: {
-                        coordinator.openLibrary(
-                            date: coordinator.navigationState.selectedDate,
-                            mealSlot: coordinator.navigationState.mealSlot
-                        )
+                        if compactStyle {
+                            coordinator.requestTabSwitch(to: .library)
+                        } else {
+                            coordinator.openLibrary(
+                                date: coordinator.navigationState.selectedDate,
+                                mealSlot: coordinator.navigationState.mealSlot
+                            )
+                        }
                     }
                 )
             } else {
                 ProgressView()
             }
         case .foodSearch:
-            if let vm = coordinator.searchViewModel {
-                SearchView(
-                    viewModel: vm,
-                    onOpenMeals: { coordinator.openMealsList() },
-                    onOpenAssistant: { purpose, barcode in
-                        coordinator.openAssistant(
-                            purpose: purpose,
-                            initialBarcode: barcode
-                        )
-                    },
-                    onDraftBarcodeWithAssistant: { barcode in
-                        coordinator.openAssistant(
-                            purpose: .customFood,
-                            initialBarcode: barcode
-                        )
-                    },
-                    onCreateCustomFoodFromBarcode: { barcode in
-                        coordinator.openLibrary(
-                            date: coordinator.navigationState.selectedDate,
-                            mealSlot: coordinator.navigationState.mealSlot,
-                            initialBarcode: barcode
-                        )
-                    }
-                )
-            } else {
-                ProgressView()
-            }
+            searchScreen(compactStyle: compactStyle)
         case .foodDetail(let foodID), .foodLog(let foodID):
             if let vm = coordinator.foodDetailViewModel(for: foodID) {
-                FoodDetailView(viewModel: vm)
+                FoodDetailView(viewModel: vm, compactStyle: compactStyle)
             } else {
                 ProgressView()
             }

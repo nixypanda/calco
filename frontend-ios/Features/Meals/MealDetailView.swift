@@ -31,7 +31,6 @@ public struct MealDetailView: View {
             case .loaded:
                 loadedView
                     .scrollDismissesKeyboard(.interactively)
-                    .safeAreaInset(edge: .bottom) { actionBar }
             }
         }
         .navigationTitle(viewModel.displayName)
@@ -159,42 +158,41 @@ public struct MealDetailView: View {
                 }
             }
 
-            LogFormView(
-                amount: portionAmountBinding,
-                unit: portionUnitBinding,
-                units: viewModel.logFormUnits,
-                mealSlot: mealSlotBinding,
-                notes: logNotesBinding,
-                focusedField: $focusedField,
-                validationMessage: viewModel.amountValidationMessage,
-                isSubmitting: viewModel.isLogging
-            )
-
-            if let notice = viewModel.unitFallbackNotice {
-                Section {
-                    Text(notice)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            if let notice = viewModel.portionFallbackNotice {
-                Section {
-                    Label {
-                        Text(notice)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } icon: {
-                        Image(systemName: "info.circle")
+            Section {
+                Button {
+                    focusedField = nil
+                    if let meal = viewModel.meal {
+                        onEdit(meal)
                     }
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                } label: {
+                    Label(
+                        String(localized: "meals.detail.edit"),
+                        systemImage: "pencil"
+                    )
                 }
-                .accessibilityIdentifier("meals.detail.portionFallback")
-            }
+                .disabled(viewModel.isDeleting)
+                .accessibilityIdentifier("meals.detail.edit")
 
-            previewSection
+                Button(role: .destructive) {
+                    confirmDelete = true
+                } label: {
+                    if viewModel.isDeleting {
+                        HStack {
+                            ProgressView()
+                            Text(String(localized: "meals.detail.delete.deleting"))
+                        }
+                    } else {
+                        Label(
+                            String(localized: "meals.detail.delete"),
+                            systemImage: "trash"
+                        )
+                    }
+                }
+                .disabled(viewModel.isDeleting)
+                .accessibilityIdentifier("meals.detail.delete")
+            }
         }
+
         .accessibilityIdentifier("meals.detail")
     }
 
@@ -239,86 +237,6 @@ public struct MealDetailView: View {
         )
     }
 
-    @ViewBuilder
-    private var previewSection: some View {
-        Section {
-            switch viewModel.previewState {
-            case .idle:
-                Text(String(localized: "meals.detail.preview.prompt"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("meals.detail.preview.idle")
-            case .loading:
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(String(localized: "meals.detail.preview.loading"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("meals.detail.preview.loading")
-                }
-            case .loaded(let nutrition):
-                if nutrition.nutrients.isEmpty {
-                    Text(String(localized: "meals.detail.preview.empty"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("meals.detail.preview.empty")
-                } else {
-                    if let quantity = MealNutrientDisplay.quantity(nutrition.quantity) {
-                        // The stable success marker lives on a real, hittable
-                        // row. A Section-level identifier is not exposed by
-                        // this Form on iOS 26, and the header alone would be
-                        // visible before any server preview arrived.
-                        Text(quantity)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("meals.detail.preview")
-                            .accessibilityLabel(quantity)
-                    }
-                    ForEach(nutrition.nutrients, id: \.code) { nutrient in
-                        HStack {
-                            Text(MealNutrientDisplay.label(for: nutrient.code))
-                            Spacer(minLength: 8)
-                            Text(MealNutrientDisplay.value(nutrient))
-                                .monospacedDigit()
-                        }
-                        .font(.subheadline)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier(
-                            "meals.detail.preview.nutrient.\(nutrient.code)"
-                        )
-                    }
-                }
-            case .unavailable(let message):
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("meals.detail.preview.unavailable")
-            case .failed(let message):
-                VStack(alignment: .leading, spacing: 8) {
-                    Label {
-                        Text(message)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier("meals.detail.preview.error")
-                    Button(String(localized: "meals.detail.preview.retry")) {
-                        viewModel.refreshPreview()
-                    }
-                    .font(.footnote)
-                    .accessibilityIdentifier("meals.detail.preview.retry")
-                }
-            }
-        } header: {
-            Text(String(localized: "meals.detail.preview"))
-                .accessibilityIdentifier("meals.detail.preview.header")
-        }
-    }
-
     private var actionBar: some View {
         VStack(spacing: 8) {
             if let meal = viewModel.meal {
@@ -338,51 +256,6 @@ public struct MealDetailView: View {
                 inlineMessage(message, systemImage: "trash", color: .red)
                     .accessibilityIdentifier("meals.detail.delete.error")
             }
-
-            if let message = viewModel.logErrorMessage {
-                inlineMessage(message, systemImage: "exclamationmark.triangle.fill", color: .red)
-                    .accessibilityIdentifier("meals.detail.log.error")
-            }
-
-            if viewModel.didLog {
-                Label {
-                    Text(String(localized: "meals.detail.logged"))
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "checkmark.circle.fill")
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.green)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("meals.detail.log.success")
-            }
-
-            if viewModel.canLog {
-                Button {
-                    focusedField = nil
-                    viewModel.logMeal()
-                } label: {
-                    HStack(spacing: 8) {
-                        if viewModel.isLogging {
-                            ProgressView()
-                                .accessibilityHidden(true)
-                            Text(String(localized: "meals.detail.logging"))
-                        } else {
-                            Text(String(localized: "meals.detail.log"))
-                        }
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 5)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(
-                    viewModel.isLogging
-                        || viewModel.isDeleting
-                        || viewModel.amountValidationMessage != nil
-                )
-                .accessibilityIdentifier("meals.detail.log")
-            }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -399,7 +272,7 @@ public struct MealDetailView: View {
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
-        .disabled(viewModel.isLogging || viewModel.isDeleting)
+        .disabled(viewModel.isDeleting)
         .accessibilityIdentifier("meals.detail.edit")
     }
 
@@ -421,7 +294,7 @@ public struct MealDetailView: View {
             }
         }
         .buttonStyle(.bordered)
-        .disabled(viewModel.isDeleting || viewModel.isLogging)
+        .disabled(viewModel.isDeleting)
         .accessibilityIdentifier("meals.detail.delete")
     }
 
@@ -439,33 +312,5 @@ public struct MealDetailView: View {
         .font(.footnote)
         .foregroundStyle(color)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var portionAmountBinding: Binding<String> {
-        Binding(
-            get: { viewModel.portionAmount },
-            set: { viewModel.portionAmountChanged($0) }
-        )
-    }
-
-    private var portionUnitBinding: Binding<String> {
-        Binding(
-            get: { viewModel.portionUnit },
-            set: { viewModel.portionUnitChanged($0) }
-        )
-    }
-
-    private var mealSlotBinding: Binding<MealSlot?> {
-        Binding(
-            get: { viewModel.mealSlot },
-            set: { viewModel.mealSlotChanged($0) }
-        )
-    }
-
-    private var logNotesBinding: Binding<String> {
-        Binding(
-            get: { viewModel.logNotes },
-            set: { viewModel.logNotesChanged($0) }
-        )
     }
 }

@@ -5493,6 +5493,36 @@
         }
       }
     },
+    "library.common.back" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        }
+      }
+    },
+    "library.hub.foods" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My Foods"
+          }
+        }
+      }
+    },
+    "library.hub.meals" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My Meals"
+          }
+        }
+      }
+    },
     "library.title" : {
       "localizations" : {
         "en" : {
@@ -5839,6 +5869,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Custom Food"
+          }
+        }
+      }
+    },
+    "library.create.manually" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create manually"
+          }
+        }
+      }
+    },
+    "library.create.withAI" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create with AI"
           }
         }
       }

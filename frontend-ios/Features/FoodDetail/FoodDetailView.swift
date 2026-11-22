@@ -17,8 +17,14 @@ public struct FoodDetailView: View {
     @FocusState private var focusedField: LogFormField?
     @State private var confirmation: FoodDetailConfirmation?
 
-    public init(viewModel: FoodDetailViewModel) {
+    /// Compact iPhone uses the native Log Food presentation: quantity first,
+    /// a live energy/macro summary, then the rest of the form. Expanded/iPad and
+    /// Mac keep the long-standing detail layout and title.
+    private let compactStyle: Bool
+
+    public init(viewModel: FoodDetailViewModel, compactStyle: Bool = false) {
         self.viewModel = viewModel
+        self.compactStyle = compactStyle
     }
 
     public var body: some View {
@@ -32,10 +38,13 @@ public struct FoodDetailView: View {
             case .loaded:
                 loadedView
                     .scrollDismissesKeyboard(.interactively)
-                    .safeAreaInset(edge: .bottom) { submitBar }
+                    .safeAreaInset(edge: .bottom, spacing: 0) { submitBar }
             }
         }
-        .navigationTitle(viewModel.food?.name ?? String(localized: "foodDetail.title"))
+        .navigationTitle(navigationTitle)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(compactStyle ? .inline : .large)
+        #endif
         .task {
             if viewModel.food == nil {
                 await viewModel.load()
@@ -75,6 +84,13 @@ public struct FoodDetailView: View {
                 )
             }
         }
+    }
+
+    private var navigationTitle: String {
+        if compactStyle {
+            return String(localized: "foodDetail.log")
+        }
+        return viewModel.food?.name ?? String(localized: "foodDetail.title")
     }
 
     private func failedView(_ message: String) -> some View {
@@ -181,9 +197,10 @@ public struct FoodDetailView: View {
         Form {
             if let food = viewModel.food {
                 Section {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: compactStyle ? 4 : 6) {
                         Text(food.name)
-                            .font(.headline)
+                            .font(compactStyle ? .title3.weight(.semibold) : .headline)
+                            .fixedSize(horizontal: false, vertical: true)
                         if let brand = food.brand, !brand.isEmpty {
                             Text(brand)
                                 .font(.subheadline)
@@ -196,21 +213,14 @@ public struct FoodDetailView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("foodDetail.foodName")
                 }
             }
 
-            LogFormView(
-                amount: amountBinding,
-                unit: unitBinding,
-                units: viewModel.availableUnits,
-                mealSlot: mealSlotBinding,
-                notes: notesBinding,
-                focusedField: $focusedField,
-                validationMessage: viewModel.amountValidationMessage,
-                // Once logged, this form's draft is final. Reusing the form
-                // would invite editing a submission that already succeeded.
-                isSubmitting: !viewModel.isFormEditable
-            )
+            quantitySection
+            nutritionSection
+
+            detailsSection
 
             if let notice = viewModel.lastUsedNotice {
                 Section {
@@ -233,23 +243,163 @@ public struct FoodDetailView: View {
             }
 
             pendingRecoverySections
+            fullNutritionSection
+        }
+    }
 
-            if let preview = viewModel.nutritionPreview, !preview.isEmpty {
-                Section {
-                    ForEach(preview, id: \.code) { nutrient in
-                        HStack {
-                            Text(nutrient.code)
-                            Spacer(minLength: 8)
-                            Text("\(nutrient.amount) \(nutrient.unit)")
-                        }
-                        .font(.subheadline)
-                    }
-                } header: {
-                    Text(String(localized: "foodDetail.nutritionPreview"))
+    // MARK: Quantity
+
+    private var quantitySection: some View {
+        Section {
+            HStack {
+                Text(String(localized: "foodDetail.amount"))
+                Spacer(minLength: 12)
+                TextField(String(localized: "foodDetail.amount"), text: amountBinding)
+                    #if os(iOS)
+                    .keyboardType(.decimalPad)
+                    #endif
+                    .frame(maxWidth: 110)
+                    .focused($focusedField, equals: .amount)
+                    .disabled(!viewModel.isFormEditable)
+                    .labelsHidden()
+                    .accessibilityLabel(String(localized: "foodDetail.amount"))
+                    .accessibilityIdentifier("foodDetail.amount.field")
+            }
+            Picker(String(localized: "foodDetail.unit"), selection: unitBinding) {
+                ForEach(viewModel.availableUnits, id: \.code) { unit in
+                    Text(unit.name).tag(unit.code)
                 }
+            }
+            .pickerStyle(.menu)
+            .disabled(!viewModel.isFormEditable)
+            .accessibilityIdentifier("foodDetail.unit.picker")
+        } footer: {
+            if let message = viewModel.amountValidationMessage {
+                Text(message)
+                    .foregroundStyle(.red)
+                    .font(.caption)
+                    .accessibilityIdentifier("foodDetail.amount.error")
             }
         }
     }
+
+    // MARK: Live nutrition
+
+    @ViewBuilder
+    private var nutritionSection: some View {
+        if let summary = makeLogNutritionSummary(from: viewModel.nutritionPreview),
+           summary.hasPrimaryValues {
+            Section {
+                VStack(spacing: 12) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(summary.energy ?? "0")
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .minimumScaleFactor(0.7)
+                            .accessibilityIdentifier("foodDetail.liveNutrition.energy")
+                        Text("kcal")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        macroColumn(
+                            title: String(localized: "meals.nutrient.protein"),
+                            value: summary.protein
+                        )
+                        macroColumn(
+                            title: String(localized: "meals.nutrient.carbs"),
+                            value: summary.carbs
+                        )
+                        macroColumn(
+                            title: String(localized: "meals.nutrient.fat"),
+                            value: summary.fat
+                        )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.vertical, compactStyle ? 6 : 2)
+            }
+            .accessibilityIdentifier("foodDetail.liveNutrition")
+        }
+    }
+
+    private func macroColumn(title: String, value: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value ?? "0")
+                    .font(.headline)
+                Text("g")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Meal, date, notes
+
+    private var detailsSection: some View {
+        Section {
+            Picker(String(localized: "foodDetail.mealSlot"), selection: mealSlotBinding) {
+                Text(String(localized: "foodDetail.mealSlot.none")).tag(MealSlot?.none)
+                ForEach(MealSlot.allCases, id: \.self) { slot in
+                    Text(DiaryLabels.mealSlotName(slot)).tag(MealSlot?.some(slot))
+                }
+            }
+            .disabled(!viewModel.isFormEditable)
+            .accessibilityIdentifier("foodDetail.mealSlot.picker")
+
+            LabeledContent {
+                Text(viewModel.originDate.diaryDisplayTitle())
+                    .foregroundStyle(.secondary)
+            } label: {
+                Label(String(localized: "library.adHoc.date"), systemImage: "calendar")
+            }
+            .accessibilityIdentifier("foodDetail.date")
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(String(localized: "foodDetail.notes"))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField(String(localized: "foodDetail.notes"), text: notesBinding, axis: .vertical)
+                    .lineLimit(3...6)
+                    .focused($focusedField, equals: .notes)
+                    .disabled(!viewModel.isFormEditable)
+                    .labelsHidden()
+                    .accessibilityLabel(String(localized: "foodDetail.notes"))
+                    .accessibilityIdentifier("foodDetail.notes.field")
+            }
+        }
+    }
+
+    // MARK: Full nutrition
+
+    @ViewBuilder
+    private var fullNutritionSection: some View {
+        if let preview = viewModel.nutritionPreview, !preview.isEmpty {
+            Section {
+                DisclosureGroup(String(localized: "foodDetail.nutritionPreview")) {
+                    ForEach(preview, id: \.code) { nutrient in
+                        HStack {
+                            Text(logNutritionLabel(for: nutrient.code))
+                            Spacer(minLength: 8)
+                            Text("\(nutrient.amount) \(nutrient.unit)")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.subheadline)
+                    }
+                }
+                .accessibilityIdentifier("foodDetail.nutritionPreview")
+            }
+        }
+    }
+
+    // MARK: Bindings
 
     private var amountBinding: Binding<String> {
         Binding(get: { viewModel.amount }, set: { viewModel.amountChanged($0) })
@@ -267,9 +417,50 @@ public struct FoodDetailView: View {
         Binding(get: { viewModel.notes }, set: { viewModel.notesChanged($0) })
     }
 
+    // MARK: Keyboard-aware primary action
+
+    /// On iOS a software keyboard is up exactly while one of the form's text
+    /// fields is focused. macOS has no software keyboard, so this is always
+    /// false there and the bottom safe-area bar is always shown.
+    ///
+    /// The system `.keyboard` toolbar's input accessory clamps every item to a
+    /// fixed 36pt (below the 44pt tap-target minimum) and stacks on top of the
+    /// bottom safe-area bar — that combination originally occluded the Log Food
+    /// button by 9pt and let the Done pill overlap it. Instead, the single
+    /// >=44pt primary action stays in the bottom safe-area bar, which SwiftUI
+    /// natively lifts above the keyboard body; a plain Done control is shown
+    /// in that same bar (above the primary) only while a field is focused, so
+    /// both are visible and never intersect.
+    private var showsKeyboardDone: Bool {
+        #if os(iOS)
+        focusedField != nil
+        #else
+        false
+        #endif
+    }
+
+    // MARK: Bottom submit bar
 
     private var submitBar: some View {
         VStack(spacing: 8) {
+            if showsKeyboardDone {
+                HStack {
+                    Spacer()
+                    Button {
+                        focusedField = nil
+                    } label: {
+                        Text(String(localized: "diary.editor.keyboardDone"))
+                            // Plain Done control: give the label a standard
+                            // 44pt minimum tap target (a minimum, adaptive to
+                            // Dynamic Type) so the full Done frame is >= 44pt
+                            // and hittable. A hit-target modifier on the label,
+                            // not a hard-coded keyboard/accessory offset.
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityIdentifier("foodDetail.keyboard.done")
+                }
+            }
             if let pending = viewModel.newSubmissionConfirmation {
                 HStack(spacing: 8) {
                     if pending.state != .conflicted {
@@ -344,9 +535,9 @@ public struct FoodDetailView: View {
                             Text(String(localized: "foodDetail.log"))
                         }
                     }
+                    .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(viewModel.isBusy)
