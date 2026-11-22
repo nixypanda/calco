@@ -5,6 +5,7 @@ public struct DiarySettingsView: View {
     private let accountSettingsViewModel: AccountSettingsViewModel?
     private let onClose: () -> Void
     private let onAccountSettingsDismissed: () -> Void
+    private let onSignOut: () -> Void
 
     @FocusState private var focusedField: SettingsField?
     @State private var isAccountSettingsPresented = false
@@ -20,12 +21,14 @@ public struct DiarySettingsView: View {
         viewModel: DiarySettingsViewModel,
         accountSettingsViewModel: AccountSettingsViewModel? = nil,
         onClose: @escaping () -> Void,
-        onAccountSettingsDismissed: @escaping () -> Void = {}
+        onAccountSettingsDismissed: @escaping () -> Void = {},
+        onSignOut: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
         self.accountSettingsViewModel = accountSettingsViewModel
         self.onClose = onClose
         self.onAccountSettingsDismissed = onAccountSettingsDismissed
+        self.onSignOut = onSignOut
     }
 
     public var body: some View {
@@ -41,12 +44,19 @@ public struct DiarySettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "settings.cancel")) {
+                // Native back-arrow semantics: the same guarded close action as
+                // Library/Meals, not a modal Cancel and not a sign-out action.
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
                         requestClose()
+                    } label: {
+                        Label(
+                            String(localized: "library.common.back"),
+                            systemImage: "chevron.left"
+                        )
                     }
                     .disabled(viewModel.isSaving)
-                    .accessibilityIdentifier("settings.cancel")
+                    .accessibilityIdentifier("settings.back")
                 }
             }
             #if os(iOS)
@@ -354,6 +364,14 @@ public struct DiarySettingsView: View {
                 }
                 .disabled(viewModel.isSaving)
                 .accessibilityIdentifier("settings.apiKeys.entry")
+
+                Button(role: .destructive) {
+                    onSignOut()
+                } label: {
+                    Label(String(localized: "auth.signOut"), systemImage: "rectangle.portrait.and.arrow.right")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .accessibilityIdentifier("auth.signOut")
             } footer: {
                 Text(String(localized: "apiKeys.description"))
             }

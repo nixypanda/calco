@@ -51,9 +51,14 @@ public struct AccountSettingsView: View {
                 .navigationBarTitleDisplayMode(.inline)
 #endif
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(String(localized: "apiKeys.close")) {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
                             close()
+                        } label: {
+                            Label(
+                                String(localized: "library.common.back"),
+                                systemImage: "chevron.left"
+                            )
                         }
                         .disabled(viewModel.isBusy)
                         .accessibilityIdentifier("settings.apiKeys.close")
@@ -381,37 +386,24 @@ public struct AccountSettingsView: View {
 #endif
             .toolbar {
                 if viewModel.createdKey == nil {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(String(localized: "diary.common.cancel")) {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
                             isNameFocused = false
                             viewModel.cancelCreateForm()
+                        } label: {
+                            Label(
+                                String(localized: "library.common.back"),
+                                systemImage: "chevron.left"
+                            )
                         }
                         .disabled(viewModel.createState == .submitting)
                         .accessibilityIdentifier("settings.apiKeys.create.cancel")
                     }
-
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(String(localized: "apiKeys.create.submit")) {
-                            isNameFocused = false
-                            Task { await viewModel.submitCreate() }
-                        }
-                        .disabled(viewModel.isCreateSubmitDisabled)
-                        .accessibilityIdentifier("settings.apiKeys.create.submit")
-                    }
                 }
             }
-#if os(iOS)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button(String(localized: "apiKeys.keyboard.done")) {
-                        isNameFocused = false
-                    }
-                    .accessibilityIdentifier("settings.apiKeys.create.keyboard.done")
-                }
-            }
-#endif
-            // Cancellation is an explicit toolbar action. Prevent a form swipe
+            // The single "Create API key" action lives in the form's bottom bar.
+            // Cancellation is the explicit toolbar action (the create form is a
+            // sheet, so this is its native dismiss/back path). Prevent a swipe
             // from destroying a partially entered key or the parent sheet.
             .interactiveDismissDisabled()
             .onChange(of: scenePhase) { _, phase in
@@ -715,11 +707,17 @@ public struct AccountSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                // Native back-arrow dismissal. The action is intentionally the
+                // exact same `finishSecretReveal()` as before: one-time secret
+                // clear, lifetime end and clipboard cleanup are untouched.
                 Button {
                     viewModel.finishSecretReveal()
                 } label: {
-                    Text(String(localized: "apiKeys.secret.done"))
-                        .frame(maxWidth: .infinity)
+                    Label(
+                        String(localized: "library.common.back"),
+                        systemImage: "chevron.left"
+                    )
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("settings.apiKeys.secret.done")
