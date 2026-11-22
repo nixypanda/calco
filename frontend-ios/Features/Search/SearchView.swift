@@ -8,38 +8,80 @@ public struct SearchView: View {
     private let onOpenAssistant: ((AssistantDraftPurpose, String?) -> Void)?
     private let onDraftBarcodeWithAssistant: ((String) -> Void)?
     private let onCreateCustomFoodFromBarcode: ((String) -> Void)?
+    /// When the shared screen is the Search tab root, food/custom/barcode
+    /// results are pushed onto that tab's own native detail stack. The Diary
+    /// Add Food push leaves this nil and keeps the existing Diary-stack route.
+    private let onSelectFoodID: ((String) -> Void)?
 
+    /// One shared screen for both the Search tab and the Diary Add Food push.
+    /// Navigation is owned by whichever stack hosts it: the system Back button
+    /// returns to Diary from the push, and the tab bar handles the Search tab.
+    /// There is no Add Food header and no Cancel control, so there is never a
+    /// duplicate Back. The host keeps the selected diary date/meal context on
+    /// the shared view model.
     public init(
         viewModel: SearchViewModel,
         onOpenMeals: (() -> Void)? = nil,
         onOpenAssistant: ((AssistantDraftPurpose, String?) -> Void)? = nil,
         onDraftBarcodeWithAssistant: ((String) -> Void)? = nil,
-        onCreateCustomFoodFromBarcode: ((String) -> Void)? = nil
+        onCreateCustomFoodFromBarcode: ((String) -> Void)? = nil,
+        onSelectFoodID: ((String) -> Void)? = nil
     ) {
         _viewModel = ObservedObject(wrappedValue: viewModel)
         self.onOpenMeals = onOpenMeals
         self.onOpenAssistant = onOpenAssistant
         self.onDraftBarcodeWithAssistant = onDraftBarcodeWithAssistant
         self.onCreateCustomFoodFromBarcode = onCreateCustomFoodFromBarcode
+        self.onSelectFoodID = onSelectFoodID
     }
 
     private var usesAccessibilityLayout: Bool { dynamicTypeSize.isAccessibilitySize }
 
+    /// The three product-backed scopes used by the contextual Diary flow. The
+    /// product has no favorites backend, so the middle scope is the real
+    /// custom-food scope rather than an invented saved-favorites feature.
+    public static var contextualScopes: [SearchScopeOption] {
+        [.history, .custom, .all]
+    }
+
+    /// Both preexisting assistant purposes stay reachable from the single
+    /// shared search screen through one native toolbar Menu.
+    public static var compactAssistantPurposes: [AssistantDraftPurpose] {
+        [.customFood, .adHocLog]
+    }
+
+    public var contextSubtitle: String {
+        let date = viewModel.originDate.diaryDisplayTitle()
+        guard let slot = viewModel.originMealSlot else { return date }
+        return "\(date) · \(DiaryLabels.mealSlotName(slot))"
+    }
+
     public var body: some View {
-        VStack(spacing: 0) {
-            scopePicker
-            if viewModel.scope == .barcode {
-                barcodeField
-            } else {
-                searchField
+        // One scroll container owns the whole screen. The search box and scope
+        // tabs are ordinary content at its top (not a pinned header above a
+        // nested List), so they scroll up with the results. Removing the nested
+        // Lists also removes the height reflow that made the screen jump while
+        // typing: the top section no longer fights a full-height list sibling.
+        ScrollView {
+            VStack(spacing: 0) {
+                scopePicker
+                if viewModel.scope == .barcode {
+                    barcodeField
+                } else {
+                    searchField
+                }
+                if !viewModel.categorySuggestions.isEmpty {
+                    categorySuggestions
+                }
+                quickAddBanner
+                searchProgressRow
+                content
             }
-            if !viewModel.categorySuggestions.isEmpty {
-                categorySuggestions
-            }
-            quickAddBanner
-            content
         }
         .navigationTitle(String(localized: "search.title"))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .onAppear {
             viewModel.clearSelection()
         }
@@ -47,46 +89,6 @@ public struct SearchView: View {
             await viewModel.loadForAppearance()
         }
         .toolbar {
-            if let onOpenMeals {
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        onOpenMeals()
-                    } label: {
-                        Label(String(localized: "meals.title"), systemImage: "fork.knife")
-                    }
-                    .accessibilityIdentifier("search.meals")
-                }
-            }
-            if let onOpenAssistant {
-                ToolbarItem(placement: .automatic) {
-                    Menu {
-                        Button {
-                            onOpenAssistant(.customFood, nil)
-                        } label: {
-                            Label(
-                                String(localized: "assistant.entry.customFood"),
-                                systemImage: "square.and.pencil"
-                            )
-                        }
-                        .accessibilityIdentifier("search.assistant.customFood")
-                        Button {
-                            onOpenAssistant(.adHocLog, nil)
-                        } label: {
-                            Label(
-                                String(localized: "assistant.entry.adHocLog"),
-                                systemImage: "fork.knife"
-                            )
-                        }
-                        .accessibilityIdentifier("search.assistant.adHocLog")
-                    } label: {
-                        Label(
-                            String(localized: "assistant.title"),
-                            systemImage: "sparkles"
-                        )
-                    }
-                    .accessibilityIdentifier("search.assistant")
-                }
-            }
             if !viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                viewModel.scope != .barcode {
                 ToolbarItem(placement: .automatic) {
@@ -96,25 +98,6 @@ public struct SearchView: View {
                     .accessibilityIdentifier("search.clear")
                 }
             }
-            if !viewModel.batchSelection.isEmpty {
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        viewModel.presentBatchReview()
-                    } label: {
-                        Label(
-                            String(
-                                format: String(localized: "search.batch.review"),
-                                viewModel.batchSelection.count
-                            ),
-                            systemImage: "checklist"
-                        )
-                    }
-                    .accessibilityIdentifier("search.batch.reviewButton")
-                }
-            }
-        }
-        .sheet(isPresented: batchReviewBinding) {
-            batchReviewSheet
         }
     }
 
@@ -142,6 +125,47 @@ public struct SearchView: View {
         .padding(.horizontal)
         .padding(.top, 8)
         .accessibilityIdentifier("search.scope")
+    }
+
+    private static func assistantPurposeTitle(_ purpose: AssistantDraftPurpose) -> String {
+        switch purpose {
+        case .customFood: return String(localized: "assistant.entry.customFood")
+        case .adHocLog: return String(localized: "assistant.entry.adHocLog")
+        }
+    }
+
+    private static func assistantPurposeIcon(_ purpose: AssistantDraftPurpose) -> String {
+        switch purpose {
+        case .customFood: return "square.and.pencil"
+        case .adHocLog: return "fork.knife"
+        }
+    }
+
+    private static func assistantPurposeIdentifier(_ purpose: AssistantDraftPurpose) -> String {
+        switch purpose {
+        case .customFood: return "search.assistant.customFood"
+        case .adHocLog: return "search.assistant.adHocLog"
+        }
+    }
+
+    /// A small inline progress row inside the scroll content. The results stay
+    /// mounted while a new query is in flight, so typing no longer replaces the
+    /// results with a differently-sized loading placeholder.
+    @ViewBuilder
+    private var searchProgressRow: some View {
+        if viewModel.isSearching, viewModel.scope != .barcode {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(String(localized: "search.loading"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .accessibilityIdentifier("search.loading.inline")
+        }
     }
 
     private var searchField: some View {
@@ -316,38 +340,41 @@ public struct SearchView: View {
     }
 
     private func resultsView(_ items: [FoodSearchResult]) -> some View {
-        List(items) { result in
-            Button {
-                viewModel.selectResult(result)
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(result.name)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let brand = result.brand, !brand.isEmpty {
-                        Text(brand)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+        LazyVStack(spacing: 0) {
+            ForEach(items) { result in
+                Button {
+                    selectResult(result)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(result.name)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let brand = result.brand, !brand.isEmpty {
+                            Text(brand)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        if !result.categories.isEmpty {
+                            Text(result.categories.joined(separator: ", "))
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
                     }
-                    if !result.categories.isEmpty {
-                        Text(result.categories.joined(separator: ", "))
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .padding(.vertical, 4)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("search.result.\(result.id)")
+
+                Divider().padding(.leading)
             }
-            .buttonStyle(.plain)
-            .listRowSeparator(.visible)
-            .accessibilityIdentifier("search.result.\(result.id)")
         }
-        .listStyle(.plain)
         .accessibilityIdentifier("search.results")
     }
 
@@ -384,79 +411,67 @@ public struct SearchView: View {
     }
 
     private func recentsList(_ items: [RecentLogItem]) -> some View {
-        List {
-            Section {
-                ForEach(items) { item in
-                    recentRow(item)
-                }
-            } header: {
-                Text(String(localized: "search.recents.title"))
+        LazyVStack(spacing: 0) {
+            Text(String(localized: "search.recents.title"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .padding(.top, 12)
+
+            ForEach(items) { item in
+                recentRow(item)
+                Divider().padding(.leading)
             }
         }
-        .listStyle(.plain)
         .accessibilityIdentifier("search.recents")
     }
 
+    /// Recents use the same native row composition as text results: leading
+    /// alignment, the same horizontal/vertical row padding, a full-width
+    /// `contentShape` tap target, the same name/brand/caption hierarchy and a
+    /// divider after every row. A row tap opens the real food detail; the
+    /// quantity chips stay as separate buttons inside the same aligned row so
+    /// their hit areas never overlap the detail tap target.
     private func recentRow(_ item: RecentLogItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                Button {
-                    viewModel.toggleBatchSelection(item)
-                } label: {
-                    Image(
-                        systemName: viewModel.isSelectedForBatch(item)
-                            ? "checkmark.circle.fill"
-                            : "circle"
-                    )
-                    .font(.title3)
-                    .foregroundStyle(
-                        viewModel.isSelectedForBatch(item) ? Color.accentColor : .secondary
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "search.batch.select"))
-                .accessibilityValue(
-                    viewModel.isSelectedForBatch(item)
-                        ? String(localized: "search.batch.selected")
-                        : String(localized: "search.batch.notSelected")
-                )
-                .accessibilityIdentifier("search.recent.select.\(item.id)")
-
-                Button {
-                    openRecent(item)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.name)
-                            .font(.body)
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let brand = item.brand, !brand.isEmpty {
-                            Text(brand)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Text(
-                            String(
-                                format: String(localized: "search.recents.lastUsed"),
-                                item.lastUsedDate.formatted
-                            )
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                openRecent(item)
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.name)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let brand = item.brand, !brand.isEmpty {
+                        Text(brand)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+                    Text(
+                        String(
+                            format: String(localized: "search.recents.lastUsed"),
+                            item.lastUsedDate.formatted
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
                 }
-                .buttonStyle(.plain)
-                .disabled(!canOpen(item))
-                .accessibilityIdentifier("search.recent.\(item.id)")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .disabled(!canOpen(item))
+            .accessibilityIdentifier("search.recent.\(item.id)")
 
             quantityChips(for: item)
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
 
     private func quantityChips(for item: RecentLogItem) -> some View {
@@ -507,10 +522,19 @@ public struct SearchView: View {
         }
     }
 
+    /// One selection entry for text results, recents and barcode lookups. The
+    /// host decides which native stack owns the detail; the screen itself never
+    /// duplicates a detail implementation or navigation control.
+    private func selectResult(_ result: FoodSearchResult) {
+        if let onSelectFoodID {
+            onSelectFoodID(result.id)
+        } else {
+            viewModel.selectResult(result)
+        }
+    }
+
     private func onSelect(productID: String) {
-        viewModel.selectResult(
-            FoodSearchResult(id: productID, name: productID)
-        )
+        selectResult(FoodSearchResult(id: productID, name: productID))
     }
 
     // MARK: - Barcode
@@ -531,38 +555,40 @@ public struct SearchView: View {
         case .loading:
             loadingView(identifier: "search.barcode.loading")
         case .found(let lookup):
-            List {
-                Button {
+            Button {
+                if let onSelectFoodID {
+                    onSelectFoodID(lookup.product.id)
+                } else {
                     viewModel.openBarcodeResult()
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(lookup.product.name)
-                            .font(.body)
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let brand = lookup.product.brand, !brand.isEmpty {
-                            Text(brand)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(barcodeOriginText(lookup.lookup))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let barcode = lookup.product.barcode {
-                            Text(barcode)
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .padding(.vertical, 4)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("search.barcode.result")
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(lookup.product.name)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let brand = lookup.product.brand, !brand.isEmpty {
+                        Text(brand)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(barcodeOriginText(lookup.lookup))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let barcode = lookup.product.barcode {
+                        Text(barcode)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .padding(.horizontal)
+                .padding(.vertical, 8)
             }
-            .listStyle(.plain)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("search.barcode.result")
         case .notFound(let message):
             VStack(spacing: 16) {
                 ContentUnavailableView {
@@ -582,18 +608,6 @@ public struct SearchView: View {
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("search.barcode.create")
                 }
-                if let onDraftBarcodeWithAssistant {
-                    Button {
-                        onDraftBarcodeWithAssistant(viewModel.barcodeInput)
-                    } label: {
-                        Label(
-                            String(localized: "assistant.entry.barcodeCustomFood"),
-                            systemImage: "sparkles"
-                        )
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("search.barcode.assistant")
-                }
             }
             .accessibilityIdentifier("search.barcode.notFound")
         case .failed(let message):
@@ -607,81 +621,6 @@ public struct SearchView: View {
             return String(localized: "search.barcode.origin.local")
         case .openFoodFacts:
             return meta.note ?? String(localized: "search.barcode.origin.openFoodFacts")
-        }
-    }
-
-    // MARK: - Batch review
-
-    private var batchReviewBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.isBatchReviewPresented },
-            set: { if !$0 { viewModel.dismissBatchReview() } }
-        )
-    }
-
-    private var batchReviewSheet: some View {
-        NavigationStack {
-            List {
-                Section {
-                    LabeledContent(
-                        String(localized: "search.batch.date"),
-                        value: viewModel.originDate.formatted
-                    )
-                    LabeledContent(
-                        String(localized: "search.batch.slot"),
-                        value: viewModel.originMealSlot.map(DiaryLabels.mealSlotName)
-                            ?? String(localized: "diary.unslotted")
-                    )
-                }
-                Section(String(localized: "search.batch.items")) {
-                    ForEach(viewModel.batchSelection, id: \.key) { selection in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(selection.item.name)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(selection.quantity.described)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .swipeActions {
-                            Button(role: .destructive) {
-                                viewModel.removeBatchSelection(selection.item)
-                                if viewModel.batchSelection.isEmpty {
-                                    viewModel.dismissBatchReview()
-                                }
-                            } label: {
-                                Label(
-                                    String(localized: "search.batch.remove"),
-                                    systemImage: "trash"
-                                )
-                            }
-                        }
-                    }
-                }
-                if let message = viewModel.submissionMessage {
-                    Section {
-                        Label(message, systemImage: "exclamationmark.triangle")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("search.batch.error")
-                    }
-                }
-            }
-            .navigationTitle(String(localized: "search.batch.title"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "search.batch.cancel")) {
-                        viewModel.dismissBatchReview()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "search.batch.submit")) {
-                        viewModel.submitBatch()
-                    }
-                    .disabled(viewModel.batchSelection.isEmpty)
-                    .accessibilityIdentifier("search.batch.submit")
-                }
-            }
         }
     }
 

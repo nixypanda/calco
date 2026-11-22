@@ -9,15 +9,17 @@ public final class SearchViewModel: ObservableObject {
     @Published public private(set) var query: String = ""
     @Published public private(set) var scope: SearchScopeOption = .all
     @Published public private(set) var state: SearchLoadState = .idle
+    /// A request is in flight. Kept separate from `state` so typing never swaps
+    /// the visible results for a short loading placeholder (the old swap was
+    /// the layout jump on every keystroke). The current rows stay put and an
+    /// inline progress row is shown above them instead.
+    @Published public private(set) var isSearching = false
     @Published public private(set) var selectedResultID: String? = nil
     @Published public private(set) var recentsState: RecentItemsLoadState = .idle
     @Published public private(set) var categorySuggestions: [CategorySuggestion] = []
     @Published public private(set) var barcodeInput: String = ""
     @Published public private(set) var barcodeState: BarcodeLookupState = .idle
     @Published public private(set) var quickAddState: SearchQuickAddState = .idle
-    @Published public private(set) var batchSelection: [SearchBatchSelection] = []
-    @Published public private(set) var isBatchReviewPresented = false
-    @Published public private(set) var submissionMessage: String?
 
     public private(set) var originDate: LocalDiaryDate
     public private(set) var originMealSlot: MealSlot?
@@ -70,8 +72,6 @@ public final class SearchViewModel: ObservableObject {
         originDate = date
         originMealSlot = mealSlot
         selectedResultID = nil
-        batchSelection = []
-        isBatchReviewPresented = false
         clearRecents()
         if scope != .barcode, query.isEmpty {
             state = .idle
@@ -89,7 +89,9 @@ public final class SearchViewModel: ObservableObject {
         guard query != newQuery else { return }
         query = newQuery
         selectedResultID = nil
-        categorySuggestions = []
+        // Do not blank the category chips here. They are replaced atomically by
+        // the debounced fetch; clearing them on every keystroke removed and
+        // re-inserted a row in the search layout and made the screen jump.
         if scope == .barcode {
             // Typing leaves barcode results behind without searching the
             // catalog; the barcode field is the active input in this mode.
@@ -127,12 +129,10 @@ public final class SearchViewModel: ObservableObject {
         resetSearch(clearQuery: true)
         clearRecents()
         categorySuggestions = []
+        isSearching = false
         barcodeInput = ""
         barcodeState = .idle
-        batchSelection = []
-        isBatchReviewPresented = false
         quickAddState = .idle
-        submissionMessage = nil
     }
 
     public func selectResult(_ result: FoodSearchResult) {
@@ -158,7 +158,7 @@ public final class SearchViewModel: ObservableObject {
     }
 
     /// Meal and product recents are openable; ad-hoc snapshots have no catalog
-    /// identity or detail editor and stay quick-add/batch-only.
+    /// identity or detail editor and stay quick-add-only.
     public func canOpen(_ item: RecentLogItem) -> Bool {
         switch item.item {
         case .product, .meal: return true
@@ -180,10 +180,7 @@ public final class SearchViewModel: ObservableObject {
         guard scope != newScope else { return }
         scope = newScope
         selectedResultID = nil
-        batchSelection = []
-        isBatchReviewPresented = false
         categorySuggestions = []
-        submissionMessage = nil
         resetSearch(clearQuery: false)
 
         switch newScope {
@@ -269,6 +266,10 @@ public final class SearchViewModel: ObservableObject {
         let token = "category:\(quoted)"
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         query = trimmed.isEmpty ? token : "\(trimmed) \(token)"
+        // A fetch for the pre-selection query may still be in flight. Invalidate
+        // it or it would repopulate the chips we just consumed with stale data.
+        categoryTask?.cancel()
+        categoryToken += 1
         categorySuggestions = []
         selectedResultID = nil
         scheduleSearch(for: query, immediate: true)
@@ -377,7 +378,7 @@ public final class SearchViewModel: ObservableObject {
         onSelectFood(lookup.product.id, originDate, originMealSlot)
     }
 
-    // MARK: - Quick add and batch
+    // MARK: - Quick add
 
     public func quickAdd(_ item: RecentLogItem, quantity: NutritionQuantity? = nil) {
         guard let onSubmitDrafts,
@@ -386,7 +387,6 @@ public final class SearchViewModel: ObservableObject {
         let chosen = quantity ?? item.quantity
         let draft = makeDraft(item: item, quantity: chosen)
         quickAddState = .submitting(item.id)
-        submissionMessage = nil
         onSubmitDrafts([draft], [item.name], item.name) { [weak self] result in
             guard let self else { return }
             switch result {
@@ -400,73 +400,7 @@ public final class SearchViewModel: ObservableObject {
     }
 
     public func dismissQuickAddMessage() {
-        guard case .idle = quickAddState else {
-            quickAddState = .idle
-            return
-        }
-        submissionMessage = nil
-    }
-
-    public func isSelectedForBatch(_ item: RecentLogItem) -> Bool {
-        batchSelection.contains { $0.key == item.id }
-    }
-
-    public func toggleBatchSelection(_ item: RecentLogItem, quantity: NutritionQuantity? = nil) {
-        if let index = batchSelection.firstIndex(where: { $0.key == item.id }) {
-            batchSelection.remove(at: index)
-        } else {
-            batchSelection.append(
-                SearchBatchSelection(item: item, quantity: quantity ?? item.quantity)
-            )
-        }
-        submissionMessage = nil
-    }
-
-    public func setBatchQuantity(_ quantity: NutritionQuantity, for item: RecentLogItem) {
-        guard let index = batchSelection.firstIndex(where: { $0.key == item.id }) else {
-            return
-        }
-        batchSelection[index] = SearchBatchSelection(item: item, quantity: quantity)
-    }
-
-    public func removeBatchSelection(_ item: RecentLogItem) {
-        batchSelection.removeAll { $0.key == item.id }
-    }
-
-    public func presentBatchReview() {
-        guard !batchSelection.isEmpty else { return }
-        isBatchReviewPresented = true
-        submissionMessage = nil
-    }
-
-    public func dismissBatchReview() {
-        isBatchReviewPresented = false
-    }
-
-    public func submitBatch() {
-        guard let onSubmitDrafts, !batchSelection.isEmpty else { return }
-        let selections = batchSelection
-        let drafts = selections.map { makeDraft(item: $0.item, quantity: $0.quantity) }
-        let summary = LogSubmissionSummary.text(
-            for: drafts,
-            names: selections.map(\.item.name)
-        )
-        submissionMessage = nil
-        onSubmitDrafts(drafts, selections.map(\.item.name), summary) { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .success:
-                self.isBatchReviewPresented = false
-                self.batchSelection = []
-                Task { await self.loadRecents(force: true) }
-            case .failure(let failure):
-                self.submissionMessage = failure.message
-            }
-        }
-    }
-
-    public func batchDraft(for selection: SearchBatchSelection) -> LogSubmissionDraft {
-        makeDraft(item: selection.item, quantity: selection.quantity)
+        quickAddState = .idle
     }
 
     private func makeDraft(
@@ -496,7 +430,7 @@ public final class SearchViewModel: ObservableObject {
         }
         guard let apiScope = scope.foodSearchScope else { return }
 
-        if state == .loading, scheduledQuery == trimmed {
+        if isSearching, scheduledQuery == trimmed {
             return
         }
 
@@ -508,7 +442,9 @@ public final class SearchViewModel: ObservableObject {
 
         scheduledQuery = trimmed
         selectedResultID = nil
-        state = .loading
+        // Keep the current `state` and its rows. Only the transient progress
+        // flag changes, so typing does not resize/replace the results area.
+        isSearching = true
 
         let delay = immediate ? 0 : debounceNanoseconds
         pendingTask = Task { [weak self] in
@@ -516,10 +452,17 @@ public final class SearchViewModel: ObservableObject {
                 do {
                     try await Task.sleep(nanoseconds: delay)
                 } catch {
+                    // Only the current request may clear the loading state.
+                    // A cancelled stale task must leave its replacement alone.
+                    self?.clearCancelledRequest(token: token)
                     return
                 }
             }
-            guard let self, !Task.isCancelled else { return }
+            guard let self else { return }
+            guard !Task.isCancelled else {
+                self.clearCancelledRequest(token: token)
+                return
+            }
             await self.executeSearch(
                 token: token,
                 query: trimmed,
@@ -540,6 +483,7 @@ public final class SearchViewModel: ObservableObject {
             let items = try await service.searchFoods(query: query, scope: apiScope)
             guard token == currentToken, scope == scopeToken else { return }
             finishCurrentRequest()
+            isSearching = false
             selectedResultID = nil
             if let loaded = FoodSearchResults(items) {
                 state = .loaded(loaded)
@@ -551,12 +495,17 @@ public final class SearchViewModel: ObservableObject {
 
             if isCancelledFoodSearchError(error) {
                 finishCurrentRequest()
+                isSearching = false
                 selectedResultID = nil
                 state = .idle
                 return
             }
 
             if isUnauthorizedFoodSearchError(error) {
+                // `invalidateSession` already calls resetSearch, which bumps
+                // currentToken and clears pendingTask/scheduledQuery; make the
+                // intent explicit and fire the session callback exactly once.
+                finishCurrentRequest()
                 invalidateSession()
                 onSessionExpired()
                 return
@@ -564,11 +513,22 @@ public final class SearchViewModel: ObservableObject {
 
             let message = foodSearchErrorMessage(error)
             finishCurrentRequest()
+            isSearching = false
             selectedResultID = nil
             state = .failed(
                 message.isEmpty ? String(localized: "search.error.generic") : message
             )
         }
+    }
+
+    /// Cancellation cleanup is token-guarded: `scheduleSearch`/`resetSearch`
+    /// synchronously install the replacement (or clear the state) before a
+    /// stale task observes its cancellation, so a stale task must never clear
+    /// the new request's `isSearching`/`scheduledQuery`.
+    private func clearCancelledRequest(token: Int) {
+        guard token == currentToken else { return }
+        finishCurrentRequest()
+        isSearching = false
     }
 
     private func finishCurrentRequest() {
@@ -581,6 +541,7 @@ public final class SearchViewModel: ObservableObject {
         pendingTask = nil
         currentToken += 1
         scheduledQuery = nil
+        isSearching = false
         if clearQuery {
             query = ""
         }

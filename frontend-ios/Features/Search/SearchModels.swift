@@ -120,18 +120,6 @@ public enum SearchQuickAddState: Equatable, Sendable {
     case failed(String)
 }
 
-public struct SearchBatchSelection: Equatable, Sendable {
-    public let item: RecentLogItem
-    public let quantity: NutritionQuantity
-
-    public init(item: RecentLogItem, quantity: NutritionQuantity) {
-        self.item = item
-        self.quantity = quantity
-    }
-
-    public var key: String { item.id }
-}
-
 public protocol FoodSearchHistoryServicing: Sendable {
     func recentItems(
         from: LocalDiaryDate,

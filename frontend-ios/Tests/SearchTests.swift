@@ -484,9 +484,10 @@ final class SearchTests: XCTestCase {
         vm.search("chick")
         await waitForState(.idle, on: vm)
 
-        XCTAssertEqual(expirationCount, 1)
+        XCTAssertEqual(expirationCount, 1, "Unauthorized search fires the session callback once")
         XCTAssertEqual(vm.query, "")
         XCTAssertEqual(vm.state, .idle)
+        XCTAssertFalse(vm.isSearching, "Unauthorized cleanup must clear the loading flag")
         XCTAssertTrue(vm.results.isEmpty)
         XCTAssertNil(vm.selectedResultID)
     }

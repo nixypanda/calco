@@ -17,6 +17,7 @@ private actor FakeHistorySearchService: FoodSearchServicing, FoodSearchHistorySe
     private var recentsFailuresRemaining = 0
     private var categories: [CategorySuggestion] = []
     private var categoryQueries: [String] = []
+    private var categoryDelayNanoseconds: UInt64 = 0
     private var barcodeResult: Result<BarcodeLookup, Error> =
         .failure(CalCoAPIError.invalidResponse)
     private var barcodeQueries: [String] = []
@@ -26,6 +27,7 @@ private actor FakeHistorySearchService: FoodSearchServicing, FoodSearchHistorySe
     func setFirstRecentsDelay(_ value: UInt64) { firstRecentsDelayNanoseconds = value }
     func failNextRecents(_ count: Int = 1) { recentsFailuresRemaining = count }
     func setCategories(_ values: [CategorySuggestion]) { categories = values }
+    func setCategoryDelay(_ value: UInt64) { categoryDelayNanoseconds = value }
     func setBarcodeResult(_ value: Result<BarcodeLookup, Error>) { barcodeResult = value }
 
     func recordedSearches() -> [(String, FoodSearchScope)] { searches }
@@ -55,6 +57,9 @@ private actor FakeHistorySearchService: FoodSearchServicing, FoodSearchHistorySe
     }
 
     func categorySuggestions(query: String, limit: Int) async throws -> [CategorySuggestion] {
+        if categoryDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: categoryDelayNanoseconds)
+        }
         categoryQueries.append(query)
         return categories
     }
@@ -170,31 +175,43 @@ final class SearchMilestoneTests: XCTestCase {
         XCTAssertEqual(vm.quickAddState, .idle)
     }
 
-    func testBatchReviewSubmitsSelectionsInOrderAndClearsOnSuccess() async {
+    /// Recents no longer carry a batch-selection surface. The two individual
+    /// row actions must stay intact: a row tap opens the real product detail
+    /// with the diary date/meal preserved, and each quantity chip submits one
+    /// draft for its own item with that same context.
+    func testRecentsKeepIndividualDetailAndQuickAddWithoutBatchSelection() async {
         let service = FakeHistorySearchService()
-        let first = recentProduct(id: "food-1", name: "Oats")
-        let second = recentProduct(id: "food-2", name: "Rice")
-        await service.setRecents([first, second])
-        var submitted: [LogSubmissionDraft] = []
-        let vm = makeViewModel(service: service) { drafts, _, _, completion in
-            submitted = drafts
-            completion(.success([]))
-        }
+        let oats = recentProduct(id: "food-1", name: "Oats")
+        await service.setRecents([oats, recentProduct(id: "food-2", name: "Rice")])
+        var submitted: [(drafts: [LogSubmissionDraft], summary: String)] = []
+        var opened: [(String, LocalDiaryDate, MealSlot?)] = []
+        let vm = makeViewModel(
+            service: service,
+            onSubmit: { drafts, _, summary, completion in
+                submitted.append((drafts, summary))
+                completion(.success([]))
+            },
+            onSelect: { opened.append(($0, $1, $2)) }
+        )
         await vm.loadForAppearance()
 
-        vm.toggleBatchSelection(first)
-        vm.toggleBatchSelection(second, quantity: NutritionQuantity(amount: "200", unit: "g"))
-        vm.presentBatchReview()
-        XCTAssertTrue(vm.isBatchReviewPresented)
-        vm.submitBatch()
+        // A recent row tap resolves to the shared product-detail callback; it
+        // never enqueues a multi-item selection.
+        vm.selectResult(FoodSearchResult(id: "food-1", name: "Oats"))
+        XCTAssertEqual(opened.count, 1)
+        XCTAssertEqual(opened.first?.0, "food-1")
+        XCTAssertEqual(opened.first?.1, date)
+        XCTAssertEqual(opened.first?.2, .lunch)
 
-        XCTAssertEqual(submitted.map(\.item), [
-            .product(id: "food-1"),
-            .product(id: "food-2"),
-        ])
-        XCTAssertEqual(submitted.map(\.amount), ["100", "200"])
-        XCTAssertFalse(vm.isBatchReviewPresented)
-        XCTAssertTrue(vm.batchSelection.isEmpty)
+        // A quantity chip submits exactly one draft for that item only.
+        vm.quickAdd(oats, quantity: NutritionQuantity(amount: "75", unit: "g"))
+        XCTAssertEqual(submitted.count, 1)
+        XCTAssertEqual(submitted[0].drafts.count, 1)
+        XCTAssertEqual(submitted[0].drafts.first?.item, .product(id: "food-1"))
+        XCTAssertEqual(submitted[0].drafts.first?.amount, "75")
+        XCTAssertEqual(submitted[0].drafts.first?.date, date)
+        XCTAssertEqual(submitted[0].drafts.first?.mealSlot, .lunch)
+        XCTAssertEqual(submitted[0].summary, "Oats")
     }
 
     func testCategorySuggestionQuotesValuesWithSpaces() async {
@@ -302,6 +319,55 @@ final class SearchMilestoneTests: XCTestCase {
             openedMeals.first?.3,
             NutritionQuantity(amount: "2", unit: "serving")
         )
+    }
+
+    func testSelectingCategorySuggestionInvalidatesPendingChipFetch() async {
+        let service = FakeHistorySearchService()
+        await service.setCategories([
+            CategorySuggestion(value: "oat milk", count: 2)
+        ])
+        let vm = makeViewModel(service: service)
+
+        vm.queryChanged("oat")
+        await waitUntil { vm.categorySuggestions.count == 1 }
+        let chosen = vm.categorySuggestions[0]
+
+        // A second chip fetch is now pending when the user consumes a chip.
+        await service.setCategoryDelay(150_000_000)
+        vm.queryChanged("oat m")
+        XCTAssertFalse(vm.categorySuggestions.isEmpty)
+        vm.applyCategorySuggestion(chosen)
+        XCTAssertTrue(vm.categorySuggestions.isEmpty)
+
+        await waitUntil { vm.state != .idle && vm.state != .loading }
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        XCTAssertTrue(
+            vm.categorySuggestions.isEmpty,
+            "A stale chip fetch must not repopulate chips after a selection"
+        )
+    }
+
+    func testStaleDebounceCancellationDoesNotClearNewerLoadingState() async {
+        let service = FakeHistorySearchService()
+        await service.setSearchResults([FoodSearchResult(id: "food-1", name: "Oats")])
+        let vm = SearchViewModel(
+            originDate: date,
+            service: service,
+            debounceNanoseconds: 200_000_000,
+            onSelectFood: { _, _, _ in },
+            historyService: service
+        )
+
+        vm.queryChanged("oat")
+        XCTAssertTrue(vm.isSearching)
+        vm.queryChanged("oats")
+        XCTAssertTrue(
+            vm.isSearching,
+            "Cancelling a stale debounce must not clear the replacement's loading flag"
+        )
+
+        await waitUntil { !vm.isSearching }
+        XCTAssertEqual(vm.results.map(\.id), ["food-1"])
     }
 
     // MARK: - Helpers
