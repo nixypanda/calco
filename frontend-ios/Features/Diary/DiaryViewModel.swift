@@ -15,6 +15,14 @@ public final class DiaryViewModel: ObservableObject {
     }
     @Published public private(set) var today: LocalDiaryDate
     @Published public private(set) var state: DiaryLoadState = .loading
+
+    /// True only while a previous/next/picker date-change fetch is in flight.
+    /// This is deliberately separate from `state`: a date change keeps the
+    /// loaded content mounted (no full-screen skeleton swap, no collapsed meal
+    /// groups, no lost scroll position) and surfaces only a compact inline
+    /// indicator. Quiet refreshes never set it.
+    @Published public private(set) var isChangingDate = false
+
     @Published public private(set) var logs: [DiaryLog] = []
     @Published public private(set) var goal: DiaryGoalTargets = DiaryGoalTargets()
     @Published public private(set) var enabledSlots: Set<MealSlot> = Set(MealSlot.allCases)
@@ -70,6 +78,9 @@ public final class DiaryViewModel: ObservableObject {
     private var latestFetchToken = 0
 
     private var currentToken: Int = 0
+    /// Guards the inline date-change indicator against overlapping rapid taps:
+    /// only the newest date change may clear it when its fetch resolves.
+    private var dateChangeToken: Int = 0
     /// Authoritative local rows from successful PUT responses. A refetch that
     /// still returns an older row must not silently revert the saved value.
     private var savedLogOverrides: [LocalDiaryDate: [String: DiaryLog]] = [:]
@@ -217,10 +228,26 @@ public final class DiaryViewModel: ObservableObject {
         }
 
         mutationNotice = nil
+        // The target date updates immediately, before the fetch resolves, so
+        // the date label changes on the same frame as the tap.
         selectedDate = clamped
-        clearContent()
-        state = .loading
-        await load(for: clamped, preservingContent: false)
+
+        // Keep the previously loaded day on screen while the new one loads.
+        // `clearContent()` + `state = .loading` used to swap the entire diary
+        // for a small spinner, collapsing every meal group and destroying the
+        // ScrollView identity (and its scroll position). Only per-date "Log
+        // latest" state is invalidated here; the brief and cards stay mounted.
+        clearLatestSlotState()
+
+        dateChangeToken += 1
+        let changeToken = dateChangeToken
+        isChangingDate = true
+        defer {
+            // Rapid taps overlap. An older fetch finishing later must not turn
+            // off the indicator while a newer date change is still in flight.
+            if changeToken == dateChangeToken { isChangingDate = false }
+        }
+        await load(for: clamped, preservingContent: true)
     }
 
     public func refreshToday() async {
@@ -250,6 +277,8 @@ public final class DiaryViewModel: ObservableObject {
 
     public func resetForSessionChange() {
         currentToken += 1
+        dateChangeToken += 1
+        isChangingDate = false
         clearContent()
         mutationNotice = nil
         savedLogOverrides.removeAll()
@@ -262,7 +291,9 @@ public final class DiaryViewModel: ObservableObject {
     }
 
     public func addFood(for slot: MealSlot) {
-        guard !isSessionExpired else { return }
+        // Old rows/cards stay visible during a date change while `selectedDate`
+        // is already the NEW date. Any entry point must not log against it.
+        guard !isSessionExpired, !isChangingDate else { return }
         onAddFood?(slot, selectedDate)
     }
 
@@ -277,12 +308,15 @@ public final class DiaryViewModel: ObservableObject {
     public func canLogLatest(for slot: MealSlot) -> Bool {
         guard isLatestLoggingAvailable,
               !isSessionExpired,
+              !isChangingDate,
               enabledSlots.contains(slot) else { return false }
         return !logs.contains { $0.mealSlot == slot }
     }
 
     public func prepareLatest(for slot: MealSlot) async {
-        guard canLogLatest(for: slot), latestLoadingSlot == nil else { return }
+        // Defense in depth: `canLogLatest` already blocks this while a date
+        // change is pending, but this is public and may be called directly.
+        guard !isChangingDate, canLogLatest(for: slot), latestLoadingSlot == nil else { return }
         let date = selectedDate
         latestErrorMessage = nil
         latestNotice = nil
@@ -497,7 +531,9 @@ public final class DiaryViewModel: ObservableObject {
     }
 
     public func openLogEditor(logID: String) {
-        guard !isSessionExpired else { return }
+        // A visible row from the retained previous day must not open an editor
+        // stamped with the already-updated `selectedDate`.
+        guard !isSessionExpired, !isChangingDate else { return }
         guard log(withID: logID) != nil else { return }
         onOpenLogEditor?(logID, selectedDate)
     }
@@ -576,6 +612,8 @@ public final class DiaryViewModel: ObservableObject {
 
     private func expireSession() {
         currentToken += 1
+        dateChangeToken += 1
+        isChangingDate = false
         clearContent()
         mutationNotice = nil
         state = .sessionExpired

@@ -1011,6 +1011,136 @@
         }
       }
     },
+    "diary.brief.kcalLogged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kcal logged"
+          }
+        }
+      }
+    },
+    "diary.brief.ofGoal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "of %@ kcal"
+          }
+        }
+      }
+    },
+    "diary.brief.onTarget" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "on target"
+          }
+        }
+      }
+    },
+    "diary.brief.overGoal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "over goal"
+          }
+        }
+      }
+    },
+    "diary.brief.remaining" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "remaining"
+          }
+        }
+      }
+    },
+    "diary.today" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today"
+          }
+        }
+      }
+    },
+    "diary.calories.eaten" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kcal eaten"
+          }
+        }
+      }
+    },
+    "diary.calories.goalMet" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Goal met"
+          }
+        }
+      }
+    },
+    "diary.calories.left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kcal left"
+          }
+        }
+      }
+    },
+    "diary.calories.ofTarget" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "of %@ kcal"
+          }
+        }
+      }
+    },
+    "diary.calories.over" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kcal over"
+          }
+        }
+      }
+    },
+    "diary.editGoals" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit goals"
+          }
+        }
+      }
+    },
+    "diary.manageSlots" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage meal slots"
+          }
+        }
+      }
+    },
     "diary.common.cancel" : {
       "localizations" : {
         "en" : {

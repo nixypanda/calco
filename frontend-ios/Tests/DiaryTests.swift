@@ -584,6 +584,24 @@ final class DiaryTests: XCTestCase {
         XCTAssertEqual(DiaryValueFormat.amount(0), "0")
     }
 
+    func testDailyBriefRemainingUsesSignedExistingFormatter() {
+        let under = DiaryGoalProgress(current: 1750, target: 2000)
+        let met = DiaryGoalProgress(current: 2000, target: 2000)
+        let over = DiaryGoalProgress(current: 2250, target: 2000)
+
+        let remaining = { (progress: DiaryGoalProgress) in
+            DiaryValueFormat.amount(progress.target - progress.current)
+        }
+        XCTAssertEqual(remaining(under), "250")
+        XCTAssertEqual(remaining(met), "0")
+        XCTAssertEqual(remaining(over), "-250")
+
+        // The layout only changes the label; progress and target semantics
+        // must stay exactly as they were for over-goal days.
+        XCTAssertEqual(over.fraction, 1)
+        XCTAssertEqual(over.targetText, "2000")
+    }
+
     func testZeroGoalFromLoadedDayRendersSafely() async {
         let service = FakeDiaryService()
         await service.setDay(DiaryDay(
@@ -884,6 +902,192 @@ final class DiaryTests: XCTestCase {
         XCTAssertNil(vm.errorMessage)
         XCTAssertTrue(vm.logs.isEmpty)
         XCTAssertEqual(vm.selectedDate, fixedToday)
+    }
+
+    // MARK: - Date-change transition regressions
+
+    func testDateChangeUpdatesDateImmediatelyAndKeepsContentMounted() async {
+        let service = FakeDiaryService()
+        await service.setDay(DiaryDay(
+            date: today,
+            logs: [DiaryLog(id: "today-log", title: "Today", calories: 100)],
+            goal: DiaryGoalTargets(calorieTarget: 500)
+        ))
+        await service.setDay(DiaryDay(
+            date: yesterday,
+            logs: [DiaryLog(id: "yesterday-log", title: "Yesterday", calories: 200)],
+            goal: DiaryGoalTargets(calorieTarget: 800)
+        ))
+        await service.hold(yesterday)
+        let vm = DiaryViewModel(service: service, today: today)
+        await vm.load()
+        XCTAssertEqual(vm.state, .loaded(.idle))
+
+        let change = Task { @MainActor in await vm.selectDate(yesterday) }
+        await service.waitForCall(yesterday)
+
+        // The target date flips before the fetch resolves, and the loaded brief
+        // and cards stay mounted instead of being replaced by a full-screen
+        // skeleton (which used to collapse every meal group).
+        XCTAssertEqual(vm.selectedDate, yesterday)
+        XCTAssertTrue(vm.isChangingDate)
+        guard case .loaded = vm.state else {
+            return XCTFail("Date change must not swap loaded content for a skeleton")
+        }
+        XCTAssertEqual(vm.logs.map(\.id), ["today-log"])
+        XCTAssertEqual(vm.goal.calorieTarget, 500)
+
+        await service.release(yesterday)
+        await change.value
+
+        XCTAssertFalse(vm.isChangingDate)
+        XCTAssertEqual(vm.state, .loaded(.idle))
+        XCTAssertEqual(vm.logs.map(\.id), ["yesterday-log"])
+        XCTAssertEqual(vm.goal.calorieTarget, 800)
+    }
+
+    func testOutOfOrderDateFetchesCannotOverwriteNewerSelection() async {
+        let twoDaysAgo = yesterday.addingDays(-1)
+        let service = FakeDiaryService()
+        for (date, id) in [
+            (today, "today-log"),
+            (yesterday, "yesterday-log"),
+            (twoDaysAgo, "two-days-ago-log")
+        ] {
+            await service.setDay(DiaryDay(date: date, logs: [DiaryLog(id: id, title: id)]))
+        }
+        await service.hold(yesterday)
+        await service.hold(twoDaysAgo)
+        let vm = DiaryViewModel(service: service, today: today)
+        await vm.load()
+
+        let older = Task { @MainActor in await vm.selectDate(yesterday) }
+        await service.waitForCall(yesterday)
+        let newer = Task { @MainActor in await vm.selectDate(twoDaysAgo) }
+        await service.waitForCall(twoDaysAgo)
+
+        // The older fetch resolves last; it must neither move the selected date
+        // nor replace the newer day's rows, nor clear the newer busy indicator.
+        await service.release(yesterday)
+        await older.value
+        XCTAssertEqual(vm.selectedDate, twoDaysAgo)
+        XCTAssertEqual(vm.logs.map(\.id), ["today-log"])
+        XCTAssertTrue(vm.isChangingDate)
+
+        await service.release(twoDaysAgo)
+        await newer.value
+        XCTAssertEqual(vm.selectedDate, twoDaysAgo)
+        XCTAssertEqual(vm.logs.map(\.id), ["two-days-ago-log"])
+        XCTAssertFalse(vm.isChangingDate)
+    }
+
+    func testQuietRefreshDoesNotReportDateChangeLoading() async {
+        let service = FakeDiaryService()
+        let vm = DiaryViewModel(service: service, today: today)
+        await vm.load()
+        XCTAssertFalse(vm.isChangingDate)
+
+        await service.hold(today)
+        let refresh = Task { @MainActor in await vm.refresh() }
+        await service.waitForCallCount(today, atLeast: 2)
+        XCTAssertFalse(vm.isChangingDate)
+        XCTAssertEqual(vm.selectedDate, today)
+
+        await service.release(today)
+        await refresh.value
+        XCTAssertFalse(vm.isChangingDate)
+    }
+
+    func testStaleDayEntriesAreBlockedWhileDateChangeFetchPending() async {
+        let service = FakeDiaryService()
+        await service.setDay(DiaryDay(
+            date: today,
+            logs: [DiaryLog(id: "old-row", mealSlot: .breakfast, title: "Old row")]
+        ))
+        await service.setDay(DiaryDay(
+            date: yesterday,
+            logs: [DiaryLog(id: "new-row", mealSlot: .breakfast, title: "New row")]
+        ))
+        await service.hold(yesterday)
+
+        var added: [(MealSlot, LocalDiaryDate)] = []
+        var opened: [(String, LocalDiaryDate)] = []
+        let vm = DiaryViewModel(
+            service: service,
+            today: today,
+            onAddFood: { slot, date in added.append((slot, date)) },
+            onOpenLogEditor: { id, date in opened.append((id, date)) },
+            latestSubmissionHandler: { _, _, _, _ in }
+        )
+        await vm.load()
+        XCTAssertTrue(vm.canLogLatest(for: .lunch))
+
+        let change = Task { @MainActor in await vm.selectDate(yesterday) }
+        await service.waitForCall(yesterday)
+
+        // Old rows are still visible but `selectedDate` is already the new day.
+        // Every date-scoped entry point must be blocked, including a direct
+        // `prepareLatest` call (not just the button's eligibility).
+        XCTAssertEqual(vm.selectedDate, yesterday)
+        XCTAssertEqual(vm.logs.map(\.id), ["old-row"])
+        XCTAssertTrue(vm.isChangingDate)
+        XCTAssertFalse(vm.canLogLatest(for: .lunch))
+
+        vm.addFood(for: .lunch)
+        vm.openLogEditor(logID: "old-row")
+        await vm.prepareLatest(for: .lunch)
+        XCTAssertTrue(added.isEmpty)
+        XCTAssertTrue(opened.isEmpty)
+        XCTAssertNil(vm.latestReview)
+        XCTAssertNil(vm.latestLoadingSlot)
+
+        await service.release(yesterday)
+        await change.value
+
+        // The same entries work again once the new day's content is installed.
+        XCTAssertFalse(vm.isChangingDate)
+        vm.addFood(for: .lunch)
+        vm.openLogEditor(logID: "new-row")
+        XCTAssertEqual(added.count, 1)
+        XCTAssertEqual(added.first?.1, yesterday)
+        XCTAssertEqual(opened.count, 1)
+        XCTAssertEqual(opened.first?.0, "new-row")
+        XCTAssertEqual(opened.first?.1, yesterday)
+    }
+
+    func testEditorSaveForRetainedDayDuringChangeStaysKeyedToItsOwnDate() async {
+        let service = FakeDiaryService()
+        await service.setDay(DiaryDay(
+            date: today,
+            logs: [DiaryLog(id: "old-row", mealSlot: .breakfast, title: "Old", calories: 100)]
+        ))
+        await service.setDay(DiaryDay(
+            date: yesterday,
+            logs: [DiaryLog(id: "new-row", mealSlot: .breakfast, title: "New", calories: 200)]
+        ))
+        await service.hold(yesterday)
+        let vm = DiaryViewModel(service: service, today: today)
+        await vm.load()
+
+        let change = Task { @MainActor in await vm.selectDate(yesterday) }
+        await service.waitForCall(yesterday)
+
+        // An editor opened before the change can still return a save. It must
+        // be stored under the date it was saved for, never applied to the
+        // already-updated selectedDate, and must not cancel the pending load.
+        let savedOld = DiaryLog(
+            id: "old-row",
+            mealSlot: .breakfast,
+            title: "Old edited",
+            calories: 150
+        )
+        vm.applySavedLog(savedOld, replacing: "old-row", on: today)
+        XCTAssertEqual(vm.logs.map(\.id), ["old-row"])
+        XCTAssertEqual(vm.logs.first?.title, "Old")
+
+        await service.release(yesterday)
+        await change.value
+        XCTAssertEqual(vm.logs.map(\.id), ["new-row"])
     }
 
 }
