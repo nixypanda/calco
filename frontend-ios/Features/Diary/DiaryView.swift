@@ -237,11 +237,6 @@ public struct DiaryView: View {
                     }
                     .accessibilityValue(notice.title)
                 }
-                if let notice = viewModel.latestNotice {
-                    noticeRow(notice, systemImage: "checkmark.circle.fill", color: .green, rowID: "diary.latestNotice", dismissID: "diary.latestNotice.dismiss") {
-                        viewModel.dismissLatestNotice()
-                    }
-                }
                 if let message = viewModel.latestErrorMessage, viewModel.latestReview == nil {
                     noticeRow(message, systemImage: "exclamationmark.triangle", color: .red, rowID: "diary.latestError", dismissID: "diary.latestError.dismiss") {
                         viewModel.dismissLatestError()

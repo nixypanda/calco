@@ -417,50 +417,12 @@ public struct FoodDetailView: View {
         Binding(get: { viewModel.notes }, set: { viewModel.notesChanged($0) })
     }
 
-    // MARK: Keyboard-aware primary action
-
-    /// On iOS a software keyboard is up exactly while one of the form's text
-    /// fields is focused. macOS has no software keyboard, so this is always
-    /// false there and the bottom safe-area bar is always shown.
-    ///
-    /// The system `.keyboard` toolbar's input accessory clamps every item to a
-    /// fixed 36pt (below the 44pt tap-target minimum) and stacks on top of the
-    /// bottom safe-area bar — that combination originally occluded the Log Food
-    /// button by 9pt and let the Done pill overlap it. Instead, the single
-    /// >=44pt primary action stays in the bottom safe-area bar, which SwiftUI
-    /// natively lifts above the keyboard body; a plain Done control is shown
-    /// in that same bar (above the primary) only while a field is focused, so
-    /// both are visible and never intersect.
-    private var showsKeyboardDone: Bool {
-        #if os(iOS)
-        focusedField != nil
-        #else
-        false
-        #endif
-    }
-
     // MARK: Bottom submit bar
 
+    /// SwiftUI lifts this single primary action above the keyboard. Scrolling
+    /// dismisses the keyboard interactively; submitting also clears focus.
     private var submitBar: some View {
         VStack(spacing: 8) {
-            if showsKeyboardDone {
-                HStack {
-                    Spacer()
-                    Button {
-                        focusedField = nil
-                    } label: {
-                        Text(String(localized: "diary.editor.keyboardDone"))
-                            // Plain Done control: give the label a standard
-                            // 44pt minimum tap target (a minimum, adaptive to
-                            // Dynamic Type) so the full Done frame is >= 44pt
-                            // and hittable. A hit-target modifier on the label,
-                            // not a hard-coded keyboard/accessory offset.
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .accessibilityIdentifier("foodDetail.keyboard.done")
-                }
-            }
             if let pending = viewModel.newSubmissionConfirmation {
                 HStack(spacing: 8) {
                     if pending.state != .conflicted {

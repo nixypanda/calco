@@ -106,9 +106,10 @@ final class DiaryLatestTests: XCTestCase {
         await viewModel.load()
         let fetchesBefore = await service.recordedFetchCalls().count
         await viewModel.prepareLatest(for: .dinner)
+        let completedFetchesBefore = viewModel.completedFetchCount
         viewModel.submitLatest()
 
-        await waitUntil { viewModel.latestNotice != nil }
+        await waitUntil { viewModel.completedFetchCount > completedFetchesBefore }
         let capture = try? XCTUnwrap(submitted)
         XCTAssertEqual(capture?.drafts.count, 2)
         XCTAssertEqual(capture?.drafts.map(\.item), [
@@ -210,7 +211,6 @@ final class DiaryLatestTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedDate, previous)
         XCTAssertNil(viewModel.latestReview)
         XCTAssertNil(viewModel.latestErrorMessage)
-        XCTAssertNil(viewModel.latestNotice)
         XCTAssertNil(viewModel.latestLoadingSlot)
     }
 

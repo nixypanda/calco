@@ -35,7 +35,6 @@ public final class DiaryViewModel: ObservableObject {
     @Published public private(set) var latestReview: DiaryLatestReview?
     @Published public private(set) var latestErrorMessage: String?
     @Published public private(set) var latestIsSubmitting = false
-    @Published public private(set) var latestNotice: String?
 
     @Published public private(set) var completedFetchCount: Int = 0
 
@@ -319,7 +318,6 @@ public final class DiaryViewModel: ObservableObject {
         guard !isChangingDate, canLogLatest(for: slot), latestLoadingSlot == nil else { return }
         let date = selectedDate
         latestErrorMessage = nil
-        latestNotice = nil
         latestLoadingSlot = slot
 
         if latestLoadedForDate != date {
@@ -406,7 +404,6 @@ public final class DiaryViewModel: ObservableObject {
                 switch result {
                 case .success:
                     self.latestReview = nil
-                    self.latestNotice = String(localized: "diary.latest.logged")
                     await self.refresh()
                 case .failure(let failure):
                     if failure == .unauthorized {
@@ -417,10 +414,6 @@ public final class DiaryViewModel: ObservableObject {
                 }
             }
         }
-    }
-
-    public func dismissLatestNotice() {
-        latestNotice = nil
     }
 
     public func dismissLatestError() {
@@ -636,7 +629,6 @@ public final class DiaryViewModel: ObservableObject {
         latestReview = nil
         latestErrorMessage = nil
         latestIsSubmitting = false
-        latestNotice = nil
     }
 
     private func clearPendingOverrides() {

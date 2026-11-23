@@ -965,11 +965,11 @@ final class NativeCompletionUITests: XCTestCase {
             "The review did not show the source item."
         )
         app.buttons["diary.latest.submit"].tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["diary.latestNotice"]
-                .waitForExistence(timeout: Timeout.long),
-            "Log latest did not report success."
-        )
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.long) {
+            !self.app.descendants(matching: .any)["diary.latest.review"].exists
+                && !self.app.descendants(matching: .any)["\(Identifier.latestPrefix)breakfast"].exists
+        }, "Log latest did not return to the updated diary.")
+        XCTAssertFalse(app.descendants(matching: .any)["diary.latestNotice"].exists)
         XCTAssertEqual(
             try mockState().logCount,
             10,

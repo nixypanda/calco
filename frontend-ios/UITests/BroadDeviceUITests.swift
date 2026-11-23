@@ -371,10 +371,8 @@ final class BroadDeviceUITests: XCTestCase {
         ).firstMatch
         let lf = labelElement.exists ? labelElement.frame : CGRect.zero
 
-        // Done is now a plain focused Button inside the SAME native
-        // safeAreaInset bar (single inset bar, no .keyboardToolbar, no
-        // .system.keyboard Other container). Query the ACTUAL Button frame;
-        // no Other accessory is expected or required for the gate.
+        // Log Food is the only action in the keyboard-aware submit bar.
+        // Retain the legacy Done frame metadata to catch its reintroduction.
         let doneButton = app.buttons["foodDetail.keyboard.done"].firstMatch
         let doneContainer = app.descendants(matching: .other)
             .matching(identifier: "foodDetail.keyboard.done").firstMatch
@@ -448,7 +446,7 @@ final class BroadDeviceUITests: XCTestCase {
                 "keyboard.exists == true (keyboard UP; no Done tap)",
                 "button.height >= 44 (full submit button visible)",
                 "button.maxY <= keyboard.minY (above the KEYBOARD BODY)",
-                "Done button.width >= 44 AND height >= 44 (native touch target)",
+                "No Done button above Log Food while the keyboard is focused",
                 "NOT button.frame.intersects(Done BUTTON frame) (2D, adjacent allowed)",
                 "button all four corners inside window/viewport",
                 "button label all four corners inside viewport; no 2D intersection with keyboard body or Done",
@@ -471,17 +469,9 @@ final class BroadDeviceUITests: XCTestCase {
         // the old capture passed isHittable while only the upper half showed.
         XCTAssertTrue(keyboard.exists, "Keyboard is not attached (must be UP).")
         XCTAssertEqual(app.state, .runningForeground, "The app left the foreground.")
-        XCTAssertTrue(
+        XCTAssertFalse(
             doneButton.exists,
-            "Native Done button is missing while the keyboard is focused."
-        )
-        XCTAssertGreaterThanOrEqual(
-            dbf.width, 44,
-            "Done button width (\(dbf.width)) is below the 44pt native touch target."
-        )
-        XCTAssertGreaterThanOrEqual(
-            dbf.height, 44,
-            "Done button height (\(dbf.height)) is below the 44pt native touch target."
+            "Log Food should not show a separate Done button."
         )
         XCTAssertGreaterThanOrEqual(
             bf.height, 43,
@@ -529,8 +519,8 @@ final class BroadDeviceUITests: XCTestCase {
     /// on the phone AFTER the FoodDetail modifier change. Runs independently of
     /// the frame gate so a failed clearance assertion never hides a functional
     /// regression. With the keyboard UP, records reachability of notes / last
-    /// picker / full nutrition; then taps Done (dismisses focus, submit stays),
-    /// then performs exactly one submit and verifies the loaded diary returns.
+    /// picker / full nutrition; then submits directly with the keyboard up
+    /// and verifies the loaded diary returns.
     func testVisualPhoneSubmitAfterKeyboard() throws {
         try launchSignedIn()
         XCTAssertEqual(app.state, .runningForeground, "The app is not in the foreground.")
@@ -615,18 +605,9 @@ final class BroadDeviceUITests: XCTestCase {
             lastBand = scopedFormDrag()
             scopedDrags += 1
         }
-        // Accepted native path: Done dismisses focus (the app uses
-        // scrollDismissesKeyboard(.interactively), so an interactive dismissal
-        // is expected, not a defect). Then the now-taller Form is scrolled with
-        // the SAME scoped gesture and Notes is focused again. No arbitrary
-        // "must never use Done" rule, and an unfocused offscreen field is NOT
-        // declared unreachable before it has been scrolled.
-        var usedDoneFallback = false
+        // Interactive keyboard dismissal can make more of the form visible.
+        let usedDoneFallback = false
         if !reached {
-            if done.exists && done.isHittable {
-                done.tap()
-                usedDoneFallback = true
-            }
             for _ in 0..<6 {
                 if notesInVisibleForm() { reached = true; break }
                 lastBand = scopedFormDrag()
@@ -685,21 +666,11 @@ final class BroadDeviceUITests: XCTestCase {
             "doneButtonFrame": done.exists ? frameDict(done.frame) : NSNull(),
             "reachability": reachability,
         ]
-        var doneDismissed = false
-        var didTapDone = false
-        var submitStays = false
+        XCTAssertFalse(done.exists, "Log Food should not show a separate Done button.")
+        let didTapDone = false
         let keyboardUpBeforeDone = app.keyboards.firstMatch.exists
-        if keyboardUpBeforeDone {
-            if done.exists && done.isHittable {
-                didTapDone = true
-                done.tap()
-            }
-            doneDismissed = !app.keyboards.firstMatch.exists
-        } else {
-            // Native Done / interactive dismissal already happened above.
-            doneDismissed = true
-        }
-        submitStays = submit.exists && submit.isHittable
+        let doneDismissed = !keyboardUpBeforeDone
+        let submitStays = submit.exists && submit.isHittable
         let afterFrames: [String: Any] = [
             "doneTappedAtSubmit": didTapDone,
             "keyboardUpBeforeDone": keyboardUpBeforeDone,
@@ -712,7 +683,7 @@ final class BroadDeviceUITests: XCTestCase {
 
         // Exactly one targeted submit, guarded by the loaded diary.
         guard submit.exists, submit.isHittable else {
-            XCTFail("Log Food submit is not available after Done.")
+            XCTFail("Log Food submit is not available while editing.")
             return
         }
         submit.tap()
@@ -740,8 +711,7 @@ final class BroadDeviceUITests: XCTestCase {
         meta.lifetime = .keepAlways
         add(meta)
 
-        XCTAssertTrue(doneDismissed, "The keyboard was still up at submit time.")
-        XCTAssertTrue(submitStays, "The submit button disappeared after Done.")
+        XCTAssertTrue(submitStays, "The submit button disappeared while editing.")
         XCTAssertTrue(
             returned,
             "The single submit did not return to a loaded diary (functional "
