@@ -3,6 +3,7 @@
 import SwiftUI
 
 public struct NutrientEditorView: View {
+    @FocusState private var focusedNutrient: String?
     public let title: String
     public let help: String?
     public let state: NutrientEditorState
@@ -64,60 +65,100 @@ public struct NutrientEditorView: View {
 
     @ViewBuilder
     private func rowView(_ row: NutrientEditorRow) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(row.name)
-                    .fixedSize(horizontal: false, vertical: true)
-                if row.isRequired {
-                    Text(String(localized: "library.common.required"))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.quaternary, in: Capsule())
-                        .accessibilityLabel(String(localized: "library.common.required"))
-                }
-                Spacer(minLength: 8)
-                if !row.isRequired && !isDisabled {
-                    Button(role: .destructive) {
-                        onRemove(row.code)
-                    } label: {
-                        Image(systemName: "minus.circle")
-                            .frame(minWidth: 44, minHeight: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.red)
-                    .accessibilityLabel(
-                        String(
-                            format: String(localized: "library.nutrient.remove"),
-                            row.name
-                        )
-                    )
-                    .accessibilityIdentifier("library.nutrient.\(row.code).remove")
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                nutrientLabel(row)
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 0)
+                amountField(row)
+                    .frame(width: 96)
             }
-
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                TextField(
-                    "0",
-                    text: Binding(
-                        get: { row.amount },
-                        set: { onAmountChange($0, row.code) }
-                    )
-                )
-#if os(iOS)
-                .keyboardType(.decimalPad)
-#endif
-                .multilineTextAlignment(.trailing)
-                .disabled(isDisabled)
-                .accessibilityLabel("\(row.name), \(row.unit)")
-                .accessibilityIdentifier("library.nutrient.\(row.code).field")
-
-                Text(row.unit)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 8) {
+                nutrientLabel(row)
+                amountField(row)
             }
         }
-        .padding(.vertical, 2)
+#if os(iOS)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if !row.isRequired && !isDisabled {
+                Button(role: .destructive) {
+                    onRemove(row.code)
+                } label: {
+                    Label(
+                        String(format: String(localized: "library.nutrient.remove"), row.name),
+                        systemImage: "trash"
+                    )
+                }
+                .labelStyle(.iconOnly)
+                .tint(.red)
+                .accessibilityIdentifier("library.nutrient.\(row.code).remove")
+            }
+        }
+#endif
+    }
+
+    private func nutrientLabel(_ row: NutrientEditorRow) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(row.name)
+                .fixedSize(horizontal: false, vertical: true)
+            if row.isRequired {
+                Text(String(localized: "library.common.required"))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary, in: Capsule())
+                    .accessibilityLabel(String(localized: "library.common.required"))
+            }
+#if os(macOS)
+            if !row.isRequired && !isDisabled {
+                Button(role: .destructive) {
+                    onRemove(row.code)
+                } label: {
+                    Image(systemName: "minus.circle")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .accessibilityLabel(
+                    String(
+                        format: String(localized: "library.nutrient.remove"),
+                        row.name
+                    )
+                )
+                .accessibilityIdentifier("library.nutrient.\(row.code).remove")
+            }
+#endif
+        }
+    }
+
+    private func amountField(_ row: NutrientEditorRow) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            TextField(
+                "0",
+                text: Binding(
+                    get: {
+                        guard focusedNutrient != row.code, !row.amount.isEmpty else {
+                            return row.amount
+                        }
+                        let formatted = DisplayNumberFormat.decimal(row.amount)
+                        return formatted == "—" ? row.amount : formatted
+                    },
+                    set: { onAmountChange($0, row.code) }
+                )
+            )
+#if os(iOS)
+            .keyboardType(.decimalPad)
+#endif
+            .multilineTextAlignment(.trailing)
+            .focused($focusedNutrient, equals: row.code)
+            .disabled(isDisabled)
+            .accessibilityLabel("\(row.name), \(row.unit)")
+            .accessibilityIdentifier("library.nutrient.\(row.code).field")
+
+            Text(row.unit)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
     }
 }

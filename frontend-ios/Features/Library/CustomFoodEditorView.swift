@@ -268,6 +268,7 @@ public struct CustomFoodEditorView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
+#if os(macOS)
                         if viewModel.isFormEditable {
                             Button(role: .destructive) {
                                 viewModel.removeServingRow(id: serving.id)
@@ -280,6 +281,7 @@ public struct CustomFoodEditorView: View {
                             .accessibilityLabel(String(localized: "library.editor.servings.remove"))
                             .accessibilityIdentifier("library.editor.serving.\(serving.id).remove")
                         }
+#endif
                     }
                     TextField(
                         String(localized: "library.editor.servings.unit"),
@@ -302,6 +304,23 @@ public struct CustomFoodEditorView: View {
                     .accessibilityIdentifier("library.editor.serving.\(serving.id).grams")
                 }
                 .padding(.vertical, 2)
+#if os(iOS)
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    if viewModel.isFormEditable {
+                        Button(role: .destructive) {
+                            viewModel.removeServingRow(id: serving.id)
+                        } label: {
+                            Label(
+                                String(localized: "library.editor.servings.remove"),
+                                systemImage: "trash"
+                            )
+                        }
+                        .labelStyle(.iconOnly)
+                        .tint(.red)
+                        .accessibilityIdentifier("library.editor.serving.\(serving.id).remove")
+                    }
+                }
+#endif
             }
 
             if viewModel.isFormEditable {
