@@ -1,4 +1,4 @@
-// Library navigation: standalone sheets own their stack; the Library hub shares
+// Library navigation: standalone hosts own their stack; the Library hub shares
 // its path so list, detail, and editors use one continuous native back history.
 
 import SwiftUI
@@ -13,6 +13,7 @@ public struct LibraryView: View {
     @State private var hasDirtyEditor = false
     @State private var initialRouteToken: UUID?
     @State private var detailRefreshToken = 0
+    @State private var creationDestination: FoodCreationDestination?
 
     private var path: NavigationPath {
         get { usesSharedPath ? sharedPath : localPath }
@@ -50,7 +51,7 @@ public struct LibraryView: View {
     private let onBack: (() -> Void)?
     private let backDisabled: Bool
     private let onDirtyChange: ((Bool) -> Void)?
-    private let onCreateWithAI: (() -> Void)?
+    private let creationContextProvider: (() -> FoodCreationContext)?
     private let initialAssistantDraft: AssistantReviewedDraft?
     private let initialBarcode: String?
     /// Reads the live diary target only when a new logging flow is opened.
@@ -71,7 +72,7 @@ public struct LibraryView: View {
         onBack: (() -> Void)? = nil,
         backDisabled: Bool = false,
         onDirtyChange: ((Bool) -> Void)? = nil,
-        onCreateWithAI: (() -> Void)? = nil,
+        creationContextProvider: (() -> FoodCreationContext)? = nil,
         assistantDraft: AssistantReviewedDraft? = nil,
         initialBarcode: String? = nil,
         currentContextProvider: (() -> LibraryLogContext)? = nil,
@@ -97,7 +98,7 @@ public struct LibraryView: View {
         self.onBack = onBack
         self.backDisabled = backDisabled
         self.onDirtyChange = onDirtyChange
-        self.onCreateWithAI = onCreateWithAI
+        self.creationContextProvider = creationContextProvider
         self.initialAssistantDraft = assistantDraft
         self.initialBarcode = initialBarcode
         self.currentContextProvider = currentContextProvider
@@ -202,8 +203,8 @@ public struct LibraryView: View {
                         }
                     }
                     // One native trailing PLUS menu, matching My Meals. Both
-                    // entries reuse the existing route/assistant plumbing, so
-                    // drafts, AI purpose and dirty-edit guards stay intact.
+                    // entries push pages on this stack; AI owns its review
+                    // draft until the entire creation task completes.
                     if isListRoot, !hasDirtyEditor {
                         ToolbarItem(placement: .primaryAction) {
                             Menu {
@@ -217,9 +218,14 @@ public struct LibraryView: View {
                                 }
                                 .accessibilityIdentifier("library.add.custom")
 
-                                if onCreateWithAI != nil {
+                                if let creationContextProvider {
                                     Button {
-                                        onCreateWithAI?()
+                                        creationDestination = FoodCreationDestination(
+                                            request: FoodCreationRequest(
+                                                entry: .assistant(.customFood, barcode: nil)
+                                            ),
+                                            context: creationContextProvider()
+                                        )
                                     } label: {
                                         Label(
                                             String(localized: "library.create.withAI"),
@@ -238,6 +244,12 @@ public struct LibraryView: View {
                 }
                 .navigationDestination(for: LibraryRoute.self) { route in
                     destination(for: route)
+                }
+                .navigationDestination(item: $creationDestination) { destination in
+                    FoodCreationFlowView(request: destination.request, context: destination.context) {
+                        creationDestination = nil
+                        Task { await viewModel.refresh() }
+                    }
                 }
     }
 

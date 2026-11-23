@@ -307,6 +307,12 @@ public final class AssistantViewModel: ObservableObject {
         onAcceptDraft(draft)
     }
 
+    /// Review is a pushed page. Returning to the conversation lets the caller
+    /// reopen that review without requesting another estimate.
+    public func resumeDraftReview() {
+        isDraftAccepted = false
+    }
+
     // MARK: - Start over
 
     public func requestStartOver() {

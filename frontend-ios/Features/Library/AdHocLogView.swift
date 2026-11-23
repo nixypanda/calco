@@ -11,9 +11,11 @@ public struct AdHocLogView: View {
     @Environment(\.dismiss) private var dismissEnvironment
     @FocusState private var focusedField: LogFormField?
     @State private var confirmingCancel = false
+    private let preservesDraftOnBack: Bool
 
-    public init(viewModel: AdHocLogViewModel) {
+    public init(viewModel: AdHocLogViewModel, preservesDraftOnBack: Bool = false) {
         self.viewModel = viewModel
+        self.preservesDraftOnBack = preservesDraftOnBack
     }
 
     public var body: some View {
@@ -32,7 +34,7 @@ public struct AdHocLogView: View {
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
-        .navigationBarBackButtonHidden(true)
+        .navigationBarBackButtonHidden(!preservesDraftOnBack || viewModel.isBusy)
         .toolbar {
 #if os(iOS)
             ToolbarItemGroup(placement: .keyboard) {
@@ -49,16 +51,18 @@ public struct AdHocLogView: View {
                 .accessibilityIdentifier("library.adHoc.keyboard.done")
             }
 #endif
-            ToolbarItem(placement: .cancellationAction) {
-                Button(String(localized: "diary.common.cancel")) {
-                    if viewModel.hasUnsavedChanges {
-                        confirmingCancel = true
-                    } else {
-                        dismissEnvironment()
+            if !preservesDraftOnBack {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "diary.common.cancel")) {
+                        if viewModel.hasUnsavedChanges {
+                            confirmingCancel = true
+                        } else {
+                            dismissEnvironment()
+                        }
                     }
+                    .disabled(viewModel.isBusy)
+                    .accessibilityIdentifier("library.adHoc.cancel")
                 }
-                .disabled(viewModel.isBusy)
-                .accessibilityIdentifier("library.adHoc.cancel")
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {

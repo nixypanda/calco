@@ -13,6 +13,7 @@ public struct CustomFoodEditorView: View {
     @FocusState private var focusedField: Field?
     @State private var confirmingCancel = false
     private let onBack: (() -> Void)?
+    private let preservesDraftOnBack: Bool
 
     private var backPlacement: ToolbarItemPlacement {
         #if os(iOS)
@@ -30,9 +31,14 @@ public struct CustomFoodEditorView: View {
         case defaultUnit
     }
 
-    public init(viewModel: CustomFoodEditorViewModel, onBack: (() -> Void)? = nil) {
+    public init(
+        viewModel: CustomFoodEditorViewModel,
+        onBack: (() -> Void)? = nil,
+        preservesDraftOnBack: Bool = false
+    ) {
         self.viewModel = viewModel
         self.onBack = onBack
+        self.preservesDraftOnBack = preservesDraftOnBack
     }
 
     public var body: some View {
@@ -51,7 +57,7 @@ public struct CustomFoodEditorView: View {
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
-        .navigationBarBackButtonHidden(viewModel.hasUnsavedChanges || viewModel.isBusy)
+        .navigationBarBackButtonHidden(needsGuardedBack)
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges || viewModel.isBusy)
         .toolbar {
 #if os(iOS)
@@ -69,7 +75,7 @@ public struct CustomFoodEditorView: View {
                 .accessibilityIdentifier("library.editor.keyboard.done")
             }
 #endif
-            if viewModel.hasUnsavedChanges || viewModel.isBusy {
+            if needsGuardedBack {
                 ToolbarItem(placement: backPlacement) {
                     Button {
                         if viewModel.hasUnsavedChanges {
@@ -122,6 +128,10 @@ public struct CustomFoodEditorView: View {
         viewModel.mode.isCreate
             ? String(localized: "library.editor.create.title")
             : String(localized: "library.editor.edit.title")
+    }
+
+    private var needsGuardedBack: Bool {
+        viewModel.isBusy || (!preservesDraftOnBack && viewModel.hasUnsavedChanges)
     }
 
     private func finishBack() {

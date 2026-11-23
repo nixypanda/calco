@@ -38,7 +38,7 @@ public struct LibraryRootView: View {
     private let onSessionExpired: () -> Void
     private let onClose: (() -> Void)?
     private let currentContextProvider: () -> LibraryLogContext
-    private let onCreateWithAI: (() -> Void)?
+    private let creationContextProvider: (() -> FoodCreationContext)?
 
     public init(
         service: any LibraryServicing,
@@ -52,7 +52,7 @@ public struct LibraryRootView: View {
         onSessionExpired: @escaping () -> Void = {},
         onClose: (() -> Void)? = nil,
         currentContextProvider: @escaping () -> LibraryLogContext,
-        onCreateWithAI: (() -> Void)? = nil
+        creationContextProvider: (() -> FoodCreationContext)? = nil
     ) {
         self.service = service
         self.mealsService = mealsService
@@ -65,7 +65,7 @@ public struct LibraryRootView: View {
         self.onSessionExpired = onSessionExpired
         self.onClose = onClose
         self.currentContextProvider = currentContextProvider
-        self.onCreateWithAI = onCreateWithAI
+        self.creationContextProvider = creationContextProvider
     }
 
     public var body: some View {
@@ -132,7 +132,7 @@ public struct LibraryRootView: View {
                 onLogged: onLogged,
                 onSessionExpired: onSessionExpired,
                 onDirtyChange: { self.hasDirtyEditor = $0 },
-                onCreateWithAI: onCreateWithAI,
+                creationContextProvider: creationContextProvider,
                 currentContextProvider: currentContextProvider,
                 navigationPath: $path
             )

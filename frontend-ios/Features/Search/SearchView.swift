@@ -3,11 +3,10 @@ import SwiftUI
 public struct SearchView: View {
     @ObservedObject private var viewModel: SearchViewModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var creationDestination: FoodCreationDestination?
+    private let creationContextProvider: (() -> FoodCreationContext)?
 
     private let onOpenMeals: (() -> Void)?
-    private let onOpenAssistant: ((AssistantDraftPurpose, String?) -> Void)?
-    private let onDraftBarcodeWithAssistant: ((String) -> Void)?
-    private let onCreateCustomFoodFromBarcode: ((String) -> Void)?
     /// When the shared screen is the Search tab root, food/custom/barcode
     /// results are pushed onto that tab's own native detail stack. The Diary
     /// Add Food push leaves this nil and keeps the existing Diary-stack route.
@@ -22,17 +21,13 @@ public struct SearchView: View {
     public init(
         viewModel: SearchViewModel,
         onOpenMeals: (() -> Void)? = nil,
-        onOpenAssistant: ((AssistantDraftPurpose, String?) -> Void)? = nil,
-        onDraftBarcodeWithAssistant: ((String) -> Void)? = nil,
-        onCreateCustomFoodFromBarcode: ((String) -> Void)? = nil,
-        onSelectFoodID: ((String) -> Void)? = nil
+        onSelectFoodID: ((String) -> Void)? = nil,
+        creationContextProvider: (() -> FoodCreationContext)? = nil
     ) {
         _viewModel = ObservedObject(wrappedValue: viewModel)
         self.onOpenMeals = onOpenMeals
-        self.onOpenAssistant = onOpenAssistant
-        self.onDraftBarcodeWithAssistant = onDraftBarcodeWithAssistant
-        self.onCreateCustomFoodFromBarcode = onCreateCustomFoodFromBarcode
         self.onSelectFoodID = onSelectFoodID
+        self.creationContextProvider = creationContextProvider
     }
 
     private var usesAccessibilityLayout: Bool { dynamicTypeSize.isAccessibilitySize }
@@ -89,6 +84,12 @@ public struct SearchView: View {
             }
         }
         .navigationTitle(String(localized: "search.title"))
+        .navigationDestination(item: $creationDestination) { destination in
+            FoodCreationFlowView(request: destination.request, context: destination.context) {
+                creationDestination = nil
+                Task { await viewModel.loadForAppearance() }
+            }
+        }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -621,9 +622,12 @@ public struct SearchView: View {
                 } description: {
                     Text(message)
                 }
-                if let onCreateCustomFoodFromBarcode {
+                if let creationContextProvider {
                     Button {
-                        onCreateCustomFoodFromBarcode(viewModel.barcodeInput)
+                        creationDestination = FoodCreationDestination(
+                            request: FoodCreationRequest(entry: .barcode(viewModel.barcodeInput)),
+                            context: creationContextProvider()
+                        )
                     } label: {
                         Label(
                             String(localized: "search.barcode.notFound.create"),

@@ -49,28 +49,6 @@ public struct MealsSheetRequest: Identifiable, Equatable, Sendable {
     }
 }
 
-public struct LibrarySheetRequest: Identifiable, Equatable, Sendable {
-    public let id: UUID
-    public let date: LocalDiaryDate
-    public let mealSlot: MealSlot?
-    public let assistantDraft: AssistantReviewedDraft?
-    public let initialBarcode: String?
-
-    public init(
-        id: UUID = UUID(),
-        date: LocalDiaryDate,
-        mealSlot: MealSlot?,
-        assistantDraft: AssistantReviewedDraft? = nil,
-        initialBarcode: String? = nil
-    ) {
-        self.id = id
-        self.date = date
-        self.mealSlot = mealSlot
-        self.assistantDraft = assistantDraft
-        self.initialBarcode = initialBarcode
-    }
-}
-
 /// Shared top-level destinations for the bottom tabs and expanded sidebar.
 public enum AppShellTab: Hashable, Sendable, CaseIterable {
     case diary
@@ -100,8 +78,6 @@ public enum AppShellTab: Hashable, Sendable, CaseIterable {
 public enum AppShellFeatureSheet: Identifiable {
     case nutrition(NutritionDetailsViewModel)
     case meals(MealsSheetRequest)
-    case library(LibrarySheetRequest)
-    case assistant(AssistantViewModel)
 
     public var id: String {
         switch self {
@@ -109,10 +85,6 @@ public enum AppShellFeatureSheet: Identifiable {
             return "nutrition-\(viewModel.id.uuidString)"
         case .meals(let request):
             return "meals-\(request.id.uuidString)"
-        case .library(let request):
-            return "library-\(request.id.uuidString)"
-        case .assistant(let viewModel):
-            return "assistant-\(ObjectIdentifier(viewModel).hashValue)"
         }
     }
 }
@@ -177,9 +149,6 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     private var dismissedSubmissions: [String: Date] = [:]
     /// Bounded by log ID rather than growing once per editor instance.
     private var deliveredLogEditorSuccesses: [String: ObjectIdentifier] = [:]
-    /// Assistant acceptance closes its sheet first, then this opens Library from
-    /// the sheet's `onDismiss` so two presentations never race.
-    private var pendingLibraryAfterAssistant: LibrarySheetRequest?
 
     public var currentUser: AuthUser? { featureGraph.readyState?.user }
     public var diaryViewModel: DiaryViewModel? { featureGraph.readyState?.diary }
@@ -437,13 +406,9 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         if case .nutrition(let viewModel) = featureSheet {
             viewModel.resetForSessionChange()
         }
-        if case .assistant(let viewModel) = featureSheet {
-            viewModel.resetForSessionChange()
-        }
         accountSettingsViewModel?.clearForSignOut()
         accountSettingsViewModel = nil
         featureSheet = nil
-        pendingLibraryAfterAssistant = nil
     }
 
     private func makeFeatureServices() -> FeatureGraph.FeatureServices {
@@ -1288,76 +1253,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         )
     }
 
-    public func openLibrary(
-        date: LocalDiaryDate? = nil,
-        mealSlot: MealSlot? = nil,
-        assistantDraft: AssistantReviewedDraft? = nil,
-        initialBarcode: String? = nil
-    ) {
-        guard featureSheet == nil,
-              featureGraph.readyState?.generation == session.sessionGeneration else {
-            return
-        }
-        featureSheet = .library(
-            LibrarySheetRequest(
-                date: date ?? navigationState.selectedDate,
-                mealSlot: mealSlot ?? navigationState.mealSlot,
-                assistantDraft: assistantDraft,
-                initialBarcode: initialBarcode
-            )
-        )
-    }
-
-    public func openAssistant(
-        purpose: AssistantDraftPurpose,
-        initialBarcode: String? = nil
-    ) {
-        guard featureSheet == nil,
-              let ready = featureGraph.readyState,
-              ready.generation == session.sessionGeneration else { return }
-        let generation = ready.generation
-        let viewModel = AssistantViewModel(
-            purpose: purpose,
-            initialBarcode: initialBarcode,
-            service: ready.services.assistant,
-            onAcceptDraft: { [weak self] draft in
-                self?.acceptAssistantDraft(draft, generation: generation)
-            },
-            onSessionExpired: { [weak self] in
-                self?.handleSessionExpired(generation: generation)
-            }
-        )
-        featureSheet = .assistant(viewModel)
-    }
-
-    private func acceptAssistantDraft(
-        _ draft: AssistantReviewedDraft,
-        generation: UInt64
-    ) {
-        guard isCurrent(generation) else { return }
-        pendingLibraryAfterAssistant = LibrarySheetRequest(
-            date: navigationState.selectedDate,
-            mealSlot: navigationState.mealSlot,
-            assistantDraft: draft
-        )
-        featureSheet = nil
-    }
-
     public func dismissFeatureSheet() {
         featureSheet = nil
-    }
-
-    /// Called by the single feature-sheet presentation after dismissal. A
-    /// follow-up sheet is opened only after the first is gone, avoiding SwiftUI
-    /// sibling-sheet races.
-    public func featureSheetDidDismiss() {
-        if let library = pendingLibraryAfterAssistant {
-            pendingLibraryAfterAssistant = nil
-            guard featureGraph.readyState?.generation == session.sessionGeneration else {
-                return
-            }
-            featureSheet = .library(library)
-        }
     }
 
     public func libraryDidLog(date: LocalDiaryDate, mealSlot: MealSlot?) {
@@ -1909,10 +1806,7 @@ public struct AppShell: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .sheet(
-                item: modalBinding,
-                onDismiss: { coordinator.featureSheetDidDismiss() }
-            ) { sheet in
+            .sheet(item: modalBinding) { sheet in
                 switch sheet {
                 case .feature(let feature): featureSheetView(feature)
                 case .food(let id):
@@ -2167,54 +2061,6 @@ public struct AppShell: View {
                 initialPortion: request.initialPortion
               )
             }
-
-        case .library(let request):
-            if let accountID = coordinator.currentUser?.id {
-                LibraryView(
-                    service: coordinator.currentLibraryService,
-                    submissionService: HandlerLibraryLogSubmissionService(
-                        handler: { [weak coordinator] drafts, names, summary, completion in
-                            coordinator?.submitDraftsForFeature(
-                                drafts,
-                                itemNames: names,
-                                summary: summary,
-                                completion: completion
-                            )
-                        }
-                    ),
-                    accountID: accountID,
-                    today: coordinator.todayProvider(),
-                    initialDate: request.date,
-                    initialMealSlot: request.mealSlot,
-                    onLogged: { [weak coordinator] date, slot in
-                        coordinator?.libraryDidLog(date: date, mealSlot: slot)
-                    },
-                    onSessionExpired: { [weak coordinator] in
-                        coordinator?.featureSessionExpired()
-                    },
-                    onClose: { [weak coordinator] in
-                        coordinator?.dismissFeatureSheet()
-                    },
-                    assistantDraft: request.assistantDraft,
-                    initialBarcode: request.initialBarcode
-                )
-            } else {
-                ProgressView()
-            }
-
-        case .assistant(let viewModel):
-            NavigationStack {
-                AssistantView(viewModel: viewModel)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button(String(localized: "diary.common.close")) {
-                                coordinator.dismissFeatureSheet()
-                            }
-                            .accessibilityIdentifier("app.assistant.close")
-                        }
-                    }
-            }
-            .presentationDetents([.large])
         }
     }
 
@@ -2326,28 +2172,10 @@ public struct AppShell: View {
                         coordinator.selectExpandedLibrary()
                     }
                 },
-                onOpenAssistant: { purpose, barcode in
-                    coordinator.openAssistant(
-                        purpose: purpose,
-                        initialBarcode: barcode
-                    )
-                },
-                onDraftBarcodeWithAssistant: { barcode in
-                    coordinator.openAssistant(
-                        purpose: .customFood,
-                        initialBarcode: barcode
-                    )
-                },
-                onCreateCustomFoodFromBarcode: { barcode in
-                    coordinator.openLibrary(
-                        date: coordinator.navigationState.selectedDate,
-                        mealSlot: coordinator.navigationState.mealSlot,
-                        initialBarcode: barcode
-                    )
-                },
                 onSelectFoodID: isSearchTabRoot
                     ? { foodID in coordinator.openSearchTabFoodDetail(foodID) }
-                    : nil
+                    : nil,
+                creationContextProvider: { foodCreationContext() }
             )
         } else {
             ProgressView()
@@ -2380,8 +2208,32 @@ public struct AppShell: View {
             },
             onClose: onClose,
             currentContextProvider: { coordinator.currentLibraryLogContext },
-            onCreateWithAI: { [weak coordinator] in
-                coordinator?.openAssistant(purpose: .customFood, initialBarcode: nil)
+            creationContextProvider: { foodCreationContext() }
+        )
+    }
+
+    private func foodCreationContext() -> FoodCreationContext {
+        let generation = coordinator.session.sessionGeneration
+        return FoodCreationContext(
+            libraryService: coordinator.currentLibraryService,
+            assistantService: coordinator.currentAssistantService,
+            submissionService: HandlerLibraryLogSubmissionService(
+                handler: { [weak coordinator] drafts, names, summary, completion in
+                    coordinator?.submitDraftsForFeature(
+                        drafts, itemNames: names, summary: summary, completion: completion
+                    )
+                }
+            ),
+            accountID: coordinator.currentUser?.id ?? "",
+            today: coordinator.todayProvider(),
+            logContext: coordinator.currentLibraryLogContext,
+            onLogged: { [weak coordinator] date, slot in
+                guard coordinator?.session.sessionGeneration == generation else { return }
+                coordinator?.libraryDidLog(date: date, mealSlot: slot)
+            },
+            onSessionExpired: { [weak coordinator] in
+                guard coordinator?.session.sessionGeneration == generation else { return }
+                coordinator?.featureSessionExpired()
             }
         )
     }

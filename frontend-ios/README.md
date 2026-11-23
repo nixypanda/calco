@@ -237,14 +237,15 @@ entry point in `App/CalCoApp.swift`.
 Browsing uses pages: root tabs have no Back/Close, Library lists and details
 share a navigation stack, custom-food and meal editors are pushed Back/Save
 pages, ingredient selection is a child page, API Keys is pushed from Settings,
-and the nutrition report is pushed from Diary. Detail pages have trailing Edit
+AI creation and its review editor stay on the originating page stack, and the
+nutrition report is pushed from Diary. Detail pages have trailing Edit
 and a separate final destructive section. The log editor has one bottom Save;
 Delete is in the form rather than beside Save.
 
 Temporary tasks use sheets: food/meal logging has leading Cancel and one bottom
 Log action; date selection and repeat review retain Cancel/Done or Cancel/Log;
-AI drafting has Close and an overflow Start Over; API-key creation has Cancel
-and one Create action. Logging keeps its originating search/page underneath.
+API-key creation has Cancel and one Create action. Logging keeps its
+originating search/page underneath.
 Opening these destinations does not reset the selected diary date or meal slot.
 Historical dates and retained logs remain available.
 
@@ -262,8 +263,8 @@ Historical dates and retained logs remain available.
 - Recents provide quantity chips, one-tap quick-add, and multi-select batch
   review. Empty eligible diary slots offer **Log latest** with the server's
   30-day lookback and a review of the source date/items.
-- Manual barcode lookup preserves leading zeroes and can open a matching food,
-  a custom-food draft, or the text AI drafting flow when no product is found.
+- Manual barcode lookup preserves leading zeroes and can open a matching food
+  or push a custom-food creation page when no product is found.
 
 ### Library, Meals, and Nutrition Details
 
@@ -296,6 +297,10 @@ Historical dates and retained logs remain available.
   explicit review in a separate editor before any save or log. An accepted draft
   writes nothing by itself. Even if the server reports image support, the native
   UI exposes no image picker or image upload.
+  **My Foods → Create with AI → review/edit** uses pushed pages, not sheets.
+  Back from review preserves edited values and the conversation; leaving the
+  AI task asks before discarding work. Save completes the entire task and
+  refreshes the original food list, without opening another Library list.
 - **Account Settings → API Keys** lists, creates, and revokes personal keys with
   supported read/read-write scopes, optional expiry, and an active-key limit.
   A new secret is shown once in memory, can be deliberately copied, and is

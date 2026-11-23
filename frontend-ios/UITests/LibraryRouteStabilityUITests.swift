@@ -183,6 +183,57 @@ final class LibraryRouteStabilityUITests: XCTestCase {
         XCTAssertTrue(add.isHittable)
     }
 
+    func testAICreationUsesPagesAndSaveReturnsToOriginalList() throws {
+        try resetFixture(assistantEnabled: true)
+        app = XCUIApplication(bundleIdentifier: "dev.calco.CalCo.Test")
+        app.launchEnvironment["CALCO_API_BASE_URL"] = baseURL
+        app.launch()
+        try signIn()
+        openLibrary()
+
+        app.buttons["library.add"].tap()
+        app.buttons["library.createWithAI"].tap()
+        let composer = app.descendants(matching: .any)["assistant.composer"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 20))
+        XCTAssertEqual(app.sheets.count, 0, "AI creation must be a pushed page")
+        composer.tap()
+        composer.typeText("Millet breakfast")
+        app.buttons["assistant.send"].tap()
+        let accept = app.buttons["assistant.draft.accept"]
+        XCTAssertTrue(accept.waitForExistence(timeout: 30))
+        accept.tap()
+
+        let name = app.textFields["library.editor.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 20))
+        XCTAssertEqual(app.sheets.count, 0, "Review must stay on the same page stack")
+        name.tap()
+        name.typeText(" edited")
+        dismissKeyboard(identifier: "library.editor.keyboard.done")
+        let editedName = name.value as? String
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(accept.waitForExistence(timeout: 20))
+        app.buttons["assistant.back"].tap()
+        let discardAlert = app.alerts.firstMatch
+        XCTAssertTrue(discardAlert.waitForExistence(timeout: 10))
+        discardAlert.buttons["Cancel"].tap()
+        XCTAssertTrue(accept.exists, "Keeping the draft must retain the conversation")
+        accept.tap()
+        XCTAssertTrue(name.waitForExistence(timeout: 20))
+        XCTAssertEqual(name.value as? String, editedName)
+        app.buttons["library.editor.save"].tap()
+
+        XCTAssertTrue(app.buttons["library.add"].waitForExistence(timeout: 20))
+        XCTAssertFalse(composer.exists)
+        XCTAssertFalse(name.exists)
+        XCTAssertEqual(app.sheets.count, 0, "Save must not reveal a modal food list")
+        // One Back from the original list reaches the Library hub, not Search
+        // or another copy of My Foods.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["library.foods"].waitForExistence(timeout: 10))
+        let state = try mockRequest(method: "GET", path: "/__qa/state")
+        XCTAssertEqual(state["assistant_draft_request_count"] as? Int, 1)
+    }
+
     private func signIn() throws {
         if app.buttons["auth.signOut"].waitForExistence(timeout: 5) {
             app.buttons["auth.signOut"].tap()
@@ -235,6 +286,11 @@ final class LibraryRouteStabilityUITests: XCTestCase {
                 "No native Library tab is reachable."
             )
             tab.tap()
+        }
+        if !app.buttons["library.add"].exists {
+            let hubFoods = app.buttons["library.foods"].firstMatch
+            XCTAssertTrue(hubFoods.waitForExistence(timeout: 10))
+            hubFoods.tap()
         }
         if app.descendants(matching: .any)["library.section"].exists {
             let foods = app.buttons.matching(
@@ -327,11 +383,12 @@ final class LibraryRouteStabilityUITests: XCTestCase {
         }
     }
 
-    private func resetFixture() throws {
+    private func resetFixture(assistantEnabled: Bool = false) throws {
         let body: [String: Any] = [
             "today": Self.isoDay(Date()),
             "log_post": "success",
             "seed_logs": true,
+            "assistant_enabled": assistantEnabled,
         ]
         _ = try mockRequest(method: "POST", path: "/__qa/reset", body: body)
     }
