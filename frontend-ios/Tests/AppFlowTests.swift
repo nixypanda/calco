@@ -703,7 +703,8 @@ final class AppFlowTests: XCTestCase {
     }
 
     func testSidebarSectionsContainOnlyTopLevelNavigationDestinations() {
-        XCTAssertEqual(AppShellPanePlan.sidebarSections, [.diary, .search, .library])
+        XCTAssertEqual(AppShellPanePlan.sidebarSections, [.diary, .search, .library, .settings])
+        XCTAssertEqual(AppShellPanePlan.sidebarSections, AppShellTab.allCases)
     }
 
     func testPanePlanDoesNotMutateDateOrMealSlotContext() {

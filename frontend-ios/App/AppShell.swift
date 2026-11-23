@@ -71,10 +71,8 @@ public struct LibrarySheetRequest: Identifiable, Equatable, Sendable {
     }
 }
 
-/// Compact iPhone top-level destinations. Search is deliberately not a tab:
-/// it is the contextual Add Food step pushed from the Diary tab so the selected
-/// date and meal slot are never lost.
-public enum AppShellTab: Hashable, Sendable {
+/// Shared top-level destinations for the bottom tabs and expanded sidebar.
+public enum AppShellTab: Hashable, Sendable, CaseIterable {
     case diary
     case search
     case library
@@ -1031,12 +1029,29 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     /// destination so the sidebar selection cannot disagree with the detail.
     private func clearExpandedLibrarySelection() {
         expandedLibrarySelected = false
+        if selectedTab == .settings { selectedTab = .diary }
+    }
+
+    public var selectedSidebarDestination: AppShellTab {
+        if selectedTab == .settings { return .settings }
+        if expandedLibrarySelected { return .library }
+        return navigationState.primarySection == .search ? .search : .diary
+    }
+
+    public func selectSidebarDestination(_ destination: AppShellTab) {
+        switch destination {
+        case .diary: showDiary()
+        case .search: showSearch()
+        case .library: selectExpandedLibrary()
+        case .settings: requestTabSwitch(to: .settings)
+        }
     }
 
     public func selectExpandedLibrary() {
         guard let ready = featureGraph.readyState,
               ready.generation == session.sessionGeneration else { return }
         guard !requestDiscardIfNeeded(for: .switchTab(tab: .library)) else { return }
+        selectedTab = .library
         expandedLibrarySelected = true
     }
 
@@ -1150,7 +1165,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     }
 
     /// Creates and loads the one shared settings graph when it is absent. The
-    /// compact Settings tab calls this so it is usable even before the diary
+    /// Settings destination calls this so it is usable even before the diary
     /// finishes loading, while the diary toolbar keeps its original guard.
     public func ensureSettingsViewModel() {
         guard settingsViewModel == nil,
@@ -1650,7 +1665,7 @@ enum AppShellPanePlan: Equatable {
 
     case split(primary: Pane, inspector: Pane?)
 
-    static let sidebarSections: [PrimarySection] = [.diary, .search, .library]
+    static let sidebarSections: [AppShellTab] = AppShellTab.allCases
 
     static func plan(for state: NavigationState, layout: PaneLayout) -> AppShellPanePlan {
         switch layout {
@@ -1882,14 +1897,6 @@ public struct AppShell: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .sheet(item: settingsSheetBinding(for: layout)) { settings in
-                DiarySettingsView(
-                    viewModel: settings,
-                    accountSettingsViewModel: coordinator.accountSettingsViewModel,
-                    onClose: { coordinator.dismissSettings() },
-                    onAccountSettingsDismissed: { coordinator.dismissAccountSettings() }
-                )
-            }
             .sheet(
                 item: featureSheetBinding,
                 onDismiss: { coordinator.featureSheetDidDismiss() }
@@ -1927,21 +1934,6 @@ public struct AppShell: View {
                 Text(String(localized: "diary.editor.discard.message"))
             }
         }
-    }
-
-    /// Compact uses an embedded Settings tab, so the sheet is only available to
-    /// expanded layouts. This keeps one settings view model across both paths.
-    private func settingsSheetBinding(
-        for layout: PaneLayout
-    ) -> Binding<DiarySettingsViewModel?> {
-        Binding(
-            get: { layout == .compact ? nil : coordinator.settingsViewModel },
-            set: { newValue in
-                if newValue == nil {
-                    coordinator.dismissSettings()
-                }
-            }
-        )
     }
 
     private var featureSheetBinding: Binding<AppShellFeatureSheet?> {
@@ -2143,7 +2135,7 @@ public struct AppShell: View {
 
     // MARK: Compact
 
-    /// Native three-tab iPhone shell. Diary owns the contextual Add Food push;
+    /// Native iPhone tabs. Diary owns the contextual Add Food push;
     /// Library owns Foods and Meals; Settings owns goals, slots, and API keys.
     private var tabSelection: Binding<AppShellTab> {
         Binding(
@@ -2154,40 +2146,28 @@ public struct AppShell: View {
 
     private var compactTabShell: some View {
         TabView(selection: tabSelection) {
-            diaryTab
-                .tabItem {
-                    Label(AppShellTab.diary.title, systemImage: AppShellTab.diary.systemImage)
-                        .accessibilityIdentifier("app.tab.diary")
-                }
-                .tag(AppShellTab.diary)
+            ForEach(AppShellTab.allCases, id: \.self) { tab in
+                tabContent(tab)
+                    .tabItem {
+                        Label(tab.title, systemImage: tab.systemImage)
+                            .accessibilityIdentifier("app.tab.\(tab)")
+                    }
+                    .tag(tab)
+            }
+        }
+    }
 
-            searchTab
-                .tabItem {
-                    Label(AppShellTab.search.title, systemImage: AppShellTab.search.systemImage)
-                        .accessibilityIdentifier("app.tab.search")
-                }
-                .tag(AppShellTab.search)
-
-            // LibraryView and MealsFlowView own their NavigationStacks; do not
-            // wrap them in another one or a second, empty bar appears. Identity
-            // is account-scoped only: a diary date change must not destroy an
-            // in-progress editor or navigation path. The tab identifier belongs
-            // on the tabItem: putting it on the content overrides descendant
-            // identifiers such as the Foods/Meals segmented control.
+    @ViewBuilder
+    private func tabContent(_ tab: AppShellTab) -> some View {
+        switch tab {
+        case .diary: diaryTab
+        case .search: searchTab
+        case .library:
+            // Library owns its NavigationStack and keeps account-scoped identity
+            // so date changes do not destroy an in-progress editor.
             libraryRoot(onClose: nil)
                 .id("library-\(coordinator.currentUser?.id ?? "none")")
-                .tabItem {
-                    Label(AppShellTab.library.title, systemImage: AppShellTab.library.systemImage)
-                        .accessibilityIdentifier("app.tab.library")
-                }
-                .tag(AppShellTab.library)
-
-            settingsTab
-                .tabItem {
-                    Label(AppShellTab.settings.title, systemImage: AppShellTab.settings.systemImage)
-                        .accessibilityIdentifier("app.tab.settings")
-                }
-                .tag(AppShellTab.settings)
+        case .settings: settingsTab
         }
     }
 
@@ -2432,7 +2412,9 @@ public struct AppShell: View {
         return NavigationSplitView {
             sidebar
         } detail: {
-            if coordinator.expandedLibrarySelected {
+            if coordinator.selectedTab == .settings {
+                settingsTab
+            } else if coordinator.expandedLibrarySelected {
                 libraryRoot(onClose: nil)
                     .id("library-\(coordinator.currentUser?.id ?? "none")")
             } else {
@@ -2458,38 +2440,17 @@ public struct AppShell: View {
         .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
     }
 
-    @ViewBuilder
-    private func sidebarLabel(for section: PrimarySection) -> some View {
-        switch section {
-        case .diary:
-            Label("Diary", systemImage: "book.closed")
-                .accessibilityIdentifier("app.sidebar.diary")
-        case .search:
-            Label(String(localized: "search.title"), systemImage: "magnifyingglass")
-                .accessibilityIdentifier("app.sidebar.search")
-        case .library:
-            Label(String(localized: "library.title"), systemImage: "books.vertical")
-                .accessibilityIdentifier("app.sidebar.library")
-        }
+    private func sidebarLabel(for section: AppShellTab) -> some View {
+        Label(section.title, systemImage: section.systemImage)
+            .accessibilityIdentifier("app.sidebar.\(section)")
     }
 
-    private var sidebarSelection: Binding<PrimarySection?> {
+    private var sidebarSelection: Binding<AppShellTab?> {
         Binding(
-            get: {
-                coordinator.expandedLibrarySelected
-                    ? .library
-                    : coordinator.navigationState.primarySection
-            },
+            get: { coordinator.selectedSidebarDestination },
             set: { section in
                 guard let section else { return }
-                switch section {
-                case .diary:
-                    coordinator.showDiary()
-                case .search:
-                    coordinator.showSearch()
-                case .library:
-                    coordinator.selectExpandedLibrary()
-                }
+                coordinator.selectSidebarDestination(section)
             }
         )
     }
@@ -2497,11 +2458,13 @@ public struct AppShell: View {
     private var inspectorPresented: Binding<Bool> {
         Binding(
             get: {
-                !coordinator.expandedLibrarySelected
+                coordinator.selectedTab != .settings
+                    && !coordinator.expandedLibrarySelected
                     && coordinator.navigationState.activePane.contextualFoodPane != nil
             },
             set: { isPresented in
                 guard !isPresented,
+                      coordinator.selectedTab != .settings,
                       !coordinator.expandedLibrarySelected,
                       coordinator.navigationState.activePane.contextualFoodPane != nil
                 else { return }
@@ -2538,7 +2501,7 @@ public struct AppShell: View {
                     viewModel: vm,
                     onOpenSettings: {
                         coordinator.showSettings()
-                        if compactStyle { coordinator.requestTabSwitch(to: .settings) }
+                        coordinator.requestTabSwitch(to: .settings)
                     },
                     onOpenNutrition: { coordinator.showNutritionDetails() },
                     onOpenMeals: {

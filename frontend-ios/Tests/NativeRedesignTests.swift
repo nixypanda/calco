@@ -346,7 +346,7 @@ final class NativeRedesignTests: XCTestCase {
 
         coordinator.selectExpandedLibrary()
         XCTAssertTrue(coordinator.expandedLibrarySelected)
-        XCTAssertEqual(AppShellPanePlan.sidebarSections, [.diary, .search, .library])
+        XCTAssertEqual(AppShellPanePlan.sidebarSections, [.diary, .search, .library, .settings])
 
         _ = await coordinator.signOut()
         XCTAssertEqual(coordinator.selectedTab, .diary)
@@ -355,6 +355,51 @@ final class NativeRedesignTests: XCTestCase {
         await coordinator.start()
         XCTAssertEqual(coordinator.selectedTab, .diary)
         XCTAssertFalse(coordinator.expandedLibrarySelected)
+    }
+
+    @MainActor
+    func testSettingsSidebarDestinationCanNavigateToEveryOtherDestination() async {
+        let coordinator = makeCoordinator(
+            diaryService: NativeRedesignDiaryService(log: makeNativeLog())
+        )
+        await loadDiary(coordinator)
+
+        for destination in [AppShellTab.diary, .search, .library] {
+            coordinator.selectSidebarDestination(.settings)
+            coordinator.ensureSettingsViewModel()
+            XCTAssertEqual(coordinator.selectedSidebarDestination, .settings)
+            XCTAssertNotNil(coordinator.settingsViewModel)
+
+            coordinator.selectSidebarDestination(destination)
+            XCTAssertEqual(coordinator.selectedSidebarDestination, destination)
+        }
+    }
+
+    @MainActor
+    func testSettingsSidebarDestinationRespectsDirtyEditorGuard() async {
+        let coordinator = makeCoordinator(
+            diaryService: NativeRedesignDiaryService(log: makeNativeLog())
+        )
+        await loadDiary(coordinator)
+        coordinator.diaryViewModel?.openLogEditor(logID: "log-1")
+        guard let editor = coordinator.logEditorViewModel(for: "log-1") else {
+            return XCTFail("Expected the log editor view model")
+        }
+        editor.notes = "unsaved note"
+        let originalDestination = coordinator.selectedSidebarDestination
+
+        coordinator.selectSidebarDestination(.settings)
+        XCTAssertEqual(coordinator.selectedSidebarDestination, originalDestination)
+        XCTAssertEqual(coordinator.pendingEditorDiscard, .switchTab(tab: .settings))
+
+        coordinator.cancelDiscardEditorChanges()
+        XCTAssertEqual(coordinator.selectedSidebarDestination, originalDestination)
+        XCTAssertTrue(coordinator.logEditorViewModel(for: "log-1") === editor)
+
+        coordinator.selectSidebarDestination(.settings)
+        coordinator.confirmDiscardEditorChanges()
+        XCTAssertEqual(coordinator.selectedSidebarDestination, .settings)
+        XCTAssertNil(coordinator.logEditorViewModel(for: "log-1"))
     }
 
     @MainActor
