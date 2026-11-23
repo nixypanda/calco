@@ -117,6 +117,14 @@ public struct LibraryView: View {
         return LibraryLogContext(date: min(captured.date, today), mealSlot: captured.mealSlot)
     }
 
+    private var backPlacement: ToolbarItemPlacement {
+#if os(iOS)
+        .navigationBarLeading
+#else
+        .navigation
+#endif
+    }
+
     public var body: some View {
         NavigationStack(path: $path) {
             listView
@@ -128,7 +136,7 @@ public struct LibraryView: View {
                     // Only on the list root: pushed detail/editor screens use
                     // the system back button, so there is never a second Back.
                     if let onBack, path.isEmpty {
-                        ToolbarItem(placement: .navigationBarLeading) {
+                        ToolbarItem(placement: backPlacement) {
                             Button {
                                 onBack()
                             } label: {

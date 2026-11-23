@@ -43,6 +43,14 @@ public struct AccountSettingsView: View {
         self.onClose = onClose
     }
 
+    private var backPlacement: ToolbarItemPlacement {
+#if os(iOS)
+        .navigationBarLeading
+#else
+        .navigation
+#endif
+    }
+
     public var body: some View {
         NavigationStack {
             list
@@ -51,7 +59,7 @@ public struct AccountSettingsView: View {
                 .navigationBarTitleDisplayMode(.inline)
 #endif
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
+                    ToolbarItem(placement: backPlacement) {
                         Button {
                             close()
                         } label: {
@@ -386,7 +394,7 @@ public struct AccountSettingsView: View {
 #endif
             .toolbar {
                 if viewModel.createdKey == nil {
-                    ToolbarItem(placement: .navigationBarLeading) {
+                    ToolbarItem(placement: backPlacement) {
                         Button {
                             isNameFocused = false
                             viewModel.cancelCreateForm()

@@ -115,6 +115,14 @@ public struct MealsFlowView: View {
         .accessibilityIdentifier("meals.close")
     }
 
+    private var backPlacement: ToolbarItemPlacement {
+#if os(iOS)
+        .navigationBarLeading
+#else
+        .navigation
+#endif
+    }
+
     public var body: some View {
         NavigationStack(path: $path) {
             MealsListView(
@@ -131,7 +139,7 @@ public struct MealsFlowView: View {
             // system back chevron is the only Back, so no duplicate remains.
             .toolbar {
                 if let onBack, path.isEmpty {
-                    ToolbarItem(placement: .navigationBarLeading) {
+                    ToolbarItem(placement: backPlacement) {
                         Button {
                             onBack()
                         } label: {

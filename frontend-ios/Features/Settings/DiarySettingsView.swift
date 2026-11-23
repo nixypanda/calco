@@ -31,6 +31,14 @@ public struct DiarySettingsView: View {
         self.onSignOut = onSignOut
     }
 
+    private var backPlacement: ToolbarItemPlacement {
+#if os(iOS)
+        .navigationBarLeading
+#else
+        .navigation
+#endif
+    }
+
     public var body: some View {
         NavigationStack {
             Form {
@@ -46,7 +54,7 @@ public struct DiarySettingsView: View {
             .toolbar {
                 // Native back-arrow semantics: the same guarded close action as
                 // Library/Meals, not a modal Cancel and not a sign-out action.
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: backPlacement) {
                     Button {
                         requestClose()
                     } label: {
