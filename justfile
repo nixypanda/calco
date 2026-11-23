@@ -95,10 +95,29 @@ coverage-backend:
 migrate-backend:
     cd backend && DATABASE_URL="${DATABASE_URL:-{{ default_database_url }}}" sqlx migrate run --ignore-missing
 
-# Run the frontend development server.
+# Start the web frontend development server.
 [working-directory("frontend-web")]
-dev-frontend:
+dev-frontend-web:
     npm run dev
+
+# Backwards-compatible alias for `dev-frontend-web` (the web dev server).
+dev-frontend: dev-frontend-web
+
+# Build and run the native iOS app on a named iPhone simulator (mini|18-pro|duo).
+dev-frontend-ios LABEL:
+    python3 frontend-ios/scripts/dev_simulator.py ios {{quote(LABEL)}}
+
+# Build and run the native iPadOS app on a named iPad simulator (mini|air).
+dev-frontend-ipados LABEL:
+    python3 frontend-ios/scripts/dev_simulator.py ipados {{quote(LABEL)}}
+
+# Build and open the native macOS app.
+dev-frontend-macos:
+    python3 frontend-ios/scripts/dev_simulator.py macos
+
+# Run the native dev-helper tests (device resolution, errors, dry-run).
+test-ios-scripts:
+    python3 -m unittest discover -s frontend-ios/scripts -p 'test_*.py' -v
 
 # Capture the README light/dark screenshots (run `just dev` first).
 screenshots:

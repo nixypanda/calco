@@ -192,7 +192,16 @@ A `read` key calling one of these routes receives `403 insufficient_scope`; the
 request is rejected before any user data is changed. Key metadata such as
 `last_used_at` may still be updated during authentication.
 
-### Safe Log Create Retries
+### Single-Log Idempotency (Legacy)
+
+CalCo does not provide automatic replay or duplicate-submission protection for
+food-log creation. A retried create may produce a duplicate log, which can be
+deleted manually; see the accepted no-replay-protection decision (2026-11-20).
+The optional single-log `idempotency_key` support described below is pre-existing
+behavior retained for compatibility, not a general replay-protection contract
+for ad-hoc or batch creates. The abandoned version-2 operation-journal
+migrations were removed after confirming they were not applied outside isolated
+tests; only the pre-existing single-log idempotency behavior remains.
 
 Scripts can make `POST /api/logs` retry-safe by supplying an optional
 `idempotency_key`:

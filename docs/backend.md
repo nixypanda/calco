@@ -645,6 +645,19 @@ item.type = meal
 
 #### Idempotent Log Creation
 
+CalCo deliberately does not provide automatic replay or duplicate-submission
+protection for food-log creation. If a create is retried or submitted twice, a
+duplicate food log is acceptable: the user can see it and delete it manually.
+See the accepted no-replay-protection decision (2026-11-20).
+Do not add durable operation journals, request fingerprints for new write paths,
+tombstones, capability negotiation, or expected-account binding as a default
+requirement for new write paths. Atomic writes, ownership, and ordinary
+validation still apply.
+
+The optional single-log `idempotency_key` support described below is pre-existing
+behavior retained for compatibility. It is not a general replay-protection
+contract, and `POST /logs/ad-hoc` and `POST /logs/batch` are not retry-safe.
+
 Apply `20261115000001_food_log_idempotency.sql` before starting the updated
 backend; it adds two nullable columns to `food_logs`. The NixOS deployment runs
 migrations before the backend, while local development uses
@@ -804,6 +817,13 @@ Run migrations explicitly with:
 ```bash
 DATABASE_URL=postgres://calco:calco@localhost:5432/calco just migrate-backend
 ```
+
+The abandoned durable-operation migrations
+`20261119000000_food_log_create_operations.sql` and
+`20261119000001_food_log_create_operations_log_count.sql` were removed after
+confirming they had not been applied outside isolated tests. The pre-existing
+`20261115000001_food_log_idempotency.sql` remains in place. Do not recreate the
+operation-journal schema for this service.
 
 Important tables:
 

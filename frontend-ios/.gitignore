@@ -1,0 +1,41 @@
+# Xcode build and derived data
+build/
+.build/
+DerivedData/
+
+# Xcode test results
+*.xcresult
+*.xctestrun
+
+# Built app bundles, symbols, and archives
+*.app
+*.dSYM
+*.ipa
+
+# Xcode per-user data and state
+xcuserdata/
+xcuserdatad/
+*.xcuserstate
+
+# Xcode per-user artifacts
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xccheckout
+*.moved-aside
+*.hmap
+*.xcscmblueprint
+timeline.xctimeline
+
+# macOS
+.DS_Store
+
+# Temporary credential-bearing test files
+*credentials*.json
+*.credentials
+*.secret
+
+# Re-include iOS data sources shadowed by root data/ ignore under case-insensitive matching
+!Data/
+!Data/*.swift

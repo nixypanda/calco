@@ -1,0 +1,461 @@
+#!/usr/bin/env python3
+"""Focused contract tests for NativeCompletionQAMockServer.
+
+Run directly:
+  python3 frontend-ios/UITests/NativeCompletionQAMockServerTests.py
+"""
+
+from __future__ import annotations
+
+import json
+import threading
+import unittest
+import urllib.error
+import urllib.request
+import uuid
+from http.server import ThreadingHTTPServer
+
+import NativeCompletionQAMockServer as mock
+
+
+class MockContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), mock.Handler)
+        cls.server.state = mock.FixtureState()  # type: ignore[attr-defined]
+        cls.server.verbose = False  # type: ignore[attr-defined]
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.base = f"http://127.0.0.1:{cls.server.server_port}"
+        cls.cookie = ""
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.thread.join(timeout=2)
+
+    def setUp(self) -> None:
+        response = self.request("POST", "/__qa/reset", {"today": "2026-11-19"})
+        self.assertEqual(response[0], 200)
+        login = self.request(
+            "POST",
+            "/api/auth/login",
+            {"username": mock.FIXTURE_USERNAME, "password": mock.FIXTURE_PASSWORD},
+        )
+        self.assertEqual(login[0], 200)
+        self.cookie = login[2].headers["Set-Cookie"].split(";", 1)[0]
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        body: dict | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, dict, object]:
+        data = None if body is None else json.dumps(body).encode()
+        return self.request_raw(
+            method,
+            path,
+            data,
+            "application/json" if data is not None else None,
+            headers,
+        )
+
+    def request_raw(
+        self,
+        method: str,
+        path: str,
+        data: bytes | None,
+        content_type: str | None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, dict, object]:
+        request = urllib.request.Request(self.base + path, data=data, method=method)
+        request.add_header("Accept", "application/json")
+        if content_type is not None:
+            request.add_header("Content-Type", content_type)
+        for name, value in (headers or {}).items():
+            request.add_header(name, value)
+        if self.cookie:
+            request.add_header("Cookie", self.cookie)
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                raw = response.read()
+                return (
+                    response.status,
+                    json.loads(raw) if raw else {},
+                    response,
+                )
+        except urllib.error.HTTPError as error:
+            raw = error.read()
+            result = (error.code, json.loads(raw) if raw else {}, error)
+            error.close()
+            return result
+
+    def multipart_draft(
+        self,
+        purpose: str,
+        text: str = "draft this food",
+    ) -> tuple[int, dict, object]:
+        boundary = "contract-boundary-" + uuid.uuid4().hex
+        conversation = json.dumps(
+            {
+                "purpose": purpose,
+                "turns": [{"role": "user", "text": text}],
+            }
+        )
+        body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="conversation"\r\n'
+            "Content-Type: application/json\r\n\r\n"
+            f"{conversation}\r\n"
+            f"--{boundary}--\r\n"
+        ).encode()
+        return self.request_raw(
+            "POST",
+            "/api/ai/custom-food/draft",
+            body,
+            f"multipart/form-data; boundary={boundary}",
+        )
+
+    def login(self) -> None:
+        login = self.request(
+            "POST",
+            "/api/auth/login",
+            {"username": mock.FIXTURE_USERNAME, "password": mock.FIXTURE_PASSWORD},
+        )
+        self.assertEqual(login[0], 200)
+        self.cookie = login[2].headers["Set-Cookie"].split(";", 1)[0]
+
+    def test_session_identity_and_profile_are_distinct_valid_uuids(self) -> None:
+        status, payload, _ = self.request("GET", "/api/auth/session")
+        self.assertEqual(status, 200)
+        identity = payload["identity"]["id"]
+        profile = payload["profile"]["id"]
+        self.assertNotEqual(identity, profile)
+        uuid.UUID(identity)
+        uuid.UUID(profile)
+        self.assertEqual(profile, mock.FIXTURE_PROFILE_ID)
+
+    def test_protected_route_requires_session_cookie(self) -> None:
+        saved = self.cookie
+        self.cookie = ""
+        try:
+            status, payload, _ = self.request("GET", "/api/goal")
+        finally:
+            self.cookie = saved
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"]["code"], "unauthorized")
+        status, _, _ = self.request("GET", "/api/goal")
+        self.assertEqual(status, 200)
+
+    def test_goal_save_is_effective_only_from_its_local_date(self) -> None:
+        historical = "2026-11-18"  # reset(today=2026-11-19) sets historical -1 day
+        status, baseline, _ = self.request("GET", f"/api/goal?date={historical}")
+        self.assertEqual(status, 200)
+        self.assertEqual(baseline["calorie_target"], 2000)
+        self.assertIsNone(baseline["effective_from"])
+
+        status, saved, _ = self.request(
+            "PUT",
+            "/api/goal",
+            {"local_date": "2026-11-19", "calorie_target": 2230},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(saved["effective_from"], "2026-11-19")
+
+        status, before, _ = self.request("GET", f"/api/goal?date={historical}")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            before["calorie_target"],
+            2000,
+            "A save effective today must not rewrite an earlier day's goal.",
+        )
+        status, today, _ = self.request("GET", "/api/goal?date=2026-11-19")
+        self.assertEqual(today["calorie_target"], 2230)
+        self.assertEqual(today["effective_from"], "2026-11-19")
+
+    def test_capabilities_endpoint_is_absent(self) -> None:
+        status, payload, _ = self.request("GET", "/api/capabilities")
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"]["code"], "not_found")
+
+    def test_legacy_account_binding_header_is_rejected(self) -> None:
+        status, payload, _ = self.request(
+            "GET",
+            "/api/goal",
+            headers={mock.LEGACY_ACCOUNT_HEADER: mock.FIXTURE_PROFILE_ID},
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "unexpected_account_header")
+
+    def test_nutrient_catalog_has_all_four_required_definitions(self) -> None:
+        status, payload, _ = self.request("GET", "/api/nutrients")
+        self.assertEqual(status, 200)
+        rows = {row["code"]: row for row in payload["items"]}
+        expected = {
+            "ENERGY_KCAL": "kcal",
+            "PROTEIN_G": "g",
+            "CARBS_G": "g",
+            "FAT_G": "g",
+        }
+        for code, unit in expected.items():
+            self.assertIn(code, rows)
+            self.assertEqual(rows[code]["unit"], unit)
+
+    def test_custom_food_create_detail_and_delete_keep_nutrients(self) -> None:
+        body = {
+            "name": "Contract Custom Food",
+            "brand": "Contract",
+            "categories": ["fixture"],
+            "default_quantity": 100,
+            "default_unit": "g",
+            "nutrients": [
+                {"code": "ENERGY_KCAL", "amount_per_100g": 100},
+                {"code": "PROTEIN_G", "amount_per_100g": 10},
+                {"code": "CARBS_G", "amount_per_100g": 20},
+                {"code": "FAT_G", "amount_per_100g": 5},
+            ],
+            "servings": [{"unit": "pack", "grams_per_unit": 80}],
+        }
+        status, payload, _ = self.request(
+            "POST",
+            "/api/foods/custom",
+            body,
+        )
+        self.assertEqual(status, 201)
+        food_id = payload["id"]
+        status, detail, _ = self.request(
+            "GET",
+            f"/api/foods/{food_id}",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(detail["name"], "Contract Custom Food")
+        amounts = {
+            row["code"]: (row["amount_per_100g"], row["unit"])
+            for row in detail["nutrients"]
+        }
+        self.assertEqual(amounts["ENERGY_KCAL"], ("100", "kcal"))
+        self.assertEqual(amounts["PROTEIN_G"], ("10", "g"))
+        self.assertEqual(amounts["CARBS_G"], ("20", "g"))
+        self.assertEqual(amounts["FAT_G"], ("5", "g"))
+        self.assertEqual(
+            detail["servings"],
+            [{"unit": "pack", "grams_per_unit": "80"}],
+        )
+        status, _, _ = self.request(
+            "DELETE",
+            f"/api/foods/custom/{food_id}",
+        )
+        self.assertEqual(status, 204)
+        state = self.request("GET", "/__qa/state")[1]
+        self.assertEqual(state["custom_food_create_count"], 1)
+        self.assertEqual(state["custom_food_delete_count"], 1)
+        self.assertEqual(state["custom_food_count"], 0)
+
+    def test_assistant_status_and_multipart_drafts_are_purpose_exact(self) -> None:
+        status, payload, _ = self.request(
+            "GET",
+            "/api/ai/food-assistant/status",
+        )
+        self.assertEqual(status, 200)
+        self.assertFalse(payload["enabled"])
+
+        reset = self.request(
+            "POST",
+            "/__qa/reset",
+            {"today": "2026-11-19", "assistant_enabled": True},
+        )
+        self.assertEqual(reset[0], 200)
+        self.login()
+        status, payload, _ = self.request(
+            "GET",
+            "/api/ai/food-assistant/status",
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["enabled"])
+
+        status, draft, _ = self.multipart_draft("custom_food")
+        self.assertEqual(status, 200)
+        self.assertEqual(draft["status"], "draft_ready")
+        self.assertIsNone(draft["suggested_log"])
+        amounts = {
+            row["code"]: row["amount_per_100g"]
+            for row in draft["draft"]["nutrients"]
+        }
+        self.assertEqual(
+            amounts,
+            {
+                "ENERGY_KCAL": "380",
+                "PROTEIN_G": "13.5",
+                "CARBS_G": "60.25",
+                "FAT_G": "7.5",
+            },
+        )
+        self.assertEqual(
+            draft["draft"]["servings"],
+            [{"unit": "bowl", "grams_per_unit": "40"}],
+        )
+        self.assertFalse(draft["warnings"] == [])
+
+        status, ad_hoc, _ = self.multipart_draft("ad_hoc_log")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            ad_hoc["suggested_log"],
+            {"amount": "1", "unit": "bowl", "total_weight_grams": "40"},
+        )
+        state = self.request("GET", "/__qa/state")[1]
+        self.assertEqual(state["assistant_draft_request_count"], 2)
+        self.assertEqual(state["assistant_last_purpose"], "ad_hoc_log")
+        self.assertEqual(state["custom_food_create_count"], 0)
+        self.assertEqual(state["log_post_attempts"], 0)
+
+    def test_meal_crud_is_faithful(self) -> None:
+        body = {
+            "name": "Contract Meal",
+            "notes": "contract notes",
+            "total_quantity": {"amount": "150", "unit": "g"},
+            "components": [
+                {
+                    "item": {"type": "product", "id": "qa-apple"},
+                    "quantity": {"amount": "100", "unit": "g"},
+                }
+            ],
+        }
+        status, meal, _ = self.request(
+            "POST",
+            "/api/meals",
+            body,
+        )
+        self.assertEqual(status, 201)
+        meal_id = meal["id"]
+        self.assertEqual(meal["name"], "Contract Meal")
+        self.assertNotIn("has_missing_components", meal)
+        status, detail, _ = self.request(
+            "GET",
+            f"/api/meals/{meal_id}",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(detail["notes"], "contract notes")
+        status, preview, _ = self.request(
+            "GET",
+            f"/api/meals/{meal_id}/nutrients?amount=100&unit=g",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(preview["meal_id"], meal_id)
+
+        repaired = dict(body)
+        repaired["notes"] = "updated contract notes"
+        status, updated, _ = self.request(
+            "PUT",
+            f"/api/meals/{meal_id}",
+            repaired,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(updated["notes"], "updated contract notes")
+        status, preview, _ = self.request(
+            "GET",
+            f"/api/meals/{meal_id}/nutrients?amount=100&unit=g",
+        )
+        self.assertEqual(status, 200)
+        status, _, _ = self.request(
+            "DELETE",
+            f"/api/meals/{meal_id}",
+        )
+        self.assertEqual(status, 204)
+        state = self.request("GET", "/__qa/state")[1]
+        self.assertEqual(state["meal_create_count"], 1)
+        self.assertEqual(state["meal_update_count"], 1)
+        self.assertEqual(state["meal_delete_count"], 1)
+        self.assertEqual(state["meal_count"], 1)
+
+    def test_normal_log_create_batch_and_ad_hoc_are_unkeyed(self) -> None:
+        log_body = {
+            "log_date": "2026-11-19",
+            "meal_slot": "breakfast",
+            "item": {"type": "product", "id": "qa-apple"},
+            "quantity": {"amount": "100", "unit": "g"},
+        }
+        status, created, _ = self.request("POST", "/api/logs", log_body)
+        self.assertEqual(status, 201)
+        self.assertEqual(created["item"]["id"], "qa-apple")
+        status, batch, _ = self.request(
+            "POST",
+            "/api/logs/batch",
+            {
+                "items": [
+                    log_body,
+                    {
+                        **log_body,
+                        "meal_slot": "lunch",
+                        "item": {"type": "product", "id": "qa-pear"},
+                    },
+                ]
+            },
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(len(batch["items"]), 2)
+        status, ad_hoc, _ = self.request(
+            "POST",
+            "/api/logs/ad-hoc",
+            {
+                "log_date": "2026-11-19",
+                "meal_slot": "snack",
+                "name": "Contract ad hoc",
+                "quantity": {"amount": "1", "unit": "serving"},
+                "nutrients": [
+                    {"code": "ENERGY_KCAL", "amount": "50", "unit": "kcal"}
+                ],
+            },
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(ad_hoc["item"]["type"], "ad_hoc")
+        state = self.request("GET", "/__qa/state")[1]
+        self.assertEqual(state["log_post_attempts"], 3)
+        self.assertEqual(state["log_count"], 12)
+        self.assertNotIn("idempotency_keys", state)
+
+    def test_fail_once_returns_ordinary_503_then_accepts_resubmission(self) -> None:
+        reset = self.request(
+            "POST",
+            "/__qa/reset",
+            {"today": "2026-11-19", "log_post": "fail_once"},
+        )
+        self.assertEqual(reset[0], 200)
+        self.login()
+        log_body = {
+            "log_date": "2026-11-19",
+            "meal_slot": "breakfast",
+            "item": {"type": "product", "id": "qa-apple"},
+            "quantity": {"amount": "100", "unit": "g"},
+        }
+        status, payload, _ = self.request("POST", "/api/logs", log_body)
+        self.assertEqual(status, 503)
+        self.assertEqual(payload["error"]["code"], "temporarily_unavailable")
+        after_failure = self.request("GET", "/__qa/state")[1]
+        self.assertEqual(after_failure["log_post_attempts"], 1)
+        self.assertEqual(after_failure["log_count"], 8)
+
+        status, created, _ = self.request("POST", "/api/logs", log_body)
+        self.assertEqual(status, 201)
+        self.assertTrue(created["id"].startswith("new-log-"))
+        final = self.request("GET", "/__qa/state")[1]
+        self.assertEqual(final["log_post_attempts"], 2)
+        self.assertEqual(final["log_count"], 9)
+
+    def test_login_session_logout_use_cookie_session(self) -> None:
+        status, payload, _ = self.request(
+            "GET",
+            "/api/auth/session",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["identity"]["username"], mock.FIXTURE_USERNAME)
+        status, _, _ = self.request("POST", "/api/auth/logout")
+        self.assertEqual(status, 204)
+        status, payload, _ = self.request("GET", "/api/auth/session")
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"]["code"], "not_found")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

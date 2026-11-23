@@ -137,6 +137,36 @@ just check-frontend-review
 just check-frontend-line-length
 ```
 
+### Native clients (iOS / iPadOS / macOS)
+
+The native SwiftUI client lives in `frontend-ios/`. From the repository root:
+
+```bash
+just dev-frontend-web              # web (Vite) on localhost:1234
+just dev-frontend                  # old name for the web dev server
+just dev                           # DB + backend + web frontend (unchanged)
+
+just dev-frontend-ios mini         # iPhone 13 mini (a booted device is reused)
+just dev-frontend-ios 18-pro       # iPhone 18 Pro — needs a newer Xcode/runtime
+just dev-frontend-ios duo          # iPhone Duo — needs a newer Xcode/runtime
+just dev-frontend-ipados mini      # iPad mini (A17 Pro)
+just dev-frontend-ipados air       # iPad Air 11-inch (M4)
+just dev-frontend-macos            # native macOS build, then open the app
+```
+
+Labels are exact; an unknown or unavailable label fails with a clear error
+instead of falling back to another model. Point `CALCO_XCODE_DEVELOPER_DIR` at
+another Xcode's `Contents/Developer` when a device needs a different runtime,
+and use `CALCO_IOS_SIM_UDID=<UDID>` to pin a device when names collide. Set
+`CALCO_DEV_IOS_DRY_RUN=1` to resolve and print the commands without changing
+simulator state. See [frontend-ios/README.md](../frontend-ios/README.md) for
+the full label list, simulator-safety details, and E2E/Test configuration.
+
+These native recipes do not start the database or backend. `Debug` builds use
+`http://localhost:3001`, so run `just dev-backend` first (and `just db-up` /
+`just migrate-backend` when needed). The separate E2E/Test build uses
+`http://127.0.0.1:3002` and is not launched by these recipes.
+
 ## README screenshots
 
 The feature screenshots in `docs/images/readme/` are generated from the local
@@ -226,6 +256,7 @@ just test
 just test-backend
 just test-frontend
 just build-frontend
+just test-ios-scripts   # native dev-helper tests; no simulator state changes
 ```
 
 Frontend quality gates, in order, before committing frontend changes:
