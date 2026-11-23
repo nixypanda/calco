@@ -64,6 +64,16 @@ public struct SearchView: View {
         // typing: the top section no longer fights a full-height list sibling.
         ScrollView {
             VStack(spacing: 0) {
+                Label(
+                    String(format: String(localized: "search.loggingContext"), contextSubtitle),
+                    systemImage: "calendar"
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .accessibilityIdentifier("search.loggingContext")
                 scopePicker
                 if viewModel.scope == .barcode {
                     barcodeField
@@ -282,6 +292,8 @@ public struct SearchView: View {
                     viewModel.dismissQuickAddMessage()
                 } label: {
                     Image(systemName: "xmark")
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "search.common.dismiss"))
@@ -300,6 +312,8 @@ public struct SearchView: View {
                     viewModel.dismissQuickAddMessage()
                 } label: {
                     Image(systemName: "xmark")
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "search.common.dismiss"))
@@ -468,6 +482,14 @@ public struct SearchView: View {
             .accessibilityIdentifier("search.recent.\(item.id)")
 
             quantityChips(for: item)
+            if viewModel.originMealSlot == nil {
+                Text(String(format: String(localized: "search.quickAdd.destination"),
+                            item.mealSlot.map(DiaryLabels.mealSlotName)
+                                ?? String(localized: "foodDetail.mealSlot.none")))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
@@ -490,8 +512,11 @@ public struct SearchView: View {
                         )
                         .font(.caption)
                         .lineLimit(1)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.bordered)
+                    .disabled(!viewModel.canQuickAdd)
                     .accessibilityLabel(
                         String(
                             format: String(localized: "search.quickAdd.quantity"),

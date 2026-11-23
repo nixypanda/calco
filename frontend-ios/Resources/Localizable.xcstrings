@@ -2151,6 +2151,16 @@
         }
       }
     },
+    "search.loggingContext" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logging to %@"
+          }
+        }
+      }
+    },
     "search.prompt" : {
       "localizations" : {
         "en" : {
@@ -2837,6 +2847,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Logged %@"
+          }
+        }
+      }
+    },
+    "search.quickAdd.destination" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick-add meal: %@"
           }
         }
       }

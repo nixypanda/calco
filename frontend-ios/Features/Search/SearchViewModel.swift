@@ -20,11 +20,13 @@ public final class SearchViewModel: ObservableObject {
     @Published public private(set) var barcodeInput: String = ""
     @Published public private(set) var barcodeState: BarcodeLookupState = .idle
     @Published public private(set) var quickAddState: SearchQuickAddState = .idle
+    @Published public private(set) var isQuickAdding = false
 
     public private(set) var originDate: LocalDiaryDate
     public private(set) var originMealSlot: MealSlot?
 
     public var results: [FoodSearchResult] { state.results }
+    public var canQuickAdd: Bool { onSubmitDrafts != nil && !isQuickAdding }
 
     private let service: FoodSearchServicing
     private let historyService: (any FoodSearchHistoryServicing)?
@@ -36,6 +38,7 @@ public final class SearchViewModel: ObservableObject {
     private let onSubmitDrafts: SearchSubmissionHandler?
 
     private var currentToken: Int = 0
+    private var quickAddGeneration = 0
     private var recentsToken: Int = 0
     private var categoryToken: Int = 0
     private var barcodeToken: Int = 0
@@ -122,10 +125,12 @@ public final class SearchViewModel: ObservableObject {
     public func clearQuery() {
         resetSearch(clearQuery: true)
         categorySuggestions = []
-        quickAddState = .idle
+        if !isQuickAdding { quickAddState = .idle }
     }
 
     public func invalidateSession() {
+        quickAddGeneration += 1
+        isQuickAdding = false
         resetSearch(clearQuery: true)
         clearRecents()
         categorySuggestions = []
@@ -186,7 +191,7 @@ public final class SearchViewModel: ObservableObject {
         switch newScope {
         case .barcode:
             barcodeState = .idle
-            quickAddState = .idle
+            if !isQuickAdding { quickAddState = .idle }
         case .all, .history, .custom:
             barcodeState = .idle
             if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -383,12 +388,16 @@ public final class SearchViewModel: ObservableObject {
     public func quickAdd(_ item: RecentLogItem, quantity: NutritionQuantity? = nil) {
         guard let onSubmitDrafts,
               !item.id.isEmpty,
-              case .idle = quickAddState else { return }
+              canQuickAdd else { return }
         let chosen = quantity ?? item.quantity
         let draft = makeDraft(item: item, quantity: chosen)
+        quickAddGeneration += 1
+        let generation = quickAddGeneration
+        isQuickAdding = true
         quickAddState = .submitting(item.id)
         onSubmitDrafts([draft], [item.name], item.name) { [weak self] result in
-            guard let self else { return }
+            guard let self, self.quickAddGeneration == generation else { return }
+            self.isQuickAdding = false
             switch result {
             case .success:
                 self.quickAddState = .added(item.name)
@@ -400,6 +409,7 @@ public final class SearchViewModel: ObservableObject {
     }
 
     public func dismissQuickAddMessage() {
+        guard !isQuickAdding else { return }
         quickAddState = .idle
     }
 

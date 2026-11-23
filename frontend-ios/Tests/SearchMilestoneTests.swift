@@ -175,6 +175,74 @@ final class SearchMilestoneTests: XCTestCase {
         XCTAssertEqual(vm.quickAddState, .idle)
     }
 
+    func testQuickAddAllowsNextExplicitAdditionWithoutDismissingSuccess() {
+        let service = FakeHistorySearchService()
+        var drafts: [LogSubmissionDraft] = []
+        let vm = makeViewModel(service: service) { submitted, _, _, completion in
+            drafts.append(contentsOf: submitted)
+            completion(.success([]))
+        }
+
+        vm.quickAdd(recentProduct())
+        XCTAssertTrue(vm.canQuickAdd)
+        vm.quickAdd(recentProduct(id: "food-2", name: "Rice"))
+
+        XCTAssertEqual(drafts.count, 2)
+        XCTAssertEqual(drafts.last?.item, .product(id: "food-2"))
+        XCTAssertEqual(vm.quickAddState, .added("Rice"))
+    }
+
+    func testQuickAddFailureDoesNotAutomaticallyRetryButAllowsExplicitTap() {
+        let service = FakeHistorySearchService()
+        var attempts = 0
+        let vm = makeViewModel(service: service) { _, _, _, completion in
+            attempts += 1
+            completion(.failure(.uncertain("Check the diary before retrying")))
+        }
+
+        vm.quickAdd(recentProduct())
+        XCTAssertEqual(attempts, 1)
+        XCTAssertTrue(vm.canQuickAdd)
+        vm.quickAdd(recentProduct())
+        XCTAssertEqual(attempts, 2)
+    }
+
+    func testQuickAddCannotBeUnlockedWhileSubmissionIsInFlight() {
+        let service = FakeHistorySearchService()
+        var attempts = 0
+        var finish: ((LogSubmissionServiceResult) -> Void)?
+        let vm = makeViewModel(service: service) { _, _, _, completion in
+            attempts += 1
+            finish = completion
+        }
+
+        vm.quickAdd(recentProduct())
+        XCTAssertTrue(vm.isQuickAdding)
+        XCTAssertFalse(vm.canQuickAdd)
+        vm.dismissQuickAddMessage()
+        vm.clearQuery()
+        vm.quickAdd(recentProduct())
+        XCTAssertEqual(attempts, 1)
+        finish?(.success([]))
+        XCTAssertFalse(vm.isQuickAdding)
+        XCTAssertTrue(vm.canQuickAdd)
+    }
+
+    func testQuickAddCompletionAfterSessionInvalidationIsIgnored() {
+        let service = FakeHistorySearchService()
+        var finish: ((LogSubmissionServiceResult) -> Void)?
+        let vm = makeViewModel(service: service) { _, _, _, completion in
+            finish = completion
+        }
+
+        vm.quickAdd(recentProduct())
+        vm.invalidateSession()
+        finish?(.success([]))
+
+        XCTAssertEqual(vm.quickAddState, .idle)
+        XCTAssertFalse(vm.isQuickAdding)
+    }
+
     /// Recents no longer carry a batch-selection surface. The two individual
     /// row actions must stay intact: a row tap opens the real product detail
     /// with the diary date/meal preserved, and each quantity chip submits one
@@ -226,7 +294,7 @@ final class SearchMilestoneTests: XCTestCase {
         vm.applyCategorySuggestion(vm.categorySuggestions[0])
 
         XCTAssertEqual(vm.query, #"oat category:"breakfast cereal""#)
-        await waitUntil { vm.state != .loading && vm.state != .idle }
+        await waitUntil { !vm.isSearching && vm.state != .loading && vm.state != .idle }
         let searches = await service.recordedSearches()
         XCTAssertEqual(searches.last?.0, #"oat category:"breakfast cereal""#)
     }
