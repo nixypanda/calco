@@ -213,6 +213,20 @@ final class NativeRedesignTests: XCTestCase {
         XCTAssertNil(makeLogNutritionSummary(from: []))
     }
 
+    func testLiveNutritionDistinguishesMissingInvalidAndMeasuredZero() throws {
+        let summary = try XCTUnwrap(makeLogNutritionSummary(from: [
+            NutrientAmount(code: "PROTEIN_G", amount: "0", unit: "g"),
+            NutrientAmount(code: "CARBS_G", amount: "n/a", unit: "g"),
+            NutrientAmount(code: "FAT_G", amount: "4.5", unit: "g"),
+        ]))
+
+        XCTAssertTrue(summary.hasPrimaryValues)
+        XCTAssertEqual(summary.energyDisplay, "—")
+        XCTAssertEqual(summary.proteinDisplay, "0")
+        XCTAssertEqual(summary.carbsDisplay, "—")
+        XCTAssertEqual(summary.fatDisplay, "4.5")
+    }
+
     func testUnknownNutrientKeepsItsCodeAsLabel() {
         XCTAssertEqual(logNutritionLabel(for: "SODIUM_MG"), "SODIUM_MG")
         XCTAssertEqual(

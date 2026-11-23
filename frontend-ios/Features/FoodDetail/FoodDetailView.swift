@@ -16,6 +16,8 @@ public struct FoodDetailView: View {
     @ObservedObject private var viewModel: FoodDetailViewModel
     @FocusState private var focusedField: LogFormField?
     @State private var confirmation: FoodDetailConfirmation?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .largeTitle) private var energyFontSize: CGFloat = 34
 
     /// Compact iPhone uses the native Log Food presentation: quantity first,
     /// a live energy/macro summary, then the rest of the form. Expanded/iPad and
@@ -148,6 +150,7 @@ public struct FoodDetailView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .tint(.red)
                 .disabled(viewModel.isBusy)
                 .accessibilityIdentifier("foodDetail.pending.discard")
             } else {
@@ -234,6 +237,8 @@ public struct FoodDetailView: View {
                             viewModel.dismissLastUsedNotice()
                         } label: {
                             Image(systemName: "xmark")
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(String(localized: "diary.common.dismiss"))
@@ -292,8 +297,8 @@ public struct FoodDetailView: View {
             Section {
                 VStack(spacing: 12) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(summary.energy ?? "0")
-                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                        Text(summary.energyDisplay)
+                            .font(.system(size: energyFontSize, weight: .bold, design: .rounded))
                             .minimumScaleFactor(0.7)
                             .accessibilityIdentifier("foodDetail.liveNutrition.energy")
                         Text("kcal")
@@ -302,35 +307,39 @@ public struct FoodDetailView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    let layout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 0))
+                    layout {
                         macroColumn(
                             title: String(localized: "meals.nutrient.protein"),
-                            value: summary.protein
+                            value: summary.proteinDisplay
                         )
                         macroColumn(
                             title: String(localized: "meals.nutrient.carbs"),
-                            value: summary.carbs
+                            value: summary.carbsDisplay
                         )
                         macroColumn(
                             title: String(localized: "meals.nutrient.fat"),
-                            value: summary.fat
+                            value: summary.fatDisplay
                         )
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.vertical, compactStyle ? 6 : 2)
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("foodDetail.liveNutrition")
         }
     }
 
-    private func macroColumn(title: String, value: String?) -> some View {
+    private func macroColumn(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(value ?? "0")
+                Text(value)
                     .font(.headline)
                 Text("g")
                     .font(.caption)

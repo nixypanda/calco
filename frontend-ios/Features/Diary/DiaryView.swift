@@ -260,39 +260,61 @@ public struct DiaryView: View {
     /// spinner (same fixed footprint, so there is no layout jump) while the
     /// fetch is in flight. The brief and meal cards stay mounted throughout.
     private var dateNavigationRow: some View {
-        HStack(spacing: 12) {
-            previousButton
-            Spacer(minLength: 8)
-            Button {
-                isDatePickerPresented = true
-            } label: {
-                HStack(spacing: 4) {
-                    Text(viewModel.selectedDate == viewModel.today
-                         ? String(localized: "diary.today")
-                         : compactDateTitle)
-                    .contentTransition(.opacity)
-                    if viewModel.isChangingDate {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(width: 14, height: 14)
-                            .accessibilityHidden(true)
-                    } else {
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.semibold))
-                            .frame(width: 14, height: 14)
+        Group {
+            if usesAccessibilityLayout {
+                VStack(spacing: 8) {
+                    dateButton
+                        .frame(maxWidth: .infinity)
+                    HStack {
+                        previousButton
+                        Spacer(minLength: 12)
+                        nextButton
                     }
                 }
-                .font(.system(size: dateFontSize, weight: .bold))
-                .foregroundStyle(.primary)
+            } else {
+                HStack(spacing: 12) {
+                    previousButton
+                    Spacer(minLength: 8)
+                    dateButton
+                    Spacer(minLength: 8)
+                    nextButton
+                }
             }
-            .animation(valueTransition, value: viewModel.selectedDate)
-            .animation(valueTransition, value: viewModel.isChangingDate)
-            .disabled(viewModel.isSessionExpired)
-            .accessibilityIdentifier("diary.calendar")
-            Spacer(minLength: 8)
-            nextButton
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("diary.dateNavigation")
+    }
+
+    private var dateButton: some View {
+        Button {
+            isDatePickerPresented = true
+        } label: {
+            HStack(spacing: 4) {
+                Text(viewModel.selectedDate == viewModel.today
+                     ? String(localized: "diary.today")
+                     : compactDateTitle)
+                    .contentTransition(.opacity)
+                    .fixedSize(horizontal: false, vertical: true)
+                if viewModel.isChangingDate {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 14, height: 14)
+                        .accessibilityHidden(true)
+                } else {
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .frame(width: 14, height: 14)
+                }
+            }
+            .font(.system(size: dateFontSize, weight: .bold))
+            .foregroundStyle(.primary)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .animation(valueTransition, value: viewModel.selectedDate)
+        .animation(valueTransition, value: viewModel.isChangingDate)
+        .disabled(viewModel.isSessionExpired)
+        .accessibilityIdentifier("diary.calendar")
     }
 
     /// Separate right-aligned row before the meal cards. It is not tied to a
@@ -306,6 +328,8 @@ public struct DiaryView: View {
                 Text(String(localized: "diary.manageSlots"))
                     .font(.subheadline)
                     .foregroundStyle(Color.accentColor)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(viewModel.isSessionExpired)
@@ -339,7 +363,10 @@ public struct DiaryView: View {
 
     private var calorieBrief: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
+            let layout = usesAccessibilityLayout
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                : AnyLayout(HStackLayout(alignment: .top))
+            layout {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(briefNumber(viewModel.calorieProgress.current))
                         .font(.system(size: loggedFontSize, weight: .bold))
@@ -353,7 +380,7 @@ public struct DiaryView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 8)
+                if !usesAccessibilityLayout { Spacer(minLength: 8) }
                 remainingView
             }
 
@@ -375,6 +402,7 @@ public struct DiaryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("diary.summary.calories")
     }
 
@@ -386,7 +414,7 @@ public struct DiaryView: View {
     /// The reference puts the signed delta's magnitude in a bold figure and
     /// its meaning in a quiet caption. No combined sentence, no blue pill.
     private var remainingView: some View {
-        VStack(alignment: .trailing, spacing: 2) {
+        VStack(alignment: usesAccessibilityLayout ? .leading : .trailing, spacing: 2) {
             if viewModel.calorieProgress.hasTarget {
                 Text(remainingNumberText)
                     .font(.system(size: remainingFontSize, weight: .bold))
@@ -401,6 +429,7 @@ public struct DiaryView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("diary.summary.remaining")
     }
 
@@ -451,19 +480,24 @@ public struct DiaryView: View {
     }
 
     private var cardActions: some View {
-        HStack(alignment: .firstTextBaseline) {
+        let layout = usesAccessibilityLayout
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+        return layout {
             Button {
                 onOpenSettings()
             } label: {
                 Text(String(localized: "diary.editGoals"))
                     .font(.subheadline)
                     .foregroundStyle(Color.accentColor)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(viewModel.isSessionExpired)
             .accessibilityIdentifier("diary.editGoals")
 
-            Spacer(minLength: 8)
+            if !usesAccessibilityLayout { Spacer(minLength: 8) }
             nutritionButton
         }
     }
@@ -488,6 +522,8 @@ public struct DiaryView: View {
                 }
                 .font(.subheadline)
                 .foregroundStyle(Color.accentColor)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(viewModel.isSessionExpired || viewModel.isChangingDate)
@@ -517,6 +553,8 @@ public struct DiaryView: View {
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .accessibilityIdentifier("diary.summary.macroMode")
     }
@@ -591,6 +629,8 @@ public struct DiaryView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark")
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "diary.common.dismiss"))

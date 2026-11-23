@@ -251,6 +251,12 @@ public struct LogNutritionSummary: Equatable, Sendable {
     /// All scaled nutrients, kept for the secondary "full nutrition" list.
     public let nutrients: [NutrientAmount]
 
+    // A missing measurement is not a measured zero.
+    public var energyDisplay: String { energy ?? "—" }
+    public var proteinDisplay: String { protein ?? "—" }
+    public var carbsDisplay: String { carbs ?? "—" }
+    public var fatDisplay: String { fat ?? "—" }
+
     public var hasPrimaryValues: Bool {
         energy != nil || protein != nil || carbs != nil || fat != nil
     }
