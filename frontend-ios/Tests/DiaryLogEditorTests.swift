@@ -253,6 +253,49 @@ final class DiaryLogEditorTests: XCTestCase {
         XCTAssertFalse(vm.hasUnsavedChanges)
     }
 
+    func testUnchangedAndRevertedFormsCannotSave() async {
+        let service = FakeEditorService(log: makeLog())
+        let vm = LogEditorViewModel(log: makeLog(), date: date, service: service)
+
+        XCTAssertFalse(vm.canSave)
+        await vm.save()
+
+        vm.amount = "200"
+        XCTAssertTrue(vm.canSave)
+        vm.amount = "150"
+        XCTAssertFalse(vm.canSave)
+        vm.unit = "kg"
+        XCTAssertTrue(vm.canSave)
+        vm.unit = "g"
+        vm.mealSlot = .lunch
+        XCTAssertTrue(vm.canSave)
+        vm.mealSlot = .breakfast
+        vm.notes = "changed"
+        XCTAssertTrue(vm.canSave)
+        vm.notes = "with milk"
+        XCTAssertFalse(vm.canSave)
+        await vm.save()
+
+        let requests = await service.requests()
+        XCTAssertTrue(requests.isEmpty)
+        XCTAssertEqual(vm.state, .editing)
+        XCTAssertTrue(vm.canEdit, "Deleting remains available for an unchanged log")
+    }
+
+    func testFailedSaveRemainsAvailableUntilChangesAreReverted() async {
+        let service = FakeEditorService(log: makeLog())
+        await service.setUpdateError(.networkUnavailable)
+        let vm = LogEditorViewModel(log: makeLog(), date: date, service: service)
+        vm.amount = "200"
+        await vm.save()
+        XCTAssertTrue(vm.canSave)
+        vm.amount = "150"
+        XCTAssertFalse(vm.canSave)
+        await vm.save()
+        let requests = await service.requests()
+        XCTAssertEqual(requests.count, 1)
+    }
+
     func testSaveRetainsAuthoritativeResponseForDiaryApply() async {
         let service = FakeEditorService(log: makeLog())
         let updated = DiaryLog(
@@ -265,6 +308,7 @@ final class DiaryLogEditorTests: XCTestCase {
         )
         await service.setLog(updated)
         let vm = LogEditorViewModel(log: makeLog(), date: date, service: service)
+        vm.amount = "200"
 
         await vm.save()
 
@@ -376,6 +420,7 @@ final class DiaryLogEditorTests: XCTestCase {
         let service = FakeEditorService(log: makeLog())
         await service.setUpdateError(.server("Could not save."))
         let vm = LogEditorViewModel(log: makeLog(), date: date, service: service)
+        vm.amount = "200"
         var calls = 0
         vm.onSaved = { _ in calls += 1 }
 
@@ -394,6 +439,7 @@ final class DiaryLogEditorTests: XCTestCase {
         let service = FakeEditorService(log: makeLog())
         await service.setUpdateError(.networkUnavailable)
         let vm = LogEditorViewModel(log: makeLog(), date: date, service: service)
+        vm.amount = "200"
 
         await vm.save()
 
@@ -404,6 +450,7 @@ final class DiaryLogEditorTests: XCTestCase {
         let service = FakeEditorService(log: makeLog())
         await service.setUpdateError(.unauthorized)
         let vm = LogEditorViewModel(log: makeLog(), date: date, service: service)
+        vm.amount = "200"
         var expirations = 0
         vm.onSessionExpired = { expirations += 1 }
 
@@ -704,6 +751,7 @@ final class DiaryLogEditorTests: XCTestCase {
         let service = FakeEditorService(log: makeLog())
         await service.setUpdateError(.cancelled)
         let vm = LogEditorViewModel(log: makeLog(), date: date, service: service)
+        vm.amount = "200"
 
         await vm.save()
 

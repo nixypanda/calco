@@ -816,6 +816,7 @@ final class LogEditorNavigationTests: XCTestCase {
         guard let editor = coordinator.logEditorViewModel(for: "log-1") else {
             return XCTFail("Expected a log editor view model")
         }
+        editor.amount = "200"
         await editor.save()
 
         XCTAssertEqual(editor.state, .sessionExpired)

@@ -24,6 +24,9 @@ public struct LogEditorView: View {
                 amountSection
                 mealSection
                 notesSection
+                if viewModel.canEdit {
+                    Section { deleteButton }
+                }
             }
             actionBar
         }
@@ -205,15 +208,7 @@ public struct LogEditorView: View {
             .accessibilityIdentifier("diary.editor.progress")
         } else if viewModel.canEdit {
             VStack(spacing: usesAccessibilityLayout ? 10 : 8) {
-                if usesAccessibilityLayout {
-                    saveButton
-                    deleteButton
-                } else {
-                    HStack(spacing: 12) {
-                        saveButton
-                        deleteButton
-                    }
-                }
+                saveButton
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
@@ -228,14 +223,12 @@ public struct LogEditorView: View {
             focusedField = nil
             Task { await viewModel.save() }
         } label: {
-            if case .saving = viewModel.state {
-                ProgressView()
-            } else {
-                Text(String(localized: "diary.editor.save"))
-            }
+            Text(String(localized: "diary.editor.save"))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.borderedProminent)
-        .disabled(viewModel.validationMessage != nil || viewModel.state.isBusy)
+        .disabled(!viewModel.canSave)
         .frame(maxWidth: .infinity)
         .accessibilityIdentifier("diary.editor.save")
     }
@@ -246,8 +239,12 @@ public struct LogEditorView: View {
             viewModel.requestDelete()
         } label: {
             Text(String(localized: "diary.editor.delete"))
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, minHeight: 44)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.plain)
+        .tint(.red)
         .disabled(viewModel.state.isBusy)
         .frame(maxWidth: .infinity)
         .accessibilityIdentifier("diary.editor.delete")

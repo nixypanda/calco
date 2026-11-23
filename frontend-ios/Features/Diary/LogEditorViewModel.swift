@@ -142,6 +142,10 @@ public final class LogEditorViewModel: ObservableObject {
         }
     }
 
+    public var canSave: Bool {
+        canEdit && hasUnsavedChanges && validationMessage == nil
+    }
+
     public var isBusy: Bool {
         state.isBusy
     }
@@ -173,7 +177,7 @@ public final class LogEditorViewModel: ObservableObject {
     }
 
     public func save() async {
-        guard canEdit, validationMessage == nil else { return }
+        guard canSave else { return }
         state = .saving
 
         // Match the create flow: trim and treat whitespace-only notes as cleared.
