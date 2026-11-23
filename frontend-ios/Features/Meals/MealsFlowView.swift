@@ -10,7 +10,7 @@ private enum MealRoute: Hashable {
     case detail(mealID: String, context: LibraryLogContext)
 }
 
-private enum MealEditorTarget: Identifiable {
+private enum MealEditorTarget: Identifiable, Hashable {
     case create
     case edit(id: String, name: String)
 
@@ -33,6 +33,7 @@ public struct MealsFlowView: View {
     @StateObject private var listViewModel: MealsListViewModel
     @State private var path: [MealRoute]
     @State private var editorTarget: MealEditorTarget?
+    @State private var editingTarget: MealEditorTarget?
     @State private var detailRefreshToken = 0
     @State private var hasDirtyEditor = false
 
@@ -167,7 +168,7 @@ public struct MealsFlowView: View {
                         onLogged: onLogged,
                         refreshToken: detailRefreshToken,
                         onEdit: { meal in
-                            editorTarget = .edit(id: meal.id, name: meal.name)
+                            editingTarget = .edit(id: meal.id, name: meal.name)
                         },
                         onDeleted: {
                             if !path.isEmpty { path.removeLast() }
@@ -177,40 +178,50 @@ public struct MealsFlowView: View {
 
                 }
             }
+            .navigationDestination(item: $editingTarget) { target in
+                editorScreen(for: target)
+                    .navigationBarBackButtonHidden()
+            }
         }
         .sheet(item: $editorTarget) { target in
             NavigationStack {
-                MealEditorScreen(
-                    target: target,
-                    accountID: accountID,
-                    service: service,
-                    onSessionExpired: onSessionExpired,
-                    onCancel: {
-                        editorTarget = nil
-                        onDirtyChange?(false)
-                    },
-                    onSaved: { meal in
-                        let wasEditing = target.mode.mealID != nil
-                        onDirtyChange?(false)
-                        editorTarget = nil
-                        Task { await listViewModel.refresh() }
-                        if wasEditing {
-                            detailRefreshToken += 1
-                        } else if !path.contains(where: { route in
-                            if case .detail(let id, _) = route { return id == meal.id }
-                            return false
-                        }) {
-                            path.append(
-                                .detail(mealID: meal.id, context: captureContext())
-                            )
-                        }
-                    },
-                    onDirtyChange: { dirty in
-                        onDirtyChange?(dirty)
-                    }
-                )
+                editorScreen(for: target)
             }
         }
+    }
+
+    private func editorScreen(for target: MealEditorTarget) -> some View {
+        MealEditorScreen(
+            target: target,
+            accountID: accountID,
+            service: service,
+            onSessionExpired: onSessionExpired,
+            onCancel: {
+                editorTarget = nil
+                editingTarget = nil
+                onDirtyChange?(false)
+            },
+            onSaved: { meal in
+                let wasEditing = target.mode.mealID != nil
+                onDirtyChange?(false)
+                editorTarget = nil
+                editingTarget = nil
+                Task { await listViewModel.refresh() }
+                if wasEditing {
+                    detailRefreshToken += 1
+                } else if !path.contains(where: { route in
+                    if case .detail(let id, _) = route { return id == meal.id }
+                    return false
+                }) {
+                    path.append(
+                        .detail(mealID: meal.id, context: captureContext())
+                    )
+                }
+            },
+            onDirtyChange: { dirty in
+                onDirtyChange?(dirty)
+            }
+        )
     }
 }
 
