@@ -69,7 +69,9 @@ public struct LoginView: View {
                                          comment: "Login submit button label")
                             )
                         }
+                        .frame(maxWidth: .infinity, minHeight: 44)
                     }
+                    .buttonStyle(.borderedProminent)
                     .disabled(viewModel.isSubmitDisabled)
                     .accessibilityIdentifier("auth.login.submit")
                 }

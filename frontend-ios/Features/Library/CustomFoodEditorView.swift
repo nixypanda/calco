@@ -12,6 +12,15 @@ public struct CustomFoodEditorView: View {
     @Environment(\.dismiss) private var dismissEnvironment
     @FocusState private var focusedField: Field?
     @State private var confirmingCancel = false
+    private let onBack: (() -> Void)?
+
+    private var backPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
 
     private enum Field: Hashable {
         case name
@@ -21,8 +30,9 @@ public struct CustomFoodEditorView: View {
         case defaultUnit
     }
 
-    public init(viewModel: CustomFoodEditorViewModel) {
+    public init(viewModel: CustomFoodEditorViewModel, onBack: (() -> Void)? = nil) {
         self.viewModel = viewModel
+        self.onBack = onBack
     }
 
     public var body: some View {
@@ -41,7 +51,8 @@ public struct CustomFoodEditorView: View {
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
-        .navigationBarBackButtonHidden(true)
+        .navigationBarBackButtonHidden(viewModel.hasUnsavedChanges || viewModel.isBusy)
+        .interactiveDismissDisabled(viewModel.hasUnsavedChanges || viewModel.isBusy)
         .toolbar {
 #if os(iOS)
             ToolbarItemGroup(placement: .keyboard) {
@@ -58,19 +69,24 @@ public struct CustomFoodEditorView: View {
                 .accessibilityIdentifier("library.editor.keyboard.done")
             }
 #endif
-            ToolbarItem(placement: .cancellationAction) {
-                Button(String(localized: "diary.common.cancel")) {
-                    if viewModel.hasUnsavedChanges {
-                        confirmingCancel = true
-                    } else {
-                        dismissEnvironment()
+            if viewModel.hasUnsavedChanges || viewModel.isBusy {
+                ToolbarItem(placement: backPlacement) {
+                    Button {
+                        if viewModel.hasUnsavedChanges {
+                            confirmingCancel = true
+                        } else {
+                            finishBack()
+                        }
+                    } label: {
+                        Label(String(localized: "library.common.back"), systemImage: "chevron.left")
                     }
+                    .disabled(viewModel.isBusy)
+                    .accessibilityIdentifier("library.editor.back")
                 }
-                .disabled(viewModel.isBusy)
-                .accessibilityIdentifier("diary.common.cancel")
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
+                    focusedField = nil
                     Task { await viewModel.submit() }
                 } label: {
                     if viewModel.isSaving {
@@ -93,7 +109,7 @@ public struct CustomFoodEditorView: View {
             isPresented: $confirmingCancel
         ) {
             Button(String(localized: "diary.editor.discard.action"), role: .destructive) {
-                dismissEnvironment()
+                finishBack()
             }
             .accessibilityIdentifier("library.editor.discard.confirm")
             Button(String(localized: "diary.common.cancel"), role: .cancel) {}
@@ -106,6 +122,11 @@ public struct CustomFoodEditorView: View {
         viewModel.mode.isCreate
             ? String(localized: "library.editor.create.title")
             : String(localized: "library.editor.edit.title")
+    }
+
+    private func finishBack() {
+        if let onBack { onBack() }
+        else { dismissEnvironment() }
     }
 
     @ViewBuilder
@@ -242,8 +263,10 @@ public struct CustomFoodEditorView: View {
                                 viewModel.removeServingRow(id: serving.id)
                             } label: {
                                 Image(systemName: "minus.circle")
+                                    .frame(minWidth: 44, minHeight: 44)
                             }
                             .buttonStyle(.plain)
+                            .foregroundStyle(.red)
                             .accessibilityLabel(String(localized: "library.editor.servings.remove"))
                             .accessibilityIdentifier("library.editor.serving.\(serving.id).remove")
                         }

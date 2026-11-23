@@ -234,9 +234,19 @@ entry point in `App/CalCoApp.swift`.
 
 ## Implemented workflows
 
-Feature sheets are presented over the current diary context. Opening Settings,
-Library, Meals, Nutrition Details, or AI drafting does not change the selected
-diary date or meal slot. Historical dates and retained logs remain available.
+Browsing uses pages: root tabs have no Back/Close, Library lists and details
+share a navigation stack, custom-food and meal editors are pushed Back/Save
+pages, ingredient selection is a child page, API Keys is pushed from Settings,
+and the nutrition report is pushed from Diary. Detail pages have trailing Edit
+and a separate final destructive section. The log editor has one bottom Save;
+Delete is in the form rather than beside Save.
+
+Temporary tasks use sheets: food/meal logging has leading Cancel and one bottom
+Log action; date selection and repeat review retain Cancel/Done or Cancel/Log;
+AI drafting has Close and an overflow Start Over; API-key creation has Cancel
+and one Create action. Logging keeps its originating search/page underneath.
+Opening these destinations does not reset the selected diary date or meal slot.
+Historical dates and retained logs remain available.
 
 ### Diary and fast logging
 

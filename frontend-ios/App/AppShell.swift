@@ -739,6 +739,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     /// system Back gesture/button popping that detail.
     public func popSearchTabDetail() {
         searchTabPath = []
+        searchViewModel?.clearSelection()
     }
 
     private func ensureFoodDetailViewModel(
@@ -1751,6 +1752,17 @@ private extension Pane {
 // MARK: - View
 
 public struct AppShell: View {
+    private enum Modal: Identifiable {
+        case feature(AppShellFeatureSheet)
+        case food(String)
+
+        var id: String {
+            switch self {
+            case .feature(let sheet): return sheet.id
+            case .food(let id): return "food-log-\(id)"
+            }
+        }
+    }
     @StateObject private var coordinator: AppShellCoordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var pendingBannerDiscard: PendingLogSubmission?
@@ -1898,10 +1910,16 @@ public struct AppShell: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .sheet(
-                item: featureSheetBinding,
+                item: modalBinding,
                 onDismiss: { coordinator.featureSheetDidDismiss() }
             ) { sheet in
-                featureSheetView(sheet)
+                switch sheet {
+                case .feature(let feature): featureSheetView(feature)
+                case .food(let id):
+                    if let vm = coordinator.foodDetailViewModel(for: id) {
+                        FoodLogTaskView(viewModel: vm, onClose: dismissFoodLog)
+                    }
+                }
             }
             .alert(item: $pendingBannerDiscard) { pending in
                 Alert(
@@ -1936,15 +1954,62 @@ public struct AppShell: View {
         }
     }
 
-    private var featureSheetBinding: Binding<AppShellFeatureSheet?> {
+    private var loggingFoodID: String? {
+        if coordinator.selectedTab == .search {
+            return NativePresentation.loggingFoodID(
+                in: coordinator.searchTabPath.last ?? coordinator.navigationState.activePane
+            )
+        }
+        guard coordinator.selectedTab == .diary else { return nil }
+        return NativePresentation.loggingFoodID(in: coordinator.navigationState.activePane)
+    }
+
+    private func dismissFoodLog() {
+        guard let id = loggingFoodID,
+              coordinator.foodDetailViewModel(for: id)?.isBusy != true else { return }
+        if !coordinator.searchTabPath.isEmpty {
+            coordinator.popSearchTabDetail()
+        } else {
+            coordinator.requestBack()
+        }
+    }
+
+    private var modalBinding: Binding<Modal?> {
         Binding(
-            get: { coordinator.featureSheet },
+            get: {
+                if let sheet = coordinator.featureSheet {
+                    if case .nutrition = sheet { return nil }
+                    return .feature(sheet)
+                }
+                return loggingFoodID.map(Modal.food)
+            },
             set: { newValue in
                 if newValue == nil {
-                    coordinator.dismissFeatureSheet()
+                    if coordinator.featureSheet != nil {
+                        coordinator.dismissFeatureSheet()
+                    } else {
+                        dismissFoodLog()
+                    }
                 }
             }
         )
+    }
+
+    private var nutritionPagePresented: Binding<Bool> {
+        Binding(
+            get: {
+                if case .nutrition = coordinator.featureSheet { return true }
+                return false
+            },
+            set: { if !$0 { coordinator.dismissFeatureSheet() } }
+        )
+    }
+
+    @ViewBuilder
+    private var nutritionPage: some View {
+        if case .nutrition(let vm) = coordinator.featureSheet {
+            NutritionDetailsView(viewModel: vm)
+        }
     }
 
     private var discardConfirmationPresented: Binding<Bool> {
@@ -2002,6 +2067,8 @@ public struct AppShell: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.semibold))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "foodDetail.pending.dismissBanner"))
@@ -2015,7 +2082,7 @@ public struct AppShell: View {
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
-                    Button(String(localized: "foodDetail.pending.discard")) {
+                    Button(String(localized: "foodDetail.pending.discard"), role: .destructive) {
                         pendingBannerDiscard = pending
                     }
                     .font(.footnote.weight(.semibold))
@@ -2059,7 +2126,24 @@ public struct AppShell: View {
             .presentationDetents([.large])
 
         case .meals(let request):
-            MealsFlowView(
+            if let mealID = request.initialMealID {
+                MealLogTaskHost(
+                    mealID: mealID,
+                    date: request.date,
+                    mealSlot: request.mealSlot,
+                    initialPortion: request.initialPortion,
+                    service: coordinator.currentMealsService,
+                    onSubmitDrafts: { [weak coordinator] drafts, names, summary, completion in
+                        coordinator?.submitDraftsForFeature(drafts, itemNames: names,
+                                                           summary: summary, completion: completion)
+                    },
+                    onSessionExpired: { [weak coordinator] in coordinator?.featureSessionExpired() },
+                    onLogged: { [weak coordinator] date, slot in
+                        coordinator?.libraryDidLog(date: date, mealSlot: slot)
+                    }
+                )
+            } else {
+              MealsFlowView(
                 date: request.date,
                 mealSlot: request.mealSlot,
                 accountID: coordinator.currentUser?.id ?? "",
@@ -2081,7 +2165,8 @@ public struct AppShell: View {
                 },
                 initialMealID: request.initialMealID,
                 initialPortion: request.initialPortion
-            )
+              )
+            }
 
         case .library(let request):
             if let accountID = coordinator.currentUser?.id {
@@ -2122,7 +2207,7 @@ public struct AppShell: View {
                 AssistantView(viewModel: viewModel)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button(String(localized: "assistant.cancel")) {
+                            Button(String(localized: "diary.common.close")) {
                                 coordinator.dismissFeatureSheet()
                             }
                             .accessibilityIdentifier("app.assistant.close")
@@ -2178,6 +2263,7 @@ public struct AppShell: View {
         )
         return NavigationStack(path: compactPath) {
             paneView(plan.rootPane, compactStyle: true)
+                .navigationDestination(isPresented: nutritionPagePresented) { nutritionPage }
                 .navigationDestination(for: Pane.self) { pane in
                     compactDestination(pane)
                 }
@@ -2197,9 +2283,9 @@ public struct AppShell: View {
     /// navigation stack, so returning to Search keeps query/scope/context.
     private var searchTabPathBinding: Binding<[Pane]> {
         Binding(
-            get: { coordinator.searchTabPath },
+            get: { NativePresentation.pagePath(coordinator.searchTabPath) },
             set: { newPath in
-                guard newPath.count < coordinator.searchTabPath.count else { return }
+                guard newPath.count < NativePresentation.pagePath(coordinator.searchTabPath).count else { return }
                 coordinator.popSearchTabDetail()
             }
         )
@@ -2237,7 +2323,7 @@ public struct AppShell: View {
                     if compactStyle {
                         coordinator.requestTabSwitch(to: .library)
                     } else {
-                        coordinator.openMealsList()
+                        coordinator.selectExpandedLibrary()
                     }
                 },
                 onOpenAssistant: { purpose, barcode in
@@ -2313,7 +2399,7 @@ public struct AppShell: View {
                 accountSettingsViewModel: coordinator.accountSettingsViewModel,
                 onClose: { closeSettingsTab() },
                 onAccountSettingsDismissed: { [weak coordinator] in
-                    coordinator?.dismissAccountSettings()
+                    coordinator?.accountSettingsViewModel?.clearSensitiveStateOnDismissal()
                 },
                 onSignOut: { [weak coordinator] in
                     Task { await coordinator?.signOut() }
@@ -2385,13 +2471,13 @@ public struct AppShell: View {
                 AppShellPanePlan.plan(
                     for: coordinator.navigationState,
                     layout: .compact
-                ).navigationPath
+                ).navigationPath.filter { NativePresentation.loggingFoodID(in: $0) == nil }
             },
             set: { newPath in
                 let currentPath = AppShellPanePlan.plan(
                     for: coordinator.navigationState,
                     layout: .compact
-                ).navigationPath
+                ).navigationPath.filter { NativePresentation.loggingFoodID(in: $0) == nil }
                 guard newPath.count < currentPath.count,
                       Array(currentPath.prefix(newPath.count)) == newPath
                 else { return }
@@ -2420,6 +2506,7 @@ public struct AppShell: View {
             } else {
                 NavigationStack {
                     paneView(plan.primaryPane)
+                        .navigationDestination(isPresented: nutritionPagePresented) { nutritionPage }
                 }
             }
         }
@@ -2460,6 +2547,7 @@ public struct AppShell: View {
             get: {
                 coordinator.selectedTab != .settings
                     && !coordinator.expandedLibrarySelected
+                    && loggingFoodID == nil
                     && coordinator.navigationState.activePane.contextualFoodPane != nil
             },
             set: { isPresented in
@@ -2508,17 +2596,14 @@ public struct AppShell: View {
                         if compactStyle {
                             coordinator.requestTabSwitch(to: .library)
                         } else {
-                            coordinator.openMealsList()
+                            coordinator.selectExpandedLibrary()
                         }
                     },
                     onOpenLibrary: {
                         if compactStyle {
                             coordinator.requestTabSwitch(to: .library)
                         } else {
-                            coordinator.openLibrary(
-                                date: coordinator.navigationState.selectedDate,
-                                mealSlot: coordinator.navigationState.mealSlot
-                            )
+                            coordinator.selectExpandedLibrary()
                         }
                     }
                 )

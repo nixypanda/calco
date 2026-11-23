@@ -7,15 +7,18 @@ public struct MealsListView: View {
     @ObservedObject private var viewModel: MealsListViewModel
     private let onOpenMeal: (Meal) -> Void
     private let onCreateMeal: () -> Void
+    private let showsAddButton: Bool
 
     public init(
         viewModel: MealsListViewModel,
         onOpenMeal: @escaping (Meal) -> Void,
-        onCreateMeal: @escaping () -> Void
+        onCreateMeal: @escaping () -> Void,
+        showsAddButton: Bool = true
     ) {
         self.viewModel = viewModel
         self.onOpenMeal = onOpenMeal
         self.onCreateMeal = onCreateMeal
+        self.showsAddButton = showsAddButton
     }
 
     public var body: some View {
@@ -39,6 +42,7 @@ public struct MealsListView: View {
         .navigationBarTitleDisplayMode(.large)
 #endif
         .toolbar {
+          if showsAddButton {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     onCreateMeal()
@@ -50,6 +54,7 @@ public struct MealsListView: View {
                 }
                 .accessibilityIdentifier("meals.list.add")
             }
+          }
         }
         .task {
             await viewModel.loadIfNeeded()

@@ -51,20 +51,12 @@ public struct DiarySettingsView: View {
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
-            .toolbar {
-                // Native back-arrow semantics: the same guarded close action as
-                // Library/Meals, not a modal Cancel and not a sign-out action.
-                ToolbarItem(placement: backPlacement) {
-                    Button {
-                        requestClose()
-                    } label: {
-                        Label(
-                            String(localized: "library.common.back"),
-                            systemImage: "chevron.left"
-                        )
-                    }
-                    .disabled(viewModel.isSaving)
-                    .accessibilityIdentifier("settings.back")
+            .navigationDestination(isPresented: $isAccountSettingsPresented) {
+                if let accountSettingsViewModel {
+                    AccountSettingsView(
+                        viewModel: accountSettingsViewModel,
+                        onClose: { isAccountSettingsPresented = false }
+                    )
                 }
             }
             #if os(iOS)
@@ -80,11 +72,6 @@ public struct DiarySettingsView: View {
             #endif
         }
         .interactiveDismissDisabled(viewModel.isSaving || viewModel.hasUnsavedChanges)
-#if os(macOS)
-        .onExitCommand {
-            requestClose()
-        }
-#endif
         .alert(
             String(localized: "settings.discard.title"),
             isPresented: $viewModel.isDiscardConfirmationPresented
@@ -104,23 +91,11 @@ public struct DiarySettingsView: View {
         .task {
             await viewModel.loadIfNeeded()
         }
-        .sheet(
-            isPresented: $isAccountSettingsPresented,
-            onDismiss: { onAccountSettingsDismissed() }
-        ) {
-            if let accountSettingsViewModel {
-                AccountSettingsView(
-                    viewModel: accountSettingsViewModel,
-                    onClose: { isAccountSettingsPresented = false }
-                )
-            }
+        .onChange(of: isAccountSettingsPresented) { _, presented in
+            if !presented { onAccountSettingsDismissed() }
         }
 #if os(macOS)
         .frame(minWidth: 440, idealWidth: 520, maxWidth: 640)
-#endif
-#if os(iOS)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
 #endif
     }
 
@@ -431,5 +406,6 @@ public struct DiarySettingsView: View {
             Text(saving ? String(localized: "diary.editor.saving") : title)
         }
         .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, minHeight: 44)
     }
 }

@@ -1,6 +1,6 @@
 // Native Library tab root. The Library is a hub with two destinations:
-// My Foods and My Meals. Each destination owns its own navigation stack and
-// returns to this hub through the single back control provided here.
+// My Foods and My Meals. One stack owns the hub and every pushed destination,
+// preserving native transitions, back gestures, and route-owned editors.
 
 import SwiftUI
 
@@ -24,7 +24,7 @@ public enum LibraryDestination: Hashable, Sendable {
 }
 
 public struct LibraryRootView: View {
-    @State private var destination: LibraryDestination?
+    @State private var path = NavigationPath()
     @State private var hasDirtyEditor = false
 
     private let service: any LibraryServicing
@@ -69,44 +69,23 @@ public struct LibraryRootView: View {
     }
 
     public var body: some View {
-        Group {
-            if let destination {
-                // Each destination owns its NavigationStack (My Foods /
-                // My Meals list -> detail -> editor). The single Back control
-                // is wired INSIDE that stack on the list screen and calls this
-                // root callback. A toolbar applied here would sit outside the
-                // active stack and never render — the original gap.
-                destinationView(destination)
-            } else {
-                // Only the hub is wrapped. It gets its own "Library" large
-                // title; the child stacks stay independent (no nested stacks).
-                NavigationStack {
-                    hubView
-                        .navigationTitle(String(localized: "library.title"))
+        NavigationStack(path: $path) {
+            hubView
+                .navigationTitle(String(localized: "library.title"))
 #if os(iOS)
-                        .navigationBarTitleDisplayMode(.large)
+                .navigationBarTitleDisplayMode(.large)
 #endif
+                .navigationDestination(for: LibraryDestination.self) { destination in
+                    destinationView(destination)
                 }
-            }
         }
-    }
-
-    /// Shared root callback for both destinations' native Back control. A
-    /// dirty/busy editor keeps its own Cancel/Save, so Back is gated here and
-    /// at the toolbar item; there is no second Close/Done control.
-    private func returnToHub() {
-        guard !hasDirtyEditor else { return }
-        destination = nil
-        hasDirtyEditor = false
+        .interactiveDismissDisabled(hasDirtyEditor)
     }
 
     private var hubView: some View {
         List {
             Section {
-                Button {
-                    destination = .foods
-                    hasDirtyEditor = false
-                } label: {
+                NavigationLink(value: LibraryDestination.foods) {
                     Label {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(String(localized: "library.hub.foods"))
@@ -121,10 +100,7 @@ public struct LibraryRootView: View {
                 }
                 .accessibilityIdentifier("library.foods")
 
-                Button {
-                    destination = .meals
-                    hasDirtyEditor = false
-                } label: {
+                NavigationLink(value: LibraryDestination.meals) {
                     Label {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(String(localized: "library.hub.meals"))
@@ -155,12 +131,10 @@ public struct LibraryRootView: View {
                 initialMealSlot: mealSlot,
                 onLogged: onLogged,
                 onSessionExpired: onSessionExpired,
-                onClose: { self.destination = nil },
-                onBack: { self.returnToHub() },
-                backDisabled: hasDirtyEditor,
                 onDirtyChange: { self.hasDirtyEditor = $0 },
                 onCreateWithAI: onCreateWithAI,
-                currentContextProvider: currentContextProvider
+                currentContextProvider: currentContextProvider,
+                navigationPath: $path
             )
             .accessibilityIdentifier("library.foods")
         case .meals:
@@ -169,14 +143,12 @@ public struct LibraryRootView: View {
                 mealSlot: mealSlot,
                 accountID: accountID,
                 service: mealsService,
-                onSubmitDrafts: nil,
+                onSubmitDrafts: submitDrafts,
                 onSessionExpired: onSessionExpired,
                 onLogged: onLogged,
-                onClose: { self.destination = nil },
-                onBack: { self.returnToHub() },
-                backDisabled: hasDirtyEditor,
                 currentContextProvider: currentContextProvider,
-                onDirtyChange: { self.hasDirtyEditor = $0 }
+                onDirtyChange: { self.hasDirtyEditor = $0 },
+                navigationPath: $path
             )
             .accessibilityIdentifier("library.meals")
         }

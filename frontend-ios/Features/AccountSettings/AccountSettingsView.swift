@@ -52,26 +52,13 @@ public struct AccountSettingsView: View {
     }
 
     public var body: some View {
-        NavigationStack {
+        Group {
             list
                 .navigationTitle(String(localized: "apiKeys.title"))
 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
 #endif
                 .toolbar {
-                    ToolbarItem(placement: backPlacement) {
-                        Button {
-                            close()
-                        } label: {
-                            Label(
-                                String(localized: "library.common.back"),
-                                systemImage: "chevron.left"
-                            )
-                        }
-                        .disabled(viewModel.isBusy)
-                        .accessibilityIdentifier("settings.apiKeys.close")
-                    }
-
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             viewModel.presentCreateForm()
@@ -127,6 +114,7 @@ public struct AccountSettingsView: View {
                 }
                 .interactiveDismissDisabled(viewModel.isCreatePresented || viewModel.isRevoking)
         }
+        .navigationBarBackButtonHidden(viewModel.isBusy)
         .accessibilityIdentifier("settings.apiKeys")
 #if os(macOS)
         .frame(minWidth: 440, idealWidth: 540, maxWidth: 680)
@@ -399,10 +387,7 @@ public struct AccountSettingsView: View {
                             isNameFocused = false
                             viewModel.cancelCreateForm()
                         } label: {
-                            Label(
-                                String(localized: "library.common.back"),
-                                systemImage: "chevron.left"
-                            )
+                            Text(String(localized: "diary.common.cancel"))
                         }
                         .disabled(viewModel.createState == .submitting)
                         .accessibilityIdentifier("settings.apiKeys.create.cancel")
@@ -721,10 +706,7 @@ public struct AccountSettingsView: View {
                 Button {
                     viewModel.finishSecretReveal()
                 } label: {
-                    Label(
-                        String(localized: "library.common.back"),
-                        systemImage: "chevron.left"
-                    )
+                    Text(String(localized: "apiKeys.close"))
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .buttonStyle(.borderedProminent)

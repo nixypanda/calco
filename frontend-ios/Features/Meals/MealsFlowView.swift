@@ -8,6 +8,7 @@ private enum MealRoute: Hashable {
     /// The diary target is captured when the detail flow opens and kept for the
     /// route's whole life; a later diary change cannot retarget an open draft.
     case detail(mealID: String, context: LibraryLogContext)
+    case editor(MealEditorTarget)
 }
 
 private enum MealEditorTarget: Identifiable, Hashable {
@@ -31,11 +32,21 @@ private enum MealEditorTarget: Identifiable, Hashable {
 
 public struct MealsFlowView: View {
     @StateObject private var listViewModel: MealsListViewModel
-    @State private var path: [MealRoute]
-    @State private var editorTarget: MealEditorTarget?
-    @State private var editingTarget: MealEditorTarget?
+    @State private var localPath: NavigationPath
+    @Binding private var sharedPath: NavigationPath
+    private let usesSharedPath: Bool
+    // The shared path includes the hub; standalone flows start at depth zero.
+    @State private var rootPathCount: Int
     @State private var detailRefreshToken = 0
     @State private var hasDirtyEditor = false
+
+    private var path: NavigationPath {
+        get { usesSharedPath ? sharedPath : localPath }
+        nonmutating set {
+            if usesSharedPath { sharedPath = newValue }
+            else { localPath = newValue }
+        }
+    }
 
     private let date: LocalDiaryDate
     private let mealSlot: MealSlot?
@@ -46,8 +57,8 @@ public struct MealsFlowView: View {
     private let onSessionExpired: () -> Void
     private let onLogged: ((LocalDiaryDate, MealSlot?) -> Void)?
     private let onClose: (() -> Void)?
-    /// One native Back-to-hub control rendered on the list screen of this
-    /// view's own NavigationStack (nil when embedded without a hub owner).
+    /// Legacy standalone back action. Shared-path destinations use the system
+    /// Back button instead, never an additional toolbar action.
     private let onBack: (() -> Void)?
     private let backDisabled: Bool
     private let currentContextProvider: () -> LibraryLogContext
@@ -67,9 +78,13 @@ public struct MealsFlowView: View {
         initialMealID: String? = nil,
         initialPortion: NutritionQuantity? = nil,
         currentContextProvider: (() -> LibraryLogContext)? = nil,
-        onDirtyChange: ((Bool) -> Void)? = nil
+        onDirtyChange: ((Bool) -> Void)? = nil,
+        navigationPath: Binding<NavigationPath>? = nil
     ) {
         self.date = date
+        _sharedPath = navigationPath ?? .constant(NavigationPath())
+        usesSharedPath = navigationPath != nil
+        _rootPathCount = State(initialValue: navigationPath == nil ? 0 : 1)
         self.mealSlot = mealSlot
         self.initialPortion = initialPortion
         self.accountID = accountID
@@ -96,11 +111,9 @@ public struct MealsFlowView: View {
             )
         )
         let initialContext = resolvedProvider()
-        _path = State(
-            initialValue: initialMealID.map {
-                [.detail(mealID: $0, context: initialContext)]
-            } ?? []
-        )
+        _localPath = State(initialValue: NavigationPath(initialMealID.map {
+            [MealRoute.detail(mealID: $0, context: initialContext)]
+        } ?? []))
     }
 
     private func captureContext() -> LibraryLogContext {
@@ -125,21 +138,32 @@ public struct MealsFlowView: View {
     }
 
     public var body: some View {
-        NavigationStack(path: $path) {
+        Group {
+            if usesSharedPath {
+                navigationContent
+            } else {
+                NavigationStack(path: $localPath) {
+                    navigationContent
+                }
+            }
+        }
+    }
+
+    private var navigationContent: some View {
             MealsListView(
                 viewModel: listViewModel,
                 onOpenMeal: { meal in
-                    path.append(.detail(mealID: meal.id, context: captureContext()))
+                    path.append(MealRoute.detail(mealID: meal.id, context: captureContext()))
                 },
                 onCreateMeal: {
-                    editorTarget = .create
-                }
+                    path.append(MealRoute.editor(.create))
+                },
+                showsAddButton: path.count == rootPathCount
             )
-            // The Back control belongs to this NavigationStack's list root.
-            // `path.isEmpty` matches LibraryView: once a detail is pushed the
-            // system back chevron is the only Back, so no duplicate remains.
+            // An explicit Back is only for legacy standalone hosting. The hub
+            // and all pushed detail screens keep the system back chevron.
             .toolbar {
-                if let onBack, path.isEmpty {
+                if let onBack, path.count == rootPathCount, !usesSharedPath {
                     ToolbarItem(placement: backPlacement) {
                         Button {
                             onBack()
@@ -168,26 +192,17 @@ public struct MealsFlowView: View {
                         onLogged: onLogged,
                         refreshToken: detailRefreshToken,
                         onEdit: { meal in
-                            editingTarget = .edit(id: meal.id, name: meal.name)
+                            path.append(MealRoute.editor(.edit(id: meal.id, name: meal.name)))
                         },
                         onDeleted: {
-                            if !path.isEmpty { path.removeLast() }
+                            if path.count > rootPathCount { path.removeLast() }
                             Task { await listViewModel.refresh() }
                         }
                     )
-
+                case .editor(let target):
+                    editorScreen(for: target)
                 }
             }
-            .navigationDestination(item: $editingTarget) { target in
-                editorScreen(for: target)
-                    .navigationBarBackButtonHidden()
-            }
-        }
-        .sheet(item: $editorTarget) { target in
-            NavigationStack {
-                editorScreen(for: target)
-            }
-        }
     }
 
     private func editorScreen(for target: MealEditorTarget) -> some View {
@@ -197,26 +212,23 @@ public struct MealsFlowView: View {
             service: service,
             onSessionExpired: onSessionExpired,
             onCancel: {
-                editorTarget = nil
-                editingTarget = nil
+                if path.count > rootPathCount { path.removeLast() }
                 onDirtyChange?(false)
             },
             onSaved: { meal in
                 let wasEditing = target.mode.mealID != nil
                 onDirtyChange?(false)
-                editorTarget = nil
-                editingTarget = nil
+                var nextPath = path
+                if nextPath.count > rootPathCount { nextPath.removeLast() }
                 Task { await listViewModel.refresh() }
                 if wasEditing {
                     detailRefreshToken += 1
-                } else if !path.contains(where: { route in
-                    if case .detail(let id, _) = route { return id == meal.id }
-                    return false
-                }) {
-                    path.append(
-                        .detail(mealID: meal.id, context: captureContext())
+                } else {
+                    nextPath.append(
+                        MealRoute.detail(mealID: meal.id, context: captureContext())
                     )
                 }
+                path = nextPath
             },
             onDirtyChange: { dirty in
                 onDirtyChange?(dirty)

@@ -107,6 +107,165 @@ final class NativeCompletionUITests: XCTestCase {
 
     // MARK: - iPhone 13 mini toolbar
 
+    func testPagePlanLogEditorKeepsDeleteOutOfTheSaveBar() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn())
+        try assertIPhone13Mini()
+        XCTAssertTrue(tapToolbarAction(Identifier.previousDay))
+        XCTAssertTrue(app.descendants(matching: .any)[Identifier.historicalLog]
+            .waitForExistence(timeout: Timeout.long))
+        let row = try XCTUnwrap(scrollToElement(Identifier.historicalLog,
+                                              marker: Identifier.diarySummary, direction: .up))
+        row.tap()
+        let save = app.buttons[Identifier.editorSave]
+        XCTAssertTrue(save.waitForExistence(timeout: Timeout.normal))
+        XCTAssertFalse(save.isEnabled)
+        XCTAssertGreaterThan(save.frame.width, app.frame.width - 60)
+        let delete = try XCTUnwrap(scrollToElement(Identifier.editorDelete,
+                                                 marker: Identifier.editorAmount, direction: .up))
+        XCTAssertTrue(delete.isEnabled)
+        let bar = app.descendants(matching: .any)["diary.editor.actions"]
+        XCTAssertFalse(bar.buttons[Identifier.editorDelete].exists)
+        XCTAssertLessThan(delete.frame.maxY, save.frame.minY)
+        XCTAssertEqual(app.sheets.count, 0)
+    }
+
+    func testPagePlanFoodAndMealEditorsUseBackAndSave() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn())
+        try assertIPhone13Mini()
+        XCTAssertTrue(tapFirstReachable(["app.tab.library"], labels: ["Library"]))
+        XCTAssertTrue(selectLibrarySection("Foods", identifier: "library.foods"))
+        app.buttons["library.add"].tap()
+        app.buttons["library.add.custom"].tap()
+        let foodName = app.descendants(matching: .any)["library.editor.name"]
+        XCTAssertTrue(foodName.waitForExistence(timeout: Timeout.normal))
+        XCTAssertTrue(app.buttons["library.editor.save"].exists)
+        XCTAssertEqual(app.sheets.count, 0, "The custom-food editor must be a page.")
+        XCTAssertFalse(app.buttons["diary.common.cancel"].exists)
+        replaceText(in: foodName, with: "Page QA Food")
+        dismissLibraryKeyboard("library.editor.keyboard.done")
+        app.buttons["library.editor.back"].tap()
+        let discardFood = app.alerts.firstMatch.buttons
+            .matching(NSPredicate(format: "label == %@", "Discard changes")).firstMatch
+        XCTAssertTrue(discardFood.waitForExistence(timeout: Timeout.normal))
+        discardFood.tap()
+        XCTAssertTrue(app.buttons["library.add"].waitForExistence(timeout: Timeout.normal))
+        app.navigationBars.buttons["Library"].tap()
+
+        XCTAssertTrue(selectLibrarySection("Meals", identifier: "library.meals"))
+        app.buttons["meals.list.add"].tap()
+        let mealName = app.descendants(matching: .any)["meals.editor.name"]
+        XCTAssertTrue(mealName.waitForExistence(timeout: Timeout.normal))
+        XCTAssertEqual(app.sheets.count, 0, "The meal editor must be a page.")
+        XCTAssertFalse(app.buttons["meals.list.add"].exists)
+        replaceText(in: mealName, with: "Page QA Meal")
+        if app.keyboards.firstMatch.exists { app.swipeUp() }
+        let choose = try XCTUnwrap(scrollToElement("meals.editor.component.1.choose",
+                                                 marker: "meals.editor.name", direction: .up))
+        choose.tap()
+        let search = app.textFields["meals.editor.component.1.search"]
+        XCTAssertTrue(search.waitForExistence(timeout: Timeout.normal))
+        XCTAssertFalse(app.buttons["meals.editor.save"].exists,
+                       "Save belongs to the editor, not the ingredient picker.")
+        search.tap()
+        search.typeText("apple")
+        let result = app.buttons["meals.editor.component.1.result.qa-apple"]
+        XCTAssertTrue(result.waitForExistence(timeout: Timeout.long))
+        result.tap()
+        XCTAssertTrue(app.buttons["meals.editor.save"].waitForExistence(timeout: Timeout.normal))
+        app.buttons["meals.editor.save"].tap()
+        XCTAssertTrue(app.buttons["meals.detail.edit"].waitForExistence(timeout: Timeout.long))
+        XCTAssertEqual(app.buttons.matching(identifier: "meals.detail.edit").count, 1)
+        app.buttons["meals.detail.edit"].tap()
+        XCTAssertTrue(app.buttons["meals.editor.save"].waitForExistence(timeout: Timeout.normal))
+        XCTAssertEqual(app.sheets.count, 0)
+    }
+
+    func testPagePlanSettingsPushesKeysAndCreationRemainsASheet() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn())
+        try assertIPhone13Mini()
+        XCTAssertTrue(tapFirstReachable(["app.tab.settings"], labels: ["Settings"]))
+        XCTAssertTrue(app.descendants(matching: .any)["settings.goals.calories"]
+            .waitForExistence(timeout: Timeout.normal))
+        XCTAssertFalse(app.buttons["settings.back"].exists)
+        let keys = try XCTUnwrap(scrollToElement("settings.apiKeys.entry",
+                                               marker: "settings.sheet", direction: .up))
+        keys.tap()
+        let add = app.buttons["settings.apiKeys.create"]
+        XCTAssertTrue(add.waitForExistence(timeout: Timeout.normal))
+        XCTAssertEqual(app.sheets.count, 0)
+        XCTAssertNotNil(leftmostNavigationBackButton())
+        XCTAssertFalse(app.buttons["settings.apiKeys.close"].exists)
+        add.tap()
+        let cancel = app.buttons["settings.apiKeys.create.cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: Timeout.normal))
+        XCTAssertEqual(cancel.label, "Cancel")
+        cancel.tap()
+        try XCTUnwrap(leftmostNavigationBackButton()).tap()
+        XCTAssertTrue(app.buttons["settings.apiKeys.entry"].waitForExistence(timeout: Timeout.normal))
+        XCTAssertFalse(app.buttons["settings.back"].exists)
+    }
+
+    func testPagePlanFoodLoggingIsACancellableTaskSheet() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn())
+        try assertIPhone13Mini()
+        let baseline = try mockState()
+        openSearchFromDiary()
+        let field = app.textFields["search.field"]
+        field.tap()
+        field.typeText("apple")
+        let result = app.buttons[Identifier.searchResult]
+        XCTAssertTrue(result.waitForExistence(timeout: Timeout.long))
+        result.tap()
+        let cancel = app.buttons["foodDetail.cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: Timeout.normal))
+        XCTAssertEqual(app.buttons.matching(identifier: "foodDetail.submit").count, 1)
+        cancel.tap()
+        XCTAssertTrue(result.waitForExistence(timeout: Timeout.normal))
+        XCTAssertEqual(field.value as? String, "apple")
+        XCTAssertEqual(try mockState().logPostAttempts, baseline.logPostAttempts)
+        result.tap()
+        let log = app.buttons["foodDetail.submit"]
+        XCTAssertTrue(log.waitForExistence(timeout: Timeout.normal))
+        log.tap()
+        XCTAssertTrue(app.descendants(matching: .any)[Identifier.diarySummary]
+            .waitForExistence(timeout: Timeout.long))
+        XCTAssertFalse(app.buttons["foodDetail.cancel"].exists)
+        assertMockLogCount(baseline.logCount + 1)
+    }
+
+    func testPagePlanNutritionIsAPageAndMealLoggingIsASheet() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn())
+        try assertIPhone13Mini()
+        let nutrition = app.buttons["diary.nutrition"]
+        XCTAssertTrue(nutrition.waitForExistence(timeout: Timeout.normal))
+        nutrition.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["nutrition.details"]
+            .waitForExistence(timeout: Timeout.long))
+        XCTAssertFalse(app.buttons["nutrition.close"].exists)
+        XCTAssertEqual(app.sheets.count, 0)
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.descendants(matching: .any)[Identifier.diarySummary]
+            .waitForExistence(timeout: Timeout.normal))
+        XCTAssertTrue(tapFirstReachable(["app.tab.library"], labels: ["Library"]))
+        XCTAssertTrue(selectLibrarySection("Meals", identifier: "library.meals"))
+        let meal = app.buttons["meals.list.row.qa-meal-1"]
+        XCTAssertTrue(meal.waitForExistence(timeout: Timeout.long))
+        meal.tap()
+        let openLog = app.buttons["meals.detail.openLog"]
+        XCTAssertTrue(openLog.waitForExistence(timeout: Timeout.long))
+        openLog.tap()
+        let cancel = app.buttons["meals.log.cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: Timeout.normal))
+        XCTAssertTrue(app.buttons["meals.detail.log"].exists)
+        cancel.tap()
+        XCTAssertTrue(openLog.waitForExistence(timeout: Timeout.normal))
+    }
+
     func testMiniToolbarActionsStayReachableWhenCollapsed() throws {
         try resetFixture()
         XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
@@ -427,6 +586,23 @@ final class NativeCompletionUITests: XCTestCase {
             app.buttons[Identifier.editorDelete].exists,
             "diary.editor.delete must identify the Delete button."
         )
+        let save = app.buttons[Identifier.editorSave]
+        let delete = app.buttons[Identifier.editorDelete]
+        XCTAssertFalse(save.isEnabled, "An unchanged log must not be saved.")
+        XCTAssertTrue(delete.isEnabled, "An unchanged log can still be deleted.")
+        XCTAssertGreaterThan(
+            save.frame.width,
+            app.frame.width - 60,
+            "Save must be the single full-width bottom action."
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["diary.editor.actions"]
+            .buttons[Identifier.editorDelete].exists, "Delete belongs in the form, not beside Save.")
+        let amount = app.descendants(matching: .any)[Identifier.editorAmount]
+        let originalAmount = try XCTUnwrap(amount.value as? String)
+        replaceText(in: amount, with: originalAmount == "175" ? "200" : "175")
+        XCTAssertTrue(save.isEnabled)
+        replaceText(in: amount, with: originalAmount)
+        XCTAssertFalse(save.isEnabled, "Reverting the change must disable Save again.")
     }
 
     func testMiniAccessibilityDynamicTypeDiaryAndSettingsRemainReachable() throws {
@@ -1000,6 +1176,101 @@ final class NativeCompletionUITests: XCTestCase {
             "The Lunch Log latest control is offscreen or has an empty frame."
         )
         attachScreenshot(named: "iPhone-13-mini-diary-latest-hidden-after-log")
+    }
+
+    func testMiniQuickAddCanLogAgainWithoutDismissingSuccess() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn())
+        try assertIPhone13Mini()
+        let baseline = try mockState()
+        openSearchFromDiary()
+
+        let context = app.descendants(matching: .any)["search.loggingContext"]
+        XCTAssertTrue(context.waitForExistence(timeout: Timeout.normal))
+        XCTAssertTrue(context.label.contains("Logging to"))
+        let chip = app.buttons["search.quickAdd.product:qa-apple.100.g"]
+        XCTAssertTrue(chip.waitForExistence(timeout: Timeout.long))
+        chip.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["search.quickAdd.added"]
+                .waitForExistence(timeout: Timeout.long)
+        )
+        assertMockLogCount(baseline.logCount + 1)
+        XCTAssertTrue(chip.isEnabled)
+        chip.tap()
+        assertMockLogCount(baseline.logCount + 2)
+        XCTAssertEqual(try mockState().logPostAttempts, baseline.logPostAttempts + 2)
+    }
+
+    func testMiniLibraryUsesNativeBackFromBothDestinations() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn())
+        try assertIPhone13Mini()
+        XCTAssertTrue(tapFirstReachable(["app.tab.library"], labels: ["Library"]))
+
+        for (title, identifier, root) in [
+            ("Foods", "library.foods", "library.add"),
+            ("Meals", "library.meals", "meals.list.add"),
+        ] {
+            XCTAssertTrue(selectLibrarySection(title, identifier: identifier))
+            let back = app.navigationBars.buttons["Library"]
+            XCTAssertTrue(back.waitForExistence(timeout: Timeout.normal))
+            XCTAssertEqual(app.buttons.matching(identifier: "library.back").count, 0,
+                           "A custom Back must not duplicate the native Back.")
+            XCTAssertTrue(app.buttons[root].waitForExistence(timeout: Timeout.normal))
+            back.tap()
+            XCTAssertTrue(app.buttons["library.foods"].waitForExistence(timeout: Timeout.normal))
+            XCTAssertTrue(app.buttons["library.meals"].exists)
+        }
+    }
+
+    func testMiniAccessibleNutritionUsesStackedFiguresAndMacros() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(dynamicType: QA.dynamicTypeAccessibility))
+        try assertIPhone13Mini()
+        let loggedCaption = app.staticTexts["kcal logged"]
+        let remaining = app.descendants(matching: .any)["diary.summary.remaining"]
+        XCTAssertTrue(loggedCaption.waitForExistence(timeout: Timeout.normal))
+        XCTAssertTrue(remaining.exists)
+        XCTAssertGreaterThanOrEqual(remaining.frame.minY, loggedCaption.frame.maxY,
+                                    "Accessibility figures must stack instead of shrinking side by side.")
+
+        openSearchFromDiary()
+        let field = app.descendants(matching: .any)[Identifier.searchField]
+        field.tap()
+        field.typeText("apple")
+        let result = app.buttons[Identifier.searchResult]
+        XCTAssertTrue(result.waitForExistence(timeout: Timeout.long))
+        result.tap()
+        let energy = app.staticTexts["foodDetail.liveNutrition.energy"]
+        XCTAssertNotNil(scrollToElement("foodDetail.liveNutrition.energy",
+                                       marker: "foodDetail.foodName", direction: .up))
+        XCTAssertGreaterThan(energy.frame.height, 40, "The energy font must scale with Dynamic Type.")
+        let protein = app.staticTexts["Protein"]
+        let carbs = app.staticTexts["Carbohydrates"]
+        let fat = app.staticTexts["Fat"]
+        XCTAssertTrue(protein.exists && carbs.exists && fat.exists)
+        XCTAssertGreaterThan(carbs.frame.minY, protein.frame.minY)
+        XCTAssertGreaterThan(fat.frame.minY, carbs.frame.minY)
+    }
+
+    func testMiniAssistantDraftReviewWorksFromNativeLibraryEntry() throws {
+        try resetFixture(assistantEnabled: true)
+        XCTAssertTrue(try launchSignedIn())
+        try assertIPhone13Mini()
+        let baseline = try mockState()
+        XCTAssertTrue(tapFirstReachable(["app.tab.library"], labels: ["Library"]))
+        XCTAssertTrue(selectLibrarySection("Foods", identifier: "library.foods"))
+        app.buttons["library.add"].tap()
+        let createWithAI = app.buttons["library.createWithAI"]
+        XCTAssertTrue(createWithAI.waitForExistence(timeout: Timeout.normal))
+        createWithAI.tap()
+        sendAssistantPrompt("Draft plain oats", draftTimeout: Timeout.long)
+        XCTAssertTrue(app.buttons["assistant.draft.accept"].exists)
+        XCTAssertEqual(try mockState().customFoodCreateCount, baseline.customFoodCreateCount,
+                       "Generating a draft must not save a food.")
+        XCTAssertEqual(try mockState().logCount, baseline.logCount,
+                       "Generating a draft must not log food.")
     }
 
     func testMiniDiarySummaryNutritionAndContextualSearchRetainTarget() throws {
@@ -2334,6 +2605,19 @@ final class NativeCompletionUITests: XCTestCase {
     /// type is a SegmentedControl whose options are buttons, so query that
     /// type before falling back to a generic labelled button.
     private func selectLibrarySection(_ label: String, identifier: String) -> Bool {
+        // The native hub link and its destination share a feature identifier.
+        // Existence at the hub is not evidence that the destination is open.
+        if app.navigationBars["Library"].exists {
+            let link = app.buttons[identifier]
+            guard link.waitForExistence(timeout: Timeout.normal), link.isHittable else {
+                return false
+            }
+            link.tap()
+            return CalCoE2E.waitUntil(timeout: Timeout.normal) {
+                self.app.buttons["library.add"].exists
+                    || self.app.buttons["meals.list.add"].exists
+            }
+        }
         if app.descendants(matching: .any)[identifier].exists { return true }
         let optionPredicate = NSPredicate(format: "label ==[c] %@", label)
         let segmented = app.segmentedControls["library.section"]

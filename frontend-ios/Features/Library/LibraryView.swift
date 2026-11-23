@@ -1,12 +1,39 @@
-// Self-contained Library navigation: list, detail, create/edit, one-off log.
+// Library navigation: standalone sheets own their stack; the Library hub shares
+// its path so list, detail, and editors use one continuous native back history.
 
 import SwiftUI
 
 public struct LibraryView: View {
     @StateObject private var viewModel: LibraryViewModel
-    @State private var path: [LibraryRoute] = []
+    @State private var localPath = NavigationPath()
+    @Binding private var sharedPath: NavigationPath
+    private let usesSharedPath: Bool
+    // Capture once: later pushes must not move the list's return destination.
+    @State private var rootPathCount: Int
     @State private var hasDirtyEditor = false
     @State private var initialRouteToken: UUID?
+    @State private var detailRefreshToken = 0
+
+    private var path: NavigationPath {
+        get { usesSharedPath ? sharedPath : localPath }
+        nonmutating set {
+            if usesSharedPath { sharedPath = newValue }
+            else { localPath = newValue }
+        }
+    }
+
+    private var isListRoot: Bool { path.count == rootPathCount }
+
+    private func returnToList() {
+        guard path.count > rootPathCount else { return }
+        path.removeLast(path.count - rootPathCount)
+    }
+
+    private func closeEditorPage() {
+        hasDirtyEditor = false
+        onDirtyChange?(false)
+        if path.count > rootPathCount { path.removeLast() }
+    }
 
     private let service: any LibraryServicing
     private let submissionService: any LibraryLogSubmitting
@@ -18,8 +45,8 @@ public struct LibraryView: View {
     private let onLogged: (LocalDiaryDate, MealSlot?) -> Void
     private let onSessionExpired: () -> Void
     private let onClose: (() -> Void)?
-    /// One native Back-to-hub control rendered on the list screen of this
-    /// view's own NavigationStack (nil when embedded without a hub owner).
+    /// Legacy standalone back action. Shared-path destinations use the system
+    /// Back button instead, never an additional toolbar action.
     private let onBack: (() -> Void)?
     private let backDisabled: Bool
     private let onDirtyChange: ((Bool) -> Void)?
@@ -47,11 +74,17 @@ public struct LibraryView: View {
         onCreateWithAI: (() -> Void)? = nil,
         assistantDraft: AssistantReviewedDraft? = nil,
         initialBarcode: String? = nil,
-        currentContextProvider: (() -> LibraryLogContext)? = nil
+        currentContextProvider: (() -> LibraryLogContext)? = nil,
+        navigationPath: Binding<NavigationPath>? = nil
     ) {
         let resolvedDate = min(initialDate, today)
         let resolvedSlot = initialMealSlot
         self.service = service
+        _sharedPath = navigationPath ?? .constant(NavigationPath())
+        usesSharedPath = navigationPath != nil
+        // Shared flows are one level below the Library hub. Destination views
+        // may be initialized before SwiftUI publishes that first path element.
+        _rootPathCount = State(initialValue: navigationPath == nil ? 0 : 1)
         self.submissionService = submissionService
         self.accountID = accountID
         self.today = today
@@ -98,7 +131,7 @@ public struct LibraryView: View {
                 initialToken = token
             }
         }
-        _path = State(initialValue: initialRoute)
+        _localPath = State(initialValue: NavigationPath(initialRoute))
         _initialRouteToken = State(initialValue: initialToken)
         _viewModel = StateObject(
             wrappedValue: LibraryViewModel(
@@ -126,7 +159,26 @@ public struct LibraryView: View {
     }
 
     public var body: some View {
-        NavigationStack(path: $path) {
+        Group {
+            if usesSharedPath {
+                navigationContent
+            } else {
+                NavigationStack(path: $localPath) {
+                    navigationContent
+                }
+            }
+        }
+        .interactiveDismissDisabled(hasDirtyEditor)
+        .onChange(of: path.count) { _, count in
+            if count == rootPathCount {
+                hasDirtyEditor = false
+                onDirtyChange?(false)
+                Task { await viewModel.refresh() }
+            }
+        }
+    }
+
+    private var navigationContent: some View {
             listView
                 .navigationTitle(Text("My Foods"))
 #if os(iOS)
@@ -135,7 +187,7 @@ public struct LibraryView: View {
                 .toolbar {
                     // Only on the list root: pushed detail/editor screens use
                     // the system back button, so there is never a second Back.
-                    if let onBack, path.isEmpty {
+                    if let onBack, isListRoot, !usesSharedPath {
                         ToolbarItem(placement: backPlacement) {
                             Button {
                                 onBack()
@@ -152,11 +204,11 @@ public struct LibraryView: View {
                     // One native trailing PLUS menu, matching My Meals. Both
                     // entries reuse the existing route/assistant plumbing, so
                     // drafts, AI purpose and dirty-edit guards stay intact.
-                    if path.isEmpty, !hasDirtyEditor {
+                    if isListRoot, !hasDirtyEditor {
                         ToolbarItem(placement: .primaryAction) {
                             Menu {
                                 Button {
-                                    path.append(.create(token: UUID()))
+                                    path.append(LibraryRoute.create(token: UUID()))
                                 } label: {
                                     Label(
                                         String(localized: "library.create.manually"),
@@ -187,14 +239,6 @@ public struct LibraryView: View {
                 .navigationDestination(for: LibraryRoute.self) { route in
                     destination(for: route)
                 }
-        }
-        .interactiveDismissDisabled(hasDirtyEditor)
-        .onChange(of: path) { _, newPath in
-            if newPath.isEmpty {
-                hasDirtyEditor = false
-                Task { await viewModel.refresh() }
-            }
-        }
     }
 
     @ViewBuilder
@@ -252,7 +296,7 @@ public struct LibraryView: View {
                         ForEach(viewModel.filteredFoods) { food in
                             Button {
                                 path.append(
-                                    .detail(foodID: food.id, token: UUID())
+                                    LibraryRoute.detail(foodID: food.id, token: UUID())
                                 )
                             } label: {
                                 HStack(spacing: 8) {
@@ -299,12 +343,13 @@ public struct LibraryView: View {
                 CustomFoodDetailRouteView(
                     foodID: foodID,
                     service: service,
+                    refreshToken: detailRefreshToken,
                     onEdit: {
-                        path.append(.edit(foodID: $0, token: UUID()))
+                        path.append(LibraryRoute.edit(foodID: $0, token: UUID()))
                     },
                     onDeleted: { id in
                         viewModel.removeFood(id: id)
-                        path.removeAll()
+                        returnToList()
                     },
                     onSessionExpired: onSessionExpired
                 )
@@ -315,7 +360,7 @@ public struct LibraryView: View {
                     service: service,
                     accountID: accountID,
                     onSaved: { _ in
-                        path.removeAll()
+                        returnToList()
                     },
                     onSessionExpired: onSessionExpired,
                     assistantDraft: isInitialRoute
@@ -323,6 +368,7 @@ public struct LibraryView: View {
                         ? initialAssistantDraft
                         : nil,
                     initialBarcode: isInitialRoute ? initialBarcode : nil,
+                    onBack: closeEditorPage,
                     onDirtyChange: { hasDirtyEditor = $0; onDirtyChange?($0) }
                 )
             case .edit(let foodID, _):
@@ -331,11 +377,13 @@ public struct LibraryView: View {
                     service: service,
                     accountID: accountID,
                     onSaved: { _ in
-                        path.removeAll()
+                        if path.count > rootPathCount { path.removeLast() }
+                        detailRefreshToken += 1
                     },
                     onSessionExpired: onSessionExpired,
                     assistantDraft: nil,
                     initialBarcode: nil,
+                    onBack: closeEditorPage,
                     onDirtyChange: { hasDirtyEditor = $0; onDirtyChange?($0) }
                 )
             case .adHoc(let token, let context):
@@ -383,6 +431,7 @@ private struct LibraryRouteIdentity: Hashable {
 private struct CustomFoodEditorRouteView: View {
     @StateObject private var viewModel: CustomFoodEditorViewModel
     private let onDirtyChange: (Bool) -> Void
+    private let onBack: () -> Void
 
     init(
         mode: CustomFoodEditorMode,
@@ -392,9 +441,11 @@ private struct CustomFoodEditorRouteView: View {
         onSessionExpired: @escaping () -> Void,
         assistantDraft: AssistantReviewedDraft?,
         initialBarcode: String?,
+        onBack: @escaping () -> Void,
         onDirtyChange: @escaping (Bool) -> Void
     ) {
         self.onDirtyChange = onDirtyChange
+        self.onBack = onBack
         _viewModel = StateObject(
             wrappedValue: CustomFoodEditorViewModel(
                 mode: mode,
@@ -411,6 +462,7 @@ private struct CustomFoodEditorRouteView: View {
     var body: some View {
         DirtyTrackingEditorRoute(
             viewModel: viewModel,
+            onBack: onBack,
             onDirtyChange: onDirtyChange
         )
     }
@@ -507,15 +559,18 @@ private struct CustomFoodDetailRouteView: View {
 
     private let onEdit: (String) -> Void
     private let onDeleted: (String) -> Void
+    private let refreshToken: Int
 
     init(
         foodID: String,
         service: any LibraryServicing,
+        refreshToken: Int = 0,
         onEdit: @escaping (String) -> Void,
         onDeleted: @escaping (String) -> Void,
         onSessionExpired: @escaping () -> Void
     ) {
         self.onEdit = onEdit
+        self.refreshToken = refreshToken
         self.onDeleted = onDeleted
         _viewModel = StateObject(
             wrappedValue: CustomFoodDetailViewModel(
@@ -555,13 +610,22 @@ private struct CustomFoodDetailRouteView: View {
             }
         }
         .navigationTitle(Text(viewModel.food?.name ?? String(localized: "foodDetail.title")))
+        .toolbar {
+            if let food = viewModel.food {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(String(localized: "library.detail.edit")) {
+                        onEdit(food.id)
+                    }
+                    .disabled(viewModel.isDeleting)
+                    .accessibilityIdentifier("library.detail.edit")
+                }
+            }
+        }
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
-        .task {
-            if case .loading = viewModel.state {
-                await viewModel.load()
-            }
+        .task(id: refreshToken) {
+            await viewModel.load()
         }
         .alert(
             String(localized: "library.detail.delete.confirmTitle"),
@@ -653,17 +717,6 @@ private struct CustomFoodDetailRouteView: View {
             }
 
             Section {
-                Button {
-                    onEdit(food.id)
-                } label: {
-                    Label(
-                        String(localized: "library.detail.edit"),
-                        systemImage: "pencil"
-                    )
-                }
-                .disabled(viewModel.isDeleting)
-                .accessibilityIdentifier("library.detail.edit")
-
                 Button(role: .destructive) {
                     viewModel.clearDeleteError()
                     confirmingDelete = true
@@ -695,12 +748,13 @@ private struct CustomFoodDetailRouteView: View {
 
 private struct DirtyTrackingEditorRoute: View {
     @ObservedObject var viewModel: CustomFoodEditorViewModel
+    let onBack: () -> Void
     let onDirtyChange: (Bool) -> Void
 
     var body: some View {
-        CustomFoodEditorView(viewModel: viewModel)
-            .onAppear { onDirtyChange(viewModel.hasUnsavedChanges) }
-            .onChange(of: viewModel.hasUnsavedChanges) { _, dirty in
+        CustomFoodEditorView(viewModel: viewModel, onBack: onBack)
+            .onAppear { onDirtyChange(viewModel.hasUnsavedChanges || viewModel.isBusy) }
+            .onChange(of: viewModel.hasUnsavedChanges || viewModel.isBusy) { _, dirty in
                 onDirtyChange(dirty)
             }
             .onDisappear { onDirtyChange(false) }

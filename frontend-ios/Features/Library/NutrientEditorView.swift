@@ -83,8 +83,10 @@ public struct NutrientEditorView: View {
                         onRemove(row.code)
                     } label: {
                         Image(systemName: "minus.circle")
+                            .frame(minWidth: 44, minHeight: 44)
                     }
                     .buttonStyle(.plain)
+                    .foregroundStyle(.red)
                     .accessibilityLabel(
                         String(
                             format: String(localized: "library.nutrient.remove"),

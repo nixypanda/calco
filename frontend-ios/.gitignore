@@ -1,5 +1,6 @@
 # Xcode build and derived data
 build/
+.build/
 DerivedData/
 
 # Xcode test results

@@ -15,6 +15,15 @@ public struct MealEditorView: View {
     private let onDirtyChange: ((Bool) -> Void)?
     @FocusState private var focusedField: MealEditorField?
     @State private var confirmDiscard = false
+    @State private var selectingIngredient: Int?
+
+    private var backPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
 
     public init(
         viewModel: MealEditorViewModel,
@@ -41,33 +50,46 @@ public struct MealEditorView: View {
             }
         }
         .navigationTitle(viewModel.editorTitle)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    requestClose()
-                } label: {
-                    Text(String(localized: "meals.editor.cancel"))
-                }
-                .disabled(viewModel.isSaving)
-                .accessibilityIdentifier("meals.editor.cancel")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .navigationBarBackButtonHidden(selectingIngredient == nil && (viewModel.hasUnsavedChanges || viewModel.isSaving))
+        .navigationDestination(isPresented: ingredientPickerPresented) {
+            if let rowID = selectingIngredient {
+                ingredientPicker(rowID: rowID)
             }
-            ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    focusedField = nil
-                    Task { await viewModel.save() }
-                } label: {
-                    if viewModel.isSaving {
-                        HStack(spacing: 6) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text(String(localized: "meals.editor.saving"))
-                        }
-                    } else {
-                        Text(String(localized: "meals.editor.save"))
+        }
+        .toolbar {
+            if selectingIngredient == nil, viewModel.hasUnsavedChanges || viewModel.isSaving {
+                ToolbarItem(placement: backPlacement) {
+                    Button {
+                        requestClose()
+                    } label: {
+                        Label(String(localized: "library.common.back"), systemImage: "chevron.left")
                     }
+                    .disabled(viewModel.isSaving)
+                    .accessibilityIdentifier("meals.editor.back")
                 }
-                .disabled(!viewModel.isReady || viewModel.isSaving || viewModel.isSaveBlocked)
-                .accessibilityIdentifier("meals.editor.save")
+            }
+            if selectingIngredient == nil {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        focusedField = nil
+                        Task { await viewModel.save() }
+                    } label: {
+                        if viewModel.isSaving {
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text(String(localized: "meals.editor.saving"))
+                            }
+                        } else {
+                            Text(String(localized: "meals.editor.save"))
+                        }
+                    }
+                    .disabled(!viewModel.isReady || viewModel.isSaving || viewModel.isSaveBlocked)
+                    .accessibilityIdentifier("meals.editor.save")
+                }
             }
         }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges || viewModel.isSaving)
@@ -75,7 +97,9 @@ public struct MealEditorView: View {
         .onChange(of: viewModel.hasUnsavedChanges) { _, dirty in
             onDirtyChange?(dirty)
         }
-        .onDisappear { onDirtyChange?(false) }
+        .onDisappear {
+            if selectingIngredient == nil { onDirtyChange?(false) }
+        }
         .alert(
             String(localized: "meals.editor.discard.title"),
             isPresented: $confirmDiscard
@@ -116,12 +140,6 @@ public struct MealEditorView: View {
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("meals.editor.retry")
 
-                Button {
-                    onCancel()
-                } label: {
-                    Text(String(localized: "meals.editor.cancel"))
-                }
-                .buttonStyle(.bordered)
             }
             .frame(maxWidth: 480)
             .padding()
@@ -247,23 +265,18 @@ public struct MealEditorView: View {
 
     private func componentView(_ row: MealComponentRow) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(String(localized: "meals.editor.searchFood"))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                TextField(
-                    String(localized: "meals.editor.searchFood"),
-                    text: componentQueryBinding(rowID: row.id)
-                )
-                .labelsHidden()
-                .autocorrectionDisabled()
-#if os(iOS)
-                .textInputAutocapitalization(.never)
-#endif
-                .accessibilityLabel(String(localized: "meals.editor.searchFood"))
-                .accessibilityIdentifier("meals.editor.component.\(row.id).search")
+            Button {
+                focusedField = nil
+                selectingIngredient = row.id
+            } label: {
+                HStack {
+                    Text(row.hasSelection ? row.displayName : String(localized: "meals.editor.searchFood"))
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                }
+                .frame(minHeight: 44)
             }
+            .accessibilityIdentifier("meals.editor.component.\(row.id).choose")
 
             if row.isResolvingName {
                 HStack(spacing: 6) {
@@ -287,8 +300,6 @@ public struct MealEditorView: View {
                 .accessibilityIdentifier("meals.editor.component.\(row.id).missing")
             }
 
-            searchResults(for: row)
-
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .bottom, spacing: 8) {
                     componentAmountField(rowID: row.id)
@@ -306,6 +317,7 @@ public struct MealEditorView: View {
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("meals.editor.component.\(row.id)")
     }
 
@@ -346,8 +358,10 @@ public struct MealEditorView: View {
             viewModel.removeComponent(rowID: rowID)
         } label: {
             Image(systemName: "trash")
+                .frame(minWidth: 44, minHeight: 44)
         }
         .buttonStyle(.borderless)
+        .tint(.red)
         .accessibilityLabel(String(localized: "meals.editor.removeComponent"))
         .accessibilityIdentifier("meals.editor.component.\(rowID).remove")
     }
@@ -384,6 +398,7 @@ public struct MealEditorView: View {
                     Button {
                         focusedField = nil
                         viewModel.selectProduct(rowID: row.id, product: product)
+                        selectingIngredient = nil
                     } label: {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -443,6 +458,39 @@ public struct MealEditorView: View {
         } else {
             onCancel()
         }
+    }
+
+    private var ingredientPickerPresented: Binding<Bool> {
+        Binding(get: { selectingIngredient != nil }, set: { if !$0 { selectingIngredient = nil } })
+    }
+
+    private func ingredientPicker(rowID: Int) -> some View {
+        Form {
+            TextField(String(localized: "meals.editor.searchFood"),
+                      text: componentQueryBinding(rowID: rowID))
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .accessibilityIdentifier("meals.editor.component.\(rowID).search")
+            if let row = viewModel.components.first(where: { $0.id == rowID }) {
+                searchResults(for: row)
+            }
+        }
+        .navigationTitle(String(localized: "meals.editor.searchFood"))
+        // A native back-history menu must not jump over the dirty parent editor.
+        .navigationBarBackButtonHidden(viewModel.hasUnsavedChanges)
+        .toolbar {
+            if viewModel.hasUnsavedChanges {
+                ToolbarItem(placement: backPlacement) {
+                    Button { selectingIngredient = nil } label: {
+                        Label(String(localized: "library.common.back"), systemImage: "chevron.left")
+                    }
+                    .accessibilityIdentifier("meals.editor.ingredient.back")
+                }
+            }
+        }
+        .accessibilityIdentifier("meals.editor.ingredientPicker")
     }
 
     private func componentQueryBinding(rowID: Int) -> Binding<String> {

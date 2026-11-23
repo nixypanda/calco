@@ -8,6 +8,7 @@ public struct MealDetailView: View {
     private let onEdit: (Meal) -> Void
     @FocusState private var focusedField: LogFormField?
     @State private var confirmDelete = false
+    @State private var isLoggingPresented = false
 
     public init(
         viewModel: MealDetailViewModel,
@@ -34,7 +35,19 @@ public struct MealDetailView: View {
             }
         }
         .navigationTitle(viewModel.displayName)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
+            if let meal = viewModel.meal {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(String(localized: "meals.detail.edit")) {
+                        onEdit(meal)
+                    }
+                    .disabled(viewModel.isDeleting || viewModel.isLogging)
+                    .accessibilityIdentifier("meals.detail.edit")
+                }
+            }
             if focusedField != nil {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -44,6 +57,25 @@ public struct MealDetailView: View {
                     .accessibilityIdentifier("meals.detail.keyboardDone")
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if viewModel.supportsLogging, viewModel.meal?.isDegraded == false {
+                Button {
+                    viewModel.dismissLogResult()
+                    isLoggingPresented = true
+                } label: {
+                    Text(String(localized: "meals.detail.log"))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.canLog)
+                .accessibilityIdentifier("meals.detail.openLog")
+                .padding()
+                .background(.bar)
+            }
+        }
+        .sheet(isPresented: $isLoggingPresented) {
+            MealLogView(viewModel: viewModel)
         }
         .task {
             await viewModel.loadIfNeeded()
@@ -159,20 +191,6 @@ public struct MealDetailView: View {
             }
 
             Section {
-                Button {
-                    focusedField = nil
-                    if let meal = viewModel.meal {
-                        onEdit(meal)
-                    }
-                } label: {
-                    Label(
-                        String(localized: "meals.detail.edit"),
-                        systemImage: "pencil"
-                    )
-                }
-                .disabled(viewModel.isDeleting)
-                .accessibilityIdentifier("meals.detail.edit")
-
                 Button(role: .destructive) {
                     confirmDelete = true
                 } label: {
@@ -294,6 +312,7 @@ public struct MealDetailView: View {
             }
         }
         .buttonStyle(.bordered)
+        .tint(.red)
         .disabled(viewModel.isDeleting)
         .accessibilityIdentifier("meals.detail.delete")
     }
