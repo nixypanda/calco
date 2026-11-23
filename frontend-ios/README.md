@@ -280,11 +280,11 @@ Historical dates and retained logs remain available.
   `.contentShape(Rectangle())`). It keeps a 44 x 44 accessibility frame. The Mac
   branch is unchanged.
 - **Meals** lists, creates, edits, and deletes meals with product-only
-  components, quantities/units, notes, and total recipe quantity. Meal detail
-  shows server-calculated portion nutrition and logs the portion on the selected
-  date and meal slot. A deleted component produces a degraded list/detail with no
-  false preview or log action; the user can repair the recipe and then delete it
-  with confirmation. Recipe edits do not rewrite existing log snapshots.
+  components, quantities/units, notes, and total recipe quantity. Library meal
+  screens are management-only: neither list quick-add nor detail logging is
+  available. A deleted component produces a degraded list/detail; the user can
+  repair the recipe or delete it with confirmation. Recipe edits do not rewrite
+  existing log snapshots.
 - **Nutrition Details** opens for the selected diary day and shows server
   nutrient totals, units, reference amounts, meaningful progress, coverage
   warnings, expandable guidance, and reference/source context. Unknown values

@@ -138,15 +138,14 @@ public struct LibraryRootView: View {
             )
             .accessibilityIdentifier("library.foods")
         case .meals:
+            // Library manages recipes only. Omitting submission callbacks keeps
+            // both list quick-add and detail logging unavailable.
             MealsFlowView(
                 date: date,
                 mealSlot: mealSlot,
                 accountID: accountID,
                 service: mealsService,
-                onSubmitDrafts: submitDrafts,
                 onSessionExpired: onSessionExpired,
-                onLogged: onLogged,
-                currentContextProvider: currentContextProvider,
                 onDirtyChange: { self.hasDirtyEditor = $0 },
                 navigationPath: $path
             )

@@ -237,7 +237,7 @@ final class NativeCompletionUITests: XCTestCase {
         assertMockLogCount(baseline.logCount + 1)
     }
 
-    func testPagePlanNutritionIsAPageAndMealLoggingIsASheet() throws {
+    func testPagePlanNutritionIsAPageAndLibraryMealsAreManagementOnly() throws {
         try resetFixture()
         XCTAssertTrue(try launchSignedIn())
         try assertIPhone13Mini()
@@ -255,15 +255,14 @@ final class NativeCompletionUITests: XCTestCase {
         XCTAssertTrue(selectLibrarySection("Meals", identifier: "library.meals"))
         let meal = app.buttons["meals.list.row.qa-meal-1"]
         XCTAssertTrue(meal.waitForExistence(timeout: Timeout.long))
+        XCTAssertFalse(app.buttons["meals.list.quickAdd.qa-meal-1"].exists)
         meal.tap()
-        let openLog = app.buttons["meals.detail.openLog"]
-        XCTAssertTrue(openLog.waitForExistence(timeout: Timeout.long))
-        openLog.tap()
-        let cancel = app.buttons["meals.log.cancel"]
-        XCTAssertTrue(cancel.waitForExistence(timeout: Timeout.normal))
-        XCTAssertTrue(app.buttons["meals.detail.log"].exists)
-        cancel.tap()
-        XCTAssertTrue(openLog.waitForExistence(timeout: Timeout.normal))
+        XCTAssertTrue(app.buttons["meals.detail.edit"]
+            .waitForExistence(timeout: Timeout.long))
+        XCTAssertTrue(app.buttons["meals.detail.delete"].exists)
+        XCTAssertFalse(app.buttons["meals.detail.openLog"].exists)
+        XCTAssertFalse(app.buttons["meals.detail.log"].exists)
+        XCTAssertEqual(app.sheets.count, 0)
     }
 
     func testMiniToolbarActionsStayReachableWhenCollapsed() throws {
