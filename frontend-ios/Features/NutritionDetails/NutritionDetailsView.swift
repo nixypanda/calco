@@ -8,6 +8,7 @@ import SwiftUI
 public struct NutritionDetailsView: View {
     @ObservedObject private var viewModel: NutritionDetailsViewModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var unitColumnWidth = 44
 
     public init(viewModel: NutritionDetailsViewModel) {
         _viewModel = ObservedObject(wrappedValue: viewModel)
@@ -135,51 +136,13 @@ public struct NutritionDetailsView: View {
             if overview.isEmpty {
                 emptySectionText(NutritionDetailsCopy.overviewEmpty)
             } else {
-                LazyVGrid(columns: overviewColumns, alignment: .leading, spacing: 8) {
-                    ForEach(overview, id: \.code) { nutrient in
-                        overviewTile(nutrient)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                nutrientTable(overview, overview: true)
             }
         } label: {
             Text(NutritionDetailsCopy.overviewTitle)
                 .font(.headline)
         }
         .accessibilityIdentifier("nutrition.overview")
-    }
-
-    private var overviewColumns: [GridItem] {
-        let minimumWidth: CGFloat = dynamicTypeSize.isAccessibilitySize ? 220 : 130
-        return [GridItem(.adaptive(minimum: minimumWidth), spacing: 8, alignment: .top)]
-    }
-
-    private func overviewTile(_ nutrient: NutritionDetailsNutrient) -> some View {
-        let caption = NutritionDetailsCopy.overviewCaption(for: nutrient.coverage)
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(nutrient.name)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(NutritionDetailsCopy.amountDisplay(nutrient.overviewAmountDisplay))
-                .font(.headline)
-                .monospacedDigit()
-                .fixedSize(horizontal: false, vertical: true)
-            Text(caption ?? " ")
-                .font(.caption2)
-                .foregroundStyle(caption == nil ? Color.clear : Color.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityHidden(caption == nil)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(
-            Color.secondary.opacity(0.07),
-            in: RoundedRectangle(cornerRadius: 10)
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(overviewAccessibilityLabel(nutrient, caption: caption))
-        .accessibilityIdentifier("nutrition.overview.\(nutrient.code)")
     }
 
     private func overviewAccessibilityLabel(
@@ -202,12 +165,7 @@ public struct NutritionDetailsView: View {
             if nutrients.isEmpty {
                 emptySectionText(NutritionDetailsCopy.sectionEmpty)
             } else {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(nutrients, id: \.code) { nutrient in
-                        nutrientRow(nutrient)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                nutrientTable(nutrients)
             }
         } label: {
             Text(NutritionDetailsCopy.sectionTitle(section))
@@ -224,6 +182,74 @@ public struct NutritionDetailsView: View {
     }
 
     // MARK: - Nutrient row
+
+    /// A shared Grid measures the number and unit columns across every row,
+    /// rather than aligning the trailing edge of combined "amount unit" labels.
+    private func nutrientTable(
+        _ nutrients: [NutritionDetailsNutrient],
+        overview: Bool = false
+    ) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+            ForEach(nutrients, id: \.code) { nutrient in
+                let display = overview ? nutrient.overviewAmountDisplay : nutrient.amountDisplay
+                GridRow(alignment: .firstTextBaseline) {
+                    nutrientName(nutrient)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(NutritionDetailsCopy.amountDisplay(display, includeUnit: false))
+                        .monospacedDigit()
+                        .multilineTextAlignment(.trailing)
+                        .gridColumnAlignment(.trailing)
+                    Text(nutrient.unit)
+                        .foregroundStyle(.secondary)
+                        .frame(width: unitColumnWidth, alignment: .leading)
+                        .gridColumnAlignment(.leading)
+                }
+                .font(.body)
+                .padding(.top, 4)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    overview
+                        ? overviewAccessibilityLabel(
+                            nutrient,
+                            caption: NutritionDetailsCopy.overviewCaption(for: nutrient.coverage)
+                        )
+                        : "\(nutrient.name), "
+                            + NutritionDetailsCopy.accessibilityAmountDisplay(display)
+                )
+                .accessibilityIdentifier(
+                    overview
+                        ? "nutrition.overview.\(nutrient.code)"
+                        : "nutrition.amount.\(nutrient.code)"
+                )
+
+                if overview {
+                    if let caption = NutritionDetailsCopy.overviewCaption(for: nutrient.coverage) {
+                        GridRow {
+                            Text(caption)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .gridCellColumns(3)
+                        }
+                    }
+                } else {
+                    GridRow {
+                        nutrientRow(nutrient)
+                            .gridCellColumns(3)
+                            .gridCellUnsizedAxes(.horizontal)
+                    }
+                }
+
+                if nutrient.code != nutrients.last?.code {
+                    GridRow {
+                        Divider()
+                            .gridCellColumns(3)
+                            .gridCellUnsizedAxes(.horizontal)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     private func nutrientRow(_ nutrient: NutritionDetailsNutrient) -> some View {
         DisclosureGroup(
@@ -251,25 +277,6 @@ public struct NutritionDetailsView: View {
 
     private func nutrientSummary(_ nutrient: NutritionDetailsNutrient) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 2) {
-                    nutrientName(nutrient)
-                    nutrientAmount(nutrient)
-                }
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        nutrientName(nutrient)
-                        Spacer(minLength: 8)
-                        nutrientAmount(nutrient)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        nutrientName(nutrient)
-                        nutrientAmount(nutrient)
-                    }
-                }
-            }
-
             if let percent = nutrient.progressPercent {
                 progressView(nutrient, percent: percent)
             }
@@ -283,17 +290,6 @@ public struct NutritionDetailsView: View {
         Text(nutrient.name)
             .font(.body.weight(.semibold))
             .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func nutrientAmount(_ nutrient: NutritionDetailsNutrient) -> some View {
-        Text(NutritionDetailsCopy.amountDisplay(nutrient.amountDisplay))
-            .font(.body)
-            .monospacedDigit()
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityLabel(
-                NutritionDetailsCopy.accessibilityAmountDisplay(nutrient.amountDisplay)
-            )
     }
 
     private func progressView(

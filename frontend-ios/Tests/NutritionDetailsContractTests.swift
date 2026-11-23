@@ -204,14 +204,14 @@ final class NutritionDetailsContractTests: XCTestCase {
 
     // MARK: - Display math
 
-    func testDecimalFormattingRoundsToOnePlaceAndTrimsZeros() {
+    func testDecimalFormattingAlwaysShowsTwoPlaces() {
         let format = NutritionDetailsFormat.self
-        XCTAssertEqual(format.decimal(0), "0")
-        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("184.2")), "184.2")
-        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("420")), "420")
-        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("28.04")), "28")
-        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("1.25")), "1.3")
-        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("1000.55")), "1000.6")
+        XCTAssertEqual(format.decimal(0), "0.00")
+        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("184.2")), "184.20")
+        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("420")), "420.00")
+        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("28.04")), "28.04")
+        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("1.255")), "1.26")
+        XCTAssertEqual(format.decimal(NutritionDetailsTestFixtures.decimal("1000.555")), "1000.56")
     }
 
     func testAmountFormattingKeepsUnitsAndOmitsBlankUnits() {
@@ -220,21 +220,21 @@ final class NutritionDetailsContractTests: XCTestCase {
                 NutritionDetailsTestFixtures.decimal("0"),
                 unit: "g"
             ),
-            "0 g"
+            "0.00 g"
         )
         XCTAssertEqual(
             NutritionDetailsFormat.amount(
                 NutritionDetailsTestFixtures.decimal("18"),
                 unit: "mg"
             ),
-            "18 mg"
+            "18.00 mg"
         )
         XCTAssertEqual(
             NutritionDetailsFormat.amount(
                 NutritionDetailsTestFixtures.decimal("18"),
                 unit: "  "
             ),
-            "18"
+            "18.00"
         )
     }
 

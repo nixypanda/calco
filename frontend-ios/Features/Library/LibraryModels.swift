@@ -159,7 +159,7 @@ public enum LibraryLogIntentFormat {
     ) -> String {
         String(
             format: String(localized: "library.log.intent"),
-            amount,
+            DisplayNumberFormat.decimal(amount),
             unit,
             date.formatted,
             slotLabel(mealSlot)

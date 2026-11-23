@@ -495,7 +495,7 @@ private struct LibraryFoodRow: View {
     }
 
     private func formatted(_ value: Double) -> String {
-        String(format: "%.1f", value)
+        DisplayNumberFormat.decimal(value)
     }
 }
 
@@ -599,15 +599,15 @@ private struct CustomFoodDetailRouteView: View {
             }
 
             Section {
-                ForEach(food.nutrients) { nutrient in
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(nutrient.code)
-                            .font(.subheadline)
-                        Spacer(minLength: 8)
-                        Text("\(nutrient.amountPer100g) \(nutrient.unit)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                NutritionTable(rows: food.nutrients.map { nutrient in
+                    NutritionTableRow(
+                        id: nutrient.code,
+                        name: logNutritionLabel(for: nutrient.code),
+                        amount: nutrient.amountPer100g,
+                        unit: nutrient.unit
+                    )
+                })
+                .font(.subheadline)
             } header: {
                 Text(String(localized: "library.detail.nutrients"))
             }
@@ -617,7 +617,7 @@ private struct CustomFoodDetailRouteView: View {
                     HStack {
                         Text(String(localized: "library.detail.defaultPortion"))
                         Spacer(minLength: 8)
-                        Text("\(amount) \(unit)")
+                        Text("\(DisplayNumberFormat.decimal(amount)) \(unit)")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -632,7 +632,7 @@ private struct CustomFoodDetailRouteView: View {
                             Text(
                                 String(
                                     format: String(localized: "library.detail.gramsPerServing"),
-                                    serving.gramsPerUnit
+                                    DisplayNumberFormat.decimal(serving.gramsPerUnit)
                                 )
                             )
                             .foregroundStyle(.secondary)

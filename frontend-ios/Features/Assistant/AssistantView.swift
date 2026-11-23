@@ -249,22 +249,22 @@ public struct AssistantView: View {
                     if let quantity = draft.defaultQuantity, let unit = draft.defaultUnit {
                         labeledValue(
                             String(localized: "assistant.draft.defaultPortion"),
-                            "\(quantity) \(unit)"
+                            "\(DisplayNumberFormat.decimal(quantity)) \(unit)"
                         )
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(String(localized: "assistant.draft.per100g"))
                             .font(.subheadline.weight(.semibold))
-                        ForEach(draft.nutrientsPer100g, id: \.code) { nutrient in
-                            HStack {
-                                Text(nutrientLabel(nutrient.code))
-                                Spacer()
-                                Text(verbatim: nutrientDisplay(nutrient))
-                                    .monospacedDigit()
-                            }
-                            .font(.caption)
-                        }
+                        NutritionTable(rows: draft.nutrientsPer100g.map { nutrient in
+                            NutritionTableRow(
+                                id: nutrient.code,
+                                name: nutrientLabel(nutrient.code),
+                                amount: nutrient.amountPer100g,
+                                unit: nutrientUnit(nutrient)
+                            )
+                        })
+                        .font(.caption)
                     }
 
                     if !draft.servings.isEmpty {
@@ -272,7 +272,7 @@ public struct AssistantView: View {
                             Text(String(localized: "assistant.draft.servings"))
                                 .font(.subheadline.weight(.semibold))
                             ForEach(draft.servings, id: \.unit) { serving in
-                                Text(verbatim: "1 \(serving.unit) = \(serving.gramsPerUnit) g")
+                                Text(verbatim: "1 \(serving.unit) = \(DisplayNumberFormat.decimal(serving.gramsPerUnit)) g")
                                     .font(.caption)
                             }
                         }
@@ -281,7 +281,8 @@ public struct AssistantView: View {
                     if let suggested = draft.suggestedLog {
                         labeledValue(
                             String(localized: "assistant.draft.suggestedLog"),
-                            "\(suggested.amount) \(suggested.unit) (\(suggested.totalWeightGrams) g)"
+                            "\(DisplayNumberFormat.decimal(suggested.amount)) \(suggested.unit) "
+                                + "(\(DisplayNumberFormat.decimal(suggested.totalWeightGrams)) g)"
                         )
                     }
 
@@ -433,17 +434,17 @@ public struct AssistantView: View {
         }
     }
 
-    private func nutrientDisplay(_ nutrient: AssistantDraftNutrient) -> String {
+    private func nutrientUnit(_ nutrient: AssistantDraftNutrient) -> String {
         let unit: String
         switch nutrient.code {
         case NutrientCodes.energyKcal:
-            unit = " kcal"
+            unit = "kcal"
         case NutrientCodes.proteinG, NutrientCodes.carbsG,
              NutrientCodes.fatG, NutrientCodes.fiberG:
-            unit = " g"
+            unit = "g"
         default:
             unit = ""
         }
-        return "\(nutrient.amountPer100g)\(unit)"
+        return unit
     }
 }

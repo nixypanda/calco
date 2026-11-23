@@ -354,22 +354,9 @@ public struct NutritionDetailsReport: Decodable, Equatable, Sendable {
 }
 
 public enum NutritionDetailsFormat {
-    /// One decimal place, trailing zeros removed, using a dot decimal
-    /// separator. This is the web's `Number.toFixedTrimmed 1` behavior.
+    /// Nutrition tables always show exactly two decimal places.
     public static func decimal(_ value: Decimal) -> String {
-        var source = value
-        var rounded = Decimal()
-        NSDecimalRound(&rounded, &source, 1, .plain)
-        var text = NSDecimalNumber(decimal: rounded).stringValue
-        if text.contains(".") {
-            while text.hasSuffix("0") {
-                text.removeLast()
-            }
-            if text.hasSuffix(".") {
-                text.removeLast()
-            }
-        }
-        return text == "-0" ? "0" : text
+        DisplayNumberFormat.decimal(value, fixed: true)
     }
 
     public static func amount(_ value: Decimal, unit: String) -> String {

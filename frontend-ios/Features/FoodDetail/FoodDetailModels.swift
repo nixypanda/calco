@@ -279,11 +279,7 @@ public func makeLogNutritionSummary(from nutrients: [NutrientAmount]?) -> LogNut
 }
 
 private func formatNutritionAmount(_ value: Double) -> String {
-    guard value.isFinite else { return "0" }
-    if value.rounded(.toNearestOrAwayFromZero) == value {
-        return String(Int(value))
-    }
-    return value.formatted(.number.precision(.fractionLength(0...1)))
+    DisplayNumberFormat.decimal(value)
 }
 
 /// Stable, native labels for the nutrients shown on the Log Food screen.

@@ -192,7 +192,7 @@ final class NativeRedesignTests: XCTestCase {
             NutrientAmount(code: "ENERGY_KCAL", amount: "146.42", unit: "kcal"),
         ])
 
-        XCTAssertEqual(summary?.energy, "146.4")
+        XCTAssertEqual(summary?.energy, "146.42")
         XCTAssertNil(summary?.protein)
     }
 

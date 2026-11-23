@@ -160,7 +160,7 @@ public struct BarcodeLookupView: View {
             default:
                 label = String(localized: "barcode.nutrient.fat")
             }
-            return "\(label) \(amount) \(unit)"
+            return "\(label) \(DisplayNumberFormat.decimal(amount)) \(unit)"
         }
         return Text(verbatim: values.joined(separator: " · "))
             .font(.caption)

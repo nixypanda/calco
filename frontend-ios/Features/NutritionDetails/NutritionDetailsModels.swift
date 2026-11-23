@@ -246,19 +246,22 @@ enum NutritionDetailsCopy {
         }
     }
 
-    static func amountDisplay(_ display: NutritionDetailsAmountDisplay) -> String {
+    static func amountDisplay(
+        _ display: NutritionDetailsAmountDisplay,
+        includeUnit: Bool = true
+    ) -> String {
         switch display {
         case .unknown:
             return "\u{2014}"
         case .value(let amount, let unit):
-            return NutritionDetailsFormat.amount(amount, unit: unit)
+            return NutritionDetailsFormat.amount(amount, unit: includeUnit ? unit : "")
         case .currentAndReference(let current, let reference, let unit):
             return "\(NutritionDetailsFormat.decimal(current)) / "
-                + NutritionDetailsFormat.amount(reference, unit: unit)
+                + NutritionDetailsFormat.amount(reference, unit: includeUnit ? unit : "")
         case .unknownOfReference(let reference, let unit):
             return String(
                 format: String(localized: "nutrition.unknownOfReference"),
-                NutritionDetailsFormat.amount(reference, unit: unit)
+                NutritionDetailsFormat.amount(reference, unit: includeUnit ? unit : "")
             )
         }
     }
@@ -369,7 +372,7 @@ enum NutritionDetailsCopy {
     static func progressAccessibility(percent: Double) -> String {
         guard percent.isFinite else { return unknown }
         let formatted = (percent / 100).formatted(
-            .percent.precision(.fractionLength(0))
+            .percent.precision(.fractionLength(2))
         )
         return "\(formatted) \(progressOfReference)"
     }

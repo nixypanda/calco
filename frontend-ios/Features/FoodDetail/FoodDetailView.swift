@@ -129,7 +129,7 @@ public struct FoodDetailView: View {
             .foregroundStyle(.orange)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(pending.draft.amount) \(pending.draft.unit)")
+                Text("\(DisplayNumberFormat.decimal(pending.draft.amount)) \(pending.draft.unit)")
                 Text(pending.draft.date.formatted)
                     .foregroundStyle(.secondary)
             }
@@ -384,15 +384,15 @@ public struct FoodDetailView: View {
         if let preview = viewModel.nutritionPreview, !preview.isEmpty {
             Section {
                 DisclosureGroup(String(localized: "foodDetail.nutritionPreview")) {
-                    ForEach(preview, id: \.code) { nutrient in
-                        HStack {
-                            Text(logNutritionLabel(for: nutrient.code))
-                            Spacer(minLength: 8)
-                            Text("\(nutrient.amount) \(nutrient.unit)")
-                                .foregroundStyle(.secondary)
-                        }
-                        .font(.subheadline)
-                    }
+                    NutritionTable(rows: preview.map { nutrient in
+                        NutritionTableRow(
+                            id: nutrient.code,
+                            name: logNutritionLabel(for: nutrient.code),
+                            amount: nutrient.amount,
+                            unit: nutrient.unit
+                        )
+                    })
+                    .font(.subheadline)
                 }
                 .accessibilityIdentifier("foodDetail.nutritionPreview")
             }

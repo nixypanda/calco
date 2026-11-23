@@ -183,7 +183,7 @@ public enum MealNutrientDisplay {
     }
 
     public static func value(_ nutrient: NutrientAmountValue) -> String {
-        "\(nutrient.amount) \(nutrient.unit)"
+        "\(DisplayNumberFormat.decimal(nutrient.amount, fixed: true)) \(nutrient.unit)"
     }
 
     public static func kcal(_ summary: NutritionSummary?) -> String? {
@@ -199,6 +199,6 @@ public enum MealNutrientDisplay {
         let amount = quantity.amount.trimmingCharacters(in: .whitespacesAndNewlines)
         let unit = quantity.unit.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !amount.isEmpty, !unit.isEmpty else { return nil }
-        return "\(amount) \(unit)"
+        return "\(DisplayNumberFormat.decimal(amount)) \(unit)"
     }
 }

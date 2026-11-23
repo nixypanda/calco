@@ -125,7 +125,7 @@ public struct NutritionQuantity: Codable, Equatable, Hashable, Sendable {
     }
 
     public var described: String {
-        "\(amount) \(unit)"
+        "\(DisplayNumberFormat.decimal(amount)) \(unit)"
     }
 }
 
