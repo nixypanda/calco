@@ -6,7 +6,12 @@ import SwiftUI
 
 public struct AssistantView: View {
     @ObservedObject private var viewModel: AssistantViewModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isComposerFocused: Bool
+    @State private var isNearBottom = true
+    @State private var followsNextResponse = false
+    @State private var hasUnreadResponse = false
 
     public init(viewModel: AssistantViewModel) {
         _viewModel = ObservedObject(wrappedValue: viewModel)
@@ -147,14 +152,36 @@ public struct AssistantView: View {
                     .frame(maxWidth: 760, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo("assistant.bottom", anchor: .bottom)
+                .onScrollGeometryChange(for: ScrollGeometry.self) { $0 } action: { old, new in
+                    // Content arriving below the viewport is not a user scroll.
+                    guard old.contentOffset != new.contentOffset
+                            || old.containerSize != new.containerSize else { return }
+                    isNearBottom = new.contentOffset.y + new.containerSize.height
+                        >= new.contentSize.height + new.contentInsets.bottom - 80
+                    if isNearBottom { hasUnreadResponse = false }
+                }
+                .onScrollPhaseChange { _, phase in
+                    if phase == .tracking || phase == .interacting {
+                        followsNextResponse = false
                     }
                 }
+                .onChange(of: viewModel.messages.count) { _, _ in
+                    revealResponse(using: proxy)
+                }
                 .onChange(of: viewModel.draft != nil) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo("assistant.bottom", anchor: .bottom)
+                    revealResponse(using: proxy)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if hasUnreadResponse {
+                        Button {
+                            scrollToBottom(using: proxy)
+                        } label: {
+                            Label(String(localized: "assistant.newResponse"), systemImage: "arrow.down")
+                                .frame(minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding()
+                        .accessibilityIdentifier("assistant.newResponse")
                     }
                 }
             }
@@ -164,11 +191,17 @@ public struct AssistantView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Button(String(localized: "assistant.startOver")) {
-                    viewModel.requestStartOver()
+                Menu {
+                    Button(String(localized: "assistant.startOver"), role: .destructive) {
+                        viewModel.requestStartOver()
+                    }
+                    .disabled(!viewModel.canStartOver || viewModel.isSending)
+                    .accessibilityIdentifier("assistant.startOver")
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
-                .disabled(!viewModel.canStartOver || viewModel.isSending)
-                .accessibilityIdentifier("assistant.startOver")
+                .accessibilityLabel(String(localized: "app.moreActions"))
+                .accessibilityIdentifier("assistant.more")
             }
         }
     }
@@ -305,16 +338,27 @@ public struct AssistantView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    HStack(spacing: 10) {
-                        Button(String(localized: "assistant.draft.askChanges")) {
+                    let actionsLayout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(spacing: 10))
+                        : AnyLayout(HStackLayout(spacing: 10))
+                    actionsLayout {
+                        Button {
                             viewModel.beginChanges()
                             isComposerFocused = true
+                        } label: {
+                            Text(String(localized: "assistant.draft.askChanges"))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("assistant.draft.askChanges")
 
-                        Button(String(localized: "assistant.draft.accept")) {
+                        Button {
                             viewModel.acceptDraft()
+                        } label: {
+                            Text(String(localized: "assistant.draft.accept"))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(viewModel.isDraftAccepted)
@@ -394,6 +438,7 @@ public struct AssistantView: View {
                 .accessibilityLabel(String(localized: "assistant.composer.label"))
 
                 Button(String(localized: "assistant.send")) {
+                    followsNextResponse = true
                     viewModel.send()
                 }
                 .buttonStyle(.borderedProminent)
@@ -407,6 +452,21 @@ public struct AssistantView: View {
     }
 
     // MARK: - Helpers
+
+    private func revealResponse(using proxy: ScrollViewProxy) {
+        if isNearBottom || followsNextResponse {
+            scrollToBottom(using: proxy)
+        } else {
+            hasUnreadResponse = true
+        }
+    }
+
+    private func scrollToBottom(using proxy: ScrollViewProxy) {
+        hasUnreadResponse = false
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+            proxy.scrollTo("assistant.bottom", anchor: .bottom)
+        }
+    }
 
     private func labeledValue(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
