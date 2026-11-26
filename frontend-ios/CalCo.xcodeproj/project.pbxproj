@@ -23,6 +23,18 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXBuildFile section */
+		1A0000000000000000000091 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000093 /* ComposableArchitecture */; };
+		1A0000000000000000000094 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000093 /* ComposableArchitecture */; };
+		1A0000000000000000000095 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000098 /* Dependencies */; };
+		1A0000000000000000000096 /* CasePaths in Frameworks */ = {isa = PBXBuildFile; productRef = 1A000000000000000000009A /* CasePaths */; };
+		1A000000000000000000009B /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000098 /* Dependencies */; };
+		1A000000000000000000009C /* CasePaths in Frameworks */ = {isa = PBXBuildFile; productRef = 1A000000000000000000009A /* CasePaths */; };
+		1A000000000000000000009D /* Clocks in Frameworks */ = {isa = PBXBuildFile; productRef = 1A000000000000000000009F /* Clocks */; };
+		1A00000000000000000000A1 /* PerceptionCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000A3 /* PerceptionCore */; };
+		1A00000000000000000000A2 /* PerceptionCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000A3 /* PerceptionCore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		1A0000000000000000000020 /* CalCo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CalCo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A0000000000000000000021 /* CalCoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CalCoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -95,6 +107,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1A0000000000000000000091 /* ComposableArchitecture in Frameworks */,
+				1A0000000000000000000095 /* Dependencies in Frameworks */,
+				1A0000000000000000000096 /* CasePaths in Frameworks */,
+				1A00000000000000000000A1 /* PerceptionCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,6 +118,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1A0000000000000000000094 /* ComposableArchitecture in Frameworks */,
+				1A000000000000000000009B /* Dependencies in Frameworks */,
+				1A000000000000000000009C /* CasePaths in Frameworks */,
+				1A000000000000000000009D /* Clocks in Frameworks */,
+				1A00000000000000000000A2 /* PerceptionCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -185,6 +206,12 @@
 				1A000000000000000000000D /* Resources */,
 			);
 			name = CalCo;
+			packageProductDependencies = (
+				1A0000000000000000000093 /* ComposableArchitecture */,
+				1A0000000000000000000098 /* Dependencies */,
+				1A000000000000000000009A /* CasePaths */,
+				1A00000000000000000000A3 /* PerceptionCore */,
+			);
 			productName = CalCo;
 			productReference = 1A0000000000000000000020 /* CalCo.app */;
 			productType = "com.apple.product-type.application";
@@ -206,6 +233,13 @@
 				1A0000000000000000000005 /* Tests */,
 			);
 			name = CalCoTests;
+			packageProductDependencies = (
+				1A0000000000000000000093 /* ComposableArchitecture */,
+				1A0000000000000000000098 /* Dependencies */,
+				1A000000000000000000009A /* CasePaths */,
+				1A000000000000000000009F /* Clocks */,
+				1A00000000000000000000A3 /* PerceptionCore */,
+			);
 			productName = CalCoTests;
 			productReference = 1A0000000000000000000021 /* CalCoTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -262,6 +296,13 @@
 				Base,
 			);
 			mainGroup = 1A0000000000000000000002;
+			packageReferences = (
+				1A0000000000000000000092 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */,
+				1A0000000000000000000097 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
+				1A0000000000000000000099 /* XCRemoteSwiftPackageReference "swift-case-paths" */,
+				1A000000000000000000009E /* XCRemoteSwiftPackageReference "swift-clocks" */,
+				1A00000000000000000000A4 /* XCRemoteSwiftPackageReference "swift-perception" */,
+			);
 			productRefGroup = 1A0000000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -610,6 +651,77 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1A0000000000000000000092 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-composable-architecture";
+			requirement = {
+				kind = exactVersion;
+				version = 1.26.2;
+			};
+		};
+		1A0000000000000000000097 /* XCRemoteSwiftPackageReference "swift-dependencies" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-dependencies";
+			requirement = {
+				kind = exactVersion;
+				version = 1.17.2;
+			};
+		};
+		1A0000000000000000000099 /* XCRemoteSwiftPackageReference "swift-case-paths" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-case-paths";
+			requirement = {
+				kind = exactVersion;
+				version = 1.10.0;
+			};
+		};
+		1A000000000000000000009E /* XCRemoteSwiftPackageReference "swift-clocks" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-clocks";
+			requirement = {
+				kind = exactVersion;
+				version = 1.1.1;
+			};
+		};
+		1A00000000000000000000A4 /* XCRemoteSwiftPackageReference "swift-perception" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-perception";
+			requirement = {
+				kind = exactVersion;
+				version = 2.0.12;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1A0000000000000000000093 /* ComposableArchitecture */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A0000000000000000000092 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;
+			productName = ComposableArchitecture;
+		};
+		1A0000000000000000000098 /* Dependencies */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A0000000000000000000097 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
+			productName = Dependencies;
+		};
+		1A000000000000000000009A /* CasePaths */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A0000000000000000000099 /* XCRemoteSwiftPackageReference "swift-case-paths" */;
+			productName = CasePaths;
+		};
+		1A000000000000000000009F /* Clocks */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A000000000000000000009E /* XCRemoteSwiftPackageReference "swift-clocks" */;
+			productName = Clocks;
+		};
+		1A00000000000000000000A3 /* PerceptionCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A00000000000000000000A4 /* XCRemoteSwiftPackageReference "swift-perception" */;
+			productName = PerceptionCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1A0000000000000000000001 /* Project object */;
 }
