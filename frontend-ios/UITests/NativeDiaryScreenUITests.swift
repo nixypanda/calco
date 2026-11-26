@@ -2123,6 +2123,18 @@ final class NativeDiaryScreenUITests: XCTestCase {
         XCTAssertEqual(response.status, 200, "The native QA fixture rejected its reset.")
     }
 
+    private func resetFixtureLatestSlots401Once() throws {
+        var body: [String: Any] = [
+            "today": Self.isoDay(Date()),
+            "log_post": "success",
+            "seed_logs": true,
+            "assistant_enabled": false,
+            "latest_slots_401_once": true,
+        ]
+        let response = try mockRequest(method: "POST", path: "/__qa/reset", json: body)
+        XCTAssertEqual(response.status, 200, "The native QA fixture rejected its reset.")
+    }
+
     private func fixtureState() throws -> FixtureState {
         let response = try mockRequest(method: "GET", path: "/__qa/state")
         XCTAssertEqual(response.status, 200, "The fixture state endpoint is unavailable.")
@@ -2598,5 +2610,366 @@ final class NativeDiaryScreenUITests: XCTestCase {
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    // MARK: - Opt-in latest-slot 401 diagnostics (new case only)
+
+    /// Strict decoder for the opt-in diagnostic fields. Every field is
+    /// required: an older or non-opted-in fixture must fail, never default.
+    private struct LatestSlotsDiagnosticPayload: Decodable {
+        let today: String
+        let logs: [FixtureLog]
+        let logCount: Int
+        let logPostAttempts: Int
+        let logBatchPostCommits: Int
+        let logBatchPostInFlight: Int
+        let goalCalories: Int
+        let latestSlotsReadAttempts: Int
+        let latestSlots401Armed: Bool
+        let latestSlots401Consumed: Int
+
+        enum CodingKeys: String, CodingKey {
+            case today, logs
+            case logCount = "log_count"
+            case logPostAttempts = "log_post_attempts"
+            case logBatchPostCommits = "log_batch_post_commits"
+            case logBatchPostInFlight = "log_batch_post_in_flight"
+            case goalCalories = "goal_calories"
+            case latestSlotsReadAttempts = "latest_slots_read_attempts"
+            case latestSlots401Armed = "latest_slots_401_armed"
+            case latestSlots401Consumed = "latest_slots_401_consumed"
+        }
+    }
+
+    private struct LatestSlotsDiagnostics {
+        /// Full fixture state with EXACTLY the three new diagnostic fields
+        /// removed. Scoped to this new case only; the historical
+        /// `fixtureState().canonical` comparator is untouched.
+        let canonicalWithoutDiagnostics: String
+        let today: String
+        let goalCalories: Int
+        let logCount: Int
+        let logPostAttempts: Int
+        let logBatchPostCommits: Int
+        let logBatchPostInFlight: Int
+        let logs: [FixtureLog]
+        let latestSlotsReadAttempts: Int
+        let latestSlots401Armed: Bool
+        let latestSlots401Consumed: Int
+    }
+
+    /// Required capability is a hard failure: no XCTSkip, no optional-false
+    /// fallback. The capability is advertised statically by the fixture.
+    private func requireLatestSlotsRead401Capability() throws {
+        let response = try mockRequest(method: "GET", path: "/__qa/health")
+        guard response.status == 200,
+              let health = try? JSONDecoder().decode(FixtureHealth.self, from: response.data),
+              health.fixture == QA.fixtureMarker,
+              health.capabilities["latest_slots_read_401"] == true,
+              !health.injectedTransientMessage.isEmpty else {
+            let message = "The QA fixture does not advertise the required "
+                + "latest_slots_read_401 diagnostic capability."
+            XCTFail(message)
+            throw HarnessError(description: message)
+        }
+    }
+
+    private func latestSlotsDiagnostics() throws -> LatestSlotsDiagnostics {
+        let response = try mockRequest(method: "GET", path: "/__qa/state")
+        guard response.status == 200 else {
+            throw HarnessError(description: "The fixture state endpoint was unavailable for diagnostics.")
+        }
+        let payload: LatestSlotsDiagnosticPayload
+        do {
+            payload = try JSONDecoder().decode(
+                LatestSlotsDiagnosticPayload.self, from: response.data
+            )
+        } catch {
+            throw HarnessError(description: "The opt-in latest-slot diagnostics are absent: \(error)")
+        }
+        guard let object = try JSONSerialization.jsonObject(with: response.data)
+                as? [String: Any] else {
+            throw HarnessError(description: "The fixture returned malformed state for diagnostics.")
+        }
+        var domain = object
+        domain.removeValue(forKey: "latest_slots_read_attempts")
+        domain.removeValue(forKey: "latest_slots_401_armed")
+        domain.removeValue(forKey: "latest_slots_401_consumed")
+        guard let data = try? JSONSerialization.data(
+                withJSONObject: domain, options: [.sortedKeys]
+              ),
+              let canonical = String(data: data, encoding: .utf8) else {
+            throw HarnessError(description: "The fixture domain state could not be canonicalized.")
+        }
+        return LatestSlotsDiagnostics(
+            canonicalWithoutDiagnostics: canonical,
+            today: payload.today,
+            goalCalories: payload.goalCalories,
+            logCount: payload.logCount,
+            logPostAttempts: payload.logPostAttempts,
+            logBatchPostCommits: payload.logBatchPostCommits,
+            logBatchPostInFlight: payload.logBatchPostInFlight,
+            logs: payload.logs,
+            latestSlotsReadAttempts: payload.latestSlotsReadAttempts,
+            latestSlots401Armed: payload.latestSlots401Armed,
+            latestSlots401Consumed: payload.latestSlots401Consumed
+        )
+    }
+
+    private func waitForLatestSlotsDiagnostics(
+        timeout: TimeInterval = Timeout.long,
+        condition: @escaping (LatestSlotsDiagnostics) -> Bool
+    ) -> Bool {
+        CalCoE2E.waitUntil(timeout: timeout) {
+            guard let state = try? self.latestSlotsDiagnostics() else { return false }
+            return condition(state)
+        }
+    }
+
+    private static func dateFromISODay(_ text: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: text)
+    }
+
+    /// Default macro mode is Grams with the fixture's exact 150/250/70 targets.
+    private func assertDefaultGramModeAndTargets() throws {
+        let menu = app.descendants(matching: .any)[Identifier.macroMode]
+        guard menu.waitForExistence(timeout: Timeout.normal) else {
+            throw HarnessError(description: "The macro mode menu is missing.")
+        }
+        XCTAssertTrue(
+            menu.label.localizedCaseInsensitiveContains("Grams"),
+            "The default macro mode must be Grams."
+        )
+        for (identifier, target) in [
+            (Identifier.protein, 150),
+            (Identifier.carbs, 250),
+            (Identifier.fat, 70),
+        ] {
+            guard let label = readMacroLabel(identifier) else {
+                throw HarnessError(description: "\(identifier) was not readable.")
+            }
+            XCTAssertFalse(label.contains("%"), "\(identifier) must not show percent in default mode.")
+            XCTAssertTrue(label.contains(" g"), "\(identifier) must show grams in default mode.")
+            XCTAssertTrue(
+                CalCoE2E.waitUntil(timeout: Timeout.normal) {
+                    guard let macro = self.readMacroNumbers(identifier) else { return false }
+                    return macro.current == 0 && macro.target == target
+                },
+                "\(identifier) did not retain the default 0/\(target) g target."
+            )
+        }
+    }
+
+    /// Default goal and all five enabled slots through the real Settings
+    /// surface, dismissed without saving anything.
+    private func assertDefaultGoalAndSlots() throws {
+        XCTAssertTrue(
+            revealDiaryTopControl(Identifier.manageSlots),
+            "Today's Manage Slots control was not reachable."
+        )
+        XCTAssertTrue(tap(Identifier.manageSlots), "Manage Slots is not reachable.")
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.settingsSheet]
+                .waitForExistence(timeout: Timeout.normal),
+            "settings.sheet is missing."
+        )
+        XCTAssertTrue(
+            CalCoE2E.waitUntil(timeout: Timeout.long) {
+                self.settingsRow(Identifier.settingsCalories) != nil
+                    && self.settingsRow(Identifier.settingsBreakfast) != nil
+            },
+            "Settings did not load both the goal and meal-slot sections."
+        )
+        // Bounded-reveal EACH goal immediately before its exact value read;
+        // no offscreen assumption is permitted for any field.
+        for (identifier, expected) in [
+            (Identifier.settingsCalories, "2000"),
+            (Identifier.settingsProtein, "150"),
+            (Identifier.settingsCarbs, "250"),
+            (Identifier.settingsFat, "70"),
+        ] {
+            XCTAssertNotNil(
+                scrollSettingsTo(identifier),
+                "The settings goal field \(identifier) was not bounded-revealed."
+            )
+            XCTAssertEqual(goalFieldValue(identifier), expected,
+                           "\(identifier) did not retain its exact default value.")
+        }
+        for identifier in [
+            Identifier.settingsBreakfast, Identifier.settingsLunch,
+            Identifier.settingsDinner, Identifier.settingsSnack,
+            Identifier.settingsLateNightSnack,
+        ] {
+            XCTAssertEqual(slotToggleIsOn(identifier), true,
+                           "\(identifier) must be enabled by default.")
+        }
+        XCTAssertTrue(tap(Identifier.diaryTab), "The Diary destination is not reachable.")
+        XCTAssertTrue(
+            CalCoE2E.waitUntil(timeout: Timeout.normal) {
+                !self.app.descendants(matching: .any)[Identifier.settingsSheet].exists
+            },
+            "settings.sheet was not dismissed."
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.nativeMarker]
+                .waitForExistence(timeout: Timeout.normal),
+            "The native Diary did not return after Settings."
+        )
+    }
+
+    /// 16. An empty-Today, user-initiated Latest Breakfast read returns 401,
+    /// consumes the armed fault exactly once without retry, then an explicit
+    /// same-account real UI relogin restores the diary. Domain, goal,
+    /// preferences, and the eight historical logs stay unchanged; the only
+    /// delta is the opt-in diagnostic counters.
+    func testNativeDiaryLatestBreakfastRead401ThenRealRelogin() throws {
+        try requireLatestSlotsRead401Capability()
+        try resetFixtureLatestSlots401Once()
+        XCTAssertTrue(try launchSignedIn(), "The QA-gated native diary did not load.")
+
+        let baseline = try latestSlotsDiagnostics()
+        XCTAssertEqual(baseline.latestSlotsReadAttempts, 0,
+                       "No latest read may occur during launch bootstrap.")
+        XCTAssertEqual(baseline.latestSlots401Consumed, 0,
+                       "The 401 must not be consumed before the user tap.")
+        XCTAssertTrue(baseline.latestSlots401Armed,
+                      "The opt-in 401 fault was not armed by the reset.")
+
+        guard let todayDate = Self.dateFromISODay(baseline.today),
+              let historicalDate = Calendar(identifier: .gregorian)
+                .date(byAdding: .day, value: -1, to: todayDate) else {
+            throw HarnessError(description: "The fixture today is not an ISO local date.")
+        }
+        let historicalDay = Self.isoDay(historicalDate)
+        XCTAssertEqual(baseline.today, Self.isoDay(Date()), "The fixture today drifted.")
+        XCTAssertEqual(baseline.goalCalories, 2000, "The fixture goal must stay 2000.")
+        XCTAssertEqual(baseline.logCount, 8, "Unexpected historical log baseline.")
+        XCTAssertEqual(baseline.logPostAttempts, 0, "The fixture already saw a log write.")
+        XCTAssertEqual(baseline.logBatchPostCommits, 0, "The fixture already committed a batch.")
+        XCTAssertEqual(baseline.logBatchPostInFlight, 0, "The fixture already has a parked POST.")
+
+        let expectedLogs: [(String, String, String, String, String)] = [
+            ("hist-log-001", historicalDay, "breakfast", "100", "g"),
+            ("hist-log-002", historicalDay, "breakfast", "100", "g"),
+            ("hist-log-003", historicalDay, "lunch", "100", "g"),
+            ("hist-log-004", historicalDay, "lunch", "100", "g"),
+            ("hist-log-005", historicalDay, "dinner", "100", "g"),
+            ("hist-log-006", historicalDay, "dinner", "100", "g"),
+            ("hist-log-007", historicalDay, "snack", "100", "g"),
+            ("hist-log-008", historicalDay, "late_night_snack", "100", "g"),
+        ]
+        XCTAssertEqual(baseline.logs.count, expectedLogs.count,
+                       "The exact historical log rows were not seeded.")
+        for (index, expected) in expectedLogs.enumerated() {
+            let log = baseline.logs[index]
+            XCTAssertEqual(log.id, expected.0, "Log \(index) has the wrong ID.")
+            XCTAssertEqual(log.date, expected.1, "Log \(index) has the wrong date.")
+            XCTAssertEqual(log.mealSlot, expected.2, "Log \(index) has the wrong meal slot.")
+            XCTAssertEqual(log.amount, expected.3, "Log \(index) has the wrong amount.")
+            XCTAssertEqual(log.unit, expected.4, "Log \(index) has the wrong unit.")
+        }
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.nativeMarker].exists,
+            "The native screen marker is missing; the QA host is not active."
+        )
+        XCTAssertTrue(isTodaySelected(), "Today was not the selected date at baseline.")
+        let baselineSummary = try XCTUnwrap(readCalorieSummary(),
+                                            "The calorie summary was not readable.")
+        XCTAssertEqual(baselineSummary.logged, 0, "Today must start with 0 kcal logged.")
+        XCTAssertEqual(baselineSummary.remaining, 2000, "Today must show 2000 kcal remaining.")
+        XCTAssertEqual(baselineSummary.goal, 2000, "Today must show a 2000 kcal goal.")
+        try assertDefaultGramModeAndTargets()
+        try assertDefaultGoalAndSlots()
+
+        guard let latest = scrollToElement(
+            Identifier.latestBreakfast,
+            marker: Identifier.calories,
+            direction: .up
+        ) else {
+            XCTFail("The Breakfast Log latest control is not reachable.")
+            return
+        }
+        latest.tap()
+
+        XCTAssertTrue(
+            waitForLatestSlotsDiagnostics {
+                $0.latestSlots401Consumed == 1 && $0.latestSlotsReadAttempts == 1
+            },
+            "The latest read 401 was not consumed exactly once."
+        )
+        let after401 = try latestSlotsDiagnostics()
+        XCTAssertEqual(after401.latestSlots401Consumed, 1,
+                       "The 401 must be consumed exactly once.")
+        XCTAssertFalse(after401.latestSlots401Armed, "The 401 arm must be cleared.")
+        XCTAssertEqual(after401.latestSlotsReadAttempts, 1,
+                       "Latest read must not retry or prefetch.")
+        XCTAssertEqual(after401.canonicalWithoutDiagnostics,
+                       baseline.canonicalWithoutDiagnostics,
+                       "The 401 fault mutated fixture domain state.")
+        XCTAssertEqual(after401.logCount, 8, "The 401 fault changed the log count.")
+        XCTAssertEqual(after401.logPostAttempts, 0, "The 401 fault wrote a log.")
+        XCTAssertEqual(after401.logBatchPostCommits, 0, "The 401 fault committed a batch.")
+        XCTAssertEqual(after401.goalCalories, 2000, "The 401 fault changed the goal.")
+
+        XCTAssertTrue(CalCoE2E.waitForLogin(in: app, timeout: Timeout.long),
+                      "The 401 did not return the app to the durable root login.")
+        XCTAssertTrue(app.textFields["auth.login.username"].exists,
+                      "The durable login username field is missing.")
+        XCTAssertFalse(app.descendants(matching: .any)[Identifier.nativeMarker].exists,
+                       "The native diary survived the expired session.")
+
+        // Existing keyboard-aware sequence: prefers auth.login.keyboard.submit
+        // when present, otherwise the durable auth.login.submit button.
+        try signInFixture()
+        XCTAssertTrue(CalCoE2E.waitForLoadedDiary(in: app, timeout: Timeout.long),
+                      "Same-account relogin did not reach the diary.")
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.nativeMarker]
+                .waitForExistence(timeout: Timeout.normal),
+            "The native diary marker is absent after relogin."
+        )
+
+        let afterRelogin = try latestSlotsDiagnostics()
+        XCTAssertEqual(afterRelogin.latestSlotsReadAttempts, 1,
+                       "Relogin bootstrap prefetched another latest read.")
+        XCTAssertEqual(afterRelogin.latestSlots401Consumed, 1,
+                       "Relogin consumed another 401.")
+        XCTAssertFalse(afterRelogin.latestSlots401Armed,
+                       "The consumed 401 was re-armed by relogin.")
+
+        XCTAssertTrue(isTodaySelected(), "Today was not selected after relogin.")
+        XCTAssertTrue(
+            waitForSummary(logged: 0, remaining: 2000, goal: 2000),
+            "Today did not restore to 0 / 2000 / 2000 after relogin."
+        )
+        try assertDefaultGramModeAndTargets()
+        try assertDefaultGoalAndSlots()
+
+        let finalState = try latestSlotsDiagnostics()
+        XCTAssertEqual(finalState.latestSlotsReadAttempts, 1,
+                       "Inspecting Settings after relogin prefetched a latest read.")
+        XCTAssertEqual(finalState.latestSlots401Consumed, 1,
+                       "Inspecting Settings after relogin consumed another 401.")
+        XCTAssertEqual(finalState.canonicalWithoutDiagnostics,
+                       baseline.canonicalWithoutDiagnostics,
+                       "Relogin mutated fixture domain state.")
+        XCTAssertEqual(finalState.logCount, 8, "Historical logs must be retained.")
+        XCTAssertEqual(finalState.logPostAttempts, 0, "No log POST may occur.")
+        XCTAssertEqual(finalState.logBatchPostCommits, 0, "No batch commit may occur.")
+        XCTAssertEqual(finalState.goalCalories, 2000, "The goal must stay 2000.")
+        for (index, expected) in expectedLogs.enumerated() {
+            let log = finalState.logs[index]
+            XCTAssertEqual(log.id, expected.0, "Log \(index) identity changed.")
+            XCTAssertEqual(log.date, expected.1, "Log \(index) date changed.")
+            XCTAssertEqual(log.mealSlot, expected.2, "Log \(index) slot changed.")
+            XCTAssertEqual(log.amount, expected.3, "Log \(index) amount changed.")
+            XCTAssertEqual(log.unit, expected.4, "Log \(index) unit changed.")
+        }
     }
 }

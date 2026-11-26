@@ -428,6 +428,14 @@ class FixtureState:
             self.fail_batch_once = body.get("fail_batch_once") is True
             self.batch_fail_once_armed = self.fail_batch_once
             self.log_post_hold = body.get("log_post_hold") is True
+            # Diagnostics are strictly opt-in. A default reset restores the
+            # historical state shape: /__qa/state exposes no counter fields and
+            # latest-slots reads are never counted, so existing canonical
+            # full-state comparisons stay byte-compatible.
+            self.latest_diagnostics_enabled = body.get("latest_slots_401_once") is True
+            self.latest_slots_401_armed = self.latest_diagnostics_enabled
+            self.latest_slots_read_attempts = 0
+            self.latest_slots_401_consumed = 0
             for gate in getattr(self, "batch_post_gates", {}).values():
                 gate.event.set()
             self.batch_post_gates: dict[str, BatchPostGate] = {}
@@ -491,6 +499,7 @@ class FixtureState:
             "capabilities": {
                 "fail_batch_once": True,
                 "log_post_hold": True,
+                "latest_slots_read_401": True,
             },
             "injected_transient_message": TRANSIENT_FAILURE_MESSAGE,
         }
@@ -636,44 +645,49 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/__qa/state":
             with self.state.lock:
-                self._send(
-                    200,
-                    {
-                        "log_count": len(self.state.logs),
-                        "log_ids": [log["id"] for log in self.state.logs],
-                        "logs": [
-                            {
-                                "id": log["id"],
-                                "date": log["log_date"],
-                                "meal_slot": log.get("meal_slot"),
-                                "amount": log["quantity"]["amount"],
-                                "unit": log["quantity"]["unit"],
-                            }
-                            for log in self.state.logs
-                        ],
-                        "log_post_attempts": self.state.log_post_attempts,
-                        "log_batch_post_commits": self.state.log_batch_post_commits,
-                        "log_batch_post_in_flight": self.state.log_batch_post_in_flight,
-                        "fail_batch_once": self.state.fail_batch_once,
-                        "batch_fail_once_armed": self.state.batch_fail_once_armed,
-                        "log_post_hold": self.state.log_post_hold,
-                        "fixture_epoch": self.state.epoch,
-                        "today": self.state.today,
-                        "api_key_count": len(self.state.api_keys),
-                        "goal_calories": self.state.goal.get("calorie_target"),
-                        "custom_food_count": len(self.state.custom_foods),
-                        "custom_food_create_count": self.state.custom_food_create_count,
-                        "custom_food_update_count": self.state.custom_food_update_count,
-                        "custom_food_delete_count": self.state.custom_food_delete_count,
-                        "assistant_enabled": self.state.assistant_enabled,
-                        "assistant_draft_request_count": self.state.assistant_draft_request_count,
-                        "assistant_last_purpose": self.state.assistant_last_purpose,
-                        "meal_count": len(self.state.meals),
-                        "meal_create_count": self.state.meal_create_count,
-                        "meal_update_count": self.state.meal_update_count,
-                        "meal_delete_count": self.state.meal_delete_count,
-                    },
-                )
+                payload = {
+                    "log_count": len(self.state.logs),
+                    "log_ids": [log["id"] for log in self.state.logs],
+                    "logs": [
+                        {
+                            "id": log["id"],
+                            "date": log["log_date"],
+                            "meal_slot": log.get("meal_slot"),
+                            "amount": log["quantity"]["amount"],
+                            "unit": log["quantity"]["unit"],
+                        }
+                        for log in self.state.logs
+                    ],
+                    "log_post_attempts": self.state.log_post_attempts,
+                    "log_batch_post_commits": self.state.log_batch_post_commits,
+                    "log_batch_post_in_flight": self.state.log_batch_post_in_flight,
+                    "fail_batch_once": self.state.fail_batch_once,
+                    "batch_fail_once_armed": self.state.batch_fail_once_armed,
+                    "log_post_hold": self.state.log_post_hold,
+                    "fixture_epoch": self.state.epoch,
+                    "today": self.state.today,
+                    "api_key_count": len(self.state.api_keys),
+                    "goal_calories": self.state.goal.get("calorie_target"),
+                    "custom_food_count": len(self.state.custom_foods),
+                    "custom_food_create_count": self.state.custom_food_create_count,
+                    "custom_food_update_count": self.state.custom_food_update_count,
+                    "custom_food_delete_count": self.state.custom_food_delete_count,
+                    "assistant_enabled": self.state.assistant_enabled,
+                    "assistant_draft_request_count": self.state.assistant_draft_request_count,
+                    "assistant_last_purpose": self.state.assistant_last_purpose,
+                    "meal_count": len(self.state.meals),
+                    "meal_create_count": self.state.meal_create_count,
+                    "meal_update_count": self.state.meal_update_count,
+                    "meal_delete_count": self.state.meal_delete_count,
+                }
+                # The three diagnostic fields are opt-in only. The default
+                # state payload stays byte-for-byte identical to the historical
+                # fixture, which the original UI canonical comparators rely on.
+                if self.state.latest_diagnostics_enabled:
+                    payload["latest_slots_read_attempts"] = self.state.latest_slots_read_attempts
+                    payload["latest_slots_401_armed"] = self.state.latest_slots_401_armed
+                    payload["latest_slots_401_consumed"] = self.state.latest_slots_401_consumed
+                self._send(200, payload)
             return
         if path == "/api/auth/bootstrap/status":
             self._send(200, {"admin_exists": True})
@@ -693,6 +707,16 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/logs/latest-slots":
             with self.state.lock:
+                # Count and fault only under the explicit opt-in. Normal reads
+                # stay unobserved and always return the historical 200 body.
+                if self.state.latest_diagnostics_enabled:
+                    self.state.latest_slots_read_attempts += 1
+                    if self.state.latest_slots_401_armed:
+                        self.state.latest_slots_401_armed = False
+                        self.state.latest_slots_401_consumed += 1
+                        # No domain write and no session/cookie rotation here.
+                        self._error(401, "unauthorized", "Sign in required.")
+                        return
                 breakfast = [
                     copy.deepcopy(log)
                     for log in self.state.logs
