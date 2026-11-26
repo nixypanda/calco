@@ -1,9 +1,26 @@
 # CalCo native client (`frontend-ios`)
 
 A native SwiftUI client for CalCo, targeting **iOS 26, iPadOS 26 and macOS 26**.
-It uses only Apple frameworks (SwiftUI, Foundation, XCTest); there are no
-Swift Package or third-party dependencies. UI uses native SwiftUI styling with
-Apple-default appearance and English-only copy.
+It uses Apple frameworks plus Swift Package dependencies pinned in the Xcode
+project. `swift-composable-architecture` **1.26.2** (exact) is the sole
+architecture dependency choice, resolved through its `Package@swift-6.1.swift`
+manifest variant for compatibility with the installed Xcode 26.6 / Swift 6.3.3
+toolchain. Because app/test code directly references generated symbols from TCA
+transitives already in the same resolved graph, the project also explicitly
+declares and links `swift-dependencies` **1.17.2** (exact, product
+`Dependencies`) and `swift-case-paths` **1.10.0** (exact, product `CasePaths`);
+no unrelated library is added. Resolution is recorded in
+`CalCo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.
+Already-resolved `PerceptionCore` 2.0.12 is explicitly linked for app/test
+generated-symbol references; `Clocks` 1.1.1 is linked only to the unit-test target.
+UI uses native SwiftUI styling with Apple-default appearance and English-only
+copy.
+
+The TCA migration is partial: authentication and selected flows use TCA, while
+the signed-in shell and several feature families remain legacy. Store-backed
+Diary installation is QA-only (`CALCO_TEST` plus `CALCO_NATIVE_DIARY_QA=1`);
+production Diary defaults to `.legacy`. See [TCA_MIGRATION.md](TCA_MIGRATION.md)
+for accepted evidence and remaining work.
 
 The normal-user workflows are implemented under the shared source directories:
 diary and food logging, Library, Meals, Nutrition Details, reviewed AI
@@ -199,6 +216,16 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
   -configuration Release -destination 'generic/platform=macOS' \
   CALCO_API_BASE_URL=https://your-host.example.com build
 ```
+
+**Swift package macro trust (CLI):** TCA and transitive dependencies include
+Swift macros. Command-line builds may require
+`-skipMacroValidation` until macros are approved for the machine/Xcode
+environment. Use it only with audited, pinned package versions (this repo pins
+TCA 1.26.2 and explicitly declares/links already-resolved `Dependencies` 1.17.2
+and `CasePaths` 1.10.0 for direct generated-symbol linkage; resolution is
+recorded in the repository's `Package.resolved`); the normal
+Xcode alternative is to approve the macros in the IDE prompt. Do not disable
+macro validation for unpinned or unreviewed packages.
 
 The `CalCo` scheme uses `Debug` for Run/Test. The shared `CalCo-E2E` scheme uses
 the `Test` configuration (127.0.0.1:3002) for Run/Test. Device builds need a
