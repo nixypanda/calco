@@ -2182,6 +2182,415 @@ final class NativeDiaryScreenUITests: XCTestCase {
         return MockResponse(status: box.status, data: box.data)
     }
 
+    // MARK: - External mutation fanout journeys (13–15)
+
+    private struct FanoutBaseline {
+        let state: FixtureState
+        let day: String
+        let calendarLabel: String
+        let fetches: Int
+    }
+
+    private struct FanoutLibraryCounters: Decodable, Equatable {
+        let foods: Int
+        let creates: Int
+        let updates: Int
+        let deletes: Int
+
+        enum CodingKeys: String, CodingKey {
+            case foods = "custom_food_count"
+            case creates = "custom_food_create_count"
+            case updates = "custom_food_update_count"
+            case deletes = "custom_food_delete_count"
+        }
+    }
+
+    func testNativeDiaryFoodDetailMutationRefreshesHistoricalOwnerExactlyOnce() throws {
+        let baseline = try prepareHistoricalFanout()
+        try openHistoricalFanoutSearch()
+        // Select the actual recent food row (not its quick-add chip). This
+        // journey proves FoodDetail mutation fanout, not query/debounce.
+        try tapFanoutButton("search.recent.product:qa-apple")
+        XCTAssertTrue(app.textFields["foodDetail.amount.field"].waitForExistence(timeout: Timeout.long),
+                      "FoodDetail amount field did not load.\n\(app.debugDescription)")
+        XCTAssertEqual(app.textFields["foodDetail.amount.field"].value as? String, "100",
+                       "FoodDetail must retain the fixture's default 100 quantity.")
+        try selectFanoutGramUnit()
+        assertFanoutBreakfastSelection("FoodDetail")
+        XCTAssertEqual(try fixtureState().canonical, baseline.state.canonical,
+                       "Opening FoodDetail must not write.")
+        try tapFanoutButton("foodDetail.submit")
+        XCTAssertTrue(app.descendants(matching: .any)[Identifier.nativeMarker]
+            .waitForExistence(timeout: Timeout.long), "FoodDetail did not return to the QA Diary.")
+        try assertHistoricalFanout(baseline, addedCalories: 100)
+    }
+
+    func testNativeDiaryMealsMutationRefreshesHistoricalOwnerExactlyOnce() throws {
+        let baseline = try prepareHistoricalFanout()
+        try openHistoricalFanoutSearch()
+        try tapFanoutButton("search.openMeals")
+        try tapFanoutButton("meals.list.row.qa-meal-1")
+        try tapFanoutButton("meals.detail.openLog")
+        let sheet = app.descendants(matching: .any)["meals.log.sheet"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: Timeout.long),
+                      "Meals log sheet did not open.\n\(app.debugDescription)")
+        XCTAssertEqual(app.textFields["foodDetail.amount.field"].value as? String, "100",
+                       "Meals must retain the fixture's default 100 quantity.")
+        try selectFanoutGramUnit()
+        assertFanoutBreakfastSelection("Meals")
+
+        // The existing fixture previews 200 kcal, but its generic POST handler
+        // authoritatively persists 100 kcal for this default 100 g quantity.
+        // Do not conflate the preview with the returned server log nutrition.
+        let nutrients = [("Calories", "200.00", "kcal"), ("Protein", "2.00", "g"),
+                         ("Carbohydrates", "40.00", "g"), ("Fat", "1.00", "g")]
+        func previewVisible() -> Bool {
+            nutrients.allSatisfy { nutrient in
+                [nutrient.0, nutrient.1, nutrient.2].allSatisfy { label in
+                    sheet.descendants(matching: .staticText)
+                        .matching(NSPredicate(format: "label == %@", label))
+                        .allElementsBoundByIndex.contains { $0.exists && $0.isHittable }
+                }
+            }
+        }
+        let container = try XCTUnwrap(scrollContainer(marker: "foodDetail.amount.field"))
+        for _ in 0..<6 where !previewVisible() { container.swipeUp() }
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.long) { previewVisible() },
+                      "The four exact meal preview nutrients are missing.")
+        XCTAssertEqual(try fixtureState().canonical, baseline.state.canonical,
+                       "Opening the Meals preview must not write.")
+        try tapFanoutButton("meals.detail.log")
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.long) { !sheet.exists },
+                       "The meal log task did not dismiss after submission.")
+        // Successful logging dismisses only the task sheet. Close belongs to
+        // the Meals list root, so first leave the recipe via its semantic Back.
+        let recipeBacks = app.navigationBars.buttons.matching(
+            NSPredicate(format: "label == %@", "My Meals")
+        ).allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
+        XCTAssertEqual(recipeBacks.count, 1,
+                       "Expected one recipe Back action labelled My Meals.\n\(app.debugDescription)")
+        try XCTUnwrap(recipeBacks.count == 1 ? recipeBacks.first : nil).tap()
+        XCTAssertTrue(app.descendants(matching: .any)["meals.list"]
+            .waitForExistence(timeout: Timeout.normal),
+                      "Recipe Back did not reach the Meals list root.\n\(app.debugDescription)")
+        try tapFanoutButton("meals.close")
+        try returnFromFanoutSearch()
+        try assertHistoricalFanout(baseline, addedCalories: 100)
+    }
+
+    /// Library's current UI manages food metadata; it has no logging entry.
+    /// A genuine manual create must therefore leave the Diary owner untouched.
+    /// This is not GUI evidence for the separate Library logging callback.
+    func testNativeDiaryLibraryMetadataSaveDoesNotRefreshOrMutateDiary() throws {
+        let baseline = try prepareHistoricalFanout()
+        let counters = try fanoutLibraryCounters()
+        try tapFanoutButton("app.tab.library")
+        try tapFanoutButton("library.foods")
+        XCTAssertTrue(app.descendants(matching: .any)["library.empty"]
+            .waitForExistence(timeout: Timeout.long), "The reset Library should be empty.")
+        try tapFanoutButton("library.add")
+        try tapFanoutButton("library.add.custom")
+        let name = app.textFields["library.editor.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: Timeout.long),
+                      "Manual Library editor did not open.\n\(app.debugDescription)")
+        name.tap()
+        name.typeText("Historical metadata food")
+        XCTAssertEqual(name.value as? String, "Historical metadata food",
+                       "The manual editor did not retain the food name.")
+        try dismissFanoutLibraryKeyboard()
+        for (code, value) in [("ENERGY_KCAL", "175"), ("PROTEIN_G", "10"),
+                              ("CARBS_G", "20"), ("FAT_G", "5")] {
+            let field = try revealFanoutControl("library.nutrient.\(code).field",
+                                               marker: "library.editor.name")
+            field.tap()
+            let oldValue = try XCTUnwrap(field.value as? String)
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: oldValue.count) + value)
+            XCTAssertEqual(field.value as? String, value, "Manual Library nutrient \(code) was not retained.")
+            try dismissFanoutLibraryKeyboard()
+        }
+        XCTAssertEqual(try fixtureState().canonical, baseline.state.canonical,
+                       "Editing metadata must not persist anything before Save.")
+        XCTAssertEqual(try fanoutLibraryCounters(), counters, "The unsaved editor wrote custom-food metadata.")
+        try tapFanoutButton("library.editor.save")
+        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "library.row."))
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.long) {
+            rows.count == 1 && rows.element.exists
+                && rows.element.label.contains("Historical metadata food")
+        }, "Exactly one named saved metadata row did not return to Library.\n\(app.debugDescription)")
+        let saved = try fanoutLibraryCounters()
+        XCTAssertEqual(saved.foods, counters.foods + 1, "Manual Save must retain exactly one custom food.")
+        XCTAssertEqual(saved.creates, counters.creates + 1, "Manual Save must issue exactly one create.")
+        XCTAssertEqual(saved.updates, counters.updates, "Manual create must not update an existing food.")
+        XCTAssertEqual(saved.deletes, counters.deletes, "Manual create must not delete any food.")
+        try tapFanoutButton(Identifier.diaryTab)
+        try assertHistoricalMetadataUnchanged(baseline)
+        XCTAssertEqual(try fanoutLibraryCounters(), saved,
+                       "Returning to Diary and inspecting Settings must not rewrite metadata.")
+    }
+
+    /// Establish a nondefault global macro mode and persisted slot preference
+    /// before measuring the mutation. No Settings save is a log write.
+    private func prepareHistoricalFanout() throws -> FanoutBaseline {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn())
+        XCTAssertTrue(tap(Identifier.previousDay))
+        XCTAssertTrue(waitForSummary(logged: 800, remaining: 1200, goal: 2000))
+        XCTAssertTrue(tap(Identifier.macroMode))
+        XCTAssertTrue(selectMenuOption("Percent"))
+        XCTAssertTrue(assertMacroModePercent())
+        XCTAssertTrue(tap(Identifier.manageSlots))
+        XCTAssertTrue(app.descendants(matching: .any)[Identifier.settingsSheet]
+            .waitForExistence(timeout: Timeout.normal))
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.long) {
+            self.settingsRow(Identifier.settingsBreakfast) != nil
+        })
+        for identifier in [Identifier.settingsBreakfast, Identifier.settingsLunch,
+                           Identifier.settingsDinner, Identifier.settingsSnack] {
+            setSlotToggle(identifier, on: true)
+        }
+        setSlotToggle(Identifier.settingsLateNightSnack, on: false)
+        try tapFanoutButton(Identifier.settingsSlotsSave)
+        XCTAssertTrue(app.descendants(matching: .any)[Identifier.settingsSlotsSaved]
+            .waitForExistence(timeout: Timeout.long))
+        try tapFanoutButton(Identifier.diaryTab)
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.normal) {
+            !self.app.descendants(matching: .any)[Identifier.settingsSheet].exists
+        })
+        XCTAssertTrue(waitForSummary(logged: 800, remaining: 1200, goal: 2000))
+        let fetches = try requireVisibleFetchCount("Missing pre-mutation Diary fetch count.")
+        let state = try fixtureState()
+        XCTAssertEqual(state.logCount, 8)
+        XCTAssertEqual(state.logs.count, 8)
+        XCTAssertEqual(state.logPostAttempts, 0)
+        XCTAssertEqual(state.typedGoalCalories, 2000)
+        let day = Self.isoDay(historicalDayDate(fromFixtureToday: state.today))
+        XCTAssertTrue(state.logs.allSatisfy { $0.date == day })
+        let calendarLabel = app.descendants(matching: .any)[Identifier.calendar].label
+        XCTAssertFalse(calendarLabel.isEmpty)
+        XCTAssertFalse(isTodaySelected())
+        return FanoutBaseline(state: state, day: day, calendarLabel: calendarLabel, fetches: fetches)
+    }
+
+    private func openHistoricalFanoutSearch() throws {
+        let add = try revealFanoutControl(Identifier.addFoodBreakfast, marker: Identifier.calories)
+        add.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["search.loggingContext"]
+            .waitForExistence(timeout: Timeout.long))
+        XCTAssertTrue(app.descendants(matching: .any)["search.loggingContext"].label.contains("Breakfast"))
+    }
+
+    private func returnFromFanoutSearch() throws {
+        XCTAssertTrue(app.textFields["search.field"].waitForExistence(timeout: Timeout.normal))
+        let backs = app.navigationBars.buttons.matching(
+            NSPredicate(format: "label ==[c] %@ OR label ==[c] %@", "Back", "Diary")
+        ).allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
+        XCTAssertEqual(backs.count, 1, "Expected one semantic Search Back action.")
+        try XCTUnwrap(backs.count == 1 ? backs.first : nil).tap()
+    }
+
+    private func assertHistoricalFanout(_ baseline: FanoutBaseline, addedCalories: Int) throws {
+        XCTAssertTrue(app.descendants(matching: .any)[Identifier.nativeMarker]
+            .waitForExistence(timeout: Timeout.long))
+        XCTAssertTrue(revealDiaryTopControl(Identifier.calendar))
+        XCTAssertTrue(waitForSummary(logged: 800 + addedCalories,
+                                    remaining: 1200 - addedCalories, goal: 2000))
+        XCTAssertEqual(app.descendants(matching: .any)[Identifier.calendar].label, baseline.calendarLabel)
+        XCTAssertTrue(assertMacroModePercent(), "The mutation reset Percent macro mode.")
+        let count = try requireVisibleFetchCount("Missing post-mutation Diary fetch count.")
+        XCTAssertEqual(count, baseline.fetches + 1, "External mutation must refresh Diary exactly once.")
+        let after = try fixtureState()
+        XCTAssertEqual(after.logPostAttempts, baseline.state.logPostAttempts + 1,
+                       "One external log submission must issue exactly one POST.")
+        XCTAssertEqual(after.logCount, baseline.state.logCount + 1,
+                       "One external log submission must persist exactly one row.")
+        XCTAssertEqual(after.typedGoalCalories, baseline.state.typedGoalCalories,
+                       "External logging changed the persisted goal.")
+        XCTAssertEqual(after.batchCommits, baseline.state.batchCommits, "Expected an individual log write.")
+        let originalIDs = Set(baseline.state.logs.map(\.id))
+        let created = after.logs.filter { !originalIDs.contains($0.id) }
+        XCTAssertEqual(created.count, 1)
+        let log = try XCTUnwrap(created.count == 1 ? created.first : nil)
+        XCTAssertEqual(log.date, baseline.day, "The POST lost the captured historical date.")
+        XCTAssertEqual(log.mealSlot, "breakfast", "The POST lost exact captured slot breakfast.")
+        XCTAssertEqual(log.amount, "100", "The POST lost exact quantity 100.")
+        XCTAssertEqual(log.unit, "g", "The POST did not persist exact Gram code g.")
+        for old in baseline.state.logs {
+            let retained = try XCTUnwrap(after.logs.first { $0.id == old.id })
+            XCTAssertEqual(retained.date, old.date)
+            XCTAssertEqual(retained.mealSlot, old.mealSlot)
+            XCTAssertEqual(retained.amount, old.amount)
+            XCTAssertEqual(retained.unit, old.unit)
+        }
+        XCTAssertEqual(collectHistoricalLogIDs(), Set(Identifier.historicalLogIDs))
+        XCTAssertTrue(revealDiaryTopControl(Identifier.calendar))
+        let row = try revealFanoutControl("diary.log.\(log.id)", marker: Identifier.calories)
+        XCTAssertTrue(row.exists && row.isHittable, "The authoritative new row is missing.")
+        try assertFanoutSettingsPreserved(baseline, addedCalories: addedCalories,
+                                         expectedFetches: baseline.fetches + 1, state: after)
+    }
+
+    private func assertHistoricalMetadataUnchanged(_ baseline: FanoutBaseline) throws {
+        XCTAssertTrue(app.descendants(matching: .any)[Identifier.nativeMarker]
+            .waitForExistence(timeout: Timeout.long), "Metadata Save did not return to the QA Diary.")
+        XCTAssertTrue(revealDiaryTopControl(Identifier.calendar), "Historical calendar is unreachable.")
+        XCTAssertTrue(waitForSummary(logged: 800, remaining: 1200, goal: 2000),
+                      "Metadata Save changed the historical 800/1200/2000 summary.")
+        XCTAssertEqual(app.descendants(matching: .any)[Identifier.calendar].label, baseline.calendarLabel,
+                       "Metadata Save changed the selected historical date.")
+        XCTAssertTrue(assertMacroModePercent(), "Metadata Save reset Percent mode.")
+        XCTAssertEqual(try requireVisibleFetchCount("Missing metadata return fetch count."), baseline.fetches,
+                       "A metadata-only Save must not refresh Diary.")
+        let after = try fixtureState()
+        XCTAssertEqual(after.logPostAttempts, baseline.state.logPostAttempts,
+                       "Metadata Save must issue zero log POSTs.")
+        XCTAssertEqual(after.logCount, 8, "Metadata Save must not add or remove a log.")
+        XCTAssertEqual(after.logs.map(\.id), baseline.state.logs.map(\.id),
+                       "Metadata Save changed the original eight log identities or order.")
+        for old in baseline.state.logs {
+            let retained = try XCTUnwrap(after.logs.first { $0.id == old.id }, "Missing history row \(old.id).")
+            XCTAssertEqual(retained.date, old.date, "Metadata Save changed \(old.id)'s date.")
+            XCTAssertEqual(retained.mealSlot, old.mealSlot, "Metadata Save changed \(old.id)'s slot.")
+            XCTAssertEqual(retained.amount, old.amount, "Metadata Save changed \(old.id)'s amount.")
+            XCTAssertEqual(retained.unit, old.unit, "Metadata Save changed \(old.id)'s unit.")
+        }
+        XCTAssertEqual(after.batchCommits, baseline.state.batchCommits, "Metadata Save committed a log batch.")
+        XCTAssertEqual(after.typedGoalCalories, baseline.state.typedGoalCalories, "Metadata Save changed the goal.")
+        XCTAssertEqual(collectHistoricalLogIDs(), Set(Identifier.historicalLogIDs),
+                       "Metadata Save did not retain all eight rendered historical rows.")
+        try assertFanoutSettingsPreserved(baseline, addedCalories: 0,
+                                         expectedFetches: baseline.fetches, state: after)
+    }
+
+    private func assertFanoutSettingsPreserved(
+        _ baseline: FanoutBaseline, addedCalories: Int, expectedFetches: Int, state: FixtureState
+    ) throws {
+        XCTAssertTrue(revealDiaryTopControl(Identifier.manageSlots))
+        XCTAssertTrue(tap(Identifier.manageSlots))
+        XCTAssertTrue(app.descendants(matching: .any)[Identifier.settingsSheet]
+            .waitForExistence(timeout: Timeout.normal))
+        // Settings retains its previous scroll position near meal slots. Each
+        // goal must be materialized before reading its exact value; nil is not
+        // an acceptable substitute for a preserved goal.
+        for (identifier, expected) in [
+            (Identifier.settingsCalories, "2000"), (Identifier.settingsProtein, "150"),
+            (Identifier.settingsCarbs, "250"), (Identifier.settingsFat, "70"),
+        ] {
+            let field = try XCTUnwrap(scrollSettingsTo(identifier),
+                                     "Cannot reveal goal \(identifier).\n\(app.debugDescription)")
+            XCTAssertTrue(field.exists && field.isHittable,
+                          "Goal \(identifier) is not reachable.\n\(app.debugDescription)")
+            XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.long) {
+                self.goalFieldValue(identifier) == expected
+            }, "Goal \(identifier) must remain exactly \(expected); "
+                + "actual=\(String(describing: goalFieldValue(identifier))).\n" + app.debugDescription)
+            XCTAssertEqual(goalFieldValue(identifier), expected,
+                           "Goal \(identifier) changed.\n\(app.debugDescription)")
+        }
+        for identifier in [Identifier.settingsBreakfast, Identifier.settingsLunch,
+                           Identifier.settingsDinner, Identifier.settingsSnack] {
+            XCTAssertEqual(slotToggleIsOn(identifier), true)
+        }
+        XCTAssertEqual(slotToggleIsOn(Identifier.settingsLateNightSnack), false)
+        try tapFanoutButton(Identifier.diaryTab)
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.normal) {
+            !self.app.descendants(matching: .any)[Identifier.settingsSheet].exists
+        })
+        XCTAssertTrue(revealDiaryTopControl(Identifier.calendar))
+        XCTAssertTrue(waitForSummary(logged: 800 + addedCalories,
+                                    remaining: 1200 - addedCalories, goal: 2000))
+        XCTAssertEqual(try requireVisibleFetchCount("Missing final Diary fetch count."), expectedFetches,
+                       "Inspecting persisted Settings changed the expected Diary fetch count.")
+        XCTAssertEqual(app.descendants(matching: .any)[Identifier.calendar].label, baseline.calendarLabel)
+        XCTAssertTrue(assertMacroModePercent())
+        XCTAssertEqual(try fixtureState().canonical, state.canonical,
+                       "Inspecting persisted Settings must not cause another mutation.")
+    }
+
+    private func fanoutLibraryCounters() throws -> FanoutLibraryCounters {
+        let response = try mockRequest(method: "GET", path: "/__qa/state")
+        XCTAssertEqual(response.status, 200)
+        return try JSONDecoder().decode(FanoutLibraryCounters.self, from: response.data)
+    }
+
+    /// The fixture's code `g` is displayed as the exact name `Gram`. Both
+    /// FoodDetailView and shared LogFormView render Text(unit.name), tagged by
+    /// unit.code. Select the real menu option, then verify its semantic token;
+    /// the authoritative POST unit is still asserted as exactly `g` separately.
+    private func selectFanoutGramUnit() throws {
+        let identifier = "foodDetail.unit.picker"
+        try tapFanoutButton(identifier)
+        let option = app.buttons.matching(NSPredicate(format: "label == %@", "Gram"))
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.normal) {
+            option.allElementsBoundByIndex.contains { $0.exists && $0.isHittable && $0.isEnabled }
+        }, "Expected exact fixture unit option Gram (code g). Picker: "
+            + fanoutPickerDescription(identifier) + "\n" + app.debugDescription)
+        XCTAssertTrue(selectMenuOption("Gram"),
+                      "Could not select exact Gram option.\n\(app.debugDescription)")
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.short) {
+            let picker = self.app.buttons[identifier]
+            guard picker.exists else { return false }
+            let text = picker.label + " " + (picker.value as? String ?? "")
+            return text.range(of: "(?:^|\\W)Gram(?:$|\\W)", options: .regularExpression) != nil
+        }, "Unit selection did not settle at Gram (code g): " + fanoutPickerDescription(identifier))
+    }
+
+    private func fanoutPickerDescription(_ identifier: String) -> String {
+        let picker = app.buttons[identifier]
+        guard picker.exists else { return "\(identifier): missing" }
+        return "\(identifier): label=\(picker.label), value=\(String(describing: picker.value)), "
+            + "hittable=\(picker.isHittable), enabled=\(picker.isEnabled)"
+    }
+
+    private func assertFanoutBreakfastSelection(_ family: String) {
+        let identifier = "foodDetail.mealSlot.picker"
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.normal) {
+            let picker = self.app.buttons[identifier]
+            guard picker.exists else { return false }
+            return [picker.label, picker.value as? String ?? ""].contains { text in
+                text.range(of: "(?:^|\\W)Breakfast(?:$|\\W)", options: .regularExpression) != nil
+            }
+        }, "\(family) must retain exact Breakfast selection: " + fanoutPickerDescription(identifier)
+            + "\n" + app.debugDescription)
+    }
+
+    private func tapFanoutButton(_ identifier: String) throws {
+        let query = app.buttons.matching(identifier: identifier)
+        func leaves() -> [XCUIElement] {
+            query.allElementsBoundByIndex.filter {
+                $0.exists && $0.isHittable && $0.isEnabled
+                    && $0.descendants(matching: .button).matching(identifier: identifier).count == 0
+            }
+        }
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.long) { leaves().count == 1 },
+                      "Expected one actionable leaf button: \(identifier); "
+                        + "matches=\(query.count), actionableLeaves=\(leaves().count).\n"
+                        + app.debugDescription)
+        let buttons = leaves()
+        try XCTUnwrap(buttons.count == 1 ? buttons.first : nil).tap()
+    }
+
+    private func revealFanoutControl(_ identifier: String, marker: String) throws -> XCUIElement {
+        let element = app.descendants(matching: .any)[identifier]
+        if element.exists && element.isHittable { return element }
+        let container = try XCTUnwrap(scrollContainer(marker: marker))
+        for _ in 0..<14 {
+            container.swipeUp()
+            if element.exists && element.isHittable { return element }
+        }
+        for _ in 0..<14 {
+            container.swipeDown()
+            if element.exists && element.isHittable { return element }
+        }
+        throw HarnessError(description: "Control \(identifier) is not reachable.")
+    }
+
+    private func dismissFanoutLibraryKeyboard() throws {
+        guard app.keyboards.firstMatch.exists else { return }
+        try tapFanoutButton("library.editor.keyboard.done")
+        XCTAssertTrue(CalCoE2E.waitUntil(timeout: Timeout.short) { !self.app.keyboards.firstMatch.exists },
+                      "The manual Library editor keyboard did not dismiss.\n\(app.debugDescription)")
+    }
+
     private static func isoDay(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
