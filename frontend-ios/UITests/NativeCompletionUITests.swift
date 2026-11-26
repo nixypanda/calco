@@ -291,6 +291,75 @@ final class NativeCompletionUITests: XCTestCase {
         attachScreenshot(named: "iPhone-13-mini-diary-toolbar")
     }
 
+    // MARK: - TCA search cutover acceptance
+
+    func testMiniSearchPreservesTrailingSpaceAcrossCompletedResults() throws {
+        try resetFixture()
+        XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
+        try assertIPhone13Mini()
+
+        openSearchFromDiary()
+
+        let field = app.descendants(matching: .any)[Identifier.searchField]
+        XCTAssertTrue(
+            field.waitForExistence(timeout: Timeout.normal),
+            "Search did not open."
+        )
+
+        let rawQuery = "Native "
+        replaceText(in: field, with: rawQuery)
+        XCTAssertTrue(
+            CalCoE2E.waitUntil(timeout: Timeout.short) {
+                (field.value as? String) == rawQuery
+            },
+            "The search field did not retain the raw query with its trailing space."
+        )
+
+        let result = app.buttons[Identifier.searchResult]
+        XCTAssertTrue(
+            result.waitForExistence(timeout: Timeout.long),
+            "The fixture search result did not appear after the debounced search."
+        )
+
+        // The completed search must keep the exact raw field value, including the
+        // trailing space that the API query trims for transport.
+        XCTAssertEqual(
+            field.value as? String,
+            rawQuery,
+            "The completed search trimmed the raw trailing space from the search field."
+        )
+
+        if !app.keyboards.firstMatch.exists {
+            field.tap()
+        }
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForExistence(timeout: Timeout.short),
+            "The keyboard did not remain available for continued typing."
+        )
+
+        field.typeText("QA")
+
+        let combined = "Native QA"
+        let settled = CalCoE2E.waitUntil(timeout: Timeout.long) {
+            let value = field.value as? String ?? ""
+            return value == combined || value.contains(combined)
+        }
+        XCTAssertTrue(
+            settled,
+            "The follow-up debounced search did not settle in the search field."
+        )
+
+        let finalValue = field.value as? String ?? ""
+        XCTAssertTrue(
+            finalValue.contains(combined),
+            "Continued typing did not preserve the space between words: \(finalValue)"
+        )
+        XCTAssertFalse(
+            finalValue.contains("NativeQA"),
+            "Continued typing concatenated the words, losing the preserved space: \(finalValue)"
+        )
+    }
+
     // MARK: - Keyboard entry
 
     func testMiniQuantityKeyboardEntryKeepsSubmitReachable() throws {
@@ -860,16 +929,13 @@ final class NativeCompletionUITests: XCTestCase {
         try assertIPhone13Mini()
         openSearchFromDiary()
 
-        // The contextual Add Food sheet uses History/Custom/All scopes;
-        // barcode is a labelled lookup card, not a scope segment.
-        let barcodeEntry = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", "Barcode lookup")
-        ).firstMatch
+        // Barcode is a native Search scope segment, not a legacy lookup card.
+        let barcodeScope = app.segmentedControls["search.scope"].firstMatch.buttons["Barcode"]
         XCTAssertTrue(
-            barcodeEntry.waitForExistence(timeout: Timeout.normal) && barcodeEntry.isHittable,
-            "The Barcode lookup entry is missing."
+            barcodeScope.waitForExistence(timeout: Timeout.normal) && barcodeScope.isHittable,
+            "The Barcode scope is missing."
         )
-        barcodeEntry.tap()
+        barcodeScope.tap()
         let field = app.textFields["search.barcode.field"]
         XCTAssertTrue(
             field.waitForExistence(timeout: Timeout.normal),
@@ -922,21 +988,17 @@ final class NativeCompletionUITests: XCTestCase {
         try resetFixture()
         XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
         try assertIPhone13Mini()
-        openSearchFromDiary()
-
-        let entry = hittableElement(identifier: "search.assistant")
-            ?? hittableElement(identifier: "search.quickEntry.assistant")
-        guard let entry else {
-            XCTFail("No assistant entry is present in Search.")
-            return
-        }
-        entry.tap()
-        let customFood = app.descendants(matching: .any)["search.assistant.customFood"]
+        // The native app exposes the custom-food Assistant through the
+        // Library add menu, not a standalone Search AI entry.
+        XCTAssertTrue(tapFirstReachable(["app.tab.library"], labels: ["Library"]))
+        XCTAssertTrue(selectLibrarySection("Foods", identifier: "library.foods"))
+        app.buttons["library.add"].tap()
+        let createWithAI = app.buttons["library.createWithAI"]
         XCTAssertTrue(
-            customFood.waitForExistence(timeout: Timeout.normal),
-            "The assistant custom-food purpose is missing."
+            createWithAI.waitForExistence(timeout: Timeout.normal),
+            "Create with AI is missing from the Library add menu."
         )
-        customFood.tap()
+        createWithAI.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["assistant.status.disabled"]
                 .waitForExistence(timeout: Timeout.long),
@@ -1297,9 +1359,14 @@ final class NativeCompletionUITests: XCTestCase {
             "The selected-day nutrition report did not open."
         )
         attachScreenshot(named: "iPhone-13-mini-nutrition-details")
-        let close = hittableElement(identifier: Identifier.nutritionClose)
-        XCTAssertNotNil(close, "The nutrition report has no reachable Close action.")
-        close?.tap()
+        XCTAssertFalse(app.buttons[Identifier.nutritionClose].exists, "The nutrition report still exposes a legacy Close action.")
+        XCTAssertEqual(app.sheets.count, 0, "The nutrition report opened a legacy sheet.")
+        let nutritionBack = app.navigationBars.buttons.firstMatch
+        XCTAssertTrue(
+            nutritionBack.waitForExistence(timeout: Timeout.normal) && nutritionBack.isHittable,
+            "The nutrition report has no reachable native back action."
+        )
+        nutritionBack.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)[Identifier.diarySummary]
                 .waitForExistence(timeout: Timeout.normal),
@@ -1325,9 +1392,9 @@ final class NativeCompletionUITests: XCTestCase {
         )
 
         // New native navigation exposes the origin date and slot as a labelled
-        // context strip. Accept either shipped identifier spelling; never treat
-        // a missing strip as a pass.
-        let contextIdentifiers = ["search.context", "search.header.context", "addFood.context"]
+        // context strip. Use the shipped identifier; never treat a missing strip
+        // as a pass.
+        let contextIdentifiers = ["search.loggingContext"]
         let context = contextIdentifiers.first {
             app.descendants(matching: .any)[$0].exists
         }.map { app.descendants(matching: .any)[$0] }
@@ -1599,7 +1666,22 @@ final class NativeCompletionUITests: XCTestCase {
         try assertIPhone13Mini()
         navigateToHistoricalFixtureDay()
         XCTAssertTrue(isHistoricalDateVisible(), "Prerequisite historical selection was not active.")
-        XCTAssertTrue(tapToolbarAction("auth.signOut"), "Sign Out is not reachable.")
+        XCTAssertTrue(
+            tapFirstReachable(
+                ["app.tab.settings", "settings.tab", "tab.settings", Identifier.settings],
+                labels: ["Settings"]
+            ),
+            "The native Settings tab is not reachable on the mini."
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.settingsSheet]
+                .waitForExistence(timeout: Timeout.normal),
+            "The Settings surface did not open."
+        )
+        let signOut = scrollToElement("auth.signOut", marker: Identifier.settingsSheet, direction: .down)
+            ?? app.buttons["auth.signOut"]
+        XCTAssertTrue(signOut.exists && signOut.isHittable, "Sign Out is not reachable.")
+        signOut.tap()
         XCTAssertTrue(
             CalCoE2E.waitForLogin(in: app, timeout: Timeout.normal),
             "Sign Out did not return to the login form."
@@ -1634,6 +1716,72 @@ final class NativeCompletionUITests: XCTestCase {
         XCTAssertFalse(
             app.descendants(matching: .any)[Identifier.historicalLog].exists,
             "The prior session's historical rows reappeared after re-login."
+        )
+    }
+
+    func testMiniInvalidLoginPreservesFormAndCanRetry() throws {
+        try resetFixture()
+        app = makeApp(dynamicType: nil)
+        app.launch()
+        try CalCoE2E.requireFreshLogin(in: app)
+
+        let username = app.textFields["auth.login.username"]
+        let password = app.secureTextFields["auth.login.password"]
+        guard username.waitForExistence(timeout: Timeout.normal),
+              password.waitForExistence(timeout: Timeout.normal),
+              app.buttons["auth.login.submit"].exists else {
+            XCTFail("The fixture login form did not appear.")
+            return
+        }
+
+        username.tap()
+        username.typeText(QA.username)
+        let wrongPassword = "wrong-password"
+        password.tap()
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForExistence(timeout: Timeout.short),
+            "The login keyboard did not appear."
+        )
+        password.typeText(wrongPassword)
+        tapSignInAboveKeyboard()
+
+        let loginError = app.descendants(matching: .any)["auth.login.error"]
+        XCTAssertTrue(
+            loginError.waitForExistence(timeout: Timeout.normal),
+            "Wrong fixture credentials did not show auth.login.error."
+        )
+        XCTAssertTrue(username.exists, "The username field disappeared after a failed sign-in.")
+        XCTAssertTrue(username.isEnabled, "The username field is not usable after a failed sign-in.")
+        XCTAssertEqual(username.value as? String, QA.username, "The username was not retained.")
+        XCTAssertTrue(password.exists, "The password field disappeared after a failed sign-in.")
+        XCTAssertTrue(password.isEnabled, "The password field is not usable after a failed sign-in.")
+        XCTAssertFalse(
+            (password.value as? String ?? "").isEmpty,
+            "The intended password retention after a failed sign-in did not occur."
+        )
+
+        // Use the existing placeholder-aware replacement helper: its Select All
+        // edit-menu path (or typeText fallback) replaces a retained SecureField
+        // value without Cmd+A or absolute coordinates. The server-backed sign-in
+        // below is the real proof that the correct password was submitted.
+        replaceText(in: password, with: QA.password)
+        XCTAssertTrue(
+            CalCoE2E.waitUntil(timeout: Timeout.short) { !loginError.exists },
+            "Editing the password did not clear the authentication error."
+        )
+        tapSignInAboveKeyboard()
+
+        let reached = CalCoE2E.waitUntil(timeout: Timeout.long) {
+            CalCoE2E.isLoadedDiary(in: self.app) || loginError.exists
+        }
+        XCTAssertFalse(loginError.exists, "The retry produced a second login error.")
+        XCTAssertTrue(
+            reached && CalCoE2E.isLoadedDiary(in: app),
+            "Correcting the password did not reach the diary."
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)[Identifier.diarySummary].exists,
+            "The diary summary is missing after the successful retry."
         )
     }
 
@@ -2051,13 +2199,34 @@ final class NativeCompletionUITests: XCTestCase {
         XCTAssertTrue(try launchSignedIn(), "The diary did not load after fixture sign-in.")
         try assertIPhone13Mini()
         navigateToHistoricalFixtureDay()
-        let summaryBefore = summaryLabel()
 
-        guard openFeatureDestination(.meals) else {
-            XCTFail("Meals is unreachable through its normal entry points.")
+        guard let addFood = scrollToElement(
+            "\(Identifier.addFoodPrefix)breakfast",
+            marker: Identifier.diarySummary,
+            direction: .up
+        ) else {
+            XCTFail("The historical Breakfast Add food control is not reachable.")
             return
         }
-        XCTAssertTrue(waitForFeatureSurface(), "Meals did not present a destination surface.")
+        addFood.tap()
+        let searchField = app.descendants(matching: .any)[Identifier.searchField]
+        XCTAssertTrue(
+            searchField.waitForExistence(timeout: Timeout.normal),
+            "Search did not open from the historical Breakfast Add food control."
+        )
+
+        let openMeals = app.buttons["search.openMeals"]
+        XCTAssertTrue(
+            openMeals.waitForExistence(timeout: Timeout.normal),
+            "The search Meals toolbar action is missing."
+        )
+        openMeals.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["meals.list"]
+                .waitForExistence(timeout: Timeout.long),
+            "The logging-capable Meals flow did not open from Search."
+        )
         let mealRow = app.buttons["meals.list.row.qa-meal-1"]
         XCTAssertTrue(
             mealRow.waitForExistence(timeout: Timeout.long),
@@ -2069,45 +2238,170 @@ final class NativeCompletionUITests: XCTestCase {
                 .waitForExistence(timeout: Timeout.long),
             "The meal detail did not open."
         )
-        let previewEnergy = app.descendants(matching: .any)[
-            "meals.detail.preview.nutrient.ENERGY_KCAL"
-        ]
-        if !previewEnergy.waitForExistence(timeout: Timeout.long) {
-            _ = scrollToElement(
-                "meals.detail.preview",
-                marker: "meals.detail",
-                direction: .up,
-                maxSwipes: 4
-            )
-        }
-        XCTAssertTrue(
-            previewEnergy.waitForExistence(timeout: Timeout.normal),
-            "The loaded portion nutrient preview did not appear."
-        )
-        for code in ["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"] {
-            XCTAssertTrue(
-                app.descendants(matching: .any)[
-                    "meals.detail.preview.nutrient.\(code)"
-                ].exists,
-                "The \(code) preview nutrient row is missing."
-            )
-        }
         let baseline = try mockState()
-        let logMeal = app.buttons["meals.detail.log"]
-        XCTAssertTrue(logMeal.exists && logMeal.isHittable, "Log meal is not reachable.")
-        logMeal.tap()
+        let openLog = app.buttons["meals.detail.openLog"]
         XCTAssertTrue(
-            app.descendants(matching: .any)["meals.detail.log.success"]
-                .waitForExistence(timeout: Timeout.long),
-            "Meal logging did not report success."
+            openLog.waitForExistence(timeout: Timeout.normal) && openLog.isHittable,
+            "Log meal is not reachable."
+        )
+        openLog.tap()
+
+        let logSheet = app.descendants(matching: .any)["meals.log.sheet"]
+        XCTAssertTrue(
+            logSheet.waitForExistence(timeout: Timeout.long),
+            "The meal log sheet did not open."
+        )
+
+        // Fixture: NativeCompletionQAMockServer.py qa-meal-1 nutrition_summary
+        // (route /api/meals/{id}/nutrients, default 100 g) returns ENERGY_KCAL 200 kcal,
+        // PROTEIN_G 2 g, CARBS_G 40 g, FAT_G 1 g. MealLogView renders these via
+        // NutritionTable (GridRow, .accessibilityElement(children: .combine)) with
+        // MealNutrientDisplay.label(for:) and DisplayNumberFormat.decimal(..., fixed: true).
+        let expectedNutrients: [(name: String, value: String, unit: String)] = [
+            ("Calories", "200.00", "kcal"),
+            ("Protein", "2.00", "g"),
+            ("Carbohydrates", "40.00", "g"),
+            ("Fat", "1.00", "g"),
+        ]
+        func visibleNutrientRow(_ nutrient: (name: String, value: String, unit: String)) -> Bool {
+            func hasExactVisible(_ label: String) -> Bool {
+                logSheet.descendants(matching: .staticText)
+                    .matching(NSPredicate(format: "label == %@", label))
+                    .allElementsBoundByIndex
+                    .contains { $0.exists && $0.isHittable }
+            }
+            return hasExactVisible(nutrient.name)
+                && hasExactVisible(nutrient.value)
+                && hasExactVisible(nutrient.unit)
+        }
+        let sheetScroll = scrollContainer(marker: "foodDetail.amount.field")
+        for _ in 0..<6 where !expectedNutrients.allSatisfy(visibleNutrientRow) {
+            if let sheetScroll, sheetScroll.exists {
+                sheetScroll.swipeUp()
+            } else {
+                logSheet.swipeUp()
+            }
+        }
+        for nutrient in expectedNutrients {
+            let found = visibleNutrientRow(nutrient)
+            if !found {
+                let keywords = [
+                    "Calories", "Protein", "Carbohydrates", "Fat", "kcal", "200",
+                    "No nutrition", "Retry", "Loading", "nutrition",
+                ]
+                var lines: [String] = ["NATIVE_QA_MEAL_PREVIEW_DIAGNOSTIC"]
+                lines.append("missing=\(nutrient.name) \(nutrient.value) \(nutrient.unit)")
+                lines.append("sheet.exists=\(logSheet.exists) isHittable=\(logSheet.isHittable) frame=\(logSheet.frame)")
+                let amountField = logSheet.descendants(matching: .any)["foodDetail.amount.field"]
+                if amountField.exists {
+                    lines.append(
+                        "amountField.value=\(String(describing: amountField.value)) label=\(amountField.label) enabled=\(amountField.isEnabled)"
+                    )
+                }
+                let unitPicker = logSheet.descendants(matching: .any)["foodDetail.unit.picker"]
+                if unitPicker.exists {
+                    lines.append(
+                        "unitPicker.value=\(String(describing: unitPicker.value)) label=\(unitPicker.label) enabled=\(unitPicker.isEnabled)"
+                    )
+                }
+                let candidates = logSheet.descendants(matching: .any).allElementsBoundByIndex
+                var dumped = 0
+                for element in candidates where dumped < 120 {
+                    let label = element.label
+                    let value = String(describing: element.value ?? "")
+                    let identifier = element.identifier
+                    let shouldDump = !label.isEmpty
+                        || !identifier.isEmpty
+                        || keywords.contains(where: { label.contains($0) || value.contains($0) || identifier.contains($0) })
+                    guard shouldDump else { continue }
+                    lines.append(
+                        "element type=\(element.elementType.rawValue) id=\(identifier) label=\(label) value=\(value) exists=\(element.exists) hittable=\(element.isHittable) frame=\(element.frame)"
+                    )
+                    dumped += 1
+                }
+                let diagnostic = XCTAttachment(string: lines.joined(separator: "\n"))
+                diagnostic.name = "NATIVE_QA_MEAL_PREVIEW_DIAGNOSTIC"
+                diagnostic.lifetime = .keepAlways
+                add(diagnostic)
+                let screenshot = XCUIScreen.main.screenshot()
+                let screenshotAttachment = XCTAttachment(screenshot: screenshot)
+                screenshotAttachment.name = "NATIVE_QA_MEAL_PREVIEW_DIAGNOSTIC"
+                screenshotAttachment.lifetime = .keepAlways
+                add(screenshotAttachment)
+                XCTAssertTrue(
+                    found,
+                    "Loaded meal log preview is missing \(nutrient.name) \(nutrient.value) \(nutrient.unit)."
+                )
+                guard found else { return }
+            }
+        }
+
+        let beforeSubmit = try mockState()
+        XCTAssertEqual(
+            beforeSubmit.logCount,
+            baseline.logCount,
+            "Opening the meal log preview must not create a log."
         )
         XCTAssertEqual(
-            try mockState().logCount,
-            baseline.logCount + 1,
+            beforeSubmit.logPostAttempts,
+            baseline.logPostAttempts,
+            "Opening the meal log preview must not issue a log POST."
+        )
+
+        let logMeal = app.buttons["meals.detail.log"]
+        XCTAssertTrue(
+            logMeal.waitForExistence(timeout: Timeout.normal) && logMeal.isHittable,
+            "The meal log submit action is not reachable."
+        )
+        logMeal.tap()
+        XCTAssertTrue(
+            CalCoE2E.waitUntil(timeout: Timeout.long) {
+                (try? self.mockState().logCount) == baseline.logCount + 1
+            },
             "Meal logging did not create exactly one fixture log."
         )
+        let afterLog = try mockState()
+        XCTAssertEqual(
+            afterLog.logPostAttempts,
+            baseline.logPostAttempts + 1,
+            "Meal logging did not issue exactly one log POST."
+        )
+
         dismissToDiary()
-        assertHistoricalContext(retainedSummary: "Calories 900 / 2000")
+        scrollDiaryToTop()
+        XCTAssertTrue(
+            isHistoricalDateVisible(),
+            "The historical fixture log is no longer rendered after the round trip."
+        )
+        guard let finalSummary = summaryLabel(), !finalSummary.isEmpty else {
+            XCTFail("The post-return historical summary is missing or empty.")
+            return
+        }
+        let requiredPhrases = ["900 kcal logged", "1100 remaining", "of 2000 kcal"]
+        for phrase in requiredPhrases {
+            let pattern = "(?:^|\\s)" + NSRegularExpression.escapedPattern(for: phrase) + "(?:\\s|$)"
+            let range = finalSummary.range(of: pattern, options: .regularExpression)
+            XCTAssertNotNil(
+                range,
+                "Post-return historical summary missing exact phrase '\(phrase)': \(finalSummary)"
+            )
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                let matches = regex.numberOfMatches(
+                    in: finalSummary,
+                    range: NSRange(finalSummary.startIndex..., in: finalSummary)
+                )
+                XCTAssertEqual(
+                    matches,
+                    1,
+                    "Post-return historical summary should contain '\(phrase)' exactly once: \(finalSummary)"
+                )
+            }
+        }
+        XCTAssertEqual(
+            displayedCalories(),
+            900,
+            "The historical logged calories changed after returning from Meals."
+        )
     }
 
     func testMiniHistoricalDateSurvivesNutritionDestination() throws {
@@ -2169,7 +2463,22 @@ final class NativeCompletionUITests: XCTestCase {
         XCTAssertTrue(try launchSignedIn(), "The diary did not load with the enabled fixture.")
         try assertIPhone13Mini()
         let baseline = try mockState()
-        openAssistant("search.assistant.customFood")
+        // Reach the custom-food Assistant through the real Library entry;
+        // the Search tab no longer hosts a standalone AI entry.
+        XCTAssertTrue(tapFirstReachable(["app.tab.library"], labels: ["Library"]))
+        XCTAssertTrue(selectLibrarySection("Foods", identifier: "library.foods"))
+        app.buttons["library.add"].tap()
+        let createWithAI = app.buttons["library.createWithAI"]
+        XCTAssertTrue(
+            createWithAI.waitForExistence(timeout: Timeout.normal),
+            "Create with AI is missing from the Library add menu."
+        )
+        createWithAI.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["assistant.composer"]
+                .waitForExistence(timeout: Timeout.normal),
+            "Assistant did not become enabled from the Library entry."
+        )
         sendAssistantPrompt(
             "Draft a 100 g oat food with four macros for review.",
             draftTimeout: Timeout.long
@@ -2860,8 +3169,22 @@ final class NativeCompletionUITests: XCTestCase {
 
     private func navigateToHistoricalFixtureDay() {
         scrollDiaryToTop()
-        let startingTitle = app.navigationBars.firstMatch.identifier
-        for attempt in 0..<3 {
+        let dateNav = app.descendants(matching: .any)["diary.dateNavigation"]
+        func currentDateText() -> String? {
+            guard dateNav.exists else { return nil }
+            let label = dateNav.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !label.isEmpty { return label }
+            let value = (dateNav.value as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
+        let startingDateText = currentDateText()
+        // A compact NavigationStack with an empty title exposes no NavigationBar
+        // element, so treat any title comparison as optional evidence only.
+        let navBar = app.navigationBars.firstMatch
+        let startingNavTitle: String? = navBar.exists ? navBar.identifier : nil
+
+        for _ in 0..<3 {
             let before = fetchCount() ?? 0
             guard tapToolbarAction(Identifier.previousDay) else {
                 XCTFail("Previous Day is not reachable on the mini.")
@@ -2871,21 +3194,31 @@ final class NativeCompletionUITests: XCTestCase {
                 waitForFetchCount(greaterThan: before),
                 "Previous Day did not complete a diary fetch."
             )
-            let changed = CalCoE2E.waitUntil(timeout: Timeout.short) {
-                self.app.navigationBars.firstMatch.identifier != startingTitle
+            let dateChanged = CalCoE2E.waitUntil(timeout: Timeout.short) {
+                guard let current = currentDateText() else { return false }
+                return current != startingDateText
+            }
+            let navChanged = CalCoE2E.waitUntil(timeout: Timeout.short) {
+                guard navBar.exists else { return false }
+                return navBar.identifier != startingNavTitle
             }
             if scrollToElement(
                 Identifier.historicalLog,
                 marker: Identifier.diarySummary,
                 direction: .up
             ) != nil {
+                if let starting = startingDateText, let current = currentDateText() {
+                    XCTAssertNotEqual(
+                        current, starting,
+                        "Previous Day did not change the accessible diary date."
+                    )
+                }
                 scrollDiaryToTop()
                 return
             }
-            // A transition tap can be swallowed once; retry only if the title
-            // did not change, so we never navigate two days back accidentally.
-            if changed { break }
-            _ = attempt
+            // A transition tap can be swallowed once; stop if the accessible
+            // date/title already changed so we never navigate two days back.
+            if dateChanged || navChanged { break }
         }
         XCTFail(
             "The historical fixture log is not visible after Previous Day. "
@@ -2920,25 +3253,255 @@ final class NativeCompletionUITests: XCTestCase {
             isHistoricalDateVisible(),
             "The historical fixture log is no longer rendered after the round trip."
         )
+        let currentSummary = summaryLabel()
+        guard let retainedSummary, !retainedSummary.isEmpty else {
+            XCTFail("The retained historical summary is missing or empty.")
+            return
+        }
+        guard let currentSummary, !currentSummary.isEmpty else {
+            XCTFail("The current historical summary is missing or empty.")
+            return
+        }
         XCTAssertEqual(
-            summaryLabel(),
+            currentSummary,
             retainedSummary,
             "The historical summary changed after returning from the destination."
         )
+    }
+
+    private func leafStaticTexts(in elements: [XCUIElement]) -> [XCUIElement] {
+        elements.filter { element in
+            if element.identifier == "diary.summary.remaining" {
+                return false
+            }
+            let frame = element.frame
+            guard frame.width > 0, frame.height > 0, frame.width.isFinite, frame.height.isFinite else {
+                return true
+            }
+            return !elements.contains { other in
+                guard other !== element else { return false }
+                if other.identifier == "diary.summary.remaining" {
+                    return false
+                }
+                let otherFrame = other.frame
+                guard otherFrame.width > 0, otherFrame.height > 0,
+                      otherFrame.width.isFinite, otherFrame.height.isFinite else {
+                    return false
+                }
+                return element.frame.contains(otherFrame)
+                    && !element.frame.equalTo(otherFrame)
+            }
+        }
     }
 
     private func summaryLabel() -> String? {
         let summaries = app.descendants(matching: .any)
             .matching(identifier: Identifier.diarySummary)
             .allElementsBoundByIndex
-        let labels = summaries.map(\.label).filter { !$0.isEmpty }
+        // Backwards-compatible combined container label.
+        let containerLabels = summaries.map(\.label).filter { !$0.isEmpty }
+        if !containerLabels.isEmpty {
+            return containerLabels.joined(separator: " ")
+        }
+        // Native SwiftUI exposes the calorie brief as contained leaf children.
+        guard let summary = summaries.first else { return nil }
+        let leaves = leafStaticTexts(
+            in: summary.descendants(matching: .staticText).allElementsBoundByIndex
+        )
+        let labels = leaves.map { leaf in
+            let label = leaf.label
+            if Self.isValidFormattedInteger(label),
+               let value = Self.parseFormattedInteger(label) {
+                return String(value)
+            }
+            return label
+        }.filter { !$0.isEmpty }
         return labels.isEmpty ? nil : labels.joined(separator: " ")
     }
 
+    private func loggedCalorieText() -> String? {
+        let summaries = app.descendants(matching: .any)
+            .matching(identifier: Identifier.diarySummary)
+            .allElementsBoundByIndex
+        guard let summary = summaries.first else { return nil }
+        let leaves = leafStaticTexts(
+            in: summary.descendants(matching: .staticText).allElementsBoundByIndex
+        )
+        let remainingContainer = app.descendants(matching: .any)
+            .matching(identifier: "diary.summary.remaining")
+            .allElementsBoundByIndex
+            .first
+        let remainingFrame = remainingContainer?.frame
+        let hasRemainingFrame = remainingFrame.map {
+            $0.width > 0 && $0.height > 0 && $0.width.isFinite && $0.height.isFinite
+        } ?? false
+
+        let candidates = leaves.compactMap { leaf -> String? in
+            let label = leaf.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !label.isEmpty else { return nil }
+
+            // Prefer structural exclusion of the remaining subtree. When no
+            // reliable frame is available, fall back to label exclusion and let
+            // ambiguity fail closed below.
+            if hasRemainingFrame, let frame = remainingFrame,
+               frame.insetBy(dx: -0.5, dy: -0.5).contains(leaf.frame) {
+                return nil
+            }
+            if !hasRemainingFrame {
+                let lower = label.lowercased()
+                if lower.contains("remaining") { return nil }
+            }
+
+            guard Self.isValidFormattedInteger(label),
+                  let value = Self.parseFormattedInteger(label) else {
+                return nil
+            }
+            return String(value)
+        }
+
+        // A unique logged value is required; equal or ambiguous values fail closed.
+        return candidates.count == 1 ? candidates.first : nil
+    }
+
     private func displayedCalories() -> Int? {
-        guard let label = summaryLabel() else { return nil }
-        let current = label.split(separator: "/", maxSplits: 1).first.map(String.init) ?? label
-        let digits = current.filter(\.isNumber)
+        let result: Int?
+        if let logged = loggedCalorieText(), let value = Int(logged) {
+            result = value
+        } else if let label = summaryLabel(), label.contains("/") {
+            let firstOperand = label.split(separator: "/", maxSplits: 1).first.map(String.init) ?? ""
+            let numericTokens = firstOperand
+                .split(whereSeparator: { $0.isWhitespace })
+                .map(String.init)
+                .filter { Self.isValidFormattedInteger($0) }
+            if numericTokens.count == 1,
+               let value = Self.parseFormattedInteger(numericTokens[0]) {
+                result = value
+            } else {
+                result = nil
+            }
+        } else {
+            result = nil
+        }
+
+        if result == nil {
+            diagnoseHistoricalCalorieSummary()
+        }
+        return result
+    }
+
+    private func diagnoseHistoricalCalorieSummary() {
+        let summaries = app.descendants(matching: .any)
+            .matching(identifier: Identifier.diarySummary)
+            .allElementsBoundByIndex
+        let remainingMatches = app.descendants(matching: .any)
+            .matching(identifier: "diary.summary.remaining")
+            .allElementsBoundByIndex
+        let remainingFrame = remainingMatches.first?.frame
+        let hasRemainingFrame = remainingFrame.map {
+            $0.width > 0 && $0.height > 0 && $0.width.isFinite && $0.height.isFinite
+        } ?? false
+
+        var lines: [String] = []
+        lines.append("NATIVE_QA_SUMMARY_DIAGNOSTIC")
+        lines.append("capturedAt=\(ISO8601DateFormatter().string(from: Date()))")
+        lines.append("summaryMatchCount=\(summaries.count)")
+        for (index, summary) in summaries.enumerated() {
+            lines.append("summary[\(index)] identifier=\(summary.identifier) label=\(summary.label) value=\(summary.value ?? "") frame=\(summary.frame) exists=\(summary.exists) hittable=\(summary.isHittable)")
+            let staticTexts = summary.descendants(matching: .staticText).allElementsBoundByIndex
+            for (textIndex, text) in staticTexts.enumerated() {
+                lines.append("  staticText[\(textIndex)] identifier=\(text.identifier) label=\(text.label) value=\(text.value ?? "") frame=\(text.frame) exists=\(text.exists) hittable=\(text.isHittable)")
+            }
+        }
+
+        lines.append("remainingMatchCount=\(remainingMatches.count)")
+        for (index, remaining) in remainingMatches.enumerated() {
+            lines.append("remaining[\(index)] identifier=\(remaining.identifier) label=\(remaining.label) value=\(remaining.value ?? "") frame=\(remaining.frame) exists=\(remaining.exists) hittable=\(remaining.isHittable)")
+            let remainingTexts = remaining.descendants(matching: .staticText).allElementsBoundByIndex
+            for (textIndex, text) in remainingTexts.enumerated() {
+                lines.append("  remainingStaticText[\(textIndex)] identifier=\(text.identifier) label=\(text.label) value=\(text.value ?? "") frame=\(text.frame) exists=\(text.exists) hittable=\(text.isHittable)")
+            }
+        }
+
+        if let summary = summaries.first {
+            let allStaticTexts = summary.descendants(matching: .staticText).allElementsBoundByIndex
+            lines.append("candidateCount=\(allStaticTexts.count)")
+            for (index, text) in allStaticTexts.enumerated() {
+                let label = text.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                var reasons: [String] = []
+                if text.identifier == "diary.summary.remaining" {
+                    reasons.append("leafRemoved(identifier=diary.summary.remaining)")
+                }
+                if hasRemainingFrame, let frame = remainingFrame,
+                   frame.insetBy(dx: -0.5, dy: -0.5).contains(text.frame) {
+                    reasons.append("remainingFrameContains")
+                }
+                let isContainer = allStaticTexts.indices.contains { otherIndex in
+                    guard otherIndex != index else { return false }
+                    let other = allStaticTexts[otherIndex]
+                    if other.identifier == "diary.summary.remaining" { return false }
+                    let otherFrame = other.frame
+                    guard otherFrame.width > 0, otherFrame.height > 0,
+                          otherFrame.width.isFinite, otherFrame.height.isFinite else {
+                        return false
+                    }
+                    return text.frame.contains(otherFrame) && !text.frame.equalTo(otherFrame)
+                }
+                if isContainer {
+                    reasons.append("leafRemoved(container)")
+                }
+                if !Self.isValidFormattedInteger(label) {
+                    reasons.append("numericParserRejected")
+                } else if Self.parseFormattedInteger(label) == nil {
+                    reasons.append("numericParserOverflow")
+                }
+                lines.append("candidate[\(index)] label=\(label) parsed=\(Self.parseFormattedInteger(label).map(String.init) ?? "nil") reasons=\(reasons.isEmpty ? "none" : reasons.joined(separator: ","))")
+            }
+        }
+
+        let diagnostic = lines.joined(separator: "\n")
+        print(diagnostic)
+        let attachment = XCTAttachment(string: diagnostic)
+        attachment.name = "NATIVE_QA_SUMMARY_DIAGNOSTIC"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        attachScreenshot(named: "NATIVE_QA_SUMMARY_DIAGNOSTIC")
+    }
+
+    private static func isValidFormattedInteger(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let allowedSeparators: Set<Character> = [
+            ",", ".", " ", "\u{00A0}", "\u{202F}", "'", "\u{2009}", "\u{2007}"
+        ]
+        guard trimmed.allSatisfy({ ("0"..."9").contains($0) || allowedSeparators.contains($0) }) else {
+            return false
+        }
+
+        let separator = trimmed.first(where: { allowedSeparators.contains($0) })
+
+        if separator == nil {
+            return !trimmed.isEmpty && trimmed.allSatisfy { ("0"..."9").contains($0) }
+        }
+
+        let groups = trimmed.split(separator: separator!, omittingEmptySubsequences: false)
+        guard groups.allSatisfy({ !$0.isEmpty }) else { return false }
+        guard Set(trimmed.filter { allowedSeparators.contains($0) }) == [separator!] else {
+            return false
+        }
+
+        guard let firstGroup = groups.first, (1...3).contains(firstGroup.count),
+              firstGroup.allSatisfy({ ("0"..."9").contains($0) }) else {
+            return false
+        }
+        return groups.dropFirst().allSatisfy { group in
+            group.count == 3 && group.allSatisfy({ ("0"..."9").contains($0) })
+        }
+    }
+
+    private static func parseFormattedInteger(_ text: String) -> Int? {
+        guard isValidFormattedInteger(text) else { return nil }
+        let digits = text.filter { ("0"..."9").contains($0) }
         return Int(digits)
     }
 
@@ -3116,14 +3679,73 @@ final class NativeCompletionUITests: XCTestCase {
     /// tree behind Search/FoodDetail. Check the top navigation surface and pop
     /// up to three destinations instead of trusting `exists` alone.
     private func returnToDiaryFromFlow() -> Bool {
+        func isActiveSurface(_ identifier: String) -> Bool {
+            app.descendants(matching: .any)
+                .matching(identifier: identifier)
+                .allElementsBoundByIndex
+                .contains { $0.exists && $0.isHittable }
+        }
+        func isDiarySemanticRootVisible() -> Bool {
+            let summary = app.descendants(matching: .any)[Identifier.diarySummary]
+            let dateNavigation = app.descendants(matching: .any)["diary.dateNavigation"]
+            let calendar = app.descendants(matching: .any)[Identifier.calendar]
+            guard summary.exists,
+                  dateNavigation.exists,
+                  calendar.exists else {
+                return false
+            }
+            if app.buttons["app.tab.diary"].exists,
+               !app.buttons["app.tab.diary"].isSelected {
+                return false
+            }
+            if isActiveSurface("search.field") {
+                return false
+            }
+            if isActiveSurface("foodDetail.submit") {
+                return false
+            }
+            if isActiveSurface("foodDetail.amount.field") {
+                return false
+            }
+            if app.sheets.count > 0 {
+                return false
+            }
+            return true
+        }
+        func isDiaryRootVisible() -> Bool {
+            guard isDiarySemanticRootVisible() else { return false }
+            let calendar = app.descendants(matching: .any)[Identifier.calendar]
+            guard calendar.exists else { return false }
+            let frame = calendar.frame
+            let hasValidFrame = frame.minX.isFinite
+                && frame.minY.isFinite
+                && frame.maxX.isFinite
+                && frame.maxY.isFinite
+                && frame.width > 0
+                && frame.height > 0
+            guard hasValidFrame else { return false }
+            let window = app.windows.firstMatch
+            let viewport = window.exists ? window.frame : app.frame
+            let hasValidViewport = viewport.minX.isFinite
+                && viewport.minY.isFinite
+                && viewport.maxX.isFinite
+                && viewport.maxY.isFinite
+                && viewport.width > 0
+                && viewport.height > 0
+            guard hasValidViewport else { return false }
+            guard frame.intersects(viewport) else { return false }
+            return calendar.isHittable
+        }
+
         for _ in 0..<4 {
-            let navBar = app.navigationBars.firstMatch
-            let topIsNotDiary = navBar.exists
-                && (navBar.identifier == "Search" || navBar.identifier.contains("Native QA"))
-            if !topIsNotDiary,
-               app.descendants(matching: .any)[Identifier.diarySummary].exists,
-               app.buttons[Identifier.settings].exists {
+            if isDiaryRootVisible() {
                 return true
+            }
+            if isDiarySemanticRootVisible() {
+                scrollDiaryToTop()
+                if isDiaryRootVisible() {
+                    return true
+                }
             }
             // Native tab destinations return through the Diary tab. Only do
             // this when a different tab's surface is present; on a pushed
@@ -3135,7 +3757,7 @@ final class NativeCompletionUITests: XCTestCase {
             if otherTabSurface,
                tapFirstReachable(["app.tab.diary", "diary.tab", "tab.diary"], labels: ["Diary"]) {
                 _ = CalCoE2E.waitUntil(timeout: Timeout.short) {
-                    self.app.descendants(matching: .any)[Identifier.diarySummary].exists
+                    isDiaryRootVisible()
                 }
                 continue
             }
@@ -3152,16 +3774,14 @@ final class NativeCompletionUITests: XCTestCase {
             if let close = hittableButton(labels: ["Close", "Done", "Cancel"]) {
                 close.tap()
                 _ = CalCoE2E.waitUntil(timeout: Timeout.short) {
-                    !self.app.descendants(matching: .any)[Identifier.diarySummary].exists
-                        || !self.app.buttons[Identifier.settings].exists
+                    isDiaryRootVisible()
                 }
                 continue
             }
             if let back = leftmostNavigationBackButton() {
                 back.tap()
                 _ = CalCoE2E.waitUntil(timeout: Timeout.short) {
-                    self.app.buttons[Identifier.settings].exists
-                        && self.app.descendants(matching: .any)[Identifier.diarySummary].exists
+                    isDiaryRootVisible()
                 }
                 continue
             }
@@ -3170,15 +3790,110 @@ final class NativeCompletionUITests: XCTestCase {
             let end = window.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
             start.press(forDuration: 0.05, thenDragTo: end)
             _ = CalCoE2E.waitUntil(timeout: Timeout.short) {
-                self.app.descendants(matching: .any)[Identifier.diarySummary].exists
+                isDiaryRootVisible()
             }
         }
-        let onDiary = app.descendants(matching: .any)[Identifier.diarySummary].exists
-            && app.buttons[Identifier.settings].exists
+        let onDiary: Bool
+        if isDiaryRootVisible() {
+            onDiary = true
+        } else if isDiarySemanticRootVisible() {
+            scrollDiaryToTop()
+            onDiary = isDiaryRootVisible()
+        } else {
+            onDiary = false
+        }
         if !onDiary {
+            diagnoseReturnToDiaryFailure()
             print("NATIVE_QA_RETURN_TO_DIARY_FAILED\n\(app.debugDescription)")
         }
         return onDiary
+    }
+
+    private func diagnoseReturnToDiaryFailure() {
+        func describe(_ element: XCUIElement, includeSelected: Bool = false) -> String {
+            guard element.exists else { return "exists=false" }
+            let frame = element.frame
+            let hasValidFrame = frame.minX.isFinite
+                && frame.minY.isFinite
+                && frame.maxX.isFinite
+                && frame.maxY.isFinite
+                && frame.width > 0
+                && frame.height > 0
+            let window = app.windows.firstMatch
+            let viewport = window.exists ? window.frame : app.frame
+            let hasValidViewport = viewport.minX.isFinite
+                && viewport.minY.isFinite
+                && viewport.maxX.isFinite
+                && viewport.maxY.isFinite
+                && viewport.width > 0
+                && viewport.height > 0
+            let isVisibleInViewport = hasValidFrame && hasValidViewport && frame.intersects(viewport)
+            var parts = [
+                "exists=true",
+                "frame=\(frame)",
+                "frameValid=\(hasValidFrame)",
+                "visibleInViewport=\(isVisibleInViewport)",
+            ]
+            if isVisibleInViewport {
+                parts.append("hittable=\(element.isHittable)")
+            } else {
+                parts.append("hittable=skipped-invalid-or-offscreen")
+            }
+            if includeSelected {
+                parts.append("selected=\(element.isSelected)")
+            }
+            return parts.joined(separator: " ")
+        }
+
+        let summary = app.descendants(matching: .any)[Identifier.diarySummary]
+        let dateNavigation = app.descendants(matching: .any)["diary.dateNavigation"]
+        let calendar = app.descendants(matching: .any)[Identifier.calendar]
+        let diaryTab = app.buttons["app.tab.diary"]
+        let activeSurfaceIdentifiers = ["search.field", "foodDetail.submit", "foodDetail.amount.field"]
+        let activeSurfaces = activeSurfaceIdentifiers.map { identifier in
+            let isActive = app.descendants(matching: .any)
+                .matching(identifier: identifier)
+                .allElementsBoundByIndex
+                .contains { candidate in
+                    guard candidate.exists else { return false }
+                    return candidate.isHittable
+                }
+            return "\(identifier)=\(isActive)"
+        }
+        let topNavigationBars = app.navigationBars.allElementsBoundByIndex
+        let scrollViews = app.scrollViews.allElementsBoundByIndex
+
+        var lines: [String] = []
+        lines.append("NATIVE_QA_RETURN_TO_DIARY_DIAGNOSTIC")
+        lines.append("capturedAt=\(ISO8601DateFormatter().string(from: Date()))")
+        lines.append("summary \(describe(summary))")
+        lines.append("dateNavigation \(describe(dateNavigation))")
+        lines.append("calendar \(describe(calendar))")
+        lines.append("diaryTab \(describe(diaryTab, includeSelected: true))")
+        lines.append("activeSurfaces \(activeSurfaces.joined(separator: " "))")
+        lines.append("sheetCount=\(app.sheets.count)")
+        lines.append("topNavigationBars count=\(topNavigationBars.count)")
+        for (index, bar) in topNavigationBars.enumerated() {
+            let barState = describe(bar)
+            let barIdentifier = bar.exists ? bar.identifier : ""
+            let barLabel = bar.exists ? bar.label : ""
+            lines.append("  navBar[\(index)] identifier=\(barIdentifier) label=\(barLabel) \(barState)")
+        }
+        lines.append("scrollViews count=\(scrollViews.count)")
+        for (index, scrollView) in scrollViews.enumerated() {
+            let scrollState = describe(scrollView)
+            let scrollIdentifier = scrollView.exists ? scrollView.identifier : ""
+            let scrollLabel = scrollView.exists ? scrollView.label : ""
+            lines.append("  scrollView[\(index)] identifier=\(scrollIdentifier) label=\(scrollLabel) \(scrollState)")
+        }
+
+        let diagnostic = lines.joined(separator: "\n")
+        print(diagnostic)
+        let attachment = XCTAttachment(string: diagnostic)
+        attachment.name = "NATIVE_QA_RETURN_TO_DIARY_DIAGNOSTIC"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        attachScreenshot(named: "NATIVE_QA_RETURN_TO_DIARY_DIAGNOSTIC")
     }
 
     private func leftmostNavigationBackButton() -> XCUIElement? {

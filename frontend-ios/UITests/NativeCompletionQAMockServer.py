@@ -27,6 +27,20 @@ COOKIE_NAME = "calco_session"
 LEGACY_ACCOUNT_HEADER = "X-CalCo-Account-ID"
 FIXTURE_PROFILE_ID = "22222222-2222-4222-8222-222222222222"
 
+# Opt-in batch-write controls. Defaults keep the historical fixture behavior
+# byte-for-byte; only /api/logs/batch consults these knobs.
+TRANSIENT_FAILURE_MESSAGE = "Injected transient failure; retry the submission."
+BATCH_HOLD_TIMEOUT_SECONDS = 15.0  # < the client's default 30s URLSession timeout
+
+
+class BatchPostGate:
+    """One parked batch POST. Reset releases the gate so it can never commit."""
+
+    def __init__(self, epoch: int) -> None:
+        self.epoch = epoch
+        self.event = threading.Event()
+
+
 NUTRIENTS = [
     {"code": "ENERGY_KCAL", "amount": "100", "unit": "kcal"},
     {"code": "PROTEIN_G", "amount": "1", "unit": "g"},
@@ -407,6 +421,18 @@ class FixtureState:
                 "late_night_snack",
             ]
             self.log_post_attempts = 0
+            # Batch-only opt-ins plus a generation guard. A reset increments the
+            # epoch and releases every parked gate BEFORE replacing state, so a
+            # request parked in a previous test cannot write into this one.
+            self.epoch = getattr(self, "epoch", 0) + 1
+            self.fail_batch_once = body.get("fail_batch_once") is True
+            self.batch_fail_once_armed = self.fail_batch_once
+            self.log_post_hold = body.get("log_post_hold") is True
+            for gate in getattr(self, "batch_post_gates", {}).values():
+                gate.event.set()
+            self.batch_post_gates: dict[str, BatchPostGate] = {}
+            self.log_batch_post_commits = 0
+            self.log_batch_post_in_flight = 0
             self.api_keys: list[dict] = [
                 {
                     "id": "qa-api-key-1",
@@ -460,6 +486,13 @@ class FixtureState:
             "identity_id": self.identity_id,
             "profile_id": self.profile_id,
             "log_post": self.log_post_mode,
+            # Additive capability advertisement for write-capable UI tests.
+            # Exact names match the /__qa/reset opt-in keys.
+            "capabilities": {
+                "fail_batch_once": True,
+                "log_post_hold": True,
+            },
+            "injected_transient_message": TRANSIENT_FAILURE_MESSAGE,
         }
 
     def session(self) -> dict:
@@ -619,6 +652,13 @@ class Handler(BaseHTTPRequestHandler):
                             for log in self.state.logs
                         ],
                         "log_post_attempts": self.state.log_post_attempts,
+                        "log_batch_post_commits": self.state.log_batch_post_commits,
+                        "log_batch_post_in_flight": self.state.log_batch_post_in_flight,
+                        "fail_batch_once": self.state.fail_batch_once,
+                        "batch_fail_once_armed": self.state.batch_fail_once_armed,
+                        "log_post_hold": self.state.log_post_hold,
+                        "fixture_epoch": self.state.epoch,
+                        "today": self.state.today,
                         "api_key_count": len(self.state.api_keys),
                         "goal_calories": self.state.goal.get("calorie_target"),
                         "custom_food_count": len(self.state.custom_foods),
@@ -997,6 +1037,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/__qa/reset":
             self._send(200, self.state.reset(self._json_body()))
             return
+        if path == "/__qa/log-post/release":
+            # Unauthenticated QA control, like /__qa/reset. Setting the event
+            # under the lock is non-blocking; the parked request reacquires the
+            # lock itself before it commits.
+            with self.state.lock:
+                released = len(self.state.batch_post_gates)
+                for gate in self.state.batch_post_gates.values():
+                    gate.event.set()
+            self._send(200, {"released": released})
+            return
         if path == "/api/auth/login":
             body = self._json_body()
             if (
@@ -1077,8 +1127,55 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/logs/batch":
             body = self._json_body()
             items = body.get("items") or []
+            gate: BatchPostGate | None = None
+            token: str | None = None
+            epoch: int | None = None
             with self.state.lock:
+                # Global attempts stay once-per-batch, as on every other route.
                 self.state.log_post_attempts += 1
+                if self.state.fail_batch_once and self.state.batch_fail_once_armed:
+                    self.state.batch_fail_once_armed = False
+                    self._error(
+                        503,
+                        "temporarily_unavailable",
+                        TRANSIENT_FAILURE_MESSAGE,
+                    )
+                    return
+                epoch = self.state.epoch
+                if self.state.log_post_hold:
+                    token = uuid.uuid4().hex
+                    gate = BatchPostGate(epoch)
+                    self.state.batch_post_gates[token] = gate
+                    self.state.log_batch_post_in_flight += 1
+            if gate is not None:
+                # Release the state lock BEFORE parking: reset and the release
+                # route must run concurrently on the ThreadingHTTPServer.
+                released = gate.event.wait(timeout=BATCH_HOLD_TIMEOUT_SECONDS)
+                with self.state.lock:
+                    if token is not None:
+                        self.state.batch_post_gates.pop(token, None)
+                    generation_matches = self.state.epoch == epoch
+                    if generation_matches:
+                        # Only the owning generation may decrement its counter.
+                        self.state.log_batch_post_in_flight = max(
+                            0, self.state.log_batch_post_in_flight - 1
+                        )
+                if not released or not generation_matches:
+                    # Fail closed. A timeout or a reset never auto-commits.
+                    self._error(
+                        503,
+                        "temporarily_unavailable",
+                        TRANSIENT_FAILURE_MESSAGE,
+                    )
+                    return
+            with self.state.lock:
+                if self.state.epoch != epoch:
+                    self._error(
+                        503,
+                        "temporarily_unavailable",
+                        TRANSIENT_FAILURE_MESSAGE,
+                    )
+                    return
                 created: list[dict] = []
                 for index, line in enumerate(items):
                     item = line.get("item") or {}
@@ -1107,6 +1204,7 @@ class Handler(BaseHTTPRequestHandler):
                         }
                     self.state.logs.append(log)
                     created.append(log)
+                self.state.log_batch_post_commits += 1
                 self._send(201, {"items": created})
             return
         if path == "/api/logs/ad-hoc":

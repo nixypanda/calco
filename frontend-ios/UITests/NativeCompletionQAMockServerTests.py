@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -52,6 +53,7 @@ class MockContractTests(unittest.TestCase):
         path: str,
         body: dict | None = None,
         headers: dict[str, str] | None = None,
+        timeout: float = 5.0,
     ) -> tuple[int, dict, object]:
         data = None if body is None else json.dumps(body).encode()
         return self.request_raw(
@@ -60,6 +62,7 @@ class MockContractTests(unittest.TestCase):
             data,
             "application/json" if data is not None else None,
             headers,
+            timeout,
         )
 
     def request_raw(
@@ -69,6 +72,7 @@ class MockContractTests(unittest.TestCase):
         data: bytes | None,
         content_type: str | None,
         headers: dict[str, str] | None = None,
+        timeout: float = 5.0,
     ) -> tuple[int, dict, object]:
         request = urllib.request.Request(self.base + path, data=data, method=method)
         request.add_header("Accept", "application/json")
@@ -79,7 +83,7 @@ class MockContractTests(unittest.TestCase):
         if self.cookie:
             request.add_header("Cookie", self.cookie)
         try:
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 raw = response.read()
                 return (
                     response.status,
@@ -126,6 +130,38 @@ class MockContractTests(unittest.TestCase):
         )
         self.assertEqual(login[0], 200)
         self.cookie = login[2].headers["Set-Cookie"].split(";", 1)[0]
+
+    def state(self) -> dict:
+        return self.request("GET", "/__qa/state")[1]
+
+    @staticmethod
+    def batch_body() -> dict:
+        base = {
+            "log_date": "2026-11-19",
+            "meal_slot": "breakfast",
+            "item": {"type": "product", "id": "qa-apple"},
+            "quantity": {"amount": "100", "unit": "g"},
+        }
+        return {
+            "items": [
+                base,
+                {
+                    **base,
+                    "meal_slot": "lunch",
+                    "item": {"type": "product", "id": "qa-pear"},
+                },
+            ]
+        }
+
+    def wait_for_in_flight(self, expected: int, timeout: float = 5.0) -> dict:
+        deadline = time.monotonic() + timeout
+        while True:
+            snapshot = self.state()
+            if snapshot["log_batch_post_in_flight"] == expected:
+                return snapshot
+            if time.monotonic() >= deadline:
+                self.fail(f"Batch in-flight never reached {expected}: {snapshot}")
+            time.sleep(0.01)
 
     def test_session_identity_and_profile_are_distinct_valid_uuids(self) -> None:
         status, payload, _ = self.request("GET", "/api/auth/session")
@@ -455,6 +491,159 @@ class MockContractTests(unittest.TestCase):
         status, payload, _ = self.request("GET", "/api/auth/session")
         self.assertEqual(status, 401)
         self.assertEqual(payload["error"]["code"], "not_found")
+
+
+    # MARK: - Opt-in batch write controls (defaults unchanged)
+
+    def test_default_reset_keeps_batch_success_and_single_route_behavior(self) -> None:
+        health = self.request("GET", "/__qa/health")[1]
+        self.assertEqual(
+            health["capabilities"],
+            {"fail_batch_once": True, "log_post_hold": True},
+        )
+        self.assertEqual(
+            health["injected_transient_message"], mock.TRANSIENT_FAILURE_MESSAGE
+        )
+
+        baseline = self.state()
+        self.assertFalse(baseline["fail_batch_once"])
+        self.assertFalse(baseline["log_post_hold"])
+        self.assertEqual(baseline["log_batch_post_commits"], 0)
+        self.assertEqual(baseline["log_batch_post_in_flight"], 0)
+        self.assertEqual(baseline["log_post_attempts"], 0)
+        self.assertEqual(baseline["log_count"], 8)
+
+        status, batch, _ = self.request("POST", "/api/logs/batch", self.batch_body())
+        self.assertEqual(status, 201)
+        self.assertEqual([row["id"] for row in batch["items"]],
+                         ["batch-log-9", "batch-log-11"])
+        after_batch = self.state()
+        self.assertEqual(after_batch["log_post_attempts"], 1)
+        self.assertEqual(after_batch["log_batch_post_commits"], 1)
+        self.assertEqual(after_batch["log_batch_post_in_flight"], 0)
+        self.assertEqual(after_batch["log_count"], 10)
+
+        # The single route keeps its old behavior; only the batch route opted in.
+        status, single, _ = self.request(
+            "POST", "/api/logs", self.batch_body()["items"][0]
+        )
+        self.assertEqual(status, 201)
+        self.assertTrue(single["id"].startswith("new-log-"))
+        after_single = self.state()
+        self.assertEqual(after_single["log_post_attempts"], 2)
+        self.assertEqual(after_single["log_batch_post_commits"], 1)
+        self.assertEqual(after_single["log_count"], 11)
+
+    def test_fail_batch_once_fails_once_then_explicit_retry_commits(self) -> None:
+        reset = self.request(
+            "POST",
+            "/__qa/reset",
+            {"today": "2026-11-19", "fail_batch_once": True},
+        )
+        self.assertEqual(reset[0], 200)
+        self.login()
+
+        status, payload, _ = self.request(
+            "POST", "/api/logs/batch", self.batch_body()
+        )
+        self.assertEqual(status, 503)
+        self.assertEqual(payload["error"]["code"], "temporarily_unavailable")
+        self.assertEqual(
+            payload["error"]["message"], mock.TRANSIENT_FAILURE_MESSAGE
+        )
+        failed = self.state()
+        self.assertEqual(failed["log_post_attempts"], 1)
+        self.assertEqual(failed["log_batch_post_commits"], 0)
+        self.assertEqual(failed["log_batch_post_in_flight"], 0)
+        self.assertEqual(failed["log_count"], 8)
+        self.assertFalse(failed["batch_fail_once_armed"])
+
+        status, batch, _ = self.request("POST", "/api/logs/batch", self.batch_body())
+        self.assertEqual(status, 201)
+        self.assertEqual([row["id"] for row in batch["items"]],
+                         ["batch-log-9", "batch-log-11"])
+        final = self.state()
+        self.assertEqual(final["log_post_attempts"], 2)
+        self.assertEqual(final["log_batch_post_commits"], 1)
+        self.assertEqual(final["log_count"], 10)
+
+    def test_log_post_hold_parks_batch_until_release_then_commits(self) -> None:
+        reset = self.request(
+            "POST",
+            "/__qa/reset",
+            {"today": "2026-11-19", "log_post_hold": True},
+        )
+        self.assertEqual(reset[0], 200)
+        self.login()
+
+        outcome: dict[str, tuple[int, dict, object]] = {}
+
+        def worker() -> None:
+            outcome["response"] = self.request(
+                "POST", "/api/logs/batch", self.batch_body(), timeout=25
+            )
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        parked = self.wait_for_in_flight(1)
+        self.assertEqual(parked["log_post_attempts"], 1)
+        self.assertEqual(parked["log_batch_post_commits"], 0)
+        self.assertEqual(parked["log_count"], 8)
+        self.assertTrue(parked["log_post_hold"])
+        self.assertTrue(thread.is_alive())
+
+        status, release, _ = self.request("POST", "/__qa/log-post/release")
+        self.assertEqual(status, 200)
+        self.assertEqual(release["released"], 1)
+        thread.join(timeout=10)
+        self.assertFalse(thread.is_alive(), "The parked batch POST did not resume.")
+
+        status, batch, _ = outcome["response"]
+        self.assertEqual(status, 201)
+        self.assertEqual(len(batch["items"]), 2)
+        final = self.state()
+        self.assertEqual(final["log_post_attempts"], 1)
+        self.assertEqual(final["log_batch_post_commits"], 1)
+        self.assertEqual(final["log_batch_post_in_flight"], 0)
+        self.assertEqual(final["log_count"], 10)
+
+    def test_reset_during_hold_aborts_old_gate_without_writing_new_state(self) -> None:
+        reset = self.request(
+            "POST",
+            "/__qa/reset",
+            {"today": "2026-11-19", "log_post_hold": True},
+        )
+        self.assertEqual(reset[0], 200)
+        self.login()
+        old_epoch = self.state()["fixture_epoch"]
+
+        outcome: dict[str, tuple[int, dict, object]] = {}
+
+        def worker() -> None:
+            outcome["response"] = self.request(
+                "POST", "/api/logs/batch", self.batch_body(), timeout=25
+            )
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        self.wait_for_in_flight(1)
+
+        fresh = self.request("POST", "/__qa/reset", {"today": "2026-11-19"})
+        self.assertEqual(fresh[0], 200)
+        self.login()
+        thread.join(timeout=10)
+        self.assertFalse(thread.is_alive(), "Reset did not release the old gate.")
+
+        status, payload, _ = outcome["response"]
+        self.assertEqual(status, 503, "A parked request must fail closed after reset.")
+        self.assertEqual(payload["error"]["code"], "temporarily_unavailable")
+        final = self.state()
+        self.assertGreater(final["fixture_epoch"], old_epoch)
+        self.assertEqual(final["log_post_attempts"], 0)
+        self.assertEqual(final["log_batch_post_commits"], 0)
+        self.assertEqual(final["log_batch_post_in_flight"], 0)
+        self.assertEqual(final["log_count"], 8)
+        self.assertTrue(all(row.startswith("hist-log-") for row in final["log_ids"]))
 
 
 if __name__ == "__main__":
