@@ -160,10 +160,16 @@ public struct MealsFlowView: View {
                 },
                 showsAddButton: path.count == rootPathCount
             )
-            // An explicit Back is only for legacy standalone hosting. The hub
-            // and all pushed detail screens keep the system back chevron.
+            // A modal feature-sheet root owns a Close action routed through the
+            // host's onClose. Pushed Library pages and detail screens keep only
+            // the system back chevron. The legacy Back action is standalone-only
+            // and yields to Close so the leading slot never holds both.
             .toolbar {
-                if let onBack, path.count == rootPathCount, !usesSharedPath {
+                if onClose != nil, path.count == rootPathCount, !usesSharedPath {
+                    ToolbarItem(placement: .cancellationAction) {
+                        closeButton
+                    }
+                } else if let onBack, path.count == rootPathCount, !usesSharedPath {
                     ToolbarItem(placement: backPlacement) {
                         Button {
                             onBack()

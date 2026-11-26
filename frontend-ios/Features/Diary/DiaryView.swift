@@ -826,7 +826,7 @@ public struct DiaryView: View {
 
 
 
-private func macroColor(_ kind: DiaryMacroKind) -> Color {
+func macroColor(_ kind: DiaryMacroKind) -> Color {
     switch kind {
     case .protein: return .pink
     case .carbs: return .blue
@@ -848,7 +848,7 @@ private func macroColor(_ kind: DiaryMacroKind) -> Color {
 /// Passive native progress styling: a thick rounded track and fill instead of
 /// the platform's ~2pt linear bar. `ProgressView` keeps its value/label
 /// accessibility; the style only draws the geometry, with no interaction.
-private struct BriefCapsuleProgressStyle: ProgressViewStyle {
+struct BriefCapsuleProgressStyle: ProgressViewStyle {
     let fraction: Double
     let color: Color
     let height: CGFloat
@@ -868,7 +868,7 @@ private struct BriefCapsuleProgressStyle: ProgressViewStyle {
     }
 }
 
-private struct AdaptiveLabeledRow<Horizontal: View, Vertical: View>: View {
+struct AdaptiveLabeledRow<Horizontal: View, Vertical: View>: View {
     let accessibilityLayout: Bool
     let horizontal: Horizontal
     let vertical: Vertical
@@ -895,7 +895,7 @@ private struct AdaptiveLabeledRow<Horizontal: View, Vertical: View>: View {
     }
 }
 
-private struct MealArtHeader: View {
+struct MealArtHeader: View {
     let slot: MealSlot
     let title: String
     let calories: Double

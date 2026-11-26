@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 import XCTest
@@ -247,6 +248,170 @@ private final class AppFlowSettingsService: DiarySettingsServicing, @unchecked S
     }
 }
 
+/// Goal-writeback fake. `authoritativeSave` is the server response returned by
+/// `saveGoal`, deliberately allowed to differ from the submitted draft so a
+/// test can prove the coordinator maps the *server* snapshot, not the draft.
+/// `armHold` / `waitForSaveStarted` / `releaseSave` let a save begin under one
+/// session and resolve after a real 401, without any sleep or polling.
+private actor AppFlowGoalSettingsService: DiarySettingsServicing {
+    private var goal: GoalSnapshot
+    private let preferences: DiaryPreferences
+    private let authoritativeSave: GoalSnapshot?
+    private var saveRequests: [SaveGoalRequest] = []
+    private var goalFetchDates: [LocalDiaryDate] = []
+    private var holdNextSave = false
+    private var saveStarted = false
+    private var released = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    // Preferences knobs. All default to the original pass-through behaviour,
+    // so the existing goal-writeback tests are unaffected.
+    private let authoritativePreferencesSave: DiaryPreferences?
+    private let preferencesSaveError: Error?
+    private var savedPreferenceRequests: [DiaryPreferences] = []
+    private var holdNextPreferencesSave = false
+    private var preferencesSaveStarted = false
+    private var preferencesReleased = false
+    private var preferencesStartWaiters: [CheckedContinuation<Void, Never>] = []
+    private var preferencesReleaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(
+        goal: GoalSnapshot,
+        preferences: DiaryPreferences,
+        authoritativeSave: GoalSnapshot? = nil,
+        authoritativePreferencesSave: DiaryPreferences? = nil,
+        preferencesSaveError: Error? = nil
+    ) {
+        self.goal = goal
+        self.preferences = preferences
+        self.authoritativeSave = authoritativeSave
+        self.authoritativePreferencesSave = authoritativePreferencesSave
+        self.preferencesSaveError = preferencesSaveError
+    }
+
+    func armHold() {
+        holdNextSave = true
+        saveStarted = false
+        released = false
+    }
+
+    func waitForSaveStarted() async {
+        guard !saveStarted else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func releaseSave() {
+        released = true
+        let waiters = releaseWaiters
+        releaseWaiters = []
+        for waiter in waiters { waiter.resume() }
+    }
+
+    func armPreferencesHold() {
+        holdNextPreferencesSave = true
+        preferencesSaveStarted = false
+        preferencesReleased = false
+    }
+
+    func waitForPreferencesSaveStarted() async {
+        guard !preferencesSaveStarted else { return }
+        await withCheckedContinuation { preferencesStartWaiters.append($0) }
+    }
+
+    func releasePreferencesSave() {
+        preferencesReleased = true
+        let waiters = preferencesReleaseWaiters
+        preferencesReleaseWaiters = []
+        for waiter in waiters { waiter.resume() }
+    }
+
+    func requests() -> [SaveGoalRequest] { saveRequests }
+    func preferenceRequests() -> [DiaryPreferences] { savedPreferenceRequests }
+    func fetchDates() -> [LocalDiaryDate] { goalFetchDates }
+
+    func fetchGoal(on date: LocalDiaryDate) async throws -> GoalSnapshot {
+        goalFetchDates.append(date)
+        return goal
+    }
+
+    func saveGoal(_ request: SaveGoalRequest) async throws -> GoalSnapshot {
+        saveRequests.append(request)
+        saveStarted = true
+        let started = startWaiters
+        startWaiters = []
+        for waiter in started { waiter.resume() }
+        if holdNextSave {
+            holdNextSave = false
+            if !released {
+                await withCheckedContinuation { releaseWaiters.append($0) }
+            }
+        }
+        if let authoritativeSave { return authoritativeSave }
+        let saved = GoalSnapshot(
+            requestedDate: request.localDate,
+            effectiveFrom: request.localDate,
+            source: .saved,
+            targets: request.targets
+        )
+        goal = saved
+        return saved
+    }
+
+    func fetchDiaryPreferences() async throws -> DiaryPreferences { preferences }
+
+    func updateDiaryPreferences(_ value: DiaryPreferences) async throws -> DiaryPreferences {
+        savedPreferenceRequests.append(value)
+        preferencesSaveStarted = true
+        let started = preferencesStartWaiters
+        preferencesStartWaiters = []
+        for waiter in started { waiter.resume() }
+        if let preferencesSaveError { throw preferencesSaveError }
+        if holdNextPreferencesSave {
+            holdNextPreferencesSave = false
+            if !preferencesReleased {
+                await withCheckedContinuation { preferencesReleaseWaiters.append($0) }
+            }
+        }
+        return authoritativePreferencesSave ?? value
+    }
+}
+
+/// Main-actor capture of the installed store-backed preferences callback.
+private final class PreferencesCallbackBox: @unchecked Sendable {
+    struct Call: Equatable {
+        let generation: UInt64
+        let prefs: DiaryPrefs
+    }
+
+    private(set) var calls: [Call] = []
+
+    func record(_ generation: UInt64, _ prefs: DiaryPrefs) {
+        calls.append(Call(generation: generation, prefs: prefs))
+    }
+}
+
+/// Main-actor capture of the installed store-backed goal callback.
+private final class GoalCallbackBox: @unchecked Sendable {
+    struct Call: Equatable {
+        let generation: UInt64
+        let targets: DiaryGoalTargets
+        let date: LocalDiaryDate
+    }
+
+    private(set) var calls: [Call] = []
+
+    func record(_ generation: UInt64, _ targets: DiaryGoalTargets, _ date: LocalDiaryDate) {
+        calls.append(Call(generation: generation, targets: targets, date: date))
+    }
+}
+
+private final class SettingsLoadBox: @unchecked Sendable {
+    var fulfilled = false
+    var continuation: CheckedContinuation<Void, Never>?
+    var cancellable: AnyCancellable?
+}
+
 private actor AppFlowFoodDetailService: FoodDetailServicing {
     private let food: FoodDetail
     private var holdsNextLog = false
@@ -454,9 +619,10 @@ final class AppFlowTests: XCTestCase {
         cookieClearer: AppFlowCookieClearer,
         searchService: AppFlowSearchService = AppFlowSearchService(),
         foodDetailService: AppFlowFoodDetailService = AppFlowFoodDetailService(),
-        settingsService: AppFlowSettingsService? = nil,
+        settingsService: (any DiarySettingsServicing)? = nil,
         logSubmissionStore: LogSubmissionStore? = nil,
         logSubmissionService: LogSubmissionService? = nil,
+        diaryScreenOwnership: DiaryScreenOwnership = .legacy,
         todayProvider: (() -> LocalDiaryDate)? = nil
     ) -> AppShellCoordinator {
         let client = CalCoAPIClient(baseURL: appFlowBaseURL)
@@ -487,6 +653,7 @@ final class AppFlowTests: XCTestCase {
             ),
             logSubmissionStore: logSubmissionStore ?? makeIsolatedSubmissionStore(),
             logSubmissionService: logSubmissionService,
+            diaryScreenOwnership: diaryScreenOwnership,
             todayProvider: todayProvider ?? { self.date }
         )
     }
@@ -507,6 +674,67 @@ final class AppFlowTests: XCTestCase {
             guard case .loaded = settings.goalState else { return false }
             guard case .loaded = settings.preferencesState else { return false }
             return true
+        }
+    }
+
+    /// Deterministic rendezvous on the settings view model's own published
+    /// goal state. No sleep, yield, poll or duration — the sink fires on the
+    /// MainActor change itself.
+    private func awaitGoalSettingsLoaded(_ settings: DiarySettingsViewModel) async {
+        if case .loaded = settings.goalState { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let box = SettingsLoadBox()
+            box.continuation = continuation
+            box.cancellable = settings.$goalState.sink { state in
+                guard !box.fulfilled, case .loaded = state else { return }
+                box.fulfilled = true
+                let pending = box.continuation
+                box.continuation = nil
+                box.cancellable?.cancel()
+                box.cancellable = nil
+                pending?.resume()
+            }
+        }
+    }
+
+    /// Deterministic rendezvous on the settings view model's own published
+    /// preferences state — no sleep, yield, poll or duration.
+    private func awaitPreferencesSettingsLoaded(_ settings: DiarySettingsViewModel) async {
+        if case .loaded = settings.preferencesState { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let box = SettingsLoadBox()
+            box.continuation = continuation
+            box.cancellable = settings.$preferencesState.sink { state in
+                guard !box.fulfilled, case .loaded = state else { return }
+                box.fulfilled = true
+                let pending = box.continuation
+                box.continuation = nil
+                box.cancellable?.cancel()
+                box.cancellable = nil
+                pending?.resume()
+            }
+        }
+    }
+
+    /// Deterministic rendezvous on the diary's own published load state.
+    private func awaitLoadedDiary(_ coordinator: AppShellCoordinator) async {
+        guard let diary = coordinator.diaryViewModel else {
+            XCTFail("Expected a diary view model")
+            return
+        }
+        if diary.state == .loaded(.idle) { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let box = SettingsLoadBox()
+            box.continuation = continuation
+            box.cancellable = diary.$state.sink { state in
+                guard !box.fulfilled, state == .loaded(.idle) else { return }
+                box.fulfilled = true
+                let pending = box.continuation
+                box.continuation = nil
+                box.cancellable?.cancel()
+                box.cancellable = nil
+                pending?.resume()
+            }
         }
     }
 
@@ -2538,5 +2766,710 @@ final class AppFlowTests: XCTestCase {
         await coordinator.signOut()
 
         XCTAssertNil(coordinator.settingsViewModel)
+    }
+
+    // MARK: - Real SettingsVM.saveGoals writeback (server snapshot authoritative)
+
+    private func goalWritebackCoordinator(
+        sessionService: AppFlowSessionService,
+        diaryService: AppFlowDiaryService,
+        settingsService: AppFlowGoalSettingsService,
+        ownership: DiaryScreenOwnership
+    ) -> AppShellCoordinator {
+        makeCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            settingsService: settingsService,
+            diaryScreenOwnership: ownership
+        )
+    }
+
+    private func defaultGoalSnapshot() -> GoalSnapshot {
+        GoalSnapshot(
+            requestedDate: date,
+            effectiveFrom: nil,
+            source: .default,
+            targets: GoalTargets(
+                calorieTarget: 2_000,
+                proteinTargetG: 150,
+                carbsTargetG: 250,
+                fatTargetG: 70
+            )
+        )
+    }
+
+    /// The draft satisfies the exact formula (170*4 + 210*4 + 70*9 = 2150).
+    private func typeDifferentDraft(into settings: DiarySettingsViewModel) async {
+        // Let the real load settle before typing; otherwise applyLoadedGoal
+        // would overwrite the draft after it was entered.
+        await awaitGoalSettingsLoaded(settings)
+        settings.calorieTarget = "2150"
+        settings.proteinTargetG = "170"
+        settings.carbsTargetG = "210"
+        settings.fatTargetG = "70"
+    }
+
+    func testStoreBackedGoalSaveMapsServerSnapshotAndDeliversCallbackOnce() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        let loadedGoal = DiaryGoalTargets(
+            calorieTarget: 2_000, proteinTargetG: 150, carbsTargetG: 250, fatTargetG: 70
+        )
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            goal: loadedGoal,
+            prefs: DiaryPrefs(enabledSlots: [.lunch])
+        ))
+        // The server response differs from the typed draft on purpose: only the
+        // mapped server snapshot may reach the store-backed owner.
+        let authoritative = GoalSnapshot(
+            requestedDate: date,
+            effectiveFrom: date,
+            source: .saved,
+            targets: GoalTargets(
+                calorieTarget: 2_230, proteinTargetG: 150, carbsTargetG: 250, fatTargetG: 70
+            )
+        )
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: [.lunch]),
+            authoritativeSave: authoritative
+        )
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .storeBackedScreen
+        )
+        let callback = GoalCallbackBox()
+        coordinator.installSettingsGoalCallback { generation, targets, savedDate in
+            callback.record(generation, targets, savedDate)
+        }
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        let generation = coordinator.session.sessionGeneration
+        let baselineFetches = await diaryService.callCount(for: date)
+
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await typeDifferentDraft(into: settings)
+        await settings.saveGoals()
+
+        XCTAssertEqual(callback.calls.count, 1, "Exactly one store-backed handoff")
+        guard let call = callback.calls.first else { return }
+        XCTAssertEqual(call.generation, generation)
+        XCTAssertEqual(call.date, date)
+        XCTAssertEqual(call.targets, CalCoStoreMapping.diaryGoal(from: authoritative))
+        XCTAssertEqual(call.targets.calorieTarget, 2_230, "The server snapshot must win over the draft")
+        // No legacy apply and no extra authoritative read on this path.
+        XCTAssertEqual(coordinator.diaryViewModel?.goal, loadedGoal)
+        let requests = await settingsService.requests()
+        XCTAssertEqual(requests.count, 1)
+        let fetchesAfterSave = await diaryService.callCount(for: date)
+        XCTAssertEqual(
+            fetchesAfterSave, baselineFetches,
+            "The settings save must not issue an additional diary fetch"
+        )
+    }
+
+    func testLegacyGoalSaveAppliesToLegacyDiaryWithoutStoreCallback() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        let loadedGoal = DiaryGoalTargets(
+            calorieTarget: 2_000, proteinTargetG: 150, carbsTargetG: 250, fatTargetG: 70
+        )
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            goal: loadedGoal,
+            prefs: DiaryPrefs(enabledSlots: [.lunch])
+        ))
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: [.lunch])
+        )
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .legacy
+        )
+        let callback = GoalCallbackBox()
+        coordinator.installSettingsGoalCallback { generation, targets, savedDate in
+            callback.record(generation, targets, savedDate)
+        }
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await typeDifferentDraft(into: settings)
+        await settings.saveGoals()
+
+        XCTAssertEqual(callback.calls.count, 0, "Legacy mode must not invoke the store callback")
+        XCTAssertEqual(diary.goal.calorieTarget, 2_150)
+        XCTAssertEqual(diary.goal.proteinTargetG, 170)
+        XCTAssertEqual(diary.goal.carbsTargetG, 210)
+        XCTAssertEqual(diary.goal.fatTargetG, 70)
+    }
+
+    func testStoreBackedGoalSaveFromHistoricalDayDeliversTodayDateAndKeepsHistory() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        let historicalGoal = DiaryGoalTargets(
+            calorieTarget: 2_100, proteinTargetG: 150, carbsTargetG: 250, fatTargetG: 70
+        )
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            goal: DiaryGoalTargets(calorieTarget: 2_000),
+            prefs: DiaryPrefs(enabledSlots: [.lunch])
+        ))
+        await diaryService.setDay(DiaryDay(
+            date: yesterday,
+            goal: historicalGoal,
+            prefs: DiaryPrefs(enabledSlots: [.lunch])
+        ))
+        // The server snapshot still names today: settings always target today,
+        // even while a historical day is visible.
+        let authoritative = GoalSnapshot(
+            requestedDate: date,
+            effectiveFrom: date,
+            source: .saved,
+            targets: GoalTargets(
+                calorieTarget: 2_230, proteinTargetG: 150, carbsTargetG: 250, fatTargetG: 70
+            )
+        )
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: [.lunch]),
+            authoritativeSave: authoritative
+        )
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .storeBackedScreen
+        )
+        let callback = GoalCallbackBox()
+        coordinator.installSettingsGoalCallback { generation, targets, savedDate in
+            callback.record(generation, targets, savedDate)
+        }
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        await diary.selectDate(yesterday)
+        XCTAssertEqual(diary.goal, historicalGoal)
+
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await typeDifferentDraft(into: settings)
+        await settings.saveGoals()
+
+        XCTAssertEqual(callback.calls.count, 1)
+        guard let call = callback.calls.first else { return }
+        XCTAssertEqual(call.date, date, "The callback must carry the server-requested today")
+        XCTAssertEqual(call.targets, CalCoStoreMapping.diaryGoal(from: authoritative))
+        XCTAssertEqual(diary.selectedDate, yesterday)
+        XCTAssertEqual(diary.goal, historicalGoal, "A historical day must keep its own goal")
+    }
+
+    func testStaleSaveAfterRealSessionExpiryDeliversNoCallbackOrMutation() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        let loadedGoal = DiaryGoalTargets(
+            calorieTarget: 2_000, proteinTargetG: 150, carbsTargetG: 250, fatTargetG: 70
+        )
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            goal: loadedGoal,
+            prefs: DiaryPrefs(enabledSlots: [.lunch])
+        ))
+        let authoritative = GoalSnapshot(
+            requestedDate: date,
+            effectiveFrom: date,
+            source: .saved,
+            targets: GoalTargets(
+                calorieTarget: 2_230, proteinTargetG: 150, carbsTargetG: 250, fatTargetG: 70
+            )
+        )
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: [.lunch]),
+            authoritativeSave: authoritative
+        )
+        await settingsService.armHold()
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .storeBackedScreen
+        )
+        let callback = GoalCallbackBox()
+        coordinator.installSettingsGoalCallback { generation, targets, savedDate in
+            callback.record(generation, targets, savedDate)
+        }
+
+        await coordinator.start()
+        await waitForLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await typeDifferentDraft(into: settings)
+
+        let saveTask = Task { await settings.saveGoals() }
+        await settingsService.waitForSaveStarted()
+        // A real 401 on the live session, while the PUT is still held.
+        XCTAssertTrue(coordinator.session.handleUnauthorized(reason: .expired))
+        // The real 401 resets the legacy VM and clears its content, so the
+        // pre-expiry 2000 target is already gone BEFORE the held PUT resolves.
+        let afterResetGoal = diary.goal
+        XCTAssertEqual(afterResetGoal, DiaryGoalTargets(), "The stale VM was not cleared")
+        await settingsService.releaseSave()
+        await saveTask.value
+
+        XCTAssertEqual(callback.calls.count, 0, "A stale success must reach no owner")
+        XCTAssertEqual(diary.goal, afterResetGoal, "A late server payload restored a cleared goal")
+        XCTAssertNil(coordinator.settingsViewModel, "The expired session cleared settings")
+    }
+
+    // MARK: - Real SettingsVM.savePreferences writeback (server response authoritative)
+
+    func testStoreBackedPreferencesSaveMapsServerResponseAndDeliversCallbackOnce() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        let allSlots = DiaryPrefs(enabledSlots: Set(MealSlot.allCases))
+        await diaryService.setDay(DiaryDay(date: date, prefs: allSlots))
+        // Draft disables only breakfast; the server response disables lunch too.
+        // Only the mapped server prefs may reach the store-backed owner.
+        let authoritative = DiaryPreferences(enabledSlots: [.dinner, .snack, .lateNightSnack])
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases)),
+            authoritativePreferencesSave: authoritative
+        )
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .storeBackedScreen
+        )
+        let callback = PreferencesCallbackBox()
+        coordinator.installSettingsPreferencesCallback { generation, prefs in
+            callback.record(generation, prefs)
+        }
+
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        let generation = coordinator.session.sessionGeneration
+        let baselineFetches = await diaryService.callCount(for: date)
+
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await awaitPreferencesSettingsLoaded(settings)
+        settings.toggleSlot(.breakfast, enabled: false)
+        await settings.savePreferences()
+
+        XCTAssertEqual(callback.calls.count, 1, "Exactly one store-backed handoff")
+        guard let call = callback.calls.first else { return }
+        XCTAssertEqual(call.generation, generation)
+        XCTAssertEqual(call.prefs, CalCoStoreMapping.diaryPrefs(from: authoritative))
+        XCTAssertFalse(call.prefs.isEnabled(.breakfast))
+        XCTAssertFalse(call.prefs.isEnabled(.lunch), "The server response must win over the draft")
+        // No legacy apply and no extra authoritative read on this path.
+        XCTAssertEqual(coordinator.diaryViewModel?.enabledSlots, allSlots.enabledSlots)
+        let requests = await settingsService.preferenceRequests()
+        XCTAssertEqual(requests.count, 1, "Exactly one PUT")
+        let fetchesAfterSave = await diaryService.callCount(for: date)
+        XCTAssertEqual(fetchesAfterSave, baselineFetches, "The save must not issue a diary GET")
+    }
+
+    func testLegacyPreferencesSaveAppliesToLegacyDiaryWithoutStoreCallback() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            prefs: DiaryPrefs(enabledSlots: Set(MealSlot.allCases))
+        ))
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases))
+        )
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .legacy
+        )
+        let callback = PreferencesCallbackBox()
+        coordinator.installSettingsPreferencesCallback { generation, prefs in
+            callback.record(generation, prefs)
+        }
+
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        let baselineFetches = await diaryService.callCount(for: date)
+
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await awaitPreferencesSettingsLoaded(settings)
+        settings.toggleSlot(.breakfast, enabled: false)
+        await settings.savePreferences()
+
+        XCTAssertEqual(callback.calls.count, 0, "Legacy mode must not invoke the store callback")
+        XCTAssertFalse(diary.enabledSlots.contains(.breakfast), "The legacy VM was not applied to")
+        XCTAssertTrue(diary.enabledSlots.contains(.lunch))
+        let fetchesAfterSave = await diaryService.callCount(for: date)
+        XCTAssertEqual(fetchesAfterSave, baselineFetches)
+    }
+
+    func testStoreBackedHistoricalPreferencesSaveKeepsDateGoalLogsAndCache() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        let historicalPrefs = DiaryPrefs(enabledSlots: [.lunch])
+        let historicalGoal = DiaryGoalTargets(
+            calorieTarget: 2_100, proteinTargetG: 160, carbsTargetG: 260, fatTargetG: 65
+        )
+        let historicalLogs = [
+            DiaryLog(id: "hist-a", mealSlot: .breakfast, title: "Historical breakfast"),
+            DiaryLog(id: "hist-b", mealSlot: .lunch, title: "Historical lunch"),
+        ]
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            goal: DiaryGoalTargets(calorieTarget: 2_000),
+            prefs: DiaryPrefs(enabledSlots: Set(MealSlot.allCases))
+        ))
+        await diaryService.setDay(DiaryDay(
+            date: yesterday,
+            logs: historicalLogs,
+            goal: historicalGoal,
+            prefs: historicalPrefs
+        ))
+        let authoritative = DiaryPreferences(enabledSlots: [.dinner, .snack])
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases)),
+            authoritativePreferencesSave: authoritative
+        )
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .storeBackedScreen
+        )
+        let callback = PreferencesCallbackBox()
+        coordinator.installSettingsPreferencesCallback { generation, prefs in
+            callback.record(generation, prefs)
+        }
+
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        await diary.selectDate(yesterday)
+        XCTAssertEqual(diary.selectedDate, yesterday)
+
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await awaitPreferencesSettingsLoaded(settings)
+        settings.toggleSlot(.breakfast, enabled: false)
+        await settings.savePreferences()
+
+        XCTAssertEqual(callback.calls.count, 1)
+        XCTAssertEqual(callback.calls.first?.prefs, CalCoStoreMapping.diaryPrefs(from: authoritative))
+        XCTAssertEqual(diary.selectedDate, yesterday, "The selected date is preserved")
+        XCTAssertEqual(coordinator.navigationState.selectedDate, yesterday)
+        XCTAssertEqual(diary.goal, historicalGoal, "The historical goal is unchanged")
+        XCTAssertEqual(diary.logs, historicalLogs, "The historical logs are unchanged")
+        XCTAssertEqual(
+            diary.enabledSlots, historicalPrefs.enabledSlots,
+            "The historical legacy prefs were not rewritten by a global save"
+        )
+    }
+
+    func testStalePreferencesSaveAfterRealSessionExpiryDeliversNoCallbackOrMutation() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            prefs: DiaryPrefs(enabledSlots: Set(MealSlot.allCases))
+        ))
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases)),
+            authoritativePreferencesSave: DiaryPreferences(enabledSlots: [.dinner])
+        )
+        await settingsService.armPreferencesHold()
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .storeBackedScreen
+        )
+        let callback = PreferencesCallbackBox()
+        coordinator.installSettingsPreferencesCallback { generation, prefs in
+            callback.record(generation, prefs)
+        }
+
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await awaitPreferencesSettingsLoaded(settings)
+        settings.toggleSlot(.breakfast, enabled: false)
+
+        let saveTask = Task { await settings.savePreferences() }
+        await settingsService.waitForPreferencesSaveStarted()
+        // A real 401 on the live session, while the PUT is still held.
+        XCTAssertTrue(coordinator.session.handleUnauthorized(reason: .expired))
+        // The real 401 resets the legacy VM to all slots BEFORE the held PUT
+        // resolves: the combined stale guard must suppress the late payload.
+        let afterResetSlots = diary.enabledSlots
+        XCTAssertEqual(afterResetSlots, Set(MealSlot.allCases), "The stale VM was not cleared")
+        await settingsService.releasePreferencesSave()
+        await saveTask.value
+
+        XCTAssertEqual(callback.calls.count, 0, "A stale success must reach no owner")
+        XCTAssertEqual(diary.enabledSlots, afterResetSlots, "A late payload restored cleared prefs")
+        XCTAssertNil(coordinator.settingsViewModel, "The expired session cleared settings")
+    }
+
+    func testSupersededSettingsViewModelCannotApplyLatePreferencesCallback() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            prefs: DiaryPrefs(enabledSlots: Set(MealSlot.allCases))
+        ))
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases))
+        )
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .storeBackedScreen
+        )
+        let callback = PreferencesCallbackBox()
+        coordinator.installSettingsPreferencesCallback { generation, prefs in
+            callback.record(generation, prefs)
+        }
+
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        coordinator.showSettings()
+        guard let oldSettings = coordinator.settingsViewModel else {
+            return XCTFail("Expected the first settings view model")
+        }
+        await awaitPreferencesSettingsLoaded(oldSettings)
+        coordinator.dismissSettings()
+        XCTAssertNil(coordinator.settingsViewModel)
+
+        coordinator.showSettings()
+        guard let newSettings = coordinator.settingsViewModel else {
+            return XCTFail("Expected the replacement settings view model")
+        }
+        XCTAssertNotEqual(oldSettings.id, newSettings.id)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        let before = diary.enabledSlots
+
+        oldSettings.onPreferencesSaved?(DiaryPreferences(enabledSlots: [.dinner]))
+
+        XCTAssertEqual(callback.calls.count, 0, "A replaced VM must reach no owner")
+        XCTAssertEqual(diary.enabledSlots, before)
+    }
+
+    func testDefinitivePreferencesFailureDeliversNoCallback() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            prefs: DiaryPrefs(enabledSlots: Set(MealSlot.allCases))
+        ))
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases)),
+            preferencesSaveError: DiarySettingsServiceError.rejected("invalid slots")
+        )
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .storeBackedScreen
+        )
+        let callback = PreferencesCallbackBox()
+        coordinator.installSettingsPreferencesCallback { generation, prefs in
+            callback.record(generation, prefs)
+        }
+
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        guard let diary = coordinator.diaryViewModel else {
+            return XCTFail("Expected a diary view model")
+        }
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await awaitPreferencesSettingsLoaded(settings)
+        settings.toggleSlot(.breakfast, enabled: false)
+        await settings.savePreferences()
+
+        XCTAssertEqual(callback.calls.count, 0, "A definitive failure reaches no owner")
+        XCTAssertNotNil(settings.preferencesSaveState.errorMessage)
+        XCTAssertFalse(settings.preferencesNeedsReconciliation, "A rejection is not ambiguous")
+        XCTAssertEqual(diary.enabledSlots, Set(MealSlot.allCases), "No prefs were applied")
+    }
+
+    func testDisabledContextualMealSlotClearedAndSearchUpdatedInBothModes() async {
+        for ownership in [DiaryScreenOwnership.legacy, .storeBackedScreen] {
+            let userSession = appFlowSession()
+            let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+            let diaryService = AppFlowDiaryService()
+            await diaryService.setDay(DiaryDay(
+                date: date,
+                prefs: DiaryPrefs(enabledSlots: Set(MealSlot.allCases))
+            ))
+            let settingsService = AppFlowGoalSettingsService(
+                goal: defaultGoalSnapshot(),
+                preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases)),
+                authoritativePreferencesSave: DiaryPreferences(
+                    enabledSlots: [.dinner, .snack, .lateNightSnack]
+                )
+            )
+            let coordinator = goalWritebackCoordinator(
+                sessionService: sessionService,
+                diaryService: diaryService,
+                settingsService: settingsService,
+                ownership: ownership
+            )
+            let callback = PreferencesCallbackBox()
+            coordinator.installSettingsPreferencesCallback { generation, prefs in
+                callback.record(generation, prefs)
+            }
+
+            await coordinator.start()
+            await awaitLoadedDiary(coordinator)
+
+            // A real navigation origin sets the contextual meal slot.
+            coordinator.startLogging(slot: .breakfast, date: date)
+            XCTAssertEqual(coordinator.navigationState.mealSlot, .breakfast)
+            XCTAssertEqual(coordinator.searchViewModel?.originMealSlot, .breakfast)
+
+            coordinator.showSettings()
+            guard let settings = coordinator.settingsViewModel else {
+                return XCTFail("Expected settings")
+            }
+            await awaitPreferencesSettingsLoaded(settings)
+            settings.toggleSlot(.breakfast, enabled: false)
+            await settings.savePreferences()
+
+            XCTAssertNil(coordinator.navigationState.mealSlot, "The disabled slot must be cleared")
+            XCTAssertEqual(coordinator.navigationState.selectedDate, date, "The date is preserved")
+            XCTAssertNil(
+                coordinator.searchViewModel?.originMealSlot,
+                "Search must inherit the cleared context"
+            )
+            switch ownership {
+            case .legacy:
+                XCTAssertEqual(callback.calls.count, 0)
+                XCTAssertFalse(coordinator.diaryViewModel?.enabledSlots.contains(.breakfast) ?? true)
+            case .storeBackedScreen:
+                XCTAssertEqual(callback.calls.count, 1)
+                XCTAssertEqual(
+                    coordinator.diaryViewModel?.enabledSlots, Set(MealSlot.allCases),
+                    "No legacy apply in store-backed mode"
+                )
+            }
+        }
+    }
+
+    func testContextualSlotDecisionUsesAuthoritativePrefsNotDraft() async {
+        let userSession = appFlowSession()
+        let sessionService = AppFlowSessionService(restore: { .authenticated(userSession) })
+        let diaryService = AppFlowDiaryService()
+        await diaryService.setDay(DiaryDay(
+            date: date,
+            prefs: DiaryPrefs(enabledSlots: Set(MealSlot.allCases))
+        ))
+        // The draft disables breakfast but the authoritative server response
+        // keeps every slot enabled. Only a stale-draft implementation clears the
+        // contextual slot here; authoritative prefs must leave it intact.
+        let settingsService = AppFlowGoalSettingsService(
+            goal: defaultGoalSnapshot(),
+            preferences: DiaryPreferences(enabledSlots: Set(MealSlot.allCases)),
+            authoritativePreferencesSave: DiaryPreferences(
+                enabledSlots: Set(MealSlot.allCases)
+            )
+        )
+        let coordinator = goalWritebackCoordinator(
+            sessionService: sessionService,
+            diaryService: diaryService,
+            settingsService: settingsService,
+            ownership: .storeBackedScreen
+        )
+        coordinator.installSettingsPreferencesCallback { _, _ in }
+
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        coordinator.startLogging(slot: .breakfast, date: date)
+        XCTAssertEqual(coordinator.navigationState.mealSlot, .breakfast)
+
+        coordinator.showSettings()
+        guard let settings = coordinator.settingsViewModel else {
+            return XCTFail("Expected settings")
+        }
+        await awaitPreferencesSettingsLoaded(settings)
+        settings.toggleSlot(.breakfast, enabled: false)
+        await settings.savePreferences()
+
+        XCTAssertEqual(
+            coordinator.navigationState.mealSlot, .breakfast,
+            "The decision must use authoritative prefs, never the stale draft"
+        )
     }
 }

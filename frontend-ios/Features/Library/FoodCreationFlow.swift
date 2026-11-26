@@ -2,6 +2,7 @@
 // The task owns its models so returning from review retains the conversation
 // and edited values. Completion removes the whole task, not just review.
 
+import ComposableArchitecture
 import SwiftUI
 
 struct FoodCreationRequest: Identifiable, Hashable {
@@ -21,6 +22,7 @@ public struct FoodCreationContext {
     let accountID: String
     let today: LocalDiaryDate
     let logContext: LibraryLogContext
+    let sessionGeneration: UInt64
     let onLogged: (LocalDiaryDate, MealSlot?) -> Void
     let onSessionExpired: () -> Void
 }
@@ -46,17 +48,34 @@ final class FoodCreationFlowModel: ObservableObject {
     private let onFinished: () -> Void
     let request: FoodCreationRequest
 
-    lazy var assistant: AssistantViewModel = {
-        guard case .assistant(let purpose, let barcode) = request.entry else {
-            preconditionFailure("Manual creation has no assistant")
+    private(set) lazy var assistantStore: StoreOf<FoodCreationAssistantFeature>? = {
+        guard case .assistant(let purpose, let barcode) = self.request.entry else {
+            return nil
         }
-        return AssistantViewModel(
-            purpose: purpose,
-            initialBarcode: barcode,
-            service: context.assistantService,
-            onAcceptDraft: { [weak self] in self?.review($0) },
-            onSessionExpired: context.onSessionExpired
-        )
+        let sessionGeneration = self.context.sessionGeneration
+        let assistantService = self.context.assistantService
+        return Store(
+            initialState: FoodCreationAssistantFeature.State(
+                assistant: AssistantFeature.State(
+                    purpose: purpose,
+                    initialBarcode: barcode,
+                    sessionGeneration: sessionGeneration
+                )
+            )
+        ) {
+            FoodCreationAssistantFeature()
+        } withDependencies: {
+            $0.assistantClient = .live(service: assistantService)
+            $0.foodCreationAssistantHandoff = FoodCreationAssistantHandoffClient(
+                acceptReviewedDraft: { [weak self] draft in
+                    self?.review(draft)
+                },
+                sessionExpired: { [weak self] generation in
+                    guard generation == self?.context.sessionGeneration else { return }
+                    self?.context.onSessionExpired()
+                }
+            )
+        }
     }()
 
     init(
@@ -130,10 +149,14 @@ struct FoodCreationFlowView: View {
     var body: some View {
         switch model.request.entry {
         case .assistant:
-            AssistantCreationPage(viewModel: model.assistant)
+            if let store = model.assistantStore {
+                AssistantCreationPage(
+                    store: store.scope(state: \.assistant, action: \.assistant)
+                )
                 .navigationDestination(isPresented: $model.isReviewPresented) {
                     reviewPage
                 }
+            }
         case .barcode:
             if let editor = model.editor {
                 CustomFoodEditorView(viewModel: editor)
@@ -152,16 +175,16 @@ struct FoodCreationFlowView: View {
 }
 
 private struct AssistantCreationPage: View {
-    @ObservedObject var viewModel: AssistantViewModel
+    let store: StoreOf<AssistantFeature>
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingBack = false
 
     var body: some View {
-        AssistantView(viewModel: viewModel)
-            .onAppear { viewModel.resumeDraftReview() }
-            .navigationBarBackButtonHidden(viewModel.canStartOver || viewModel.isSending)
+        AssistantFeatureView(store: store)
+            .onAppear { store.send(.resumeDraftReview) }
+            .navigationBarBackButtonHidden(store.canStartOver || store.isSending)
             .toolbar {
-                if viewModel.canStartOver || viewModel.isSending {
+                if store.canStartOver || store.isSending {
                     ToolbarItem(placement: .cancellationAction) {
                         Button {
                             confirmingBack = true

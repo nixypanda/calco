@@ -10,6 +10,7 @@
 //
 
 import Combine
+import ComposableArchitecture
 import SwiftUI
 
 // MARK: - Coordinator
@@ -46,6 +47,103 @@ public struct MealsSheetRequest: Identifiable, Equatable, Sendable {
         self.mealSlot = mealSlot
         self.initialMealID = initialMealID
         self.initialPortion = initialPortion
+    }
+}
+
+/// Owns whether the Search feature is backed by the legacy SearchViewModel or
+/// the migrated TCA feature. The coordinator only constructs and drives the
+/// legacy SearchViewModel in `.legacy` mode; `.tca` keeps the ready graph and
+/// generation authority intact while leaving Search construction/rendering to
+/// the future root-bridge task. The actual renderer is still legacy until that
+/// bridge lands, so production callers should keep the default.
+public enum SearchOwnership: Sendable, Equatable {
+    case legacy
+    case tca
+}
+
+/// Ownership of Diary *rendering* during the transitional migration. Both modes
+/// keep the coordinator's existing ready graph, bootstrap load and legacy
+/// `DiaryViewModel` intact; `.storeBackedScreen` only means the native screen is
+/// hosted from the TCA window store instead of the legacy `DiaryView`. Production
+/// stays on `.legacy`; only the QA-gated test host opts into the store-backed
+/// screen.
+public enum DiaryScreenOwnership: Sendable, Equatable {
+    case legacy
+    case storeBackedScreen
+}
+
+/// One immutable, typed log-editor mutation handed to the store-backed Diary
+/// owner. The localized notice is built by the coordinator *before* the async
+/// handoff, so a later generation/date change cannot rewrite what the user did.
+/// The editor service already produces a `DiaryLog`; there is no FoodLog
+/// conversion on this path.
+public enum DiaryEditorMutation: Equatable, Sendable {
+    case saved(
+        originalID: String,
+        date: LocalDiaryDate,
+        log: DiaryLog,
+        notice: DiaryMutationNotice
+    )
+    case deleted(
+        id: String,
+        date: LocalDiaryDate,
+        notice: DiaryMutationNotice
+    )
+
+    /// The single date this mutation touches (the captured editor date).
+    public var date: LocalDiaryDate {
+        switch self {
+        case .saved(_, let date, _, _), .deleted(_, let date, _):
+            return date
+        }
+    }
+
+    /// The immutable localized notice projected from the captured payload —
+    /// never reconstructed at delivery time.
+    public var notice: DiaryMutationNotice {
+        switch self {
+        case .saved(_, _, _, let notice), .deleted(_, _, let notice):
+            return notice
+        }
+    }
+}
+
+/// One successful typed submission delivered to the store-backed Diary owner.
+/// Affected dates are the de-duplicated union of draft dates and the log dates
+/// returned by the server, so a multi-day write can never be silently dropped.
+public struct DiaryMutationDelivery: Equatable, Sendable {
+    public let generation: UInt64
+    public let affectedDates: [LocalDiaryDate]
+    /// Original server payload; conversion to a `DiaryLog` belongs to the
+    /// receiving owner, which can reject a malformed row per date.
+    public let logs: [FoodLog]
+    /// Set only by the transitional log-editor slice. It is mutually exclusive
+    /// with the created-submission payload: there is no memberwise init, so an
+    /// invalid "created + editor" combination cannot be constructed.
+    public let editor: DiaryEditorMutation?
+
+    /// Created (quick-add/copy/batch) submission. Preserves the original
+    /// signature and behaviour: the editor payload is always `nil`.
+    public init(generation: UInt64, drafts: [LogSubmissionDraft], logs: [FoodLog]) {
+        self.generation = generation
+        self.editor = nil
+        var dates: [LocalDiaryDate] = []
+        var seen: Set<LocalDiaryDate> = []
+        let candidates = drafts.map(\.date) + logs.map(\.logDate)
+        for date in candidates where seen.insert(date).inserted {
+            dates.append(date)
+        }
+        self.affectedDates = dates
+        self.logs = logs
+    }
+
+    /// Log-editor mutation. The captured date is the single affected date and
+    /// no created-submission row payload is present.
+    public init(generation: UInt64, editor: DiaryEditorMutation) {
+        self.generation = generation
+        self.editor = editor
+        self.affectedDates = [editor.date]
+        self.logs = []
     }
 }
 
@@ -106,6 +204,12 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     public let logSubmissionService: LogSubmissionService
     public let logSubmissionSessionContextProvider: LogSubmissionSessionContextProvider?
     public let todayProvider: () -> LocalDiaryDate
+    /// Read-only ownership mode for the Search feature. The future root bridge
+    /// will read this to decide whether to host the TCA search store; the
+    /// coordinator never holds a TCA store or event bus.
+    public let searchOwnership: SearchOwnership
+    /// Transitional rendering owner. Default keeps every existing legacy path.
+    public let diaryScreenOwnership: DiaryScreenOwnership
 
     public let configurationError: String?
 
@@ -152,7 +256,9 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
 
     public var currentUser: AuthUser? { featureGraph.readyState?.user }
     public var diaryViewModel: DiaryViewModel? { featureGraph.readyState?.diary }
-    public var searchViewModel: SearchViewModel? { featureGraph.readyState?.search }
+    public var searchViewModel: SearchViewModel? {
+        featureGraph.readyState?.search.legacyViewModel
+    }
     public var currentMealsService: any MealsServicing {
         featureGraph.readyState?.services.meals ?? mealsService
     }
@@ -211,6 +317,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         logSubmissionStore: LogSubmissionStore? = nil,
         logSubmissionService: LogSubmissionService? = nil,
         logSubmissionSessionContextProvider: LogSubmissionSessionContextProvider? = nil,
+        searchOwnership: SearchOwnership = .legacy,
+        diaryScreenOwnership: DiaryScreenOwnership = .legacy,
         todayProvider: (() -> LocalDiaryDate)? = nil
     ) {
         let resolvedClient: CalCoAPIClient
@@ -237,6 +345,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         self.client = resolvedClient
         self.configurationError = configurationError
         self.session = resolvedSession
+        self.searchOwnership = searchOwnership
+        self.diaryScreenOwnership = diaryScreenOwnership
         self.diaryService = diaryService ?? CalCoDiaryServiceAdapter(client: resolvedClient)
         self.searchService = searchService ?? CalCoFoodSearchServiceAdapter(client: resolvedClient)
         self.foodDetailService = foodDetailService
@@ -359,12 +469,30 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             let apiKeys: any APIKeyServicing
         }
 
+        /// Owned Search representation. `.legacy` holds the coordinator-owned
+        /// SearchViewModel; `.tca` means the future root bridge owns Search and
+        /// this coordinator must not construct or drive a legacy view model.
+        enum Search {
+            case legacy(SearchViewModel)
+            case tca
+
+            var legacyViewModel: SearchViewModel? {
+                guard case .legacy(let viewModel) = self else { return nil }
+                return viewModel
+            }
+
+            @MainActor
+            func invalidateIfLegacy() {
+                legacyViewModel?.invalidateSession()
+            }
+        }
+
         struct Ready {
             let user: AuthUser
             let generation: UInt64
             let services: FeatureServices
             let diary: DiaryViewModel
-            let search: SearchViewModel
+            let search: Search
             var foodDetails: [String: FoodDetailViewModel]
             var logEditors: [String: LogEditorViewModel]
         }
@@ -398,7 +526,10 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         searchTabPath = []
         expandedLibrarySelected = false
         previous.readyState?.diary.resetForSessionChange()
-        previous.readyState?.search.invalidateSession()
+        previous.readyState?.search.invalidateIfLegacy()
+        // TCA mode: eventual invalidation/context delivery is pending a future
+        // root-bridge seam that can forward generation resets to the TCA search
+        // store. No coordinator-owned store, event bus, or noop callback here.
         navigationState = NavigationState(date: todayProvider())
     }
 
@@ -446,7 +577,10 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         deliveredLogEditorSuccesses.removeAll()
         dismissedSubmissions.removeAll()
         previous.readyState?.diary.resetForSessionChange()
-        previous.readyState?.search.invalidateSession()
+        previous.readyState?.search.invalidateIfLegacy()
+        // TCA mode: eventual invalidation/context delivery is pending a future
+        // root-bridge seam that can forward generation resets to the TCA search
+        // store. No coordinator-owned store, event bus, or noop callback here.
         settingsViewModel = nil
         clearPresentedFeatures()
         pendingSubmission = nil
@@ -496,48 +630,59 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             }
         )
 
-        let searchVM = SearchViewModel(
-            originDate: today,
-            originMealSlot: nil,
-            service: services.search,
-            onSelectFood: { [weak self] foodID, date, mealSlot in
-                self?.openFoodDetailIfCurrent(
-                    foodID,
-                    date: date,
-                    mealSlot: mealSlot,
-                    generation: generation
-                )
-            },
-            onSelectMeal: { [weak self] mealID, date, mealSlot, quantity in
-                self?.openMealDetailIfCurrent(
-                    mealID,
-                    date: date,
-                    mealSlot: mealSlot,
-                    initialPortion: quantity,
-                    generation: generation
-                )
-            },
-            onSessionExpired: { [weak self] in
-                self?.handleSessionExpired(generation: generation)
-            },
-            historyService: services.search as? any FoodSearchHistoryServicing,
-            onSubmitDrafts: { [weak self] drafts, names, summary, completion in
-                self?.submitDrafts(
-                    drafts,
-                    itemNames: names,
-                    summary: summary,
-                    generation: generation,
-                    completion: completion
-                )
-            }
-        )
+        let search: FeatureGraph.Search
+        switch searchOwnership {
+        case .legacy:
+            search = .legacy(SearchViewModel(
+                originDate: today,
+                originMealSlot: nil,
+                service: services.search,
+                onSelectFood: { [weak self] foodID, date, mealSlot in
+                    self?.openFoodDetailIfCurrent(
+                        foodID,
+                        date: date,
+                        mealSlot: mealSlot,
+                        generation: generation
+                    )
+                },
+                onSelectMeal: { [weak self] mealID, date, mealSlot, quantity in
+                    self?.openMealDetailIfCurrent(
+                        mealID,
+                        date: date,
+                        mealSlot: mealSlot,
+                        initialPortion: quantity,
+                        generation: generation
+                    )
+                },
+                onSessionExpired: { [weak self] in
+                    self?.handleSessionExpired(generation: generation
+                    )
+                },
+                historyService: services.search as? any FoodSearchHistoryServicing,
+                onSubmitDrafts: { [weak self] drafts, names, summary, completion in
+                    self?.submitDrafts(
+                        drafts,
+                        itemNames: names,
+                        summary: summary,
+                        generation: generation,
+                        completion: completion
+                    )
+                }
+            ))
+        case .tca:
+            // The TCA root bridge will own SearchViewModel/store construction
+            // and receive future context/invalidation deliveries. The coordinator
+            // keeps the ready graph and generation authority, but constructs no
+            // legacy SearchViewModel and issues no legacy search side effects.
+            search = .tca
+        }
 
         featureGraph = .ready(FeatureGraph.Ready(
             user: user,
             generation: generation,
             services: services,
             diary: diaryVM,
-            search: searchVM,
+            search: search,
             foodDetails: [:],
             logEditors: [:]
         ))
@@ -555,6 +700,144 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         return ready.generation == generation
     }
 
+    /// Narrow, public generation check for the migrated search screen's routing
+    /// client. It reads the private feature graph without exposing it, and
+    /// validates the captured generation against both the ready graph and the
+    /// session authority. Phase eligibility is checked by the caller.
+    public func isCurrentSearchGeneration(_ generation: UInt64) -> Bool {
+        isCurrent(generation)
+    }
+
+    /// Narrow, public generation check for the migrated diary screen's runtime
+    /// clients. It mirrors `isCurrentSearchGeneration`: it reads the private
+    /// feature graph without exposing it, and validates the captured generation
+    /// against both the ready graph and the session authority. Phase
+    /// eligibility is checked by the caller.
+    public func isCurrentDiaryGeneration(_ generation: UInt64) -> Bool {
+        isCurrent(generation)
+    }
+
+    /// Resolves the ready-graph-owned diary service only when `generation` is
+    /// still current. Returns `nil` for stale, missing, or deallocated graph
+    /// state so callers can map the miss to `.cancelled` without touching the
+    /// session authority.
+    public func currentDiaryServiceIfCurrent(_ generation: UInt64) -> (any DiaryServicing)? {
+        guard isCurrent(generation) else { return nil }
+        return currentDiaryService
+    }
+
+    // MARK: - Search ownership side effects
+    //
+    // Legacy mode drives the coordinator-owned SearchViewModel. TCA mode has no
+    // legacy VM; the root bridge installs narrow closures that forward context
+    // and external recents invalidation into the TCA store without giving the
+    // coordinator a store reference or event bus.
+
+    private var tcaSearchContextChanged:
+        (@MainActor (LocalDiaryDate, MealSlot?, UInt64) -> Void)?
+    private var tcaSearchRecentsInvalidated: (@MainActor (UInt64) -> Void)?
+
+    /// Store-backed Diary owns refresh/reconciliation. The runtime installs a
+    /// weak-store callback once; the coordinator holds the command value but
+    /// never a store, service, or view model of its own.
+    private var diaryMutationCallback: (@MainActor (DiaryMutationDelivery) async -> Void)?
+
+    /// Store-backed Diary owns the saved-goal writeback. The runtime installs a
+    /// weak-store callback once; the coordinator holds only the command value,
+    /// never a store. Legacy mode never invokes this callback.
+    private var settingsGoalCallback: (@MainActor (UInt64, DiaryGoalTargets, LocalDiaryDate) -> Void)?
+
+    /// Store-backed Diary owns the saved-preferences writeback. The runtime
+    /// installs a weak-store callback once; the coordinator holds only the
+    /// command value, never a store. Legacy mode never invokes this callback.
+    private var settingsPreferencesCallback: (@MainActor (UInt64, DiaryPrefs) -> Void)?
+
+    /// Weak, store-backed row resolver for the transitional log editor. The
+    /// runtime installs a closure that reads only the TCA visible day, its saved
+    /// override, or its settled cache. The coordinator never falls back to the
+    /// legacy `DiaryViewModel` when the store-backed screen is active, so a
+    /// freshly written row is provably read from the authoritative owner.
+    private var storeLogResolver: (@MainActor (String, LocalDiaryDate, UInt64) -> DiaryLog?)?
+
+    /// Narrow root-bridge seam for successful typed submissions in
+    /// `.storeBackedScreen` mode. Legacy mode never invokes this callback.
+    public func installDiaryMutationCallback(
+        _ callback: @escaping @MainActor (DiaryMutationDelivery) async -> Void
+    ) {
+        diaryMutationCallback = callback
+    }
+
+    /// Canonical root-bridge seam for successful settings goal saves in
+    /// `.storeBackedScreen` mode. The runtime captures its store weakly, so this
+    /// command value cannot retain the window graph. Legacy mode never invokes
+    /// it: the legacy `DiaryViewModel` stays the sole owner there.
+    public func installSettingsGoalCallback(
+        _ callback: @escaping @MainActor (UInt64, DiaryGoalTargets, LocalDiaryDate) -> Void
+    ) {
+        settingsGoalCallback = callback
+    }
+
+    /// Canonical root-bridge seam for successful settings preference saves in
+    /// `.storeBackedScreen` mode. The runtime captures its store weakly, so this
+    /// command value cannot retain the window graph. Legacy mode never invokes
+    /// it: the legacy `DiaryViewModel` stays the sole owner there.
+    public func installSettingsPreferencesCallback(
+        _ callback: @escaping @MainActor (UInt64, DiaryPrefs) -> Void
+    ) {
+        settingsPreferencesCallback = callback
+    }
+
+    /// Narrow root-bridge seam for editor row lookup. The runtime captures the
+    /// store weakly, so this command value cannot retain the window graph.
+    public func installStoreLogResolver(
+        _ resolver: @escaping @MainActor (String, LocalDiaryDate, UInt64) -> DiaryLog?
+    ) {
+        storeLogResolver = resolver
+    }
+
+    /// Narrow root-bridge seam. The runtime installs weak-store closures after
+    /// the ready graph exists; the coordinator only invokes them in `.tca` mode
+    /// with a current ready generation.
+    public func installTCASearchHandlers(
+        contextChanged: @escaping @MainActor (LocalDiaryDate, MealSlot?, UInt64) -> Void,
+        recentsInvalidated: @escaping @MainActor (UInt64) -> Void
+    ) {
+        tcaSearchContextChanged = contextChanged
+        tcaSearchRecentsInvalidated = recentsInvalidated
+    }
+
+    private func legacySearchContextDidChange(
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?
+    ) {
+        switch searchOwnership {
+        case .legacy:
+            searchViewModel?.updateContext(date: date, mealSlot: mealSlot)
+        case .tca:
+            guard let ready = featureGraph.readyState,
+                  ready.generation == session.sessionGeneration else { return }
+            tcaSearchContextChanged?(date, mealSlot, ready.generation)
+        }
+    }
+
+    private func legacySearchSelectionDidClear() {
+        switch searchOwnership {
+        case .legacy:
+            searchViewModel?.clearSelection()
+        case .tca:
+            // TCA SearchScreenFeature clears selection on appearance; no legacy
+            // VM exists and no coordinator-to-store selection write is needed.
+            break
+        }
+    }
+
+    private func notifyTCASearchRecentsInvalidatedIfCurrent() {
+        guard searchOwnership == .tca,
+              let ready = featureGraph.readyState,
+              ready.generation == session.sessionGeneration else { return }
+        tcaSearchRecentsInvalidated?(ready.generation)
+    }
+
     private func synchronizeNavigationDate(
         _ date: LocalDiaryDate,
         generation: UInt64
@@ -564,7 +847,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         var state = navigationState
         state.updateSelectedDate(date)
         navigationState = state
-        searchViewModel?.updateContext(date: date, mealSlot: state.mealSlot)
+        legacySearchContextDidChange(date: date, mealSlot: state.mealSlot)
     }
 
     private func startLoggingIfCurrent(
@@ -610,6 +893,30 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         )
     }
 
+    /// Generation-preserving variant used by runtime-injected diary submission
+    /// clients. It validates the captured generation synchronously before
+    /// delegating to the private writer so a transition between the wrapper
+    /// check and the callback cannot rebind to a newer generation.
+    public func submitDraftsForFeature(
+        _ drafts: [LogSubmissionDraft],
+        itemNames: [String],
+        summary: String,
+        expectedGeneration: UInt64,
+        completion: @escaping (LogSubmissionServiceResult) -> Void
+    ) {
+        guard isCurrent(expectedGeneration) else {
+            completion(.failure(.unauthorized))
+            return
+        }
+        submitDrafts(
+            drafts,
+            itemNames: itemNames,
+            summary: summary,
+            generation: expectedGeneration,
+            completion: completion
+        )
+    }
+
     private func submitDrafts(
         _ drafts: [LogSubmissionDraft],
         itemNames: [String],
@@ -638,8 +945,35 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
                 completion(.failure(.unauthorized))
                 return
             }
-            if case .success = result {
-                await self.diaryViewModel?.refresh()
+            if case .success(let logs) = result {
+                switch self.diaryScreenOwnership {
+                case .legacy:
+                    // Unchanged legacy owner: the sole writer refreshes the
+                    // coordinator-owned diary once.
+                    await self.diaryViewModel?.refresh()
+
+                case .storeBackedScreen:
+                    // Re-check immediately before the async handoff so a
+                    // generation change during the write cannot route a stale
+                    // payload into a newer session.
+                    guard self.isCurrent(generation) else {
+                        completion(result)
+                        return
+                    }
+                    let delivery = DiaryMutationDelivery(
+                        generation: generation,
+                        drafts: drafts,
+                        logs: logs
+                    )
+                    await self.diaryMutationCallback?(delivery)
+                    // Exactly-once completion survives the async work; the
+                    // owning callback performs its own post-await generation
+                    // guard, so a new session is never refreshed here.
+                    guard self.isCurrent(generation) else {
+                        completion(result)
+                        return
+                    }
+                }
             }
             completion(result)
         }
@@ -660,7 +994,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         state.selectDate(date)
         state.startLogging(mealSlot: slot)
         navigationState = state
-        searchViewModel?.updateContext(date: date, mealSlot: slot)
+        legacySearchContextDidChange(date: date, mealSlot: slot)
     }
 
     public func openFoodDetail(_ foodID: String, date: LocalDiaryDate, mealSlot: MealSlot?) {
@@ -683,20 +1017,42 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         var state = navigationState
         state.showDetail(foodID: foodID, date: date, mealSlot: mealSlot)
         navigationState = state
-        searchViewModel?.updateContext(date: state.selectedDate, mealSlot: state.mealSlot)
+        legacySearchContextDidChange(date: state.selectedDate, mealSlot: state.mealSlot)
         ensureFoodDetailViewModel(foodID: foodID, date: date, mealSlot: mealSlot)
     }
 
     /// Search tab selection: detail is pushed on the Search tab's own native
     /// stack. `navigationState` (the hidden Diary stack) is deliberately left
     /// untouched, so Back returns to Search and no hidden stack is stranded.
+    ///
+    /// Legacy fallback derives the target context from the live navigation
+    /// state. It delegates to the captured-context overload so there is a
+    /// single legacy body; the migrated search screen calls the overload with
+    /// its captured date/meal slot, which stays correct after the cutover when
+    /// the old `SearchViewModel` context is stale.
     public func openSearchTabFoodDetail(_ foodID: String) {
+        openSearchTabFoodDetail(
+            foodID,
+            date: navigationState.selectedDate,
+            mealSlot: navigationState.mealSlot
+        )
+    }
+
+    /// Search-tab food detail routed with the originating screen's captured
+    /// context. The caller (the legacy routing client) has already validated
+    /// the captured generation, so this reuses the established graph and dirty
+    /// guards without consulting any old/new search view model wrapper.
+    public func openSearchTabFoodDetail(
+        _ foodID: String,
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?
+    ) {
         guard featureGraph.readyState?.generation == session.sessionGeneration else { return }
         searchTabPath = [.foodDetail(foodID: foodID)]
         ensureFoodDetailViewModel(
             foodID: foodID,
-            date: navigationState.selectedDate,
-            mealSlot: navigationState.mealSlot
+            date: date,
+            mealSlot: mealSlot
         )
     }
 
@@ -704,7 +1060,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     /// system Back gesture/button popping that detail.
     public func popSearchTabDetail() {
         searchTabPath = []
-        searchViewModel?.clearSelection()
+        legacySearchSelectionDidClear()
     }
 
     private func ensureFoodDetailViewModel(
@@ -781,10 +1137,19 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         openLogEditor(logID: logID, date: date, generation: ready.generation)
     }
 
-    private func openLogEditor(logID: String, date: LocalDiaryDate, generation: UInt64) {
+    public func openLogEditor(logID: String, date: LocalDiaryDate, generation: UInt64) {
         guard isCurrent(generation),
-              let ready = featureGraph.readyState,
-              let log = ready.diary.log(withID: logID) else { return }
+              let ready = featureGraph.readyState else { return }
+        let log: DiaryLog?
+        switch diaryScreenOwnership {
+        case .legacy:
+            log = ready.diary.log(withID: logID)
+        case .storeBackedScreen:
+            // Fresh-row proof: with the store-backed screen active the TCA owner
+            // is the only source. A stale legacy VM row is never a fallback.
+            log = storeLogResolver?(logID, date, generation)
+        }
+        guard let log else { return }
 
         // Tapping the same row must preserve its editor in every state,
         // including while a PUT is in flight. Only terminal editors are
@@ -888,11 +1253,59 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
               let ready = featureGraph.readyState,
               ready.logEditors[viewModel.logID] === viewModel else { return }
 
+        // Dedup and context identity are shared by both owners: one editor
+        // instance may report success exactly once, and only while it is still
+        // the editor the coordinator owns.
         let identifier = ObjectIdentifier(viewModel)
         guard deliveredLogEditorSuccesses[viewModel.logID] != identifier else { return }
         deliveredLogEditorSuccesses[viewModel.logID] = identifier
         pendingEditorDiscard = nil
 
+        if diaryScreenOwnership == .storeBackedScreen {
+            notifyTCASearchRecentsInvalidatedIfCurrent()
+            var state = navigationState
+            if state.activePane == .logEditor(logID: viewModel.logID) {
+                _ = state.back()
+                navigationState = state
+            }
+
+            // Build the immutable payload and its localized notice BEFORE the
+            // async handoff. The notice title is the edited log's own title;
+            // the delete notice carries the editor's blocked-pending count.
+            // No legacy applyVM/refreshVM happens on this path.
+            let mutation: DiaryEditorMutation
+            switch kind {
+            case .saved:
+                // A save without an authoritative PUT response fails closed;
+                // no row is fabricated for the store-backed owner.
+                guard let saved = viewModel.lastSavedLog else { return }
+                mutation = .saved(
+                    originalID: viewModel.logID,
+                    date: date,
+                    log: saved,
+                    notice: DiaryMutationNotice(kind: .saved, title: viewModel.title)
+                )
+            case .deleted:
+                mutation = .deleted(
+                    id: viewModel.logID,
+                    date: date,
+                    notice: DiaryMutationNotice(
+                        kind: .deleted,
+                        title: viewModel.title,
+                        blockedPendingCount: viewModel.blockedPendingCount
+                    )
+                )
+            }
+            let delivery = DiaryMutationDelivery(generation: generation, editor: mutation)
+            Task { [weak self] in
+                guard let self, self.isCurrent(generation) else { return }
+                await self.diaryMutationCallback?(delivery)
+            }
+            return
+        }
+
+        // Legacy owner keeps the exact established behaviour: apply the
+        // response to the VM, go back, refresh once and show the notice.
         var blockedPendingCount = 0
         if kind == .deleted {
             // The PUT/DELETE response is authoritative. Apply it locally before
@@ -908,6 +1321,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
                 on: date
             )
         }
+
+        notifyTCASearchRecentsInvalidatedIfCurrent()
 
         var state = navigationState
         let wasActiveEditor = state.activePane == .logEditor(logID: viewModel.logID)
@@ -984,7 +1399,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         // must inherit the selected diary date/meal slot rather than keep a
         // stale origin from an earlier entry.
         if tab == .search {
-            searchViewModel?.updateContext(
+            legacySearchContextDidChange(
                 date: navigationState.selectedDate,
                 mealSlot: navigationState.mealSlot
             )
@@ -1041,8 +1456,15 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             back()
         case .openLogEditor(let logID, let date):
             guard let ready = featureGraph.readyState,
-                  ready.generation == session.sessionGeneration,
-                  let log = ready.diary.log(withID: logID) else { return }
+                  ready.generation == session.sessionGeneration else { return }
+            let log: DiaryLog?
+            switch diaryScreenOwnership {
+            case .legacy:
+                log = ready.diary.log(withID: logID)
+            case .storeBackedScreen:
+                log = storeLogResolver?(logID, date, ready.generation)
+            }
+            guard let log else { return }
             performOpenLogEditor(
                 log,
                 logID: logID,
@@ -1086,7 +1508,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         var state = navigationState
         state.finishLogging()
         navigationState = state
-        searchViewModel?.clearSelection()
+        legacySearchSelectionDidClear()
     }
 
     private func showDiary(date: LocalDiaryDate, generation: UInt64) {
@@ -1101,8 +1523,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         var state = navigationState
         state.selectDate(date)
         navigationState = state
-        searchViewModel?.clearSelection()
-        searchViewModel?.updateContext(date: date, mealSlot: state.mealSlot)
+        legacySearchSelectionDidClear()
+        legacySearchContextDidChange(date: date, mealSlot: state.mealSlot)
 
         Task { [weak self] in
             guard let self,
@@ -1194,10 +1616,16 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
 
     // MARK: - Feature sheets
 
-    public func showNutritionDetails() {
+    public func showNutritionDetails(
+        onOpen: ((LocalDiaryDate, LocalDiaryDate) -> Void)? = nil
+    ) {
         guard featureSheet == nil,
               let ready = featureGraph.readyState,
               ready.generation == session.sessionGeneration else { return }
+        if let onOpen {
+            onOpen(navigationState.selectedDate, todayProvider())
+            return
+        }
         let generation = ready.generation
         let viewModel = NutritionDetailsViewModel(
             date: navigationState.selectedDate,
@@ -1262,6 +1690,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
               ready.generation == session.sessionGeneration,
               ready.diary.selectedDate == date else { return }
         _ = mealSlot
+        notifyTCASearchRecentsInvalidatedIfCurrent()
         Task { await ready.diary.refresh() }
     }
 
@@ -1278,10 +1707,19 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
               let ready = featureGraph.readyState,
               settingsViewModel?.id == settingsID,
               settingsViewModel?.accountID == ready.user.id else { return }
-        ready.diary.applySavedGoal(
-            CalCoStoreMapping.diaryGoal(from: snapshot),
-            effectiveOn: snapshot.requestedDate
-        )
+        // The service response, not the draft, is authoritative. Map it once and
+        // deliver to exactly one owner; there is no dual-apply path.
+        let targets = CalCoStoreMapping.diaryGoal(from: snapshot)
+        switch diaryScreenOwnership {
+        case .legacy:
+            // Unchanged legacy owner: apply the mapped server values to the
+            // coordinator-owned diary, exactly as before.
+            ready.diary.applySavedGoal(targets, effectiveOn: snapshot.requestedDate)
+        case .storeBackedScreen:
+            // Store-backed Diary is the sole owner: forward the mapped values
+            // and the server-requested date. No legacy apply, GET, or notice.
+            settingsGoalCallback?(generation, targets, snapshot.requestedDate)
+        }
     }
 
     private func handleSettingsPreferencesSaved(
@@ -1294,7 +1732,16 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
               settingsViewModel?.id == settingsID,
               settingsViewModel?.accountID == ready.user.id else { return }
         let prefs = CalCoStoreMapping.diaryPrefs(from: preferences)
-        ready.diary.applySavedPreferences(prefs)
+        switch diaryScreenOwnership {
+        case .legacy:
+            // Unchanged legacy owner: apply the mapped server values to the
+            // coordinator-owned diary, exactly as before.
+            ready.diary.applySavedPreferences(prefs)
+        case .storeBackedScreen:
+            // Store-backed Diary is the sole owner: forward the mapped server
+            // prefs. No legacy apply, GET, or notice.
+            settingsPreferencesCallback?(generation, prefs)
+        }
 
         // The date is preserved; only a now-disabled contextual meal slot is
         // cleared, and search inherits that updated context.
@@ -1302,7 +1749,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             var state = navigationState
             state.setMealSlot(nil)
             navigationState = state
-            searchViewModel?.updateContext(date: state.selectedDate, mealSlot: nil)
+            legacySearchContextDidChange(date: state.selectedDate, mealSlot: nil)
         }
     }
 
@@ -1379,8 +1826,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             state.pushSearch()
         }
         navigationState = state
-        searchViewModel?.clearSelection()
-        searchViewModel?.updateContext(date: state.selectedDate, mealSlot: state.mealSlot)
+        legacySearchSelectionDidClear()
+        legacySearchContextDidChange(date: state.selectedDate, mealSlot: state.mealSlot)
     }
 
     public func back() {
@@ -1391,9 +1838,9 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         guard state.back() else { return }
         navigationState = state
         if wasShowingFoodDetail {
-            searchViewModel?.clearSelection()
+            legacySearchSelectionDidClear()
         }
-        searchViewModel?.updateContext(date: state.selectedDate, mealSlot: state.mealSlot)
+        legacySearchContextDidChange(date: state.selectedDate, mealSlot: state.mealSlot)
     }
 
     func handleFoodDetailSuccess(_ viewModel: FoodDetailViewModel) {
@@ -1440,6 +1887,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             && navigationState.activePane.contextualFoodID == success.foodID
             && navigationState.selectedDate == originDate
 
+        notifyTCASearchRecentsInvalidatedIfCurrent()
+
         if isActiveDetail {
             var state = navigationState
             state.selectDate(originDate)
@@ -1447,8 +1896,8 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
                 state.setMealSlot(mealSlot)
             }
             navigationState = state
-            searchViewModel?.clearSelection()
-            searchViewModel?.updateContext(
+            legacySearchSelectionDidClear()
+            legacySearchContextDidChange(
                 date: originDate,
                 mealSlot: mealSlot
             )
@@ -1648,6 +2097,28 @@ private extension Pane {
 
 // MARK: - View
 
+/// Narrow live seam for the native Diary screen while the legacy diary shell
+/// and the TCA root coexist. A non-nil bridge means TCA owns diary presentation
+/// from the persistent Window state; `nil` keeps the legacy `DiaryView` /
+/// `DiaryViewModel` path. The bridge only carries the scoped store and the two
+/// external navigation callbacks the native screen exposes — no service, store,
+/// or view-model construction of its own.
+public struct NativeDiaryBridge {
+    public let store: StoreOf<DiaryScreenFeature>
+    public let onOpenSettings: () -> Void
+    public let onOpenNutrition: () -> Void
+
+    public init(
+        store: StoreOf<DiaryScreenFeature>,
+        onOpenSettings: @escaping () -> Void,
+        onOpenNutrition: @escaping () -> Void
+    ) {
+        self.store = store
+        self.onOpenSettings = onOpenSettings
+        self.onOpenNutrition = onOpenNutrition
+    }
+}
+
 public struct AppShell: View {
     private enum Modal: Identifiable {
         case feature(AppShellFeatureSheet)
@@ -1661,17 +2132,32 @@ public struct AppShell: View {
         }
     }
     @StateObject private var coordinator: AppShellCoordinator
+    private let nutritionBridge: NativeNutritionBridge?
+    private let searchBridge: NativeSearchBridge?
+    private let diaryBridge: NativeDiaryBridge?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var pendingBannerDiscard: PendingLogSubmission?
     /// Tab selection lives on the coordinator so the native tab bar goes
     /// through the shared discard/busy guard. Each destination still keeps its
     /// own navigation stack and route-owned view models across tab switches.
 
-    public init() {
+    public init(
+        nutritionBridge: NativeNutritionBridge? = nil,
+        searchBridge: NativeSearchBridge? = nil,
+        diaryBridge: NativeDiaryBridge? = nil
+    ) {
         _coordinator = StateObject(wrappedValue: AppShellCoordinator())
+        self.nutritionBridge = nutritionBridge
+        self.searchBridge = searchBridge
+        self.diaryBridge = diaryBridge
     }
 
-    public init(sessionAuthority: CalCoSessionAuthority) {
+    public init(
+        sessionAuthority: CalCoSessionAuthority,
+        nutritionBridge: NativeNutritionBridge? = nil,
+        searchBridge: NativeSearchBridge? = nil,
+        diaryBridge: NativeDiaryBridge? = nil
+    ) {
         _coordinator = StateObject(
             wrappedValue: AppShellCoordinator(
                 client: sessionAuthority.client,
@@ -1690,10 +2176,21 @@ public struct AppShell: View {
                 }
             )
         )
+        self.nutritionBridge = nutritionBridge
+        self.searchBridge = searchBridge
+        self.diaryBridge = diaryBridge
     }
 
-    public init(coordinator: AppShellCoordinator) {
+    public init(
+        coordinator: AppShellCoordinator,
+        nutritionBridge: NativeNutritionBridge? = nil,
+        searchBridge: NativeSearchBridge? = nil,
+        diaryBridge: NativeDiaryBridge? = nil
+    ) {
         _coordinator = StateObject(wrappedValue: coordinator)
+        self.nutritionBridge = nutritionBridge
+        self.searchBridge = searchBridge
+        self.diaryBridge = diaryBridge
     }
 
     public var body: some View {
@@ -1892,16 +2389,30 @@ public struct AppShell: View {
     private var nutritionPagePresented: Binding<Bool> {
         Binding(
             get: {
+                if let nutritionBridge {
+                    return nutritionBridge.store != nil
+                }
                 if case .nutrition = coordinator.featureSheet { return true }
                 return false
             },
-            set: { if !$0 { coordinator.dismissFeatureSheet() } }
+            set: { isPresented in
+                guard !isPresented else { return }
+                if let nutritionBridge {
+                    nutritionBridge.onDismiss()
+                } else {
+                    coordinator.dismissFeatureSheet()
+                }
+            }
         )
     }
 
     @ViewBuilder
     private var nutritionPage: some View {
-        if case .nutrition(let vm) = coordinator.featureSheet {
+        if let nutritionBridge {
+            if let store = nutritionBridge.store {
+                NutritionDetailsFeatureView(store: store)
+            }
+        } else if case .nutrition(let vm) = coordinator.featureSheet {
             NutritionDetailsView(viewModel: vm)
         }
     }
@@ -2154,15 +2665,61 @@ public struct AppShell: View {
         }
     }
 
-    /// Single owner of the shared Search / Add Food screen. The Search tab and
-    /// Diary's Add Food push render this exact view over the one shared
-    /// SearchViewModel; only the hosting stack differs. The push gets the
-    /// native Back to Diary, the tab root uses its own detail stack with Back
-    /// to Search, and neither path strands a hidden stack. There is no Add Food
-    /// header, no Cancel, and no duplicate Back.
+    /// Single owner of the shared Search / Add Food screen. A non-nil
+    /// `searchBridge` means TCA owns search presentation; the legacy
+    /// SearchViewModel fallback is used only when the bridge is absent.
     @ViewBuilder
     private func searchScreen(compactStyle: Bool, isSearchTabRoot: Bool = false) -> some View {
-        if let vm = coordinator.searchViewModel {
+        if let searchBridge {
+            let origin: SearchScreenFeature.NavigationOrigin = isSearchTabRoot ? .searchTab : .diaryPush
+            let windowStore = searchBridge.windowStore
+            let capturedPresentation = windowStore.foodCreation?.origin == origin
+                ? windowStore.foodCreation
+                : nil
+            let presentedID = capturedPresentation?.id
+            SearchScreenView(
+                store: windowStore.scope(state: \.search, action: \.search),
+                onOpenMeals: {
+                    let search = windowStore.search
+                    windowStore.send(.openSearchMeals(
+                        date: search.originDate,
+                        mealSlot: search.originMealSlot,
+                        generation: search.sessionGeneration
+                    ))
+                },
+                navigationOrigin: origin
+            )
+            .navigationDestination(
+                isPresented: Binding(
+                    get: {
+                        guard let presentedID else { return false }
+                        let current = windowStore.foodCreation
+                        return current?.id == presentedID && current?.origin == origin
+                    },
+                    set: { isPresented in
+                        guard !isPresented, let presentedID else { return }
+                        guard windowStore.foodCreation?.id == presentedID else { return }
+                        windowStore.send(.closeFoodCreation(expectedPresentationID: presentedID))
+                    }
+                )
+            ) {
+                if let capturedPresentation {
+                    SearchFoodCreationHostView(
+                        presentation: capturedPresentation,
+                        context: capturedFoodCreationContext(
+                            date: capturedPresentation.date,
+                            mealSlot: capturedPresentation.mealSlot,
+                            generation: capturedPresentation.generation
+                        ),
+                        onFinished: {
+                            windowStore.send(.foodCreationCompleted(
+                                expectedPresentationID: capturedPresentation.id
+                            ))
+                        }
+                    )
+                }
+            }
+        } else if let vm = coordinator.searchViewModel {
             SearchView(
                 viewModel: vm,
                 onOpenMeals: {
@@ -2227,6 +2784,42 @@ public struct AppShell: View {
             accountID: coordinator.currentUser?.id ?? "",
             today: coordinator.todayProvider(),
             logContext: coordinator.currentLibraryLogContext,
+            sessionGeneration: generation,
+            onLogged: { [weak coordinator] date, slot in
+                guard coordinator?.session.sessionGeneration == generation else { return }
+                coordinator?.libraryDidLog(date: date, mealSlot: slot)
+            },
+            onSessionExpired: { [weak coordinator] in
+                guard coordinator?.session.sessionGeneration == generation else { return }
+                coordinator?.featureSessionExpired()
+            }
+        )
+    }
+
+    /// Captured-context overload for TCA-owned barcode creation. Returns nil
+    /// when the captured generation is no longer current/ready, so a stale
+    /// payload cannot render against the wrong account or services.
+    private func capturedFoodCreationContext(
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?,
+        generation: UInt64
+    ) -> FoodCreationContext? {
+        guard coordinator.isCurrentSearchGeneration(generation),
+              let accountID = coordinator.currentUser?.id else { return nil }
+        return FoodCreationContext(
+            libraryService: coordinator.currentLibraryService,
+            assistantService: coordinator.currentAssistantService,
+            submissionService: HandlerLibraryLogSubmissionService(
+                handler: { [weak coordinator] drafts, names, summary, completion in
+                    coordinator?.submitDraftsForFeature(
+                        drafts, itemNames: names, summary: summary, completion: completion
+                    )
+                }
+            ),
+            accountID: accountID,
+            today: coordinator.todayProvider(),
+            logContext: LibraryLogContext(date: date, mealSlot: mealSlot),
+            sessionGeneration: generation,
             onLogged: { [weak coordinator] date, slot in
                 guard coordinator?.session.sessionGeneration == generation else { return }
                 coordinator?.libraryDidLog(date: date, mealSlot: slot)
@@ -2436,14 +3029,26 @@ public struct AppShell: View {
     private func paneView(_ pane: Pane, compactStyle: Bool = false) -> some View {
         switch pane {
         case .diary:
-            if let vm = coordinator.diaryViewModel {
+            if let diaryBridge {
+                // QA-only native host. The scoped store comes from the persistent
+                // Window state; the legacy view model is not constructed or
+                // driven on this path, and the same host serves compact/expanded.
+                DiaryScreenView(
+                    store: diaryBridge.store,
+                    onOpenSettings: diaryBridge.onOpenSettings,
+                    onOpenNutrition: diaryBridge.onOpenNutrition,
+                    todayProvider: { coordinator.todayProvider() }
+                )
+            } else if let vm = coordinator.diaryViewModel {
                 DiaryView(
                     viewModel: vm,
                     onOpenSettings: {
                         coordinator.showSettings()
                         coordinator.requestTabSwitch(to: .settings)
                     },
-                    onOpenNutrition: { coordinator.showNutritionDetails() },
+                    onOpenNutrition: {
+                        coordinator.showNutritionDetails(onOpen: nutritionBridge?.onOpen)
+                    },
                     onOpenMeals: {
                         if compactStyle {
                             coordinator.requestTabSwitch(to: .library)
@@ -2476,6 +3081,38 @@ public struct AppShell: View {
             } else {
                 ProgressView()
             }
+        }
+    }
+}
+
+private struct SearchFoodCreationHostView: View {
+    let presentation: SearchFoodCreationPresentation
+    let context: FoodCreationContext?
+    let onFinished: () -> Void
+
+    @State private var request: FoodCreationRequest
+
+    init(
+        presentation: SearchFoodCreationPresentation,
+        context: FoodCreationContext?,
+        onFinished: @escaping () -> Void
+    ) {
+        self.presentation = presentation
+        self.context = context
+        self.onFinished = onFinished
+        _request = State(initialValue: FoodCreationRequest(entry: .barcode(presentation.barcode)))
+    }
+
+    var body: some View {
+        if let context {
+            FoodCreationFlowView(
+                request: request,
+                context: context,
+                onFinished: onFinished
+            )
+        } else {
+            ProgressView()
+                .accessibilityIdentifier("search.foodCreation.waiting")
         }
     }
 }

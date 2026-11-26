@@ -46,7 +46,7 @@ struct CalCoApp: App {
                 }
                 .padding()
             } else {
-                AppShell(sessionAuthority: sessionAuthority)
+                TCAAppRoot(sessionAuthority: sessionAuthority)
             }
         }
     }
