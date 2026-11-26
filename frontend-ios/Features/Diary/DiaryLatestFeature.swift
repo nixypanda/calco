@@ -221,6 +221,7 @@ public struct DiaryLatestFeature {
             result: Result<[DiaryLatestSlot], DiaryServiceError>
         )
         case contextChanged(date: LocalDiaryDate, today: LocalDiaryDate)
+        case invalidateCachedSuggestions(generation: UInt64)
         case expireSession
         case delegate(Delegate)
     }
@@ -396,6 +397,17 @@ public struct DiaryLatestFeature {
 
             case let .contextChanged(date, today):
                 return contextChanged(state: &state, date: date, today: today)
+
+            case let .invalidateCachedSuggestions(generation):
+                guard generation == state.sessionGeneration, !state.isSessionExpired else { return .none }
+                // Any changed log date can be a source in another destination's
+                // lookback. Reject every old cache token without fetching the
+                // visible date. Explicit review/copy intents remain unchanged.
+                state.cache = state.cache.clearAll()
+                state.phase = .idle(destinationDate: state.destinationDate)
+                state.loadingSlot = nil
+                state.errorMessage = nil
+                return .cancel(id: CancelID.latest)
 
             case .expireSession:
                 return expireLatestSession(state: &state)

@@ -30,6 +30,7 @@ public enum EditorDiscardRequest: Equatable, Sendable {
 
 public struct MealsSheetRequest: Identifiable, Equatable, Sendable {
     public let id: UUID
+    public let generation: UInt64
     public let date: LocalDiaryDate
     public let mealSlot: MealSlot?
     public let initialMealID: String?
@@ -37,12 +38,14 @@ public struct MealsSheetRequest: Identifiable, Equatable, Sendable {
 
     public init(
         id: UUID = UUID(),
+        generation: UInt64 = 0,
         date: LocalDiaryDate,
         mealSlot: MealSlot?,
         initialMealID: String? = nil,
         initialPortion: NutritionQuantity? = nil
     ) {
         self.id = id
+        self.generation = generation
         self.date = date
         self.mealSlot = mealSlot
         self.initialMealID = initialMealID
@@ -144,6 +147,15 @@ public struct DiaryMutationDelivery: Equatable, Sendable {
         self.editor = editor
         self.affectedDates = [editor.date]
         self.logs = []
+    }
+
+    /// FoodDetail's frozen submission callback has no full server row. Let the
+    /// existing owner invalidate the captured date and refresh only if visible.
+    public init(generation: UInt64, invalidating date: LocalDiaryDate) {
+        self.generation = generation
+        self.affectedDates = [date]
+        self.logs = []
+        self.editor = nil
     }
 }
 
@@ -917,6 +929,43 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         )
     }
 
+    /// These are captured by Meals/Library presentations, not rebound when an
+    /// old view invokes a retained callback after a session transition.
+    func featureSubmissionHandler(expectedGeneration: UInt64) -> LogSubmissionHandler {
+        { [weak self] drafts, names, summary, completion in
+            guard let self else {
+                completion(.failure(.unauthorized))
+                return
+            }
+            self.submitDraftsForFeature(
+                drafts, itemNames: names, summary: summary,
+                expectedGeneration: expectedGeneration, completion: completion
+            )
+        }
+    }
+
+    func featureLoggedHandler(
+        expectedGeneration: UInt64
+    ) -> (LocalDiaryDate, MealSlot?) -> Void {
+        { [weak self] date, slot in
+            self?.libraryDidLog(date: date, mealSlot: slot, expectedGeneration: expectedGeneration)
+        }
+    }
+
+    func featureSessionExpiredHandler(expectedGeneration: UInt64) -> () -> Void {
+        { [weak self] in
+            self?.handleSessionExpired(generation: expectedGeneration)
+        }
+    }
+
+    func mealsListLoggedHandler(expectedGeneration: UInt64) -> ((LocalDiaryDate, MealSlot?) -> Void)? {
+        // Legacy list logging historically has no post-write hook (the shared
+        // writer refreshes once); direct Meals/Library retain their own hook.
+        diaryScreenOwnership == .storeBackedScreen
+            ? featureLoggedHandler(expectedGeneration: expectedGeneration)
+            : nil
+    }
+
     private func submitDrafts(
         _ drafts: [LogSubmissionDraft],
         itemNames: [String],
@@ -1092,7 +1141,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             },
             onSubmissionSuccess: { [weak self, identity] success in
                 guard let source = identity.viewModel else { return }
-                self?.handleFoodDetailSuccess(
+                _ = self?.handleFoodDetailSuccess(
                     success,
                     expectedGeneration: generation,
                     source: source
@@ -1657,6 +1706,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         }
         featureSheet = .meals(
             MealsSheetRequest(
+                generation: session.sessionGeneration,
                 date: date,
                 mealSlot: mealSlot,
                 initialMealID: initialMealID,
@@ -1686,12 +1736,27 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
     }
 
     public func libraryDidLog(date: LocalDiaryDate, mealSlot: MealSlot?) {
+        libraryDidLog(date: date, mealSlot: mealSlot, expectedGeneration: session.sessionGeneration)
+    }
+
+    func libraryDidLog(date: LocalDiaryDate, mealSlot: MealSlot?, expectedGeneration: UInt64) {
+        guard isCurrent(expectedGeneration) else { return }
         guard let ready = featureGraph.readyState,
-              ready.generation == session.sessionGeneration,
-              ready.diary.selectedDate == date else { return }
+              ready.generation == expectedGeneration else { return }
         _ = mealSlot
-        notifyTCASearchRecentsInvalidatedIfCurrent()
-        Task { await ready.diary.refresh() }
+        switch diaryScreenOwnership {
+        case .legacy:
+            guard ready.diary.selectedDate == date else { return }
+            notifyTCASearchRecentsInvalidatedIfCurrent()
+            Task { [weak self] in
+                guard self?.isCurrent(expectedGeneration) == true else { return }
+                await ready.diary.refresh()
+            }
+        case .storeBackedScreen:
+            // The shared writer already delivered to the sole Diary owner.
+            // Recents still change for successful writes on nonvisible dates.
+            notifyTCASearchRecentsInvalidatedIfCurrent()
+        }
     }
 
     public func featureSessionExpired() {
@@ -1843,9 +1908,14 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         legacySearchContextDidChange(date: state.selectedDate, mealSlot: state.mealSlot)
     }
 
-    func handleFoodDetailSuccess(_ viewModel: FoodDetailViewModel) {
+    @discardableResult
+    func handleFoodDetailSuccess(_ viewModel: FoodDetailViewModel) -> Task<Void, Never>? {
         guard let ready = featureGraph.readyState,
-              ready.generation == session.sessionGeneration else { return }
+              ready.generation == session.sessionGeneration,
+              // Compatibility entry has no captured generation. Only a source
+              // still owned by this graph can borrow its generation. Actual
+              // submission callbacks use the captured-generation overload below.
+              ready.foodDetails[viewModel.foodID] === viewModel else { return nil }
         let success = viewModel.lastSubmissionSuccess ?? FoodLogSubmissionSuccess(
             submissionID: "legacy-\(viewModel.foodID)-\(viewModel.originDate.formatted)",
             accountID: viewModel.accountID,
@@ -1856,7 +1926,7 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             logID: nil,
             replayed: false
         )
-        handleFoodDetailSuccess(
+        return handleFoodDetailSuccess(
             success,
             expectedGeneration: ready.generation,
             source: viewModel
@@ -1867,13 +1937,13 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
         _ success: FoodLogSubmissionSuccess,
         expectedGeneration: UInt64,
         source: FoodDetailViewModel?
-    ) {
+    ) -> Task<Void, Never>? {
         guard expectedGeneration == session.sessionGeneration,
               let ready = featureGraph.readyState,
               ready.generation == expectedGeneration,
               success.accountID == ready.user.id,
               deliveredSubmissionIDs.insert(success.submissionID).inserted
-        else { return }
+        else { return nil }
 
         let generation = ready.generation
         let originDate = success.date
@@ -1903,11 +1973,17 @@ public final class AppShellCoordinator: ObservableObject, AuthFeatureCoordinatin
             )
         }
 
-        Task { [weak self] in
+        return Task { [weak self] in
             guard let self,
                   let current = self.featureGraph.readyState,
                   current.generation == generation,
                   generation == self.session.sessionGeneration else { return }
+            if self.diaryScreenOwnership == .storeBackedScreen {
+                await self.diaryMutationCallback?(
+                    DiaryMutationDelivery(generation: generation, invalidating: originDate)
+                )
+                return
+            }
             let diary = current.diary
             if diary.selectedDate == originDate {
                 await diary.refresh()
@@ -2531,6 +2607,7 @@ public struct AppShell: View {
             .presentationDetents([.large])
 
         case .meals(let request):
+          if coordinator.isCurrentSearchGeneration(request.generation) {
             if let mealID = request.initialMealID {
                 MealLogTaskHost(
                     mealID: mealID,
@@ -2538,14 +2615,13 @@ public struct AppShell: View {
                     mealSlot: request.mealSlot,
                     initialPortion: request.initialPortion,
                     service: coordinator.currentMealsService,
-                    onSubmitDrafts: { [weak coordinator] drafts, names, summary, completion in
-                        coordinator?.submitDraftsForFeature(drafts, itemNames: names,
-                                                           summary: summary, completion: completion)
-                    },
-                    onSessionExpired: { [weak coordinator] in coordinator?.featureSessionExpired() },
-                    onLogged: { [weak coordinator] date, slot in
-                        coordinator?.libraryDidLog(date: date, mealSlot: slot)
-                    }
+                    onSubmitDrafts: coordinator.featureSubmissionHandler(
+                        expectedGeneration: request.generation
+                    ),
+                    onSessionExpired: coordinator.featureSessionExpiredHandler(
+                        expectedGeneration: request.generation
+                    ),
+                    onLogged: coordinator.featureLoggedHandler(expectedGeneration: request.generation)
                 )
             } else {
               MealsFlowView(
@@ -2553,25 +2629,22 @@ public struct AppShell: View {
                 mealSlot: request.mealSlot,
                 accountID: coordinator.currentUser?.id ?? "",
                 service: coordinator.currentMealsService,
-                onSubmitDrafts: { [weak coordinator] drafts, names, summary, completion in
-                    coordinator?.submitDraftsForFeature(
-                        drafts,
-                        itemNames: names,
-                        summary: summary,
-                        completion: completion
-                    )
-                },
-                onSessionExpired: { [weak coordinator] in
-                    coordinator?.featureSessionExpired()
-                },
-                onLogged: nil,
+                onSubmitDrafts: coordinator.featureSubmissionHandler(
+                    expectedGeneration: request.generation
+                ),
+                onSessionExpired: coordinator.featureSessionExpiredHandler(
+                    expectedGeneration: request.generation
+                ),
+                onLogged: coordinator.mealsListLoggedHandler(expectedGeneration: request.generation),
                 onClose: { [weak coordinator] in
+                    guard coordinator?.isCurrentSearchGeneration(request.generation) == true else { return }
                     coordinator?.dismissFeatureSheet()
                 },
                 initialMealID: request.initialMealID,
                 initialPortion: request.initialPortion
               )
             }
+          }
         }
     }
 
@@ -2732,7 +2805,7 @@ public struct AppShell: View {
                 onSelectFoodID: isSearchTabRoot
                     ? { foodID in coordinator.openSearchTabFoodDetail(foodID) }
                     : nil,
-                creationContextProvider: { foodCreationContext() }
+                creationContextProvider: foodCreationContextProvider()
             )
         } else {
             ProgressView()
@@ -2742,6 +2815,8 @@ public struct AppShell: View {
 
     @ViewBuilder
     private func libraryRoot(onClose: (() -> Void)? = nil) -> some View {
+        let generation = coordinator.session.sessionGeneration
+        let capturedContext = coordinator.currentLibraryLogContext
         LibraryRootView(
             service: coordinator.currentLibraryService,
             mealsService: coordinator.currentMealsService,
@@ -2749,24 +2824,26 @@ public struct AppShell: View {
             date: coordinator.navigationState.selectedDate,
             mealSlot: coordinator.navigationState.mealSlot,
             today: coordinator.todayProvider(),
-            submitDrafts: { [weak coordinator] drafts, names, summary, completion in
-                coordinator?.submitDraftsForFeature(
-                    drafts,
-                    itemNames: names,
-                    summary: summary,
-                    completion: completion
-                )
-            },
-            onLogged: { [weak coordinator] date, slot in
-                coordinator?.libraryDidLog(date: date, mealSlot: slot)
-            },
-            onSessionExpired: { [weak coordinator] in
-                coordinator?.featureSessionExpired()
-            },
+            submitDrafts: coordinator.featureSubmissionHandler(expectedGeneration: generation),
+            onLogged: coordinator.featureLoggedHandler(expectedGeneration: generation),
+            onSessionExpired: coordinator.featureSessionExpiredHandler(expectedGeneration: generation),
             onClose: onClose,
-            currentContextProvider: { coordinator.currentLibraryLogContext },
-            creationContextProvider: { foodCreationContext() }
+            currentContextProvider: {
+                guard coordinator.isCurrentSearchGeneration(generation) else { return capturedContext }
+                return coordinator.currentLibraryLogContext
+            },
+            creationContextProvider: foodCreationContextProvider()
         )
+    }
+
+    /// Keep context live within the originating session, but never construct a
+    /// newer account's creation context from a retained old root callback.
+    private func foodCreationContextProvider() -> () -> FoodCreationContext {
+        let captured = foodCreationContext()
+        return {
+            guard coordinator.isCurrentSearchGeneration(captured.sessionGeneration) else { return captured }
+            return foodCreationContext()
+        }
     }
 
     private func foodCreationContext() -> FoodCreationContext {
@@ -2775,24 +2852,14 @@ public struct AppShell: View {
             libraryService: coordinator.currentLibraryService,
             assistantService: coordinator.currentAssistantService,
             submissionService: HandlerLibraryLogSubmissionService(
-                handler: { [weak coordinator] drafts, names, summary, completion in
-                    coordinator?.submitDraftsForFeature(
-                        drafts, itemNames: names, summary: summary, completion: completion
-                    )
-                }
+                handler: coordinator.featureSubmissionHandler(expectedGeneration: generation)
             ),
             accountID: coordinator.currentUser?.id ?? "",
             today: coordinator.todayProvider(),
             logContext: coordinator.currentLibraryLogContext,
             sessionGeneration: generation,
-            onLogged: { [weak coordinator] date, slot in
-                guard coordinator?.session.sessionGeneration == generation else { return }
-                coordinator?.libraryDidLog(date: date, mealSlot: slot)
-            },
-            onSessionExpired: { [weak coordinator] in
-                guard coordinator?.session.sessionGeneration == generation else { return }
-                coordinator?.featureSessionExpired()
-            }
+            onLogged: coordinator.featureLoggedHandler(expectedGeneration: generation),
+            onSessionExpired: coordinator.featureSessionExpiredHandler(expectedGeneration: generation)
         )
     }
 
@@ -2810,24 +2877,14 @@ public struct AppShell: View {
             libraryService: coordinator.currentLibraryService,
             assistantService: coordinator.currentAssistantService,
             submissionService: HandlerLibraryLogSubmissionService(
-                handler: { [weak coordinator] drafts, names, summary, completion in
-                    coordinator?.submitDraftsForFeature(
-                        drafts, itemNames: names, summary: summary, completion: completion
-                    )
-                }
+                handler: coordinator.featureSubmissionHandler(expectedGeneration: generation)
             ),
             accountID: accountID,
             today: coordinator.todayProvider(),
             logContext: LibraryLogContext(date: date, mealSlot: mealSlot),
             sessionGeneration: generation,
-            onLogged: { [weak coordinator] date, slot in
-                guard coordinator?.session.sessionGeneration == generation else { return }
-                coordinator?.libraryDidLog(date: date, mealSlot: slot)
-            },
-            onSessionExpired: { [weak coordinator] in
-                guard coordinator?.session.sessionGeneration == generation else { return }
-                coordinator?.featureSessionExpired()
-            }
+            onLogged: coordinator.featureLoggedHandler(expectedGeneration: generation),
+            onSessionExpired: coordinator.featureSessionExpiredHandler(expectedGeneration: generation)
         )
     }
 

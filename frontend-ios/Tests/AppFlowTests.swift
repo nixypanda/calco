@@ -622,6 +622,7 @@ final class AppFlowTests: XCTestCase {
         settingsService: (any DiarySettingsServicing)? = nil,
         logSubmissionStore: LogSubmissionStore? = nil,
         logSubmissionService: LogSubmissionService? = nil,
+        searchOwnership: SearchOwnership = .legacy,
         diaryScreenOwnership: DiaryScreenOwnership = .legacy,
         todayProvider: (() -> LocalDiaryDate)? = nil
     ) -> AppShellCoordinator {
@@ -653,6 +654,7 @@ final class AppFlowTests: XCTestCase {
             ),
             logSubmissionStore: logSubmissionStore ?? makeIsolatedSubmissionStore(),
             logSubmissionService: logSubmissionService,
+            searchOwnership: searchOwnership,
             diaryScreenOwnership: diaryScreenOwnership,
             todayProvider: todayProvider ?? { self.date }
         )
@@ -735,6 +737,186 @@ final class AppFlowTests: XCTestCase {
                 box.cancellable = nil
                 pending?.resume()
             }
+        }
+    }
+
+    func testRetainedMealsAndLibraryCallbacksCannotRebindToAnotherAccount() async {
+        let first = appFlowSession()
+        let second = appFlowSession(id: "identity-b", username: "bob", displayName: "Bob")
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(first) }, login: { _, _ in second }
+        )
+        let sender = AppFlowSubmissionSender()
+        let diaryService = AppFlowDiaryService()
+        let coordinator = makeCoordinator(
+            sessionService: sessionService, diaryService: diaryService,
+            cookieClearer: AppFlowCookieClearer(),
+            logSubmissionService: LogSubmissionService(sender: sender),
+            searchOwnership: .tca, diaryScreenOwnership: .storeBackedScreen
+        )
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        coordinator.openMeals(date: date, mealSlot: .lunch)
+        guard case .meals(let request) = coordinator.featureSheet else {
+            return XCTFail("Missing originating Meals request")
+        }
+        XCTAssertEqual(request.generation, coordinator.session.sessionGeneration)
+        let submit = coordinator.featureSubmissionHandler(expectedGeneration: request.generation)
+        let logged = coordinator.featureLoggedHandler(expectedGeneration: request.generation)
+        let expired = coordinator.featureSessionExpiredHandler(expectedGeneration: request.generation)
+        let librarySubmission = HandlerLibraryLogSubmissionService(handler: submit)
+        var recents = 0
+        var mutations = 0
+        coordinator.installTCASearchHandlers(contextChanged: { _, _, _ in }, recentsInvalidated: { _ in
+            recents += 1
+        })
+        coordinator.installDiaryMutationCallback { _ in mutations += 1 }
+
+        let login = coordinator.loginViewModel
+        login.username = "bob"
+        login.password = "pw"
+        await login.submit()
+        await awaitLoadedDiary(coordinator)
+        let generation = coordinator.session.sessionGeneration
+        let before = await diaryService.callCount(for: date)
+        let draft = LogSubmissionDraft(
+            item: .product(id: "food-1"), date: date, mealSlot: .lunch,
+            amount: "100", unit: "g", notes: nil, timeZone: "UTC"
+        )
+        var completions: [LogSubmissionServiceResult] = []
+        submit([draft], ["Food"], "Food") { completions.append($0) }
+        let libraryResult = await librarySubmission.submit(
+            accountID: first.identity.id, drafts: [draft], itemNames: ["Food"],
+            summary: "Food", baseURL: appFlowBaseURL
+        )
+        logged(date, .lunch)
+        expired()
+
+        XCTAssertEqual(completions, [.failure(.unauthorized)])
+        XCTAssertEqual(libraryResult, .failure(.unauthorized))
+        XCTAssertEqual(coordinator.session.sessionGeneration, generation)
+        XCTAssertEqual(coordinator.currentUser?.id, second.identity.id)
+        XCTAssertEqual(recents, 0)
+        XCTAssertEqual(mutations, 0)
+        let requests = await sender.recordedRequests()
+        let after = await diaryService.callCount(for: date)
+        XCTAssertTrue(requests.isEmpty)
+        XCTAssertEqual(after, before)
+    }
+
+    func testFoodDetailStoreSuccessDeliversDateOnlyOnceWithoutResending() async throws {
+        let account = appFlowSession()
+        let service = AppFlowFoodDetailService()
+        let diaryService = AppFlowDiaryService()
+        let coordinator = makeCoordinator(
+            sessionService: AppFlowSessionService(restore: { .authenticated(account) }),
+            diaryService: diaryService, cookieClearer: AppFlowCookieClearer(),
+            foodDetailService: service, searchOwnership: .tca,
+            diaryScreenOwnership: .storeBackedScreen
+        )
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        var recents = 0
+        var deliveries: [DiaryMutationDelivery] = []
+        let (stream, continuation) = AsyncStream.makeStream(of: DiaryMutationDelivery.self)
+        defer { continuation.finish() }
+        coordinator.installTCASearchHandlers(contextChanged: { _, _, _ in }, recentsInvalidated: { _ in
+            recents += 1
+        })
+        coordinator.installDiaryMutationCallback { delivery in
+            deliveries.append(delivery)
+            continuation.yield(delivery)
+        }
+        coordinator.openFoodDetail("food-1", date: yesterday, mealSlot: .lunch)
+        let detail = try XCTUnwrap(coordinator.foodDetailViewModel(for: "food-1"))
+        await detail.load()
+        detail.amountChanged("100")
+        detail.unitChanged("g")
+        let before = await diaryService.callCount(for: date)
+        await detail.submit()
+        var iterator = stream.makeAsyncIterator()
+        let delivery = await iterator.next()
+        XCTAssertEqual(delivery, DiaryMutationDelivery(
+            generation: coordinator.session.sessionGeneration, invalidating: yesterday
+        ))
+        XCTAssertNil(coordinator.handleFoodDetailSuccess(detail), "Duplicate must not schedule delivery")
+        XCTAssertEqual(deliveries.count, 1)
+        XCTAssertEqual(recents, 1)
+        let requests = await service.loggedRequests()
+        let after = await diaryService.callCount(for: date)
+        XCTAssertEqual(requests.count, 1, "Fanout must not resend the frozen journal request")
+        XCTAssertEqual(after, before, "Store ownership must not refresh the hidden legacy Diary")
+    }
+
+    func testReplacedFoodDetailCapturedSuccessDeliversWithoutNavigatingReplacement() async throws {
+        let account = appFlowSession()
+        let coordinator = makeCoordinator(
+            sessionService: AppFlowSessionService(restore: { .authenticated(account) }),
+            diaryService: AppFlowDiaryService(), cookieClearer: AppFlowCookieClearer(),
+            diaryScreenOwnership: .storeBackedScreen
+        )
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        let (stream, continuation) = AsyncStream.makeStream(of: DiaryMutationDelivery.self)
+        defer { continuation.finish() }
+        coordinator.installDiaryMutationCallback { _ = continuation.yield($0) }
+        coordinator.openFoodDetail("food-1", date: yesterday, mealSlot: .lunch)
+        let old = try XCTUnwrap(coordinator.foodDetailViewModel(for: "food-1"))
+        await old.load()
+        old.amountChanged("100")
+        old.unitChanged("g")
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .dinner)
+        let replacement = try XCTUnwrap(coordinator.foodDetailViewModel(for: "food-1"))
+        XCTAssertFalse(old === replacement)
+        let navigation = coordinator.navigationState
+        await old.submit()
+        var iterator = stream.makeAsyncIterator()
+        let delivery = await iterator.next()
+        XCTAssertEqual(delivery?.affectedDates, [yesterday])
+        XCTAssertTrue(coordinator.foodDetailViewModel(for: "food-1") === replacement)
+        XCTAssertEqual(coordinator.navigationState, navigation)
+    }
+
+    func testFoodDetailOldGenerationAndForeignAccountSuccessDoNotFanOut() async throws {
+        let first = appFlowSession()
+        for second in [first, appFlowSession(id: "identity-b", username: "bob", displayName: "Bob")] {
+        let sessionService = AppFlowSessionService(
+            restore: { .authenticated(first) }, login: { _, _ in second }
+        )
+        let coordinator = makeCoordinator(
+            sessionService: sessionService, diaryService: AppFlowDiaryService(),
+            cookieClearer: AppFlowCookieClearer(), searchOwnership: .tca,
+            diaryScreenOwnership: .storeBackedScreen
+        )
+        await coordinator.start()
+        await awaitLoadedDiary(coordinator)
+        coordinator.openFoodDetail("food-1", date: date, mealSlot: .lunch)
+        let oldDetail = try XCTUnwrap(coordinator.foodDetailViewModel(for: "food-1"))
+        await oldDetail.load()
+        oldDetail.amountChanged("100")
+        oldDetail.unitChanged("g")
+        let originatingGeneration = coordinator.session.sessionGeneration
+        var mutations = 0
+        var recents = 0
+        coordinator.installDiaryMutationCallback { _ in mutations += 1 }
+        coordinator.installTCASearchHandlers(contextChanged: { _, _, _ in }, recentsInvalidated: { _ in
+            recents += 1
+        })
+        let login = coordinator.loginViewModel
+        login.username = "bob"
+        login.password = "pw"
+        await login.submit()
+        await awaitLoadedDiary(coordinator)
+        XCTAssertGreaterThan(coordinator.session.sessionGeneration, originatingGeneration)
+        let expectedNavigation = coordinator.navigationState
+        // The real retained callback carries the old generation.
+        await oldDetail.submit()
+        // The compatibility entry also rejects the foreign account synchronously.
+        XCTAssertNil(coordinator.handleFoodDetailSuccess(oldDetail))
+        XCTAssertEqual(mutations, 0)
+        XCTAssertEqual(recents, 0)
+        XCTAssertEqual(coordinator.navigationState, expectedNavigation)
+        XCTAssertEqual(coordinator.currentUser?.id, second.identity.id)
         }
     }
 

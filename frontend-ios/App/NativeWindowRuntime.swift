@@ -224,6 +224,15 @@ public final class NativeWindowRuntime: ObservableObject {
                 return
             }
 
+            // A changed source date makes all destinations' lookback suggestions
+            // stale. This invalidates existing feature-owned cache/tokens only;
+            // it never fetches a nonvisible date or changes a retained review.
+            if !delivery.affectedDates.isEmpty {
+                await store.send(.window(.diary(.latest(.invalidateCachedSuggestions(
+                    generation: generation
+                ))))).finish()
+            }
+
             // Every affected date is handled, not only the visible one. Valid
             // rows update that date's cache/overrides; a date with no valid row
             // is explicitly invalidated so a later visit refetches it.

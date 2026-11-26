@@ -245,6 +245,274 @@ final class NativeWindowRuntimeTests: XCTestCase {
         )
     }
 
+    /// Load the TCA owner explicitly; the transitional legacy bootstrap is not
+    /// evidence that the Store has loaded or that a mutation refreshed it.
+    private func loadMutationDiary(_ runtime: NativeWindowRuntime) async {
+        await ensureSignedIn(runtime)
+        await awaitAbsoluteInitialLegacyFetch(runtime)
+        await runtime.store.send(.window(.diary(.diary(.loadIfNeeded)))).finish()
+        await awaitSettledVisibleDay(runtime, date: initialDate)
+        XCTAssertEqual(fetchCount(in: runtime), 1)
+    }
+
+    func testFoodDetailVisibleDateInvalidatesAndRefreshesStoreOnceWithoutLegacyRead() async throws {
+        let (authority, _) = makeAuthority()
+        let service = StoreBackedDiaryService(logs: [])
+        let runtime = makeStoreBackedRuntime(
+            authority: authority, box: SessionStreamBox(), logs: [], diaryService: service
+        )
+        await loadMutationDiary(runtime)
+        let legacy = try XCTUnwrap(runtime.coordinator.diaryViewModel)
+        let legacyReads = legacy.completedFetchCount
+        let reads = service.fetchCallCount
+        var recents = 0
+        runtime.coordinator.installTCASearchHandlers(
+            contextChanged: { _, _, _ in }, recentsInvalidated: { _ in recents += 1 }
+        )
+        runtime.coordinator.openFoodDetail("qa-apple", date: initialDate, mealSlot: .breakfast)
+        let source = try XCTUnwrap(runtime.coordinator.foodDetailViewModel(for: "qa-apple"))
+        let delivery = try XCTUnwrap(runtime.coordinator.handleFoodDetailSuccess(source))
+        await delivery.value
+        XCTAssertEqual(fetchCount(in: runtime), 2)
+        XCTAssertEqual(service.fetchCallCount, reads + 1)
+        XCTAssertEqual(legacy.completedFetchCount, legacyReads)
+        XCTAssertEqual(recents, 1)
+        XCTAssertNil(runtime.store.state.window?.diary.diary.mutationNotice)
+        XCTAssertNil(runtime.coordinator.handleFoodDetailSuccess(source))
+        XCTAssertEqual(fetchCount(in: runtime), 2)
+        XCTAssertEqual(service.fetchCallCount, reads + 1)
+        XCTAssertEqual(recents, 1)
+    }
+
+    func testFoodDetailNonvisibleDateInvalidatesWithoutFetchingOrMovingReplacement() async throws {
+        let (authority, _) = makeAuthority()
+        let service = StoreBackedDiaryService(logs: [])
+        let runtime = makeStoreBackedRuntime(
+            authority: authority, box: SessionStreamBox(), logs: [], diaryService: service
+        )
+        await loadMutationDiary(runtime)
+        let historical = initialDate.addingDays(-7)
+        await runtime.store.send(.window(.diary(.diary(.selectDate(historical))))).finish()
+        await runtime.store.send(.window(.diary(.latest(.loadIfNeeded)))).finish()
+        await runtime.store.send(.window(.diary(.diary(.selectDate(initialDate))))).finish()
+        await runtime.store.send(.window(.diary(.latest(.loadIfNeeded)))).finish()
+        let latestBefore = try XCTUnwrap(runtime.store.state.window?.diary.latest)
+        for date in [historical, initialDate] {
+            if case .settled(.success) = latestBefore.cache.entry(for: date) {} else {
+                XCTFail("Latest cache must be seeded before mutation")
+            }
+        }
+        runtime.coordinator.openFoodDetail("qa-apple", date: historical, mealSlot: .breakfast)
+        let old = try XCTUnwrap(runtime.coordinator.foodDetailViewModel(for: "qa-apple"))
+        runtime.coordinator.openFoodDetail("qa-other", date: initialDate, mealSlot: .dinner)
+        let replacement = try XCTUnwrap(runtime.coordinator.foodDetailViewModel(for: "qa-other"))
+        XCTAssertFalse(old === replacement)
+        let navigation = runtime.coordinator.navigationState
+        let reads = service.fetchCallCount
+        let storeReads = fetchCount(in: runtime)
+        let delivery = try XCTUnwrap(runtime.coordinator.handleFoodDetailSuccess(old))
+        await delivery.value
+        guard let diary = runtime.store.state.window?.diary.diary else {
+            return XCTFail("Missing Diary owner")
+        }
+        if case .notRequested = diary.cache.entry(for: historical) {} else {
+            XCTFail("Nonvisible affected date retained its pre-mutation cache")
+        }
+        let latestAfter = try XCTUnwrap(runtime.store.state.window?.diary.latest)
+        for date in [historical, initialDate] {
+            if case .notRequested = latestAfter.cache.entry(for: date) {} else {
+                XCTFail("Mutation retained stale latest-slot suggestions for \(date)")
+            }
+        }
+        XCTAssertEqual(latestAfter.phase, .idle(destinationDate: initialDate))
+        XCTAssertEqual(diary.selectedDate, initialDate)
+        XCTAssertEqual(runtime.coordinator.navigationState, navigation)
+        XCTAssertTrue(runtime.coordinator.foodDetailViewModel(for: "qa-other") === replacement)
+        XCTAssertEqual(fetchCount(in: runtime), storeReads)
+        XCTAssertEqual(service.fetchCallCount, reads)
+    }
+
+    func testFoodDetailDeliveryIsRejectedByNewerStoreGeneration() async throws {
+        let (authority, _) = makeAuthority()
+        let service = StoreBackedDiaryService(logs: [])
+        let runtime = makeStoreBackedRuntime(
+            authority: authority, box: SessionStreamBox(), logs: [], diaryService: service
+        )
+        await loadMutationDiary(runtime)
+        runtime.coordinator.openFoodDetail("qa-apple", date: initialDate, mealSlot: .breakfast)
+        let detail = try XCTUnwrap(runtime.coordinator.foodDetailViewModel(for: "qa-apple"))
+        let generation = runtime.coordinator.session.sessionGeneration
+        runtime.store.send(.sessionSnapshot(SessionSnapshot(
+            phase: .signedOut(.signedOut), generation: generation + 1
+        )))
+        let reads = service.fetchCallCount
+        let delivery = try XCTUnwrap(runtime.coordinator.handleFoodDetailSuccess(detail))
+        await delivery.value
+        XCTAssertNil(runtime.store.state.window)
+        XCTAssertEqual(service.fetchCallCount, reads)
+    }
+
+    func testMealsAndLibrarySharedSubmissionThenLoggedDoesNotDeliverTwice() async {
+        let (authority, _) = makeAuthority()
+        let service = StoreBackedDiaryService(logs: [])
+        let runtime = makeStoreBackedRuntime(
+            authority: authority, box: SessionStreamBox(), logs: [], diaryService: service
+        )
+        await loadMutationDiary(runtime)
+        let generation = runtime.coordinator.session.sessionGeneration
+        let submit = runtime.coordinator.featureSubmissionHandler(expectedGeneration: generation)
+        let logged = runtime.coordinator.featureLoggedHandler(expectedGeneration: generation)
+        let legacyReads = runtime.coordinator.diaryViewModel?.completedFetchCount
+        var recents = 0
+        runtime.coordinator.installTCASearchHandlers(
+            contextChanged: { _, _, _ in }, recentsInvalidated: { _ in recents += 1 }
+        )
+        // Meals list/direct hosts and the Library adapter use this same writer.
+        let completion = SubmissionCompletionGate()
+        submit([makeDraft(date: initialDate)], ["Apple"], "Apple", completion.record)
+        await completion.wait()
+        XCTAssertEqual(completion.results, [.success([])])
+        XCTAssertEqual(fetchCount(in: runtime), 2)
+        logged(initialDate, .breakfast)
+        XCTAssertEqual(fetchCount(in: runtime), 2)
+        XCTAssertEqual(recents, 1)
+        XCTAssertEqual(runtime.coordinator.diaryViewModel?.completedFetchCount, legacyReads)
+
+        // Nonvisible writes still invalidate recents even though the hidden
+        // legacy Diary has never selected that date. They must not read Today.
+        let historical = initialDate.addingDays(-7)
+        let library = HandlerLibraryLogSubmissionService(handler: submit)
+        let result = await library.submit(
+            accountID: runtime.coordinator.currentUser?.id ?? "", drafts: [makeDraft(date: historical)],
+            itemNames: ["Apple"], summary: "Apple", baseURL: baseURL
+        )
+        XCTAssertEqual(result, .success([]))
+        logged(historical, .breakfast)
+        XCTAssertEqual(fetchCount(in: runtime), 2)
+        XCTAssertEqual(recents, 2)
+        XCTAssertEqual(runtime.coordinator.diaryViewModel?.completedFetchCount, legacyReads)
+    }
+
+    func testLegacyMealsListAndDirectLibraryKeepTheirExistingRefreshCounts() async throws {
+        let (authority, _) = makeAuthority()
+        let box = SessionStreamBox()
+        let service = StoreBackedDiaryService(logs: [])
+        let runtime = NativeWindowRuntime(
+            sessionAuthority: authority, makeDiaryService: { _ in service },
+            logSubmissionService: LogSubmissionService(sender: RecordingLogSender(logs: [])),
+            configureDependencies: { dependencies, _ in
+                self.applyStableDependencies(
+                    &dependencies, authority: authority, box: box, overrideClients: true
+                )
+            }
+        )
+        await loadMutationDiary(runtime)
+        let generation = runtime.coordinator.session.sessionGeneration
+        let legacy = try XCTUnwrap(runtime.coordinator.diaryViewModel)
+        let target = legacy.selectedDate
+        XCTAssertEqual(legacy.completedFetchCount, 1)
+        XCTAssertNil(runtime.coordinator.mealsListLoggedHandler(expectedGeneration: generation))
+        let completion = SubmissionCompletionGate()
+        runtime.coordinator.featureSubmissionHandler(expectedGeneration: generation)(
+            [makeDraft(date: target)], ["Apple"], "Apple", completion.record
+        )
+        await completion.wait()
+        XCTAssertEqual(completion.results, [.success([])])
+        XCTAssertEqual(legacy.completedFetchCount, 2, "Legacy list shared writer refreshes once")
+        var recents = 0
+        runtime.coordinator.installTCASearchHandlers(
+            contextChanged: { _, _, _ in }, recentsInvalidated: { _ in recents += 1 }
+        )
+        runtime.coordinator.featureLoggedHandler(expectedGeneration: generation)(target, .breakfast)
+        await awaitLegacyFetchCount(legacy, equals: 3)
+        XCTAssertEqual(recents, 1, "Existing direct Meals/Library post-log hook remains")
+        XCTAssertEqual(fetchCount(in: runtime), 1, "Legacy delivery never refreshes Store")
+        runtime.coordinator.featureLoggedHandler(expectedGeneration: generation)(target.addingDays(-7), nil)
+        XCTAssertEqual(legacy.completedFetchCount, 3)
+        XCTAssertEqual(recents, 1, "Legacy nonvisible-date behavior remains unchanged")
+    }
+
+    func testLibraryLogOnlyAndSaveAndLogEachRefreshOnceAndNotifyRecentsOnce() async {
+        for mode in [AdHocSaveMode.logOnly, .saveAndLog] {
+            let (authority, _) = makeAuthority()
+            let service = StoreBackedDiaryService(logs: [])
+            let runtime = makeStoreBackedRuntime(
+                authority: authority, box: SessionStreamBox(), logs: [], diaryService: service
+            )
+            await loadMutationDiary(runtime)
+            let generation = runtime.coordinator.session.sessionGeneration
+            let library = FakeLibraryService()
+            library.enqueueCreate(.success("saved-bowl"))
+            var recents = 0
+            runtime.coordinator.installTCASearchHandlers(
+                contextChanged: { _, _, _ in }, recentsInvalidated: { _ in recents += 1 }
+            )
+            let legacyReads = runtime.coordinator.diaryViewModel?.completedFetchCount
+            let reads = service.fetchCallCount
+            let editor = AdHocLogViewModel(
+                service: library,
+                submissionService: HandlerLibraryLogSubmissionService(
+                    handler: runtime.coordinator.featureSubmissionHandler(expectedGeneration: generation)
+                ),
+                accountID: runtime.coordinator.currentUser?.id ?? "",
+                initialDate: initialDate, today: initialDate, initialMealSlot: .breakfast,
+                onLogged: runtime.coordinator.featureLoggedHandler(expectedGeneration: generation)
+            )
+            await editor.load()
+            editor.name = "Bowl"
+            editor.amount = "100"
+            editor.unit = "g"
+            editor.mode = mode
+            editor.setNutrientAmount("250", code: NutrientCodes.energyKcal)
+            editor.setNutrientAmount("10", code: NutrientCodes.proteinG)
+            editor.setNutrientAmount("40", code: NutrientCodes.carbsG)
+            editor.setNutrientAmount("5", code: NutrientCodes.fatG)
+            editor.requestReview()
+            await editor.confirmReview()
+            XCTAssertTrue(editor.isSubmissionCompleted)
+            XCTAssertEqual(fetchCount(in: runtime), 2)
+            XCTAssertEqual(service.fetchCallCount, reads + 1)
+            XCTAssertEqual(recents, 1)
+            XCTAssertEqual(runtime.coordinator.diaryViewModel?.completedFetchCount, legacyReads)
+            XCTAssertEqual(library.createCallCount, mode == .saveAndLog ? 1 : 0)
+        }
+    }
+
+    func testLibraryMetadataSaveDoesNotMutateDiaryOrRecents() async {
+        let (authority, _) = makeAuthority()
+        let service = StoreBackedDiaryService(logs: [])
+        let runtime = makeStoreBackedRuntime(
+            authority: authority, box: SessionStreamBox(), logs: [], diaryService: service
+        )
+        await loadMutationDiary(runtime)
+        let library = FakeLibraryService()
+        library.enqueueCreate(.success("metadata-food"))
+        var recents = 0
+        var saved = 0
+        runtime.coordinator.installTCASearchHandlers(
+            contextChanged: { _, _, _ in }, recentsInvalidated: { _ in recents += 1 }
+        )
+        let reads = service.fetchCallCount
+        let editor = CustomFoodEditorViewModel(
+            mode: .create, service: library, accountID: runtime.coordinator.currentUser?.id ?? "",
+            onSaved: { _ in saved += 1 }
+        )
+        await editor.load()
+        editor.name = "Metadata only"
+        editor.defaultQuantity = "100"
+        editor.defaultUnit = "g"
+        editor.setNutrientAmount("250", code: NutrientCodes.energyKcal)
+        editor.setNutrientAmount("10", code: NutrientCodes.proteinG)
+        editor.setNutrientAmount("40", code: NutrientCodes.carbsG)
+        editor.setNutrientAmount("5", code: NutrientCodes.fatG)
+        await editor.submit()
+        XCTAssertEqual(saved, 1)
+        XCTAssertEqual(library.createCallCount, 1)
+        XCTAssertEqual(fetchCount(in: runtime), 1)
+        XCTAssertEqual(service.fetchCallCount, reads)
+        XCTAssertEqual(recents, 0)
+    }
+
     func testStoreBackedCallbackAppliesAcrossDatesAndRefreshesVisibleOnlyOnce() async {
         let (authority, _) = makeAuthority()
         let box = SessionStreamBox()
