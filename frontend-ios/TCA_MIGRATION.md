@@ -1,12 +1,84 @@
 # iOS TCA Migration Ledger
 
-## Latest accepted checkpoint — preferences writeback
+## Latest accepted checkpoint — Meals / Library / FoodDetail mutation fanout
 
-**Current authority: preferences-only Settings writeback ACCEPTED, QA-only.**
+**Current authority: external log-mutation fanout ACCEPTED, QA-only.**
+This supersedes the preferences checkpoint's current counts, not its preserved
+writeback contract. Meals, Library and FoodDetail feature owners remain legacy;
+this is bounded delivery into the existing QA Store-backed Diary, not their TCA
+migration or a production Diary cutover.
+
+- Explicit Debug build passed; affected **285/285** across **17 selector groups**,
+  focused **463/463** across **29 groups**, full **1028/1028**, zero failures/skips
+  on pinned iPhone 13 mini `18DD023D-9987-4B6C-9370-FF39B66325C0`.
+  Full delta is eleven new methods: AppFlow now 63, Runtime 19.
+- Separate fresh **Test / CalCo-E2E** build passed, with actual CalCo
+  `CALCO_TEST` compilation and bundle `dev.calco.CalCo.Test`. Python fixture
+  contracts **16/16**; **ALL 15 NativeDiaryScreenUITests ran together**, zero
+  failures/skips, 818.204 seconds. Debug units and Test GUI are **separate builds**,
+  not a same-build claim. The additional new-three diagnostic passed separately
+  but is **not acceptance authority** and is not combined with a twelve-test run.
+- Evidence root:
+  `/private/var/folders/ky/lktlhg4x5v11fg0jydm7fkrm0000gn/T/opencode/calco-fanout-20261126-154749/`.
+  **Only `final-verified/` contains final acceptance gates**, particularly regular
+  `ui.log` / `ui.xcresult` / `ui-summary.json`, unit summaries/test trees,
+  `unit-count-audit.json`, actual Test compilation proof, and immutable manifests.
+  Its `ui-diagnostic.*` is supplementary only. Earlier `acceptance/`, `accepted/`
+  and `acceptance-final/` preserve failures and are **not final authority**.
+- Ownership audit found **FoodDetail was the sole delivery bypass**. Meals,
+  Library Log-only/Save-and-log and FoodCreation already used the shared writer;
+  their post-log callbacks must not deliver again. FoodDetail now hands its
+  captured successful date to existing `DiaryMutationDelivery` invalidation,
+  retaining generation/account/submission-ID guards, source-navigation isolation,
+  and its frozen journal/writer. No successful write is repeated.
+- Captured-generation submission/logged/expiry handlers and Meals request
+  generation prevent retained callbacks from rebinding to a newer session.
+  Store-mode post-log hooks notify Search recents without hidden legacy refresh
+  or duplicate delivery; nonvisible writes do not depend on the hidden VM date.
+  Each path's existing `.legacy` refresh/notification behavior remains.
+- Existing runtime ownership applies or invalidates affected dates and performs
+  exactly one authoritative Diary refresh only when an affected date is visible.
+  These external deliveries invalidate latest suggestions across all dates using
+  the existing feature-owned cache/tokens and read cancellation; retained review/copy intents
+  are unchanged. No wrong-visible-date fetch, new service/cache authority,
+  replay/journal behavior, or automatic retry was introduced.
+- Original **12 UI bodies and helpers are byte-preserved**. New FoodDetail and
+  Meals journeys prove real historical Breakfast logging, one POST/one Diary
+  refresh, retained eight rows/date/preferences/goal/Percent mode. The fixture's
+  Meals preview is 200 kcal while its authoritative default 100 g log is 100 kcal;
+  the assertions deliberately distinguish them and fixtures are unchanged.
+  The third new journey proves genuine Library metadata creation causes **no**
+  log mutation or Diary refresh. Current Library has no reachable ad-hoc logging
+  entry: positive Library Log-only/Save-and-log delivery is **unit-proven only**,
+  not claimed as a GUI logging journey; no product route was invented.
+- Independent adversarial source/test/repair reviews used
+  `opencode-go/beam-free#high`, distinct from implementers. Earlier failures
+  exposed a computed-login-VM test mistake and new-test unit-display, unreachable
+  Library-route, navigation and AX-reachability assumptions. Repairs preserved
+  valid mutation/read/state assertions; no production or Python repair followed
+  those failures. No Search query/debounce repair or coverage claim is made.
+- The **264-entry** source/input manifest is identical through every final gate.
+  Protected Search routing, DiaryEditor EOF bytes, excluded web version marker,
+  Python fixtures and all 20 recovery files remain unchanged. Fixture cleanup
+  terminated only owned PID 86186 and verified port 3932 free. Post-gate repository
+  edits are limited to this ledger before independently verified local commits;
+  no push is authorized.
+- **Production `.legacy` remains default.** `.storeBackedScreen` remains
+  transitional and QA-only under `CALCO_TEST` + `CALCO_NATIVE_DIARY_QA=1`, retaining
+  legacy Diary VM/bootstrap and Settings/editor VMs. Preferences keep their typed
+  synchronous authoritative callback, identity guards and no-GET/no-notice
+  single-owner contract; preferences remain global and goals date-effective.
+  Actual feature migrations, production ownership/foreground/Store install/default
+  cutover and full Diary auth-expiry UI remain incomplete. The already-open
+  latest-copy review surviving slot disablement remains deferred in both owners.
+
+## Prior accepted checkpoint — preferences writeback
+
+**Prior authority: preferences-only Settings writeback ACCEPTED, QA-only.**
 This checkpoint supersedes the goal-only 1007-unit / 11-journey checkpoint.
 Historical rolling summaries and checkpoint bullets below retain their original
-counts and pending-language provenance; this section and the current inventory
-supersede those statements about preferences writeback and current test counts.
+counts and pending-language provenance. The latest checkpoint and current
+inventory supersede historical current-count and pending-scope statements.
 
 - Debug build passed; affected **71/71** (AppFlow 59 + Runtime 12), focused
   **310/310** (18 selector groups), full **1017/1017** on the pinned iPhone 13 mini.
@@ -204,7 +276,7 @@ These are minimum behavioral gates, not exhaustive UI parity. Prefer TCA `TestSt
 | Signed-in shell/navigation | **Legacy (transitional boundary)** | `AppShell`/`AppShellCoordinator` and VM-owned routes remain; bridge is explicit/incomplete boundary. |
 | Barcode | **Partially live-wired in Search cutover** | Barcode creation push now wired via windowStore TCA-owned path in live Search cutover (captured context/ID guard/native SwiftUI isPresented); broader barcode live integration still pending. Reducer/view/tests exist and unit-green. |
 | Search/History/QuickAdd/Assistant (current wave) | **Search live TCA cutover (focused 70/70); Search UI original 7 GREEN; AssistantFoodCreationFlow Store host live** | Search now wired via AppShell + NativeSearchBridge + NativeWindowRuntime `.tca`: no legacy SearchVM construction; windowStore TCA-owned barcode creation push/captured context/ID guard/native SwiftUI isPresented. Focused 70/70 green (Root 19/QuickAdd 9/Routing 10/Ownership 3/Runtime 2/SearchScreen 13/Window 14); independent Runtime+Bridge/ownership reviews ready; Root guard tested. Standard gate verified: focused-mini 113/113, full-mini 798/798, full-mac 801/801, 0 failures/skips (`calco-tca-standard-20261124-152414`). Latest actual Search UI original 7 GREEN together (`.../opencode/calco-tca-ui-validate-20261125-202624/search-ui-7.xcresult`, all 7 pass; current test SHA f506eb... blob 65b05...); Source Search `.tca` no legacy VM ownership; 6 unit (prior 811) pass; context/Back/barcode entry test contract fixes + robust summary reader + post-return scroll helper fixes individually independent-review approved; all assertions exact POST date/slot/amount/unit/+100 no auto-write retained. Search cutover ACCEPTED for 7 exercised journeys, NOT all Search coverage nor whole app. UI gaps (Search Tab origin, historical typed quickAdd, barcode found, external mutation refresh) remain unit-stronger. Supplementary Meals runtime **GREEN (independently reviewed)**, recorded separately — NOT merged with original Search 7, full unit baseline (823/837/856/870/883/899/904/920/937/941/950/981/1000/1007), or historical Assistant/auth/Nutrition (none rerun): selector `CalCoUITests/NativeCompletionUITests/testMiniHistoricalDateSurvivesMealsDestination` **1 passed, 0 failed/skipped**, `TEST EXECUTE SUCCEEDED` (167.238s, 20261125 final3 snapshot); artifacts `/private/var/folders/ky/lktlhg4x5v11fg0jydm7fkrm0000gn/T/opencode/calco-tca-ui-meals-final3-20261125-225656/meals-only.xcresult` + `meals-only.log`; fresh CalCo-E2E Test build exit0. UI SHA `f92f0372a527ed007930d5ddc3d85a4b32425e9cfebfe360a0c9604a26d992ab`, blob `4edeece580c5a1e4921ac57f9e5b278434000937`; 316-file manifest CHANGED0. Accepted behavior: four preview nutrients 200kcal/2protein/40carbs/1fat, **no preview write**, exactly one log + POST, Close/SearchBack historical return summary 900logged/1100remaining/2000goal (semantic, order-independent). Source Meals root Close fix reviewed and accepted; prior `final2` enum-order RED is historical/superseded. Historical full fresh unit baseline (superseded by current 1007): CalCoTests **823/823**, 0 failures on mini clean isolated DD (`...opencode/calco-tca-unit-clean-20261125-204458/fresh-final-20261125-224726/calco-tests-full.xcresult` + `.log` succeeded; focused `.../fresh-final-20261125-224726/focused-diary-resourcecache.xcresult` = 34 (22 Diary incl. 10 core + 12 Cache), 0 failures; build-for-testing `.../rootcause-sanitized-build-for-testing-mini.log` succeeded); prior RED `calco-tca-fullunit-20261125-204200` and temporary agent-owned `Tests/ProbeTest.swift` (accidental 811 run, 2 failures, confirmed/read-verified, removed by creator) retained as terse history only — NOT user work, NOT feature regression; latest 823 includes 22 Diary + 12 Cache (34 focused), no Probe. Root cause ENV LD pollution (`nix develop` `LD=ld`); invocation-only env sanitization (unset LD/LDPLUSPLUS/CC/CXX/SWIFT_EXEC/TOOLCHAINS/SDKROOT/LDFLAGS/OTHER_LDFLAGS, set DEVELOPER_DIR to Xcode) restored the clang driver; NO project/dependency change or global config fix. Full-tree **316-entry** SHA manifest unchanged before/after. Diary mutation **ACCEPTED as UNWIRED slice** (no AppShell/UI coordinator wiring; production VM stays); Diary UI still legacy/unwired — not live cutover. Native DatePicker needs no month grid. DiaryLatest read + copy + notice + foreground + Screen-composition + ScreenView-source + inert Window-ownership + captured-generation read-guard + guarded runtime-client + cancelReview-parity + counter/marker + bounded QA write/read-GUI (7 journeys) + transitional parent AddFood/Search + single-owner write delivery + bounded editor bridge + goal-only Settings writeback slices ACCEPTED (Debug affected 61/61, focused 300/300, full 1007/1007; Diary UI now 11/11; see baseline bullets); pending: preference handler, SettingsVM/TCA port/preferences writeback, Meals/FoodDetail/library fans, production foreground/production Store install/default cutover/full Diary 401 UI and whole-app families (production legacy VM/View UNCHANGED). AssistantFoodCreationFlow Store host live with 18 flow/host/reducer tests (full suite green at build32). `SearchResultRow` extracted for VM view pure parity (static review). New accepted Assistant UI gate (4 actual, no skips) recorded as evidence only. Whole app still legacy Diary/latest/copy/views, log detail/editor, Library/Meals/Settings/API keys/shell. No whole-app migration complete claim. |
-| Diary, food detail/logging, library, meals, settings/goals, API keys | **Production legacy; bounded TCA Diary accepted QA-only** | Diary reducer/cache/latest/copy/notice/foreground/screen/runtime slices and transitional AddFood/Search, editor, goal and preferences writeback bridges accepted within their recorded boundaries. Latest Debug affected 71/71, focused 310/310, full 1017/1017; separate Test host Diary UI 12/12 together, Python 16/16 (see latest checkpoint). Production Diary VM/View and Settings/editor VMs remain legacy. Remaining: actual Settings/editor TCA migration, Meals/FoodDetail/Library fanout, production ownership/foreground/Store install/default cutover, full Diary auth-expiry UI, and other legacy families. Latest-copy review surviving disabled-slot changes remains explicitly deferred. No whole-app or production cutover claim. |
+| Diary, food detail/logging, library, meals, settings/goals, API keys | **Production legacy; bounded TCA Diary and external mutation bridges accepted QA-only** | Prior Diary/AddFood/Search/editor/goal/preferences slices remain accepted. Meals/Library/FoodDetail mutation delivery now accepted through existing single-owner machinery, not full feature migration. Latest Debug affected 285/285 (17 groups), focused 463/463 (29), full 1028/1028; separate Test Diary UI 15/15 together, Python 16/16. GUI proves Meals/FoodDetail logging and Library metadata no-fanout; Library logging is unit-proven only because its current management UI exposes no logging entry. Production Diary VM/View, Settings/editor and Meals/Library/FoodDetail VMs remain legacy. Remaining: actual feature migrations, production ownership/foreground/Store install/default cutover, full Diary auth-expiry UI, and other legacy families. Latest-copy review surviving disabled-slot changes remains explicitly deferred. No whole-app or production cutover claim. |
 | Cache/resource tokens | **Pure TCA-adjacent law-tested** | `ResourceCache`/session-guard tests green; not full Store.elm parity migration. |
 
 ## Checklist
