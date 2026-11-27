@@ -3,11 +3,6 @@ import SwiftUI
 
 public struct LoginFeatureView: View {
     @Bindable var store: StoreOf<LoginFeature>
-
-    public init(store: StoreOf<LoginFeature>) {
-        self.store = store
-    }
-
     private var failureMessage: String? {
         guard case .failed(let failure) = store.phase else { return nil }
         switch failure {

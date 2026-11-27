@@ -33,6 +33,7 @@
 		1A000000000000000000009D /* Clocks in Frameworks */ = {isa = PBXBuildFile; productRef = 1A000000000000000000009F /* Clocks */; };
 		1A00000000000000000000A1 /* PerceptionCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000A3 /* PerceptionCore */; };
 		1A00000000000000000000A2 /* PerceptionCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000A3 /* PerceptionCore */; };
+		1A00000000000000000000B1 /* ConcurrencyExtras in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000B2 /* ConcurrencyExtras */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -122,6 +123,7 @@
 				1A000000000000000000009B /* Dependencies in Frameworks */,
 				1A000000000000000000009C /* CasePaths in Frameworks */,
 				1A000000000000000000009D /* Clocks in Frameworks */,
+				1A00000000000000000000B1 /* ConcurrencyExtras in Frameworks */,
 				1A00000000000000000000A2 /* PerceptionCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -301,6 +303,7 @@
 				1A0000000000000000000097 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
 				1A0000000000000000000099 /* XCRemoteSwiftPackageReference "swift-case-paths" */,
 				1A000000000000000000009E /* XCRemoteSwiftPackageReference "swift-clocks" */,
+				1A00000000000000000000B3 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */,
 				1A00000000000000000000A4 /* XCRemoteSwiftPackageReference "swift-perception" */,
 			);
 			productRefGroup = 1A0000000000000000000003 /* Products */;
@@ -685,6 +688,14 @@
 				version = 1.1.1;
 			};
 		};
+		1A00000000000000000000B3 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-concurrency-extras";
+			requirement = {
+				kind = exactVersion;
+				version = 1.4.3;
+			};
+		};
 		1A00000000000000000000A4 /* XCRemoteSwiftPackageReference "swift-perception" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pointfreeco/swift-perception";
@@ -720,6 +731,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1A00000000000000000000A4 /* XCRemoteSwiftPackageReference "swift-perception" */;
 			productName = PerceptionCore;
+		};
+		1A00000000000000000000B2 /* ConcurrencyExtras */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A00000000000000000000B3 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */;
+			productName = ConcurrencyExtras;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

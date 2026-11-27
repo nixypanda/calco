@@ -3,9 +3,9 @@ import Foundation
 
 /// Small root reducer for authentication/session projection.
 ///
-/// This is intentionally not the whole app shell. Signed-in navigation and the
-/// legacy `AppShellCoordinator` remain separate until a later migration step.
-/// `AppFeature` owns the root auth projection, embeds `LoginFeature` while a
+/// `AppFeature` is the single root reducer: it owns the auth projection, the
+/// session bootstrap, foreground/day-change authority, and embeds `LoginFeature`
+/// while a
 /// login lifecycle is active, and embeds `WindowFeature` while signed in.
 @Reducer
 public struct AppFeature {
@@ -91,14 +91,22 @@ public struct AppFeature {
         case sessionSnapshot(SessionSnapshot)
         case login(LoginFeature.Action)
         case window(WindowFeature.Action)
+        /// Root foreground/day-change authority. The scene-phase observation
+        /// lives once at the app root; children receive derived date changes.
+        case foreground
+        /// Calendar-day rollover observed once at the root, independent of
+        /// scene-phase activity. `dayChanged` is idempotent, so an active
+        /// transition and a calendar notification cannot produce a double read.
+        case calendarDayChanged
+        case dayChanged(LocalDiaryDate)
         case dismissUnsupportedAccount
         case retryRestore
     }
 
     @Dependency(\.sessionClient) private var sessionClient
     @Dependency(\.date) private var date
-    @Dependency(\.legacySearchRoutingClient) private var legacySearchRoutingClient
-    @Dependency(\.legacyDiaryRoutingClient) private var legacyDiaryRoutingClient
+    @Dependency(\.uuid) private var uuid
+    @Dependency(\.apiKeyClient) private var apiKeyClient
 
     public init() {}
 
@@ -122,6 +130,19 @@ public struct AppFeature {
                 guard snapshot.generation >= state.sessionGeneration else {
                     return .none
                 }
+
+                // A signed-in window disappearing (logout/account switch) must
+                // clear an owned clipboard secret. Capture the receipt BEFORE
+                // the window state is replaced; the effect is parent-owned and
+                // survives child/window removal.
+                let ownedReceipt = state.window?.accountSettings?.clipboardReceipt
+                let client = apiKeyClient
+                let teardownClipboard: Effect<Action> = {
+                    guard let ownedReceipt else { return .none }
+                    return .run { _ in
+                        await MainActor.run { client.clearSecret(ownedReceipt) }
+                    }
+                }()
 
                 state.sessionGeneration = snapshot.generation
 
@@ -158,7 +179,8 @@ public struct AppFeature {
                                 user: user,
                                 window: WindowFeature.State(
                                     sessionGeneration: snapshot.generation,
-                                    today: today()
+                                    today: today(),
+                                    sessionAccountID: user.id
                                 )
                             ))
                         }
@@ -173,7 +195,7 @@ public struct AppFeature {
                     state.phase = .restoreFailed(failure)
                 }
 
-                return .none
+                return teardownClipboard
 
             case .login:
                 return .none
@@ -188,50 +210,81 @@ public struct AppFeature {
                 }
 
             case .window(.delegate(.selectedFood(let id, let date, let mealSlot, let generation, let origin))):
-                guard generation == state.sessionGeneration else { return .none }
-                guard case .signedIn = state.phase, state.window != nil else { return .none }
-                let routingClient = legacySearchRoutingClient
-                return .run { _ in
-                    await routingClient.openFoodDetail(id, date, mealSlot, origin, generation)
-                }
+                guard let signedIn = self.signedInWindow(for: generation, in: state) else { return .none }
+                let context = WindowCaptureContext(
+                    date: date,
+                    slot: mealSlot,
+                    accountID: signedIn.user.id,
+                    generation: generation,
+                    origin: Self.windowOrigin(origin),
+                    presentationID: uuid()
+                )
+                return .send(.window(.pushDestination(.foodDetail(id: id, context: context))))
 
             case .window(.delegate(.selectedMeal(let id, let date, let mealSlot, let quantity, let generation, let origin))):
-                guard generation == state.sessionGeneration else { return .none }
-                guard case .signedIn = state.phase, state.window != nil else { return .none }
-                let routingClient = legacySearchRoutingClient
-                return .run { _ in
-                    await routingClient.openMealDetail(id, date, mealSlot, quantity, origin, generation)
-                }
+                guard let signedIn = self.signedInWindow(for: generation, in: state) else { return .none }
+                _ = quantity
+                let context = WindowCaptureContext(
+                    date: date,
+                    slot: mealSlot,
+                    accountID: signedIn.user.id,
+                    generation: generation,
+                    origin: Self.windowOrigin(origin),
+                    presentationID: uuid()
+                )
+                return .send(.window(.pushDestination(.mealDetail(id: id, context: context))))
 
             case .window(.delegate(.openMeals(let date, let mealSlot, let generation))):
-                guard generation == state.sessionGeneration else { return .none }
-                guard case .signedIn = state.phase, state.window != nil else { return .none }
-                let routingClient = legacySearchRoutingClient
-                return .run { _ in
-                    await routingClient.openMeals(date, mealSlot, generation)
-                }
+                guard let signedIn = self.signedInWindow(for: generation, in: state) else { return .none }
+                let context = WindowCaptureContext(
+                    date: date,
+                    slot: mealSlot,
+                    accountID: signedIn.user.id,
+                    generation: generation,
+                    origin: .diary,
+                    presentationID: uuid()
+                )
+                return .send(.window(.pushDestination(.meals(context: context))))
 
             case .window(.delegate(.openLogEditor(let id, let date, let generation))):
-                // Root authority: the captured generation must match both the
-                // root and the signed-in window before any editor route runs.
-                guard generation == state.sessionGeneration else { return .none }
-                guard case .signedIn(let signedIn) = state.phase,
-                      signedIn.window.sessionGeneration == generation else { return .none }
-                let routingClient = legacyDiaryRoutingClient
-                return .run { _ in
-                    await routingClient.openLogEditor(id, date, generation)
-                }
+                // Root authority: captured generation must match both root and
+                // signed-in window before any editor destination is pushed.
+                guard let signedIn = self.signedInWindow(for: generation, in: state) else { return .none }
+                let context = WindowCaptureContext(
+                    date: date,
+                    slot: nil,
+                    accountID: signedIn.user.id,
+                    generation: generation,
+                    origin: .diary,
+                    presentationID: uuid()
+                )
+                return .send(.window(.pushDestination(.logEditor(id: id, context: context))))
 
             case .window(.delegate(.addFood(let slot, let date, let generation))):
-                // Root authority: captured generation must match both the root
-                // and the signed-in window before any legacy navigation runs.
-                guard generation == state.sessionGeneration else { return .none }
-                guard case .signedIn(let signedIn) = state.phase,
-                      signedIn.window.sessionGeneration == generation else { return .none }
-                let routingClient = legacyDiaryRoutingClient
-                return .run { _ in
-                    await routingClient.startLogging(slot, date, generation)
-                }
+                guard let signedIn = self.signedInWindow(for: generation, in: state) else { return .none }
+                let context = WindowCaptureContext(
+                    date: date,
+                    slot: slot,
+                    accountID: signedIn.user.id,
+                    generation: generation,
+                    origin: .diary,
+                    presentationID: uuid()
+                )
+                return .send(.window(.pushDestination(.search(context: context))))
+
+            case .foreground:
+                // One root trigger only. Window's `todayChanged` drives the
+                // single Diary foreground/rollover path; no second refresh here.
+                return .send(.dayChanged(today()))
+
+            case .calendarDayChanged:
+                return .send(.dayChanged(today()))
+
+            case let .dayChanged(date):
+                guard case .signedIn = state.phase,
+                      let window = state.window,
+                      window.today != date else { return .none }
+                return .send(.window(.todayChanged(date)))
 
             case .window:
                 return .none
@@ -258,6 +311,24 @@ public struct AppFeature {
 
     private enum CancelID: Hashable {
         case sessionSubscription
+    }
+
+    /// Root authority: a captured generation must match both the root and the
+    /// signed-in window before any typed destination/presentation is created.
+    private func signedInWindow(for generation: UInt64, in state: State) -> SignedInState? {
+        guard generation == state.sessionGeneration,
+              case .signedIn(let signedIn) = state.phase,
+              signedIn.window.sessionGeneration == generation else { return nil }
+        return signedIn
+    }
+
+    private static func windowOrigin(
+        _ origin: SearchScreenFeature.NavigationOrigin
+    ) -> WindowNavOrigin {
+        switch origin {
+        case .diaryPush: return .diary
+        case .searchTab: return .search
+        }
     }
 
     private func today() -> LocalDiaryDate {

@@ -1,48 +1,89 @@
 import ComposableArchitecture
 import SwiftUI
 
+/// Single per-window runtime. It owns exactly one `Store<AppFeature>` for the
+/// window lifetime and wires live clients directly from the existing session
+/// authority, service adapters and frozen submission/journal infrastructure.
+///
+/// There is no feature coordinator, no view-model factory, no legacy routing
+/// client and no QA ownership mode. The shared writer returns the authoritative
+/// result; the Window reducer owns the single Diary fanout from typed delegates.
 @MainActor
 public final class NativeWindowRuntime: ObservableObject {
-    public let coordinator: AppShellCoordinator
     public let store: StoreOf<AppFeature>
 
     public init(
         sessionAuthority: CalCoSessionAuthority,
-        makeDiaryService: ((CalCoAPIClient) -> any DiaryServicing)? = nil,
-        makeSettingsService: ((CalCoAPIClient) -> any DiarySettingsServicing)? = nil,
         logSubmissionService: LogSubmissionService? = nil,
-        diaryScreenOwnership: DiaryScreenOwnership = .legacy,
-        configureDependencies: ((inout DependencyValues, AppShellCoordinator) -> Void)? = nil
+        configureDependencies: ((inout DependencyValues) -> Void)? = nil
     ) {
-        let coordinator = AppShellCoordinator(
-            client: sessionAuthority.client,
-            session: sessionAuthority.session,
-            diaryService: makeDiaryService?(sessionAuthority.client),
-            settingsService: makeSettingsService?(sessionAuthority.client),
-            logSubmissionService: logSubmissionService,
-            logSubmissionSessionContextProvider: { [weak sessionAuthority] in
-                guard let sessionAuthority,
-                      case .signedIn(let user) = sessionAuthority.session.phase
-                else {
-                    return nil
-                }
-                return LogSubmissionSessionContext(
-                    accountID: user.id,
-                    generation: sessionAuthority.session.sessionGeneration,
-                    baseURL: sessionAuthority.client.configuration.baseURL
-                )
-            },
-            searchOwnership: .tca,
-            diaryScreenOwnership: diaryScreenOwnership
+        let sessionContextProvider: LogSubmissionSessionContextProvider = { [weak sessionAuthority] in
+            guard let sessionAuthority,
+                  case .signedIn(let user) = sessionAuthority.session.phase
+            else { return nil }
+            return LogSubmissionSessionContext(
+                accountID: user.id,
+                generation: sessionAuthority.session.sessionGeneration,
+                baseURL: sessionAuthority.client.configuration.baseURL
+            )
+        }
+        let submissionService = logSubmissionService ?? LogSubmissionService(
+            sender: CalCoLogSubmissionSender(client: sessionAuthority.client),
+            sessionContextProvider: sessionContextProvider
         )
-        self.coordinator = coordinator
+        let isCurrentGeneration: @MainActor @Sendable (UInt64) -> Bool = { [weak sessionAuthority] generation in
+            guard let sessionAuthority else { return false }
+            return sessionAuthority.session.sessionGeneration == generation
+        }
+        let currentAccountID: @MainActor @Sendable () -> String? = { [weak sessionAuthority] in
+            guard let sessionAuthority,
+                  case .signedIn(let user) = sessionAuthority.session.phase
+            else { return nil }
+            return user.id
+        }
+        // One atomic per-call guard against the CURRENT session authority.
+        // Never a generation captured at root init; caller-supplied account AND
+        // generation must both match the live signed-in session.
+        let isCurrentSession: @MainActor @Sendable (String, UInt64) -> Bool = { [weak sessionAuthority] accountID, generation in
+            guard let sessionAuthority,
+                  case .signedIn(let user) = sessionAuthority.session.phase,
+                  user.id == accountID,
+                  sessionAuthority.session.sessionGeneration == generation
+            else { return false }
+            return true
+        }
+        // Lane B metadata guard (MainActor) and Lane A reply guard (sync).
+        let isCurrentFeatureContext: FeatureContextGuard = { context in
+            isCurrentSession(context.accountID, context.generation)
+        }
+        let isCurrentSettingsContext: @MainActor @Sendable (SettingsFeature.RequestContext) -> Bool = { context in
+            isCurrentSession(context.accountID, context.generation)
+        }
+        let editorContextIsCurrent: @MainActor @Sendable (LogEditorFeature.RequestContext) -> Bool = { context in
+            isCurrentSession(context.accountID, context.generation)
+        }
+        // The one existing writer. No fanout, no replay, no automatic retry.
+        let submit: LogSubmissionHandler = { drafts, names, summary, completion in
+            Task { @MainActor in
+                guard let accountID = currentAccountID() else {
+                    completion(.failure(.unauthorized))
+                    return
+                }
+                let result = await submissionService.submit(
+                    accountID: accountID,
+                    summary: summary,
+                    drafts: drafts,
+                    itemNames: names
+                )
+                completion(result)
+            }
+        }
 
-        let store = Store(
-            initialState: AppFeature.State.initial
-        ) {
+        let store = Store(initialState: AppFeature.State.initial) {
             AppFeature()
         } withDependencies: {
             $0.sessionClient = SessionClient.live(authority: sessionAuthority)
+
             $0.nutritionDetailsClient = NutritionDetailsFeature.Client.live(
                 service: CalCoNutritionDetailsServiceAdapter(client: sessionAuthority.client)
             )
@@ -53,264 +94,135 @@ public final class NativeWindowRuntime: ObservableObject {
                 service: CalCoBarcodeServiceAdapter(client: sessionAuthority.client)
             )
             $0.searchQuickAddClient = SearchQuickAddFeature.Client.live(
-                submissionHandler: { drafts, itemNames, summary, completion in
-                    MainActor.assumeIsolated {
-                        coordinator.submitDraftsForFeature(
-                            drafts,
-                            itemNames: itemNames,
-                            summary: summary,
-                            completion: completion
-                        )
-                    }
-                },
-                isCurrentGeneration: { generation in
-                    coordinator.isCurrentSearchGeneration(generation)
-                }
+                submissionHandler: submit,
+                isCurrentGeneration: isCurrentGeneration
             )
+
+            let diaryService = CalCoDiaryServiceAdapter(client: sessionAuthority.client)
             $0.diaryClient = DiaryFeature.Client.guarded(
-                base: { [weak coordinator] date, expectedGeneration in
-                    guard let coordinator else { throw DiaryServiceError.cancelled }
-                    let isCurrent = await MainActor.run {
-                        coordinator.isCurrentDiaryGeneration(expectedGeneration)
+                base: { date, expectedGeneration in
+                    guard await MainActor.run(body: { isCurrentGeneration(expectedGeneration) }) else {
+                        throw DiaryServiceError.cancelled
                     }
-                    guard isCurrent else { throw DiaryServiceError.cancelled }
-                    let service = await MainActor.run { coordinator.currentDiaryService }
-                    return try await service.fetchDiary(for: date)
+                    return try await diaryService.fetchDiary(for: date)
                 },
-                isCurrentGeneration: { [weak coordinator] expectedGeneration in
-                    coordinator?.isCurrentDiaryGeneration(expectedGeneration) ?? false
-                }
+                isCurrentGeneration: isCurrentGeneration
             )
             $0.diaryLatestClient = DiaryLatestFeature.Client.guarded(
-                base: { [weak coordinator] before, lookbackDays, expectedGeneration in
-                    guard let coordinator else { throw DiaryServiceError.cancelled }
-                    let isCurrent = await MainActor.run {
-                        coordinator.isCurrentDiaryGeneration(expectedGeneration)
+                base: { before, lookbackDays, expectedGeneration in
+                    guard await MainActor.run(body: { isCurrentGeneration(expectedGeneration) }) else {
+                        throw DiaryServiceError.cancelled
                     }
-                    guard isCurrent else { throw DiaryServiceError.cancelled }
-                    let service = await MainActor.run { coordinator.currentDiaryService }
-                    return try await service.latestSlots(before: before, lookbackDays: lookbackDays)
+                    return try await diaryService.latestSlots(
+                        before: before,
+                        lookbackDays: lookbackDays
+                    )
                 },
-                isCurrentGeneration: { [weak coordinator] expectedGeneration in
-                    coordinator?.isCurrentDiaryGeneration(expectedGeneration) ?? false
+                isCurrentGeneration: isCurrentGeneration
+            )
+            $0.diaryLatestSubmissionClient = DiaryLatestFeature.SubmissionClient {
+                drafts, names, summary, expectedGeneration in
+                guard await MainActor.run(body: { isCurrentGeneration(expectedGeneration) }) else {
+                    return .failure(.unauthorized)
+                }
+                return await withCheckedContinuation { continuation in
+                    submit(drafts, names, summary) { result in
+                        continuation.resume(returning: result)
+                    }
+                }
+            }
+
+            let logStore = LogSubmissionStore.shared
+            $0.logEditorClient = LogEditorFeature.Client(
+                fetchUnits: { context in
+                    guard await MainActor.run(body: { editorContextIsCurrent(context) }) else { throw DiaryServiceError.cancelled }
+                    return try await diaryService.fetchUnits()
+                },
+                updateLog: { context, id, request in
+                    guard await MainActor.run(body: { editorContextIsCurrent(context) }) else { throw DiaryServiceError.cancelled }
+                    return try await diaryService.updateLog(id: id, request: request)
+                },
+                deleteLog: { context, id in
+                    guard await MainActor.run(body: { editorContextIsCurrent(context) }) else { throw DiaryServiceError.cancelled }
+                    try await diaryService.deleteLog(id: id)
+                },
+                blockBeforeDeleting: { context, foodID, date, reason in
+                    guard editorContextIsCurrent(context) else { throw DiaryServiceError.cancelled }
+                    // Count the invalidated matches BEFORE the DELETE is sent.
+                    return try logStore.blockBeforeDeleting(
+                        accountID: context.accountID,
+                        foodID: foodID,
+                        date: date,
+                        reason: reason
+                    ).count
+                },
+                matchingPendingCount: { context, foodID, date in
+                    guard editorContextIsCurrent(context) else { return 0 }
+                    return logStore.unresolved(
+                        accountID: context.accountID,
+                        foodID: foodID,
+                        date: date
+                    ).count
                 }
             )
-            $0.diaryLatestSubmissionClient = DiaryLatestFeature.SubmissionClient { [weak coordinator] drafts, itemNames, summary, expectedGeneration in
-                guard let coordinator else { return .failure(.unauthorized) }
-                let isCurrent = await MainActor.run {
-                    coordinator.isCurrentDiaryGeneration(expectedGeneration)
-                }
-                guard isCurrent else { return .failure(.unauthorized) }
-                return await withCheckedContinuation { continuation in
-                    MainActor.assumeIsolated {
-                        coordinator.submitDraftsForFeature(
-                            drafts,
-                            itemNames: itemNames,
+            $0.diarySettingsClient = SettingsFeature.Client.live(
+                service: CalCoSettingsServiceAdapter(client: sessionAuthority.client),
+                isCurrent: isCurrentSettingsContext
+            )
+
+            $0.foodDetailClient = FoodDetailFeature.Client.live(
+                service: CalCoFoodDetailServiceAdapter(client: sessionAuthority.client),
+                isCurrent: isCurrentFeatureContext
+            )
+            $0.foodDetailJournalClient = FoodDetailFeature.JournalClient.live(store: logStore)
+
+            let libraryService = CalCoLibraryServiceAdapter(client: sessionAuthority.client)
+            let libraryLogClient = LibraryLogClient(
+                submit: { drafts, names, summary, accountID, generation, completion in
+                    Task { @MainActor in
+                        guard isCurrentSession(accountID, generation) else {
+                            completion(.failure(.unauthorized))
+                            return
+                        }
+                        let result = await submissionService.submit(
+                            accountID: accountID,
                             summary: summary,
-                            expectedGeneration: expectedGeneration,
-                            completion: { result in
-                                continuation.resume(returning: result)
-                            }
+                            drafts: drafts,
+                            itemNames: names,
+                            generation: generation
                         )
+                        completion(result)
                     }
-                }
-            }
-            $0.legacySearchRoutingClient = LegacySearchRoutingClient.live(coordinator: coordinator)
-            $0.legacyDiaryRoutingClient = LegacyDiaryRoutingClient.live(coordinator: coordinator)
-            configureDependencies?(&$0, coordinator)
+                },
+                isCurrentOwner: isCurrentSession
+            )
+            $0.libraryClient = LibraryFeature.Client.live(
+                service: libraryService,
+                isCurrent: isCurrentFeatureContext
+            )
+            $0.libraryLogClient = libraryLogClient
+            $0.customFoodEditorClient = CustomFoodEditorFeature.Client.live(
+                service: libraryService,
+                isCurrent: isCurrentFeatureContext
+            )
+            $0.adHocLogClient = AdHocLogFeature.Client.live(
+                service: libraryService,
+                log: libraryLogClient,
+                isCurrent: isCurrentFeatureContext
+            )
+
+            $0.mealsClient = MealsFeatureClient.live(
+                service: CalCoMealsServiceAdapter(client: sessionAuthority.client),
+                submissionHandler: submit,
+                isCurrentSession: isCurrentSession
+            )
+            $0.apiKeyClient = APIKeyFeatureClient.live(
+                service: CalCoAPIKeysServiceAdapter(client: sessionAuthority.client),
+                isCurrentSession: isCurrentSession
+            )
+
+            configureDependencies?(&$0)
         }
         self.store = store
-
-        coordinator.installTCASearchHandlers(
-            contextChanged: { [weak store] (date: LocalDiaryDate, mealSlot: MealSlot?, generation: UInt64) in
-                guard let store else { return }
-                guard generation == store.state.sessionGeneration else { return }
-                guard case .signedIn(let signedIn) = store.state.phase,
-                      signedIn.window.sessionGeneration == generation else {
-                    return
-                }
-                store.send(.window(.search(.updateContext(date: date, mealSlot: mealSlot))))
-            },
-            recentsInvalidated: { [weak store] (generation: UInt64) in
-                guard let store else { return }
-                guard generation == store.state.sessionGeneration else { return }
-                guard case .signedIn(let signedIn) = store.state.phase,
-                      signedIn.window.sessionGeneration == generation else {
-                    return
-                }
-                store.send(.window(.searchRecentsInvalidated(generation: generation)))
-            }
-        )
-
-        // Transitional log editor reads its row from the TCA owner only: the
-        // visible day, then a saved override, then a settled cache entry. A
-        // deleted tombstone, expired/stale session, changed selected date, or
-        // deallocated store all fail closed — there is no legacy VM fallback,
-        // so a freshly written row is provably the authoritative one.
-        coordinator.installStoreLogResolver { [weak store] logID, date, generation in
-            guard let store,
-                  Self.diaryAuthorityIsCurrent(generation, in: store),
-                  let diary = store.state.window?.diary.diary,
-                  !diary.isSessionExpired,
-                  diary.selectedDate == date,
-                  !(diary.deletedIDs[date]?.contains(logID) ?? false)
-            else { return nil }
-            if let day = diary.visibleDay, day.date == date,
-               let log = day.logs.first(where: { $0.id == logID }) {
-                return log
-            }
-            if let log = diary.savedLogOverrides[date]?[logID] { return log }
-            if case .settled(.success(let day)) = diary.cache.entry(for: date),
-               let log = day.logs.first(where: { $0.id == logID }) {
-                return log
-            }
-            return nil
-        }
-
-        // Store-backed Diary owns mutation delivery. The weak store capture is
-        // deliberate: the coordinator holds this callback for the window's
-        // lifetime and must not become a retention path back to the store.
-        coordinator.installDiaryMutationCallback { [weak store] delivery in
-            guard let store else { return }
-            let generation = delivery.generation
-            guard Self.diaryAuthorityIsCurrent(generation, in: store) else { return }
-
-            if let editor = delivery.editor {
-                // Editor writes are applied on their captured date regardless
-                // of what is visible. A cross-date write still caches its row
-                // or tombstone; only the read and the notice are visible-gated.
-                switch editor {
-                case let .saved(originalID, date, log, _):
-                    await store.send(
-                        .window(.diary(.diary(.applySavedLog(
-                            generation: generation,
-                            log: log,
-                            replacingID: originalID,
-                            onDate: date
-                        ))))
-                    ).finish()
-                case let .deleted(id, date, _):
-                    await store.send(
-                        .window(.diary(.diary(.applyDeletedLog(
-                            generation: generation,
-                            id: id,
-                            onDate: date
-                        ))))
-                    ).finish()
-                }
-
-                // Exactly one authoritative read, only after the local row is
-                // applied and only while the captured date is still selected.
-                guard Self.diaryAuthorityIsCurrent(generation, in: store),
-                      store.state.window?.diary.diary.selectedDate == editor.date else {
-                    return
-                }
-                await store.send(.window(.diary(.diary(.refresh)))).finish()
-
-                // Re-check both authorities after the await: a mid-read
-                // generation/date change suppresses the notice and any pullback
-                // to an edited date the user has since left.
-                guard Self.diaryAuthorityIsCurrent(generation, in: store),
-                      store.state.window?.diary.diary.selectedDate == editor.date else {
-                    return
-                }
-                await store.send(
-                    .window(.diary(.diary(.showMutationNotice(
-                        generation: generation,
-                        date: editor.date,
-                        notice: editor.notice
-                    ))))
-                ).finish()
-                return
-            }
-
-            // A changed source date makes all destinations' lookback suggestions
-            // stale. This invalidates existing feature-owned cache/tokens only;
-            // it never fetches a nonvisible date or changes a retained review.
-            if !delivery.affectedDates.isEmpty {
-                await store.send(.window(.diary(.latest(.invalidateCachedSuggestions(
-                    generation: generation
-                ))))).finish()
-            }
-
-            // Every affected date is handled, not only the visible one. Valid
-            // rows update that date's cache/overrides; a date with no valid row
-            // is explicitly invalidated so a later visit refetches it.
-            for date in delivery.affectedDates {
-                let converted = delivery.logs.compactMap { log -> DiaryLog? in
-                    guard log.logDate == date, !log.id.isEmpty else { return nil }
-                    return CalCoStoreMapping.diaryLog(from: log)
-                }
-                if converted.isEmpty {
-                    await store.send(
-                        .window(.diary(.diary(.invalidateCachedDay(
-                            generation: generation,
-                            date: date
-                        ))))
-                    ).finish()
-                } else {
-                    for log in converted {
-                        // `applySavedLog` replaces by ID, so a later own-screen
-                        // copy reconciliation of the same IDs is idempotent.
-                        await store.send(
-                            .window(.diary(.diary(.applySavedLog(
-                                generation: generation,
-                                log: log,
-                                replacingID: log.id,
-                                onDate: date
-                            ))))
-                        ).finish()
-                    }
-                }
-            }
-
-            // Re-check after all awaited effects: a write captured under an old
-            // generation must never refresh a newer session.
-            guard Self.diaryAuthorityIsCurrent(generation, in: store) else { return }
-            guard let visibleDate = store.state.window?.diary.diary.selectedDate,
-                  delivery.affectedDates.contains(visibleDate) else { return }
-            // Exactly one authoritative read, after all local rows are applied.
-            await store.send(.window(.diary(.diary(.refresh)))).finish()
-        }
-
-        // Store-backed Diary owns the saved-goal writeback too. The mapped
-        // server targets update only the visible day through the feature-owned
-        // action, which returns no effects — so this send is synchronous and
-        // needs no await/finish/Task. The weak store capture cannot retain the
-        // window graph; no legacy VM apply, GET, or notice is issued here.
-        coordinator.installSettingsGoalCallback { [weak store] generation, targets, date in
-            guard let store,
-                  Self.diaryAuthorityIsCurrent(generation, in: store) else { return }
-            store.send(.window(.diary(.diary(.applySavedGoal(
-                generation: generation,
-                targets: targets,
-                effectiveDate: date
-            )))))
-        }
-
-        // Store-backed Diary owns the saved-preferences writeback too. The
-        // mapped server prefs update only the visible day through the
-        // feature-owned action, which returns no effects — so this send is
-        // synchronous and needs no await/finish/Task. The weak store capture
-        // cannot retain the window graph; no legacy VM apply, GET, or notice is
-        // issued here.
-        coordinator.installSettingsPreferencesCallback { [weak store] generation, prefs in
-            guard let store,
-                  Self.diaryAuthorityIsCurrent(generation, in: store) else { return }
-            store.send(.window(.diary(.diary(.applySavedPreferences(
-                generation: generation,
-                prefs: prefs
-            )))))
-        }
-    }
-
-    private static func diaryAuthorityIsCurrent(
-        _ generation: UInt64,
-        in store: StoreOf<AppFeature>
-    ) -> Bool {
-        guard generation == store.state.sessionGeneration else { return false }
-        guard case .signedIn(let signedIn) = store.state.phase,
-              signedIn.window.sessionGeneration == generation else { return false }
-        return true
     }
 }

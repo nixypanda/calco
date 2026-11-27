@@ -10,22 +10,17 @@ public struct DiaryFeature {
         public let targets: DiaryGoalTargets
         public let date: LocalDiaryDate
         public let activeToken: Token
-
-        public init(targets: DiaryGoalTargets, date: LocalDiaryDate, activeToken: Token) {
-            self.targets = targets
-            self.date = date
-            self.activeToken = activeToken
-        }
     }
 
     public struct PendingPrefsOverride: Equatable, Sendable {
         public let prefs: DiaryPrefs
         public let activeToken: Token
+    }
 
-        public init(prefs: DiaryPrefs, activeToken: Token) {
-            self.prefs = prefs
-            self.activeToken = activeToken
-        }
+    public struct PendingMutationNotice: Equatable, Sendable {
+        public let generation: UInt64
+        public let date: LocalDiaryDate
+        public let notice: DiaryMutationNotice
     }
 
     public enum Activity: Equatable, Sendable {
@@ -74,6 +69,8 @@ public struct DiaryFeature {
         public var pendingGoalOverride: PendingGoalOverride? = nil
         public var pendingPrefsOverride: PendingPrefsOverride? = nil
         public var mutationNotice: DiaryMutationNotice? = nil
+        /// Held until the authoritative read for `date` actually settles.
+        public var pendingMutationNotice: PendingMutationNotice? = nil
         /// Number of accepted diary reads for this state's lifetime. Incremented
         /// once per authoritative `.diaryReceived` settle; never reset locally.
         public var completedFetchCount: Int = 0
@@ -98,13 +95,11 @@ public struct DiaryFeature {
         }
 
         public var visibleDay: DiaryDay? {
-            if case .loaded(let day, _) = phase { return day }
-            return nil
+            if case .loaded(let day, _) = phase { day } else { nil }
         }
 
         public var isSessionExpired: Bool {
-            if case .sessionExpired = phase { return true }
-            return false
+            if case .sessionExpired = phase { true } else { false }
         }
 
         public var canGoNext: Bool {
@@ -185,6 +180,9 @@ public struct DiaryFeature {
         case applySavedGoal(generation: UInt64, targets: DiaryGoalTargets, effectiveDate: LocalDiaryDate)
         case applySavedPreferences(generation: UInt64, prefs: DiaryPrefs)
         case showMutationNotice(generation: UInt64, date: LocalDiaryDate, notice: DiaryMutationNotice)
+        /// Queues a notice to be emitted only after the authoritative read for
+        /// that date settles. The notice is never shown on action enqueue.
+        case queueMutationNotice(generation: UInt64, date: LocalDiaryDate, notice: DiaryMutationNotice)
         case clearMutationNotice
         case expireSession
         case delegate(Delegate)
@@ -195,6 +193,13 @@ public struct DiaryFeature {
         case addFood(slot: MealSlot, date: LocalDiaryDate, generation: UInt64)
         case openLogEditor(id: String, date: LocalDiaryDate, generation: UInt64)
         case openMeals(date: LocalDiaryDate, generation: UInt64)
+        /// Emitted only after a real authoritative read completion, with
+        /// generation/date re-checked at completion time.
+        case mutationNoticeReady(
+            generation: UInt64,
+            date: LocalDiaryDate,
+            notice: DiaryMutationNotice
+        )
     }
 
     private enum CancelID: Hashable {
@@ -203,11 +208,6 @@ public struct DiaryFeature {
 
     public struct Client: Sendable {
         public var fetchDay: @Sendable (LocalDiaryDate, UInt64) async throws -> DiaryDay
-
-        public init(fetchDay: @escaping @Sendable (LocalDiaryDate, UInt64) async throws -> DiaryDay) {
-            self.fetchDay = fetchDay
-        }
-
         public static func live(service: any DiaryServicing) -> Self {
             // Base/unwrapped read seam. This factory captures the supplied
             // service at creation time; it is intentionally not guarded. Future
@@ -300,7 +300,6 @@ public struct DiaryFeature {
                 let current = state.selectedDate
 
                 if clamped == current {
-                    // Retry failed loads on the same date.
                     switch state.phase {
                     case .initialFailed, .idle:
                         return startRequest(state: &state, requestDate: clamped, mode: .initial)
@@ -312,8 +311,10 @@ public struct DiaryFeature {
                 }
 
                 // A real date change retires any mutation notice tied to the
-                // previous day. Same-date refreshes/retries preserve it.
+                // previous day, including one still awaiting read completion.
+                // Same-date refreshes/retries preserve it.
                 state.mutationNotice = nil
+                state.pendingMutationNotice = nil
 
                 // Retire any in-flight request for the date we are leaving so a
                 // later revisit can issue a fresh request.
@@ -383,7 +384,6 @@ public struct DiaryFeature {
                 guard isTokenActive(state.phase, requestDate: requestDate, token: token) else { return .none }
 
                 if day.date != requestDate {
-                    // Consume pending overrides for this token even on wrong-day.
                     if state.pendingGoalOverride?.activeToken == token {
                         state.pendingGoalOverride = nil
                     }
@@ -471,7 +471,6 @@ public struct DiaryFeature {
                 // before this point. Never reset locally.
                 state.completedFetchCount += 1
 
-                // Promote inflight phase to settled loaded.
                 switch state.phase {
                 case .initialLoading, .idle:
                     state.phase = .loaded(day: reconciledDay, activity: .settled)
@@ -487,7 +486,21 @@ public struct DiaryFeature {
                 default:
                     state.phase = .loaded(day: reconciledDay, activity: .settled)
                 }
-                return .none
+
+                // The authoritative read has settled. Only now may a held
+                // editor notice be shown, and only if identity still matches.
+                guard let pending = state.pendingMutationNotice,
+                      pending.generation == generation,
+                      pending.date == requestDate,
+                      state.selectedDate == requestDate else {
+                    return .none
+                }
+                state.pendingMutationNotice = nil
+                return .send(.delegate(.mutationNoticeReady(
+                    generation: generation,
+                    date: pending.date,
+                    notice: pending.notice
+                )))
 
             case let .diaryFailed(generation, requestDate, token, error):
                 guard generation == state.sessionGeneration else { return .none }
@@ -495,14 +508,12 @@ public struct DiaryFeature {
                 guard isTokenActive(state.phase, requestDate: requestDate, token: token) else { return .none }
 
                 if isCancelledDiaryError(error) {
-                    // Consume pending overrides for this token.
                     if state.pendingGoalOverride?.activeToken == token {
                         state.pendingGoalOverride = nil
                     }
                     if state.pendingPrefsOverride?.activeToken == token {
                         state.pendingPrefsOverride = nil
                     }
-                    // Cancelled completions never surface an error or get stuck.
                     return .none
                 }
 
@@ -530,7 +541,27 @@ public struct DiaryFeature {
                     return .none
                 }
                 state.cache = newCache
-                return applyFailure(state: &state, requestDate: requestDate, token: token, message: message)
+                let failureEffect = applyFailure(
+                    state: &state,
+                    requestDate: requestDate,
+                    token: token,
+                    message: message
+                )
+                guard let pending = state.pendingMutationNotice,
+                      pending.generation == generation,
+                      pending.date == requestDate,
+                      state.selectedDate == requestDate else {
+                    return failureEffect
+                }
+                state.pendingMutationNotice = nil
+                return .merge(
+                    failureEffect,
+                    .send(.delegate(.mutationNoticeReady(
+                        generation: generation,
+                        date: pending.date,
+                        notice: pending.notice
+                    )))
+                )
 
             case let .applySavedLog(generation, log, replacingID, onDate):
                 guard generation == state.sessionGeneration else { return .none }
@@ -696,6 +727,19 @@ public struct DiaryFeature {
                 state.mutationNotice = notice
                 return .none
 
+            case let .queueMutationNotice(generation, date, notice):
+                guard generation == state.sessionGeneration else { return .none }
+                guard !state.isSessionExpired else { return .none }
+                guard date == state.selectedDate else { return .none }
+                // Hold, do not display: the notice is released only when the
+                // authoritative read for this date actually settles.
+                state.pendingMutationNotice = PendingMutationNotice(
+                    generation: generation,
+                    date: date,
+                    notice: notice
+                )
+                return .none
+
             case .clearMutationNotice:
                 state.mutationNotice = nil
                 return .none
@@ -751,8 +795,7 @@ public struct DiaryFeature {
         state.cache = newCache
 
         let retainedDay: DiaryDay? = {
-            if case .loaded(let day, _) = state.phase { return day }
-            return nil
+            if case .loaded(let day, _) = state.phase { day } else { nil }
         }()
 
         switch mode {
@@ -821,8 +864,7 @@ public struct DiaryFeature {
     }
 
     private func isChangingDate(_ phase: Phase) -> Bool {
-        if case .loaded(_, .changingDate) = phase { return true }
-        return false
+        if case .loaded(_, .changingDate) = phase { true } else { false }
     }
 
     private func isTokenActive(_ phase: Phase, requestDate: LocalDiaryDate, token: Token) -> Bool {

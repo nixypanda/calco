@@ -105,14 +105,10 @@ public enum DiaryGoalValidationError: Error, Equatable, Sendable {
 
     public var message: String {
         switch self {
-        case .invalidNumbers:
-            return String(localized: "settings.goals.error.invalidNumbers")
-        case .caloriesNotPositive:
-            return String(localized: "settings.goals.error.caloriesPositive")
-        case .macrosNegative:
-            return String(localized: "settings.goals.error.macrosNonNegative")
-        case .formulaMismatch:
-            return String(localized: "settings.goals.error.formula")
+        case .invalidNumbers: String(localized: "settings.goals.error.invalidNumbers")
+        case .caloriesNotPositive: String(localized: "settings.goals.error.caloriesPositive")
+        case .macrosNegative: String(localized: "settings.goals.error.macrosNonNegative")
+        case .formulaMismatch: String(localized: "settings.goals.error.formula")
         }
     }
 }
@@ -233,11 +229,6 @@ public enum DiaryGoalForm {
         let decimalSeparator = locale.decimalSeparator ?? "."
         guard decimalSeparator != "." else { return ascii }
         return ascii.replacingOccurrences(of: ".", with: decimalSeparator)
-    }
-
-    public static func isSupported(_ value: Double, locale: Locale = .current) -> Bool {
-        guard let decimal = GoalDecimalMath.exactDecimal(for: value) else { return false }
-        return isSupportedDecimal(decimal)
     }
 
     public static func isSupportedDecimal(_ value: Decimal) -> Bool {

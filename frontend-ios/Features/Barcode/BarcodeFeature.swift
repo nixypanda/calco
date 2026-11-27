@@ -1,17 +1,8 @@
 import ComposableArchitecture
 import Foundation
 
-// Manual barcode lookup only. No camera/scanner behavior is ported here.
-// The feature wraps existing BarcodeServicing via an explicit injected live
-// service and keeps lookup side effects behind a narrow dependency.
-
 public struct BarcodeClient: Sendable {
     public var lookup: @Sendable (_ barcode: String) async throws -> BarcodeLookup
-
-    public init(lookup: @escaping @Sendable (_ barcode: String) async throws -> BarcodeLookup) {
-        self.lookup = lookup
-    }
-
     public static func live(service: any BarcodeServicing) -> Self {
         Self { barcode in
             try await service.lookupBarcode(barcode)
@@ -53,8 +44,7 @@ public struct BarcodeFeature: Sendable {
         }
 
         public var isBusy: Bool {
-            if case .lookingUp = lookup { return true }
-            return false
+            if case .lookingUp = lookup { true } else { false }
         }
     }
 
@@ -189,12 +179,10 @@ public struct BarcodeFeature: Sendable {
 
 private extension BarcodeServiceError {
     var isCancelled: Bool {
-        if case .cancelled = self { return true }
-        return false
+        if case .cancelled = self { true } else { false }
     }
 
     var isUnauthorized: Bool {
-        if case .unauthorized = self { return true }
-        return false
+        if case .unauthorized = self { true } else { false }
     }
 }

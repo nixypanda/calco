@@ -3,11 +3,6 @@ import SwiftUI
 
 public struct NutritionDetailsFeatureView: View {
     @Bindable var store: StoreOf<NutritionDetailsFeature>
-
-    public init(store: StoreOf<NutritionDetailsFeature>) {
-        self.store = store
-    }
-
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {

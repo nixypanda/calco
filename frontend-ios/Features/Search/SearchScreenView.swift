@@ -1,13 +1,7 @@
 import ComposableArchitecture
 import SwiftUI
 
-/// Native Search screen ported from `SearchView` onto the parent TCA store.
-///
-/// This is the Search cutover view: it is Store-backed and deliberately has no
-/// `ObservableObject`/ViewModel adapter. Every write goes through an explicit
-/// parent or child action; state is only ever read from the store. The optional
-/// `onOpenMeals` closure is an explicit transitional parent-intent seam — the
-/// host supplies it; this view never navigates or writes an API itself.
+/// Store-backed search screen. Navigation and writes remain parent intents.
 public struct SearchScreenView: View {
     private let store: StoreOf<SearchScreenFeature>
 
@@ -51,12 +45,6 @@ public struct SearchScreenView: View {
     /// custom-food scope rather than an invented saved-favorites feature.
     public static var contextualScopes: [SearchScopeOption] {
         [.history, .custom, .all]
-    }
-
-    /// Both preexisting assistant purposes stay reachable from the single
-    /// shared search screen through one native toolbar Menu.
-    public static var compactAssistantPurposes: [AssistantDraftPurpose] {
-        [.customFood, .adHocLog]
     }
 
     /// `originDate`/`originMealSlot`/`sessionGeneration` are computed on the
@@ -162,27 +150,6 @@ public struct SearchScreenView: View {
         .padding(.horizontal)
         .padding(.top, 8)
         .accessibilityIdentifier("search.scope")
-    }
-
-    private static func assistantPurposeTitle(_ purpose: AssistantDraftPurpose) -> String {
-        switch purpose {
-        case .customFood: return String(localized: "assistant.entry.customFood")
-        case .adHocLog: return String(localized: "assistant.entry.adHocLog")
-        }
-    }
-
-    private static func assistantPurposeIcon(_ purpose: AssistantDraftPurpose) -> String {
-        switch purpose {
-        case .customFood: return "square.and.pencil"
-        case .adHocLog: return "fork.knife"
-        }
-    }
-
-    private static func assistantPurposeIdentifier(_ purpose: AssistantDraftPurpose) -> String {
-        switch purpose {
-        case .customFood: return "search.assistant.customFood"
-        case .adHocLog: return "search.assistant.adHocLog"
-        }
     }
 
     // MARK: - Inline progress
@@ -671,10 +638,8 @@ public struct SearchScreenView: View {
 
     private func barcodeOriginText(_ meta: BarcodeLookupMeta) -> String {
         switch meta.origin {
-        case .local:
-            return String(localized: "search.barcode.origin.local")
-        case .openFoodFacts:
-            return meta.note ?? String(localized: "search.barcode.origin.openFoodFacts")
+        case .local: String(localized: "search.barcode.origin.local")
+        case .openFoodFacts: meta.note ?? String(localized: "search.barcode.origin.openFoodFacts")
         }
     }
 

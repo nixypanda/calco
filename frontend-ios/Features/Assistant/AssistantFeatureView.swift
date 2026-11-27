@@ -204,10 +204,8 @@ public struct AssistantFeatureView: View {
 
     private var introText: String {
         switch store.purpose {
-        case .customFood:
-            return String(localized: "assistant.intro.customFood")
-        case .adHocLog:
-            return String(localized: "assistant.intro.adHocLog")
+        case .customFood: String(localized: "assistant.intro.customFood")
+        case .adHocLog: String(localized: "assistant.intro.adHocLog")
         }
     }
 

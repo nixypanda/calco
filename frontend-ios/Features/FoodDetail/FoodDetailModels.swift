@@ -1,5 +1,31 @@
 import Foundation
 
+// MARK: - Lifecycle types
+
+public enum FoodDetailLoadState: Equatable, Sendable {
+    case loading
+    case loaded
+    case failed(String)
+}
+
+public enum FoodDetailSubmitState: Equatable, Sendable {
+    case idle
+    case submitting
+    case failed(String)
+    case uncertain(String)
+    case conflict(String)
+    case rateLimited(String)
+    case succeeded
+}
+
+public enum FoodDetailRecoveryState: Equatable, Sendable {
+    case idle
+    case retrying(String)
+    case succeeded(String)
+    case failed(String)
+    case conflicted(String)
+}
+
 // MARK: - Food detail models
 
 public struct FoodUnit: Equatable, Hashable, Identifiable, Sendable {
@@ -7,13 +33,13 @@ public struct FoodUnit: Equatable, Hashable, Identifiable, Sendable {
     public let name: String
     public let kind: String
 
-    public var id: String { code }
-
     public init(code: String, name: String, kind: String = "unit") {
         self.code = code
         self.name = name
         self.kind = kind
     }
+
+    public var id: String { code }
 }
 
 public struct FoodServing: Equatable, Hashable, Sendable {
@@ -86,12 +112,6 @@ public struct NutrientAmount: Equatable, Sendable {
     public let code: String
     public let amount: String
     public let unit: String
-
-    public init(code: String, amount: String, unit: String) {
-        self.code = code
-        self.amount = amount
-        self.unit = unit
-    }
 }
 
 public struct FoodLogCreateRequest: Equatable, Sendable {
@@ -133,21 +153,6 @@ public struct FoodLogCreateRequest: Equatable, Sendable {
         self.idempotencyKey = idempotencyKey
         self.encodedBody = encodedBody
         self.baseURLString = baseURLString
-    }
-
-    public func withIdempotencyKey(_ key: String?) -> FoodLogCreateRequest {
-        FoodLogCreateRequest(
-            date: date,
-            timeZone: timeZone,
-            mealSlot: mealSlot,
-            foodID: foodID,
-            amount: amount,
-            unit: unit,
-            notes: notes,
-            idempotencyKey: key,
-            encodedBody: key == idempotencyKey ? encodedBody : nil,
-            baseURLString: key == idempotencyKey ? baseURLString : nil
-        )
     }
 
     public func withEncodedBody(_ body: Data) -> FoodLogCreateRequest {
@@ -256,10 +261,6 @@ public struct LogNutritionSummary: Equatable, Sendable {
     public var proteinDisplay: String { protein ?? "—" }
     public var carbsDisplay: String { carbs ?? "—" }
     public var fatDisplay: String { fat ?? "—" }
-
-    public var hasPrimaryValues: Bool {
-        energy != nil || protein != nil || carbs != nil || fat != nil
-    }
 }
 
 public func makeLogNutritionSummary(from nutrients: [NutrientAmount]?) -> LogNutritionSummary? {
@@ -271,7 +272,7 @@ public func makeLogNutritionSummary(from nutrients: [NutrientAmount]?) -> LogNut
         }) else { return nil }
         let trimmed = match.amount.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let value = Double(trimmed), value.isFinite else { return nil }
-        return formatNutritionAmount(value)
+        return DisplayNumberFormat.decimal(value)
     }
 
     return LogNutritionSummary(
@@ -282,10 +283,6 @@ public func makeLogNutritionSummary(from nutrients: [NutrientAmount]?) -> LogNut
         fiber: displayed(NutrientCodes.fiberG),
         nutrients: nutrients
     )
-}
-
-private func formatNutritionAmount(_ value: Double) -> String {
-    DisplayNumberFormat.decimal(value)
 }
 
 /// Stable, native labels for the nutrients shown on the Log Food screen.

@@ -7,12 +7,7 @@ public enum AuthSessionStatus: Equatable, Sendable {
 
 public struct SessionStatusView: View {
     public let status: AuthSessionStatus
-    public var onRetry: (() -> Void)?
-
-    public init(status: AuthSessionStatus, onRetry: (() -> Void)? = nil) {
-        self.status = status
-        self.onRetry = onRetry
-    }
+    public var onRetry: (() -> Void)? = nil
 
     public var body: some View {
         switch status {

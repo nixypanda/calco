@@ -26,8 +26,7 @@ public struct LoginFeature {
         }
 
         public var isSubmitting: Bool {
-            if case .submitting = phase { return true }
-            return false
+            if case .submitting = phase { true } else { false }
         }
     }
 
@@ -116,14 +115,10 @@ public struct LoginFeature {
 
     private func map(_ failure: SessionCoordinator.Failure) -> AuthFeatureError {
         switch failure {
-        case .invalidCredentials:
-            return .invalidCredentials
-        case .networkUnavailable, .timedOut:
-            return .networkUnavailable
-        case .server(let message):
-            return .server(message)
-        case .cancelled, .unknown:
-            return .unknown
+        case .invalidCredentials: .invalidCredentials
+        case .networkUnavailable, .timedOut: .networkUnavailable
+        case .server(let message): .server(message)
+        case .cancelled, .unknown: .unknown
         }
     }
 }

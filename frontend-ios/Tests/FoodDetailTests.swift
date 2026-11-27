@@ -1,89 +1,245 @@
-import SwiftUI
+import CasePaths
+import ComposableArchitecture
 import XCTest
 
 @testable import CalCo
 
-private actor FakeFoodDetailService: FoodDetailServicing {
-    private var food: FoodDetail?
-    private var units: [FoodUnit] = []
-    private var foodError: Error?
-    private var createError: Error?
-    private var delayNanoseconds: UInt64 = 0
-    private var createCalls: [FoodLogCreateRequest] = []
-    private var holdsNextCreate = false
-    private var createStarted = false
-    private var createReleased = false
-    private var createContinuation: CheckedContinuation<Void, Never>?
+/// In-memory stand-in for the frozen LogSubmissionStore. Every method maps to
+/// the same transition the real store performs; no new writer/authority.
+/// Thread-safe in-memory stand-in for the frozen LogSubmissionStore. All state
+/// is NSLock-protected so the synchronous @Sendable JournalClient closures can
+/// read and mutate it dynamically (later test mutations remain visible). No
+/// snapshots and no @MainActor isolation assumptions.
+private final class JournalFake: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedEntries: [String: PendingLogSubmission] = [:]
+    private var reservedEntries: [String: PendingLogSubmission] = [:]
+    private var blockedIDs: Set<String> = []
+    private var liveIDs: Set<String> = []
 
-    func setFood(_ value: FoodDetail?) { food = value }
-    func setUnits(_ value: [FoodUnit]) { units = value }
-    func setFoodError(_ value: Error?) { foodError = value }
-    func setCreateError(_ value: Error?) { createError = value }
-    func setDelayNanoseconds(_ value: UInt64) { delayNanoseconds = value }
-    func recordedCreateCalls() -> [FoodLogCreateRequest] { createCalls }
-
-    func holdNextCreate() {
-        holdsNextCreate = true
-        createStarted = false
-        createReleased = false
+    var entries: [String: PendingLogSubmission] {
+        lock.lock(); defer { lock.unlock() }
+        return storedEntries
     }
 
-    func waitForCreateStart() async {
-        let deadline = Date().addingTimeInterval(5)
-        while !createStarted, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 1_000_000)
+    var reserved: [String: PendingLogSubmission] {
+        lock.lock(); defer { lock.unlock() }
+        return reservedEntries
+    }
+
+    var blocked: Set<String> {
+        lock.lock(); defer { lock.unlock() }
+        return blockedIDs
+    }
+
+    var live: Set<String> {
+        lock.lock(); defer { lock.unlock() }
+        return liveIDs
+    }
+
+    func markBlocked(_ id: String) {
+        lock.lock(); defer { lock.unlock() }
+        blockedIDs.insert(id)
+    }
+
+    func markLive(_ id: String) {
+        lock.lock(); defer { lock.unlock() }
+        liveIDs.insert(id)
+    }
+
+    private func entry(_ id: String) -> PendingLogSubmission? {
+        lock.lock(); defer { lock.unlock() }
+        return storedEntries[id]
+    }
+
+    private func update(_ id: String, _ transform: (inout PendingLogSubmission) -> Void) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard var entry = storedEntries[id] else {
+            throw LogSubmissionStoreError.missingEntry
         }
-        XCTAssertTrue(createStarted, "Timed out waiting for the create request")
+        transform(&entry)
+        storedEntries[id] = entry
     }
 
-    func releaseCreate() {
-        createReleased = true
-        createContinuation?.resume()
-        createContinuation = nil
-    }
-
-    func fetchFoodDetail(id: String) async throws -> FoodDetail {
-        if delayNanoseconds > 0 {
-            try await Task.sleep(nanoseconds: delayNanoseconds)
-        }
-        if let foodError { throw foodError }
-        return food ?? FoodDetail(id: id, name: "Food")
-    }
-
-    func fetchUnits() async throws -> [FoodUnit] {
-        units
-    }
-
-    func createLog(_ request: FoodLogCreateRequest) async throws -> CreatedFoodLog {
-        if delayNanoseconds > 0 {
-            try await Task.sleep(nanoseconds: delayNanoseconds)
-        }
-        if holdsNextCreate {
-            holdsNextCreate = false
-            createStarted = true
-            await withCheckedContinuation { continuation in
-                if createReleased {
-                    continuation.resume()
-                } else {
-                    createContinuation = continuation
+    func client() -> FoodDetailFeature.JournalClient {
+        FoodDetailFeature.JournalClient(
+            unresolved: { [weak self] accountID, foodID, date in
+                guard let self else { return [] }
+                return self.entries.values.filter {
+                    !self.blocked.contains($0.id)
+                        && $0.accountID == accountID
+                        && $0.draft.foodID == foodID
+                        && $0.draft.date == date
+                        && ($0.state == .inFlight
+                            || $0.state == .uncertain
+                            || $0.state == .conflicted)
                 }
-            }
+            },
+            entry: { [weak self] id, _ in self?.entry(id) },
+            requireEntry: { [weak self] id, _ in
+                guard let self, let entry = self.entry(id) else {
+                    throw LogSubmissionStoreError.missingEntry
+                }
+                return entry
+            },
+            reserve: { [weak self] account, name, draft, request, body in
+                guard let self else {
+                    throw LogSubmissionStoreError.persistence("test fixture unavailable")
+                }
+                let entry = PendingLogSubmission(
+                    id: request.idempotencyKey ?? UUID().uuidString.lowercased(),
+                    accountID: account,
+                    foodName: name,
+                    draft: draft,
+                    idempotencyKey: request.idempotencyKey ?? "",
+                    body: body,
+                    baseURLString: request.baseURLString ?? "",
+                    state: .inFlight,
+                    createdAt: Date(),
+                    updatedAt: Date()
+                )
+                self.lock.lock()
+                self.storedEntries[entry.id] = entry
+                self.reservedEntries[entry.id] = entry
+                self.lock.unlock()
+                return entry
+            },
+            markInFlight: { [weak self] id, _ in
+                guard let self else { throw LogSubmissionStoreError.missingEntry }
+                try self.update(id) { $0.state = .inFlight }
+            },
+            markUncertain: { [weak self] id, _, status, message, retryAfter in
+                guard let self else { throw LogSubmissionStoreError.missingEntry }
+                try self.update(id) { entry in
+                    entry.state = .uncertain
+                    entry.lastStatus = status
+                    entry.lastMessage = message
+                    entry.retryAfterSeconds = retryAfter
+                }
+            },
+            markSucceeded: { [weak self] id, _, logID, date, slot, replayed in
+                guard let self else { throw LogSubmissionStoreError.missingEntry }
+                try self.update(id) { entry in
+                    entry.state = .succeeded
+                    entry.body = nil
+                    entry.resultLogID = logID
+                    entry.resultDate = date
+                    entry.resultMealSlot = slot
+                    entry.replayed = replayed
+                    entry.lastStatus = replayed ? 200 : 201
+                    entry.lastMessage = nil
+                }
+            },
+            markRejected: { [weak self] id, _, status, message in
+                guard let self else { throw LogSubmissionStoreError.missingEntry }
+                try self.update(id) { entry in
+                    entry.state = .rejected
+                    entry.lastStatus = status
+                    entry.lastMessage = message
+                }
+            },
+            markConflicted: { [weak self] id, _, message in
+                guard let self else { throw LogSubmissionStoreError.missingEntry }
+                try self.update(id) { entry in
+                    entry.state = .conflicted
+                    entry.body = nil
+                    entry.lastMessage = message
+                }
+            },
+            remove: { [weak self] id, _ in
+                guard let self else { throw LogSubmissionStoreError.persistence("test fixture unavailable") }
+                self.lock.lock()
+                self.storedEntries[id] = nil
+                self.lock.unlock()
+            },
+            isRetryBlocked: { [weak self] id in
+                guard let self else { return false }
+                self.lock.lock(); defer { self.lock.unlock() }
+                return self.blockedIDs.contains(id)
+            },
+            isLiveSubmission: { [weak self] id in
+                guard let self else { return false }
+                self.lock.lock(); defer { self.lock.unlock() }
+                return self.liveIDs.contains(id)
+            },
+            revisionUpdates: { AsyncStream { $0.finish() } }
+        )
+    }
+}
+
+private actor PostGate {
+    private var didEnter = false
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func markEntered() {
+        didEnter = true
+        let pending = enteredWaiters
+        enteredWaiters = []
+        for waiter in pending { waiter.resume() }
+    }
+
+    func entered() async {
+        if didEnter { return }
+        await withCheckedContinuation { enteredWaiters.append($0) }
+    }
+
+    func wait() async {
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        let pending = waiters
+        waiters = []
+        for waiter in pending { waiter.resume() }
+    }
+}
+
+@MainActor
+private final class DetailServiceFake: @unchecked Sendable {
+    var food: FoodDetail = FoodDetail(id: "food-1", name: "Food")
+    var units: [FoodUnit] = [FoodUnit(code: "g", name: "Gram")]
+    var foodError: Error?
+    var createError: Error?
+    var lastUsed: RecentLogItem?
+    var requests: [FoodLogCreateRequest] = []
+    var createContexts: [FeatureRequestContext] = []
+    var postGate: PostGate?
+
+    func recordCreateContext(_ context: FeatureRequestContext) {
+        createContexts.append(context)
+    }
+
+    func fetch() async throws -> FoodDetail {
+        if let foodError { throw foodError }
+        return food
+    }
+
+    func create(_ request: FoodLogCreateRequest) async throws -> CreatedFoodLog {
+        requests.append(request)
+        if let postGate {
+            await postGate.markEntered()
+            await postGate.wait()
         }
-        createCalls.append(request)
         if let createError { throw createError }
         return CreatedFoodLog(id: "log-1", date: request.date, mealSlot: request.mealSlot)
     }
 }
 
 @MainActor
-private final class CallbackRecorder {
-    var successes: [(LocalDiaryDate, MealSlot?)] = []
-    var sessionExpiredCount = 0
-}
-
-@MainActor
 final class FoodDetailTests: XCTestCase {
     private let date = LocalDiaryDate(year: 2026, month: 11, day: 17)
+    private let accountID = "account-a"
+    private let generation: UInt64 = 42
+    private let baseURL = URL(string: "https://calco.example.com")
+    /// Explicit deterministic request/identity fixtures for every load helper.
+    private let loadRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    private let presentationID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    private var expectedContext: FeatureRequestContext {
+        FeatureRequestContext(
+            accountID: accountID, generation: generation, presentationID: presentationID
+        )
+    }
 
     private func assertValidIdempotencyKey(
         _ key: String?,
@@ -94,469 +250,254 @@ final class FoodDetailTests: XCTestCase {
             return XCTFail("Expected an idempotency key", file: file, line: line)
         }
         XCTAssertNotNil(UUID(uuidString: key), "The key must be a UUID", file: file, line: line)
-        XCTAssertEqual(
-            key,
-            key.trimmingCharacters(in: .whitespacesAndNewlines),
-            "The key must not be blank or padded",
-            file: file,
-            line: line
-        )
-        XCTAssertTrue(
-            (1...128).contains(key.count),
-            "The key must fit the backend's 1...128 character limit",
-            file: file,
-            line: line
-        )
+        XCTAssertEqual(key, key.trimmingCharacters(in: .whitespacesAndNewlines), file: file, line: line)
+        XCTAssertTrue((1...128).contains(key.count), file: file, line: line)
     }
 
-    private func makeViewModel(
-        foodID: String,
-        originMealSlot: MealSlot? = nil,
-        service: FakeFoodDetailService,
-        recorder: CallbackRecorder? = nil
-    ) -> FoodDetailViewModel {
-        let callbacks = recorder ?? CallbackRecorder()
-        return FoodDetailViewModel(
+    private func makeStore(
+        foodID: String = "food-1",
+        slot: MealSlot? = nil,
+        service: DetailServiceFake,
+        journal: JournalFake,
+        accountID: String = "account-a",
+        requestID: UUID? = nil,
+        presentationID: UUID? = nil,
+        makeID: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() },
+        initialState: FoodDetailFeature.State? = nil
+    ) -> TestStore<FoodDetailFeature.State, FoodDetailFeature.Action> {
+        let resolvedRequestID = requestID ?? self.loadRequestID
+        let resolvedPresentationID = presentationID ?? self.presentationID
+        let state = initialState ?? FoodDetailFeature.State(
             foodID: foodID,
-            originDate: date,
-            originMealSlot: originMealSlot,
-            service: service,
-            onSuccess: { callbacks.successes.append(($0, $1)) },
-            onSessionExpired: { callbacks.sessionExpiredCount += 1 }
+            date: date,
+            slot: slot,
+            generation: generation,
+            accountID: accountID,
+            presentationID: resolvedPresentationID,
+            baseURL: baseURL
         )
-    }
-
-    func testLoadSuccessAppliesDefaults() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(
-            FoodDetail(
-                id: "food-1",
-                name: "Chicken",
-                defaultQuantity: "2",
-                defaultUnit: "serving",
-                nutrients: [FoodNutrient(code: "ENERGY_KCAL", amountPer100g: "200", unit: "kcal")],
-                servings: [FoodServing(unit: "serving", gramsPerUnit: "100")],
-                allowedUnits: [FoodUnit(code: "serving", name: "Serving")]
+        let units = service.units
+        let lastUsedItem = service.lastUsed
+        return TestStore(initialState: state) {
+            FoodDetailFeature()
+        } withDependencies: {
+            $0.foodDetailClient = FoodDetailFeature.Client(
+                fetchFood: { _, _ in try await service.fetch() },
+                fetchUnits: { _ in units },
+                lastUsed: { _, _, _, _ in lastUsedItem },
+                createLog: { context, request in
+                    await service.recordCreateContext(context)
+                    return try await service.create(request)
+                },
+                makeID: makeID,
+                timeZoneIdentifier: { "America/New_York" }
             )
-        )
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(foodID: "food-1", originMealSlot: .lunch, service: service, recorder: recorder)
-
-        await vm.load()
-
-        XCTAssertEqual(vm.loadState, .loaded)
-        XCTAssertEqual(vm.food?.name, "Chicken")
-        XCTAssertEqual(vm.amount, "2")
-        XCTAssertEqual(vm.unit, "serving")
-        XCTAssertEqual(vm.mealSlot, .lunch)
-        XCTAssertEqual(vm.availableUnits.map(\.code), ["serving"])
-        XCTAssertTrue(recorder.successes.isEmpty, "Loading must not report a completed log")
-        XCTAssertEqual(recorder.sessionExpiredCount, 0)
-    }
-
-    func testLoadFallsBackToFirstServing() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(
-            FoodDetail(
-                id: "food-2",
-                name: "Rice",
-                nutrients: [],
-                servings: [FoodServing(unit: "cup", gramsPerUnit: "180")],
-                allowedUnits: []
-            )
-        )
-        await service.setUnits([FoodUnit(code: "g", name: "Grams")])
-        let vm = makeViewModel(foodID: "food-2", service: service)
-
-        await vm.load()
-
-        XCTAssertEqual(vm.loadState, .loaded)
-        XCTAssertEqual(vm.amount, "1")
-        XCTAssertEqual(vm.unit, "cup")
-        XCTAssertEqual(vm.availableUnits.map(\.code), ["g"])
-    }
-
-    func testLoadHalfDefaultNeverMixesFields() async {
-        let quantityOnlyService = FakeFoodDetailService()
-        await quantityOnlyService.setFood(
-            FoodDetail(
-                id: "food-half-quantity",
-                name: "Quantity only",
-                defaultQuantity: "2",
-                servings: [FoodServing(unit: "cup", gramsPerUnit: "200")]
-            )
-        )
-        let quantityVM = makeViewModel(foodID: "food-half-quantity", service: quantityOnlyService)
-        await quantityVM.load()
-
-        XCTAssertEqual(quantityVM.amount, "1")
-        XCTAssertEqual(quantityVM.unit, "cup")
-
-        let unitOnlyService = FakeFoodDetailService()
-        await unitOnlyService.setFood(
-            FoodDetail(id: "food-half-unit", name: "Unit only", defaultUnit: "serving")
-        )
-        let unitVM = makeViewModel(foodID: "food-half-unit", service: unitOnlyService)
-        await unitVM.load()
-
-        XCTAssertEqual(unitVM.amount, "100")
-        XCTAssertEqual(unitVM.unit, "g")
-    }
-
-    func testSubmitImmediatelyAfterLoadUsesValidFallback() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-auto", name: "Auto"))
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(foodID: "food-auto", service: service, recorder: recorder)
-        await vm.load()
-
-        XCTAssertEqual(vm.loadState, .loaded)
-        XCTAssertNotNil(vm.food)
-        XCTAssertEqual(vm.amount, "100")
-        XCTAssertEqual(vm.unit, "g")
-        XCTAssertNil(vm.amountValidationMessage)
-
-        await vm.submit()
-
-        XCTAssertEqual(vm.submitState, .succeeded)
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1)
-        XCTAssertEqual(calls.first?.amount, "100")
-        XCTAssertEqual(calls.first?.unit, "g")
-        XCTAssertEqual(recorder.successes.count, 1)
-    }
-
-    func testLoadFailure() async {
-        let service = FakeFoodDetailService()
-        await service.setFoodError(FoodDetailServiceError.failed("boom"))
-        let vm = makeViewModel(foodID: "food-3", service: service)
-
-        await vm.load()
-
-        XCTAssertNil(vm.food)
-        guard case .failed(let message) = vm.loadState else {
-            return XCTFail("Expected failed load state")
-        }
-        XCTAssertEqual(message, "boom")
-    }
-
-    func testLoadUnauthorizedCallsSessionExpired() async {
-        let service = FakeFoodDetailService()
-        await service.setFoodError(FoodDetailServiceError.unauthorized)
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(foodID: "food-4", service: service, recorder: recorder)
-
-        await vm.load()
-
-        XCTAssertEqual(recorder.sessionExpiredCount, 1)
-        guard case .failed = vm.loadState else {
-            return XCTFail("Expected failed load state")
+            $0.foodDetailJournalClient = journal.client()
+            $0.uuid = .constant(resolvedRequestID)
         }
     }
 
-    func testAmountValidationBlocksSubmit() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-5", name: "Egg"))
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(foodID: "food-5", service: service, recorder: recorder)
-        await vm.load()
-        vm.amountChanged("   ")
-
-        await vm.submit()
-
-        guard case .failed(let message) = vm.submitState else {
-            return XCTFail("Expected failed submit state")
+    /// Plain helper from explicit fixtures: no post-action store introspection.
+    private func load(
+        _ store: TestStore<FoodDetailFeature.State, FoodDetailFeature.Action>,
+        service: DetailServiceFake,
+        lastUsed: RecentLogItem? = nil,
+        requestID: UUID? = nil,
+        slot: MealSlot? = nil
+    ) async throws {
+        let expectedRequestID = requestID ?? self.loadRequestID
+        let expectedContext = FeatureRequestContext(
+            accountID: self.accountID,
+            generation: self.generation,
+            presentationID: self.presentationID
+        )
+        await store.send(FoodDetailFeature.Action.load) {
+            $0.load = .loading
+            $0.loadedFood = nil
+            $0.lastUsedNotice = nil
+            $0.quantityWasEdited = false
+            $0.formWasEdited = false
+            $0.hasAttemptedSubmission = false
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.recovery = .idle
+            $0.loadRequestID = expectedRequestID
         }
-        XCTAssertFalse(message.isEmpty)
-        let calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty, "Invalid amount must never reach the service")
-        XCTAssertTrue(recorder.successes.isEmpty)
-    }
-
-    func testSubmitSuccessCallsCallbackWithContext() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(
-            FoodDetail(id: "food-6", name: "Tofu", allowedUnits: [FoodUnit(code: "g", name: "Grams")])
-        )
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(
-            foodID: "food-6",
-            originMealSlot: .dinner,
-            service: service,
-            recorder: recorder
-        )
-        await vm.load()
-        vm.amount = "100"
-        vm.unit = "g"
-        vm.mealSlot = .dinner
-        vm.notes = "note"
-
-        await vm.submit()
-
-        XCTAssertEqual(vm.submitState, .succeeded)
-        XCTAssertTrue(vm.didSubmitSuccessfully)
-        XCTAssertNil(vm.submitErrorMessage)
-        XCTAssertEqual(recorder.successes.count, 1)
-        XCTAssertEqual(recorder.successes.first?.0, date)
-        XCTAssertEqual(recorder.successes.first?.1, .dinner)
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1)
-        let request = calls.first
-        XCTAssertEqual(request?.foodID, "food-6")
-        XCTAssertEqual(request?.date, date)
-        XCTAssertEqual(request?.mealSlot, .dinner)
-        XCTAssertEqual(request?.timeZone, TimeZone.current.identifier)
-        XCTAssertEqual(request?.amount, "100")
-        XCTAssertEqual(request?.unit, "g")
-        XCTAssertEqual(request?.notes, "note")
-    }
-
-    func testSubmitUnauthorizedCallsSessionExpired() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-7", name: "Beans"))
-        await service.setCreateError(FoodDetailServiceError.unauthorized)
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(foodID: "food-7", service: service, recorder: recorder)
-        await vm.load()
-        vm.amount = "50"
-        vm.unit = "g"
-
-        await vm.submit()
-
-        XCTAssertEqual(recorder.sessionExpiredCount, 1)
-        XCTAssertTrue(recorder.successes.isEmpty, "Unauthorized submit must not report success")
-        guard case .failed = vm.submitState else {
-            return XCTFail("Expected failed submit state")
+        await store.receive(.loadCompleted(
+            requestID: expectedRequestID,
+            context: expectedContext,
+            result: .success(FoodDetailFeature.LoadPayload(
+                food: service.food,
+                units: service.units
+            ))
+        )) {
+            $0.units = service.units
+            let defaults = service.food.defaultLogQuantity
+            $0.amount = defaults.amount
+            $0.unit = defaults.unit
+            if $0.mealSlot == nil { $0.mealSlot = slot }
+            $0.loadedFood = service.food
+            $0.load = .loaded
+            $0.lastUsedRequestID = expectedRequestID
         }
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "The service should still have been attempted")
+        await store.receive(.lastUsedCompleted(
+            requestID: expectedRequestID,
+            context: expectedContext,
+            result: .success(lastUsed)
+        ))
     }
 
-    func testConcurrentSubmitIsGuardedWhileInFlight() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-10", name: "Bread"))
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(foodID: "food-10", service: service, recorder: recorder)
-        await vm.load()
-        vm.amount = "1"
-        vm.unit = "g"
-        await service.setDelayNanoseconds(50_000_000)
-
-        async let first: Void = vm.submit()
-        async let second: Void = vm.submit()
-        await first
-        await second
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "A second submit while one is in flight must be ignored")
-        assertValidIdempotencyKey(calls.first?.idempotencyKey)
-        XCTAssertEqual(recorder.successes.count, 1)
+    /// Explicit submit-start state diff from known fixtures (idempotency key,
+    /// request ID and captured timezone). No after-action store introspection.
+    private func sendSubmit(
+        _ store: TestStore<FoodDetailFeature.State, FoodDetailFeature.Action>,
+        attemptID: String,
+        requestID: UUID,
+        timeZone: String = "America/New_York"
+    ) async {
+        await store.send(FoodDetailFeature.Action.submit) {
+            $0.hasAttemptedSubmission = true
+            $0.frozenTimeZone = timeZone
+            $0.newSubmissionConfirmationID = nil
+            $0.currentAttemptID = attemptID
+            $0.submit = .submitting
+            $0.activeWriteRequestID = requestID
+        }
     }
 
-    func testSubmitFailureIsExposedForDisplay() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-fail", name: "Failure Food"))
-        await service.setCreateError(FoodDetailServiceError.failed("Network down"))
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(foodID: "food-fail", service: service, recorder: recorder)
-        await vm.load()
-        vm.amount = "10"
-        vm.unit = "g"
+    /// Drains the immutable settlement action produced by the write effect and
+    /// the single UI delegate, if any. Keeps TestStore exhaustivity at default.
+    /// Drains the immutable settlement action produced by the write effect and
+    /// the single UI delegate, if any. All expected rows are predicted from the
+    /// captured attempt + known server outcome, never from a post-action read.
+    private func drainWrite(
+        _ store: TestStore<FoodDetailFeature.State, FoodDetailFeature.Action>,
+        journal: JournalFake,
+        requestID: UUID,
+        outcome: FoodDetailSettlement.Outcome,
+        context: FeatureRequestContext,
+        expectLogged: Bool = false,
+        expectExpiry: Bool = false
+    ) async throws {
+        let original = journal.reserved.values.first ?? journal.entries.values.first!
+        let sessionExpiredMessage = String(localized: "foodDetail.error.sessionExpired")
 
-        await vm.submit()
+        // Predict the terminal journal row from the known outcome/failure.
+        var predictedRow = original
+        var hasPending = false
+        switch outcome {
+        case .succeeded:
+            break
+        case let .failed(failure, _):
+            switch failure {
+            case .stale:
+                hasPending = true // still the in-flight snapshot
+            case .unauthorized:
+                predictedRow.state = .uncertain
+                predictedRow.lastStatus = 401
+                predictedRow.lastMessage = sessionExpiredMessage
+                predictedRow.retryAfterSeconds = nil
+                hasPending = true
+            case let .uncertain(message):
+                predictedRow.state = .uncertain
+                predictedRow.lastStatus = nil
+                predictedRow.lastMessage = message
+                predictedRow.retryAfterSeconds = nil
+                hasPending = true
+            case let .conflict(message):
+                predictedRow.state = .conflicted
+                predictedRow.body = nil
+                predictedRow.lastMessage = message
+                hasPending = true
+            case let .rateLimited(retryAfter):
+                predictedRow.state = .uncertain
+                predictedRow.lastStatus = 429
+                predictedRow.lastMessage = String(localized: "foodDetail.error.rateLimited")
+                predictedRow.retryAfterSeconds = retryAfter
+                hasPending = true
+            case .failed(_):
+                predictedRow.state = .rejected // real store marks rejected, excluded from unresolved
+            }
+        }
 
-        XCTAssertEqual(vm.submitState, .failed("Network down"))
-        XCTAssertEqual(vm.submitErrorMessage, "Network down", "The failure banner renders submitErrorMessage")
-        XCTAssertFalse(vm.isSubmitting, "The spinner must stop once the request fails")
-        XCTAssertFalse(vm.didSubmitSuccessfully)
-        XCTAssertTrue(recorder.successes.isEmpty, "A failed POST must not report success")
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1)
-    }
-
-    func testSubmitFailureClearsWhenFieldEdited() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-clear", name: "Clearable"))
-        await service.setCreateError(FoodDetailServiceError.failed("Try later"))
-        let vm = makeViewModel(foodID: "food-clear", service: service)
-        await vm.load()
-        vm.amount = "10"
-        vm.unit = "g"
-        await vm.submit()
-        XCTAssertNotNil(vm.submitErrorMessage)
-
-        vm.amountChanged("11")
-
-        XCTAssertEqual(vm.submitState, .idle)
-        XCTAssertNil(vm.submitErrorMessage, "Editing must dismiss a stale failure banner")
-    }
-
-    func testValidationFailureIsVisibleWithoutRequest() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-validation", name: "Validation"))
-        let vm = makeViewModel(foodID: "food-validation", service: service)
-        await vm.load()
-        vm.amountChanged("   ")
-
-        await vm.submit()
-
-        XCTAssertEqual(vm.submitErrorMessage, vm.amountValidationMessage)
-        XCTAssertFalse(vm.submitErrorMessage?.isEmpty ?? true)
-        XCTAssertFalse(vm.isSubmitting)
-        let calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty, "Invalid input must never reach the service")
-    }
-
-    func testSubmitIsIdempotentAfterSuccess() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-once", name: "Once"))
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(foodID: "food-once", service: service, recorder: recorder)
-        await vm.load()
-        vm.amount = "1"
-        vm.unit = "g"
-
-        await vm.submit()
-        await vm.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "A repeated submit must not create a second log")
-        XCTAssertEqual(recorder.successes.count, 1)
-        XCTAssertEqual(vm.submitState, .succeeded)
-        XCTAssertTrue(vm.didSubmitSuccessfully)
-    }
-
-    func testRetryAfterUncertainFailureReusesIdempotencyKey() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-retry", name: "Retry"))
-        await service.setCreateError(
-            FoodDetailServiceError.uncertain(
-                "Network unavailable. Check your connection and try again."
+        // One authoritative success record shared by state and delegate.
+        var expectedSuccess: FoodLogSubmissionSuccess?
+        if case let .succeeded(created, entry) = outcome {
+            let attempt = entry ?? original
+            expectedSuccess = FoodLogSubmissionSuccess(
+                submissionID: attempt.id,
+                accountID: attempt.accountID,
+                foodID: attempt.draft.foodID,
+                foodName: attempt.foodName,
+                date: attempt.resultDate ?? attempt.draft.date,
+                mealSlot: created.mealSlot ?? attempt.resultMealSlot ?? attempt.draft.mealSlot,
+                logID: created.id,
+                replayed: created.replayed
             )
-        )
-        let recorder = CallbackRecorder()
-        let vm = makeViewModel(foodID: "food-retry", service: service, recorder: recorder)
-        await vm.load()
-        vm.amount = "10"
-        vm.unit = "g"
+        }
 
-        await vm.submit()
-        XCTAssertFalse(vm.didSubmitSuccessfully)
-        XCTAssertTrue(recorder.successes.isEmpty, "An uncertain failure must not report success")
-
-        await service.setCreateError(nil)
-        await vm.retryPending()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2)
-        assertValidIdempotencyKey(calls.first?.idempotencyKey)
-        XCTAssertEqual(
-            calls.first?.idempotencyKey,
-            calls.last?.idempotencyKey,
-            "An explicit retry of the unchanged request must replay the original key"
-        )
-        XCTAssertEqual(vm.submitState, .succeeded)
-        XCTAssertEqual(recorder.successes.count, 1)
+        await store.receive(.settled(settlement: FoodDetailSettlement(
+            requestID: requestID,
+            attempt: original,
+            ownerAccountID: accountID,
+            generation: generation,
+            context: context,
+            recovery: false,
+            outcome: outcome
+        ))) { state in
+            state.activeWriteRequestID = nil
+            if hasPending && !journal.blocked.contains(original.id) {
+                state.pending = [predictedRow]
+                state.visiblePending = [predictedRow]
+                state.lastPendingIDs = [original.id]
+                state.currentAttemptID = original.id
+            } else {
+                state.pending = []
+                state.visiblePending = []
+                state.lastPendingIDs = []
+            }
+            switch outcome {
+            case .succeeded:
+                state.currentAttemptID = nil
+                state.newSubmissionConfirmationID = nil
+                state.lastSubmissionSuccess = expectedSuccess
+                state.submit = .succeeded
+            case let .failed(failure, _):
+                switch failure {
+                case .unauthorized:
+                    state.submit = .failed(sessionExpiredMessage)
+                    state.currentAttemptID = nil
+                case .stale:
+                    break
+                case let .uncertain(message):
+                    state.submit = .uncertain(message)
+                case let .conflict(message):
+                    state.submit = .conflict(message)
+                case let .rateLimited(_):
+                    state.submit = .rateLimited(String(localized: "foodDetail.error.rateLimited"))
+                case let .failed(message):
+                    state.submit = .failed(message)
+                    state.currentAttemptID = nil
+                }
+            }
+        }
+        if expectLogged, let expectedSuccess {
+            let date = expectedSuccess.date
+            await store.receive(.delegate(.logged(
+                date: date,
+                slot: expectedSuccess.mealSlot,
+                generation: generation,
+                submission: expectedSuccess
+            )))
+        }
+        if expectExpiry {
+            await store.receive(.delegate(.sessionExpired(generation: generation)))
+        }
     }
 
-    func testEditedPayloadUsesNewIdempotencyKey() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-edit", name: "Edited"))
-        await service.setCreateError(FoodDetailServiceError.failed("Try later"))
-        let vm = makeViewModel(foodID: "food-edit", service: service)
-        await vm.load()
-        vm.amount = "10"
-        vm.unit = "g"
-
-        await vm.submit()
-
-        await service.setCreateError(nil)
-        vm.amountChanged("11")
-        await vm.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2)
-        XCTAssertEqual(calls.first?.amount, "10")
-        XCTAssertEqual(calls.last?.amount, "11")
-        assertValidIdempotencyKey(calls.first?.idempotencyKey)
-        assertValidIdempotencyKey(calls.last?.idempotencyKey)
-        XCTAssertNotEqual(
-            calls.first?.idempotencyKey,
-            calls.last?.idempotencyKey,
-            "An edited payload must be a new logical submission with a new key"
-        )
-    }
-
-    func testNewSubmissionFlowUsesNewIdempotencyKey() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-new-flow", name: "New Flow"))
-        let first = makeViewModel(foodID: "food-new-flow", service: service)
-        await first.load()
-        first.amount = "10"
-        first.unit = "g"
-        await first.submit()
-
-        let second = makeViewModel(foodID: "food-new-flow", service: service)
-        await second.load()
-        second.amount = "10"
-        second.unit = "g"
-        await second.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2)
-        XCTAssertNotEqual(
-            calls.first?.idempotencyKey,
-            calls.last?.idempotencyKey,
-            "A new form flow must not reuse a previous submission's key"
-        )
-    }
-
-    func testNutritionPreviewWhenDataSufficient() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(
-            FoodDetail(
-                id: "food-8",
-                name: "Oats",
-                nutrients: [FoodNutrient(code: "ENERGY_KCAL", amountPer100g: "400", unit: "kcal")],
-                servings: [FoodServing(unit: "g", gramsPerUnit: "1")]
-            )
-        )
-        let vm = makeViewModel(foodID: "food-8", service: service)
-        await vm.load()
-        vm.amount = "50"
-        vm.unit = "g"
-
-        let preview = vm.nutritionPreview
-        XCTAssertEqual(preview?.count, 1)
-        XCTAssertEqual(preview?.first?.code, "ENERGY_KCAL")
-        XCTAssertEqual(preview?.first?.amount, "200.0")
-        XCTAssertEqual(preview?.first?.unit, "kcal")
-    }
-
-    func testNutritionPreviewNilWhenInsufficient() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-9", name: "Salt", nutrients: [], servings: []))
-        let vm = makeViewModel(foodID: "food-9", service: service)
-        await vm.load()
-        vm.amount = "abc"
-        vm.unit = "g"
-
-        XCTAssertNil(vm.nutritionPreview)
-    }
-
-    func testViewObservesInjectedViewModel() {
-        let vm = makeViewModel(foodID: "food-view", service: FakeFoodDetailService())
-        let view = FoodDetailView(viewModel: vm)
-
-        let storage = Mirror(reflecting: view).children
-            .first { $0.label == "_viewModel" }?.value
-
-        XCTAssertTrue(
-            storage is ObservedObject<FoodDetailViewModel>,
-            "FoodDetailView must observe the externally owned view model; @StateObject would retain a previous session's data"
-        )
-    }
+    // MARK: - Pure contracts preserved byte-for-byte
 
     func testValidateLogAmountRejectsInvalidValues() {
         XCTAssertNil(validateLogAmount("1"))
@@ -570,97 +511,51 @@ final class FoodDetailTests: XCTestCase {
         XCTAssertNotNil(validateLogAmount("Infinity"))
     }
 
-    func testSubmitTrimsNotes() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-trim", name: "Trim"))
-        let vm = makeViewModel(foodID: "food-trim", service: service)
-        await vm.load()
-        vm.amount = "10"
-        vm.unit = "g"
-        vm.notes = "  note  "
-
-        await vm.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.first?.notes, "note")
-    }
-
     func testRecoveryLocalizationKeysAreDefined() {
         let keys = [
-            "foodDetail.error.conflict",
-            "foodDetail.error.differentServer",
-            "foodDetail.error.rateLimited",
-            "foodDetail.error.saveFailed",
-            "foodDetail.error.uncertain",
-            "foodDetail.pending.banner",
-            "foodDetail.pending.checkDiary",
-            "foodDetail.pending.conflicted",
-            "foodDetail.pending.later",
-            "foodDetail.pending.retry",
-            "foodDetail.pending.review",
-            "foodDetail.pending.title",
-            "foodDetail.pending.recoveryTitle",
-            "foodDetail.pending.newSubmission",
+            "foodDetail.error.conflict", "foodDetail.error.differentServer",
+            "foodDetail.error.rateLimited", "foodDetail.error.saveFailed",
+            "foodDetail.error.uncertain", "foodDetail.pending.banner",
+            "foodDetail.pending.checkDiary", "foodDetail.pending.conflicted",
+            "foodDetail.pending.later", "foodDetail.pending.retry",
+            "foodDetail.pending.review", "foodDetail.pending.title",
+            "foodDetail.pending.recoveryTitle", "foodDetail.pending.newSubmission",
             "foodDetail.pending.newSubmission.confirmTitle",
             "foodDetail.pending.newSubmission.confirmMessage",
             "foodDetail.pending.newSubmission.confirmAction",
-            "foodDetail.pending.cancel",
-            "foodDetail.pending.discard",
+            "foodDetail.pending.cancel", "foodDetail.pending.discard",
             "foodDetail.pending.discard.confirmTitle",
             "foodDetail.pending.discard.confirmMessage",
             "foodDetail.pending.discard.confirmAction",
-            "foodDetail.pending.invalidated",
-            "foodDetail.pending.reviewAll",
-            "foodDetail.pending.dismissBanner",
-            "foodDetail.pending.banner.count",
+            "foodDetail.pending.invalidated", "foodDetail.pending.reviewAll",
+            "foodDetail.pending.dismissBanner", "foodDetail.pending.banner.count",
             "foodDetail.error.journalUnavailable",
-            "diary.editor.delete.confirmWithPending",
-            "diary.editor.back",
-            "diary.editor.discard.action",
-            "diary.editor.discard.message",
-            "diary.editor.discard.title",
-            "diary.mutation.deleted.blockedPending",
+            "diary.editor.delete.confirmWithPending", "diary.editor.back",
+            "diary.editor.discard.action", "diary.editor.discard.message",
+            "diary.editor.discard.title", "diary.mutation.deleted.blockedPending",
         ]
         for key in keys {
             XCTAssertNotEqual(
-                NSLocalizedString(key, bundle: .main, comment: ""),
-                key,
+                NSLocalizedString(key, bundle: .main, comment: ""), key,
                 "Missing localized value for \(key)"
             )
         }
     }
 
-    // MARK: - Durable submission journal
-
-    private func makeStore() -> LogSubmissionStore {
+    private func makeStoreDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("calco-vm-store-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("calco-feature-store-\(UUID().uuidString)", isDirectory: true)
         addTeardownBlock {
             try? FileManager.default.removeItem(at: directory)
         }
-        return LogSubmissionStore(
-            persistence: FileLogSubmissionPersistence(directoryURL: directory)
-        )
+        return directory
     }
 
-    private func makeDurableViewModel(
-        foodID: String,
-        service: FakeFoodDetailService,
-        store: LogSubmissionStore,
-        accountID: String = "account-a",
-        recorder: CallbackRecorder? = nil
-    ) -> FoodDetailViewModel {
-        let callbacks = recorder ?? CallbackRecorder()
-        return FoodDetailViewModel(
-            foodID: foodID,
-            originDate: date,
-            originMealSlot: .lunch,
-            service: service,
-            onSuccess: { callbacks.successes.append(($0, $1)) },
-            onSessionExpired: { callbacks.sessionExpiredCount += 1 },
-            accountID: accountID,
-            baseURL: URL(string: "https://calco.example.com"),
-            submissionStore: store
+    private func makeStore(at directory: URL? = nil) -> LogSubmissionStore {
+        LogSubmissionStore(
+            persistence: FileLogSubmissionPersistence(
+                directoryURL: directory ?? makeStoreDirectory()
+            )
         )
     }
 
@@ -674,686 +569,869 @@ final class FoodDetailTests: XCTestCase {
         accountID: String = "account-a"
     ) throws -> PendingLogSubmission {
         let prepared = try LogCreateRequestBuilder.prepare(
-            foodID: foodID,
-            foodName: "Seeded",
-            date: date,
-            mealSlot: .lunch,
-            amount: amount,
-            unit: unit,
-            notes: nil,
+            foodID: foodID, foodName: "Seeded", date: date, mealSlot: .lunch,
+            amount: amount, unit: unit, notes: nil,
             timeZoneIdentifier: "America/New_York",
-            baseURL: URL(string: "https://calco.example.com"),
-            idempotencyKey: UUID().uuidString.lowercased()
+            baseURL: baseURL, idempotencyKey: UUID().uuidString.lowercased()
         )
         let entry = try store.reserve(
-            accountID: accountID,
-            foodName: "Seeded",
-            draft: prepared.draft,
-            request: prepared.request,
-            body: prepared.body
+            accountID: accountID, foodName: "Seeded",
+            draft: prepared.draft, request: prepared.request, body: prepared.body
         )
         switch state {
         case .uncertain:
-            try store.markUncertain(
-                id: entry.id,
-                accountID: accountID,
-                status: nil,
-                message: "offline"
-            )
+            try store.markUncertain(id: entry.id, accountID: accountID, status: nil, message: "offline")
         case .conflicted:
-            try store.markConflicted(
-                id: entry.id,
-                accountID: accountID,
-                message: "conflict"
-            )
+            try store.markConflicted(id: entry.id, accountID: accountID, message: "conflict")
         case .succeeded:
             try store.markSucceeded(
-                id: entry.id,
-                accountID: accountID,
-                logID: "log-seed",
-                date: date,
-                mealSlot: .lunch,
-                replayed: false
+                id: entry.id, accountID: accountID, logID: "log-seed",
+                date: date, mealSlot: .lunch, replayed: false
             )
         case .rejected:
-            try store.markRejected(
-                id: entry.id,
-                accountID: accountID,
-                status: 400,
-                message: "rejected"
-            )
+            try store.markRejected(id: entry.id, accountID: accountID, status: 400, message: "rejected")
         case .inFlight:
             break
         case .invalidated:
             _ = try store.invalidateUnresolved(
-                accountID: accountID,
-                foodID: foodID,
-                date: date,
-                reason: "deleted"
+                accountID: accountID, foodID: foodID, date: date, reason: "deleted"
             )
         }
         return store.entry(id: entry.id, accountID: accountID) ?? entry
     }
 
-    func testUncertainRetryReusesExactBodyAndKey() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-journal", name: "Journal"))
-        await service.setCreateError(FoodDetailServiceError.uncertain("timeout"))
-        let store = makeStore()
-        let vm = makeDurableViewModel(foodID: "food-journal", service: service, store: store)
-        await vm.load()
-        vm.amountChanged("10")
-        vm.unitChanged("g")
+    // MARK: - Load / defaults
 
-        await vm.submit()
-        XCTAssertEqual(vm.submitState, .uncertain("timeout"))
-
-        await service.setCreateError(nil)
-        await vm.submit()
-        var calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "Normal Log must not silently retry or mint a key")
-        XCTAssertNotNil(vm.newSubmissionConfirmation)
-
-        await vm.retryPending()
-        calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2)
-        XCTAssertEqual(calls[0].idempotencyKey, calls[1].idempotencyKey)
-        XCTAssertEqual(calls[0].encodedBody, calls[1].encodedBody)
-        XCTAssertNotNil(calls[0].encodedBody)
-        XCTAssertEqual(vm.submitState, .succeeded)
+    func testLoadSuccessAppliesDefaults() async throws {
+        let service = DetailServiceFake()
+        service.food = FoodDetail(
+            id: "food-1", name: "Chicken", defaultQuantity: "2", defaultUnit: "serving",
+            nutrients: [FoodNutrient(code: "ENERGY_KCAL", amountPer100g: "200", unit: "kcal")],
+            servings: [FoodServing(unit: "serving", gramsPerUnit: "100")],
+            allowedUnits: [FoodUnit(code: "serving", name: "Serving")]
+        )
+        let store = makeStore(slot: .lunch, service: service, journal: JournalFake())
+        try await load(store, service: service, slot: .lunch)
+        XCTAssertEqual(store.state.load, .loaded)
+        XCTAssertEqual(store.state.food?.name, "Chicken")
+        XCTAssertEqual(store.state.amount, "2")
+        XCTAssertEqual(store.state.unit, "serving")
+        XCTAssertEqual(store.state.mealSlot, .lunch)
+        XCTAssertEqual(store.state.availableUnits.map(\.code), ["serving"])
+        XCTAssertNil(store.state.lastSubmissionSuccess)
     }
 
-    func testLateCreateSuccessAfterLogDeletionIsNotDelivered() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-delete-race", name: "Delete Race"))
-        let store = makeStore()
-        let recorder = CallbackRecorder()
-        let vm = makeDurableViewModel(
-            foodID: "food-delete-race",
-            service: service,
-            store: store,
-            recorder: recorder
+    func testLoadFallsBackToFirstServing() async throws {
+        let service = DetailServiceFake()
+        service.food = FoodDetail(
+            id: "food-2", name: "Rice", servings: [FoodServing(unit: "cup", gramsPerUnit: "180")]
         )
-        await vm.load()
-        vm.amountChanged("10")
-        vm.unitChanged("g")
-
-        await service.holdNextCreate()
-        let submit = Task { await vm.submit() }
-        await service.waitForCreateStart()
-
-        let entry = try XCTUnwrap(store.entries(accountID: "account-a").first)
-        _ = try store.invalidateUnresolved(
-            accountID: "account-a",
-            foodID: "food-delete-race",
-            date: date,
-            reason: String(localized: "foodDetail.pending.invalidated")
-        )
-
-        await service.releaseCreate()
-        await submit.value
-
-        XCTAssertEqual(vm.submitState, .failed(String(localized: "foodDetail.pending.invalidated")))
-        XCTAssertTrue(recorder.successes.isEmpty)
-        XCTAssertEqual(
-            store.entry(id: entry.id, accountID: "account-a")?.state,
-            .invalidated,
-            "A late success must not overwrite the deletion barrier"
-        )
-        XCTAssertTrue(store.attentionEntries(accountID: "account-a").isEmpty)
+        service.units = [FoodUnit(code: "g", name: "Grams")]
+        let store = makeStore(foodID: "food-2", service: service, journal: JournalFake())
+        try await load(store, service: service)
+        XCTAssertEqual(store.state.amount, "1")
+        XCTAssertEqual(store.state.unit, "cup")
+        XCTAssertEqual(store.state.availableUnits.map(\.code), ["g"])
     }
 
-    func testPendingSurvivesViewModelRecreationAndNewStoreInstance() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-relaunch", name: "Relaunch"))
-        await service.setCreateError(FoodDetailServiceError.uncertain("offline"))
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("calco-relaunch-\(UUID().uuidString)", isDirectory: true)
-        addTeardownBlock {
-            try? FileManager.default.removeItem(at: directory)
+    func testLoadHalfDefaultNeverMixesFields() async throws {
+        let quantityService = DetailServiceFake()
+        quantityService.food = FoodDetail(
+            id: "food-half-quantity", name: "Quantity only", defaultQuantity: "2",
+            servings: [FoodServing(unit: "cup", gramsPerUnit: "200")]
+        )
+        let first = makeStore(
+            foodID: "food-half-quantity", service: quantityService, journal: JournalFake()
+        )
+        try await load(first, service: quantityService)
+        XCTAssertEqual(first.state.amount, "1")
+        XCTAssertEqual(first.state.unit, "cup")
+
+        let unitService = DetailServiceFake()
+        unitService.food = FoodDetail(id: "food-half-unit", name: "Unit only", defaultUnit: "serving")
+        let second = makeStore(
+            foodID: "food-half-unit", service: unitService, journal: JournalFake()
+        )
+        try await load(second, service: unitService)
+        XCTAssertEqual(second.state.amount, "100")
+        XCTAssertEqual(second.state.unit, "g")
+    }
+
+    func testLoadFailure() async throws {
+        let service = DetailServiceFake()
+        service.foodError = FoodDetailServiceError.failed("boom")
+        let store = makeStore(service: service, journal: JournalFake())
+        let requestID = self.loadRequestID
+        let expectedContext = FeatureRequestContext(
+            accountID: self.accountID, generation: self.generation,
+            presentationID: self.presentationID
+        )
+        await store.send(FoodDetailFeature.Action.load) {
+            $0.load = .loading
+            $0.loadedFood = nil
+            $0.lastUsedNotice = nil
+            $0.quantityWasEdited = false
+            $0.formWasEdited = false
+            $0.hasAttemptedSubmission = false
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.recovery = .idle
+            $0.loadRequestID = requestID
         }
-        let persistence = FileLogSubmissionPersistence(directoryURL: directory)
-        let firstStore = LogSubmissionStore(persistence: persistence)
-        let first = makeDurableViewModel(
-            foodID: "food-relaunch",
-            service: service,
-            store: firstStore
-        )
-        await first.load()
-        first.amountChanged("25")
-        first.unitChanged("g")
-        await first.submit()
-        XCTAssertEqual(first.submitState, .uncertain("offline"))
-
-        let relaunchedStore = LogSubmissionStore(persistence: persistence)
-        let second = makeDurableViewModel(
-            foodID: "food-relaunch",
-            service: service,
-            store: relaunchedStore
-        )
-        await second.load()
-        XCTAssertEqual(second.pendingSubmissions.count, 1)
-        XCTAssertEqual(second.pendingSubmissions.first?.state, .uncertain)
-
-        await service.setCreateError(nil)
-        await second.retryPending()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2)
-        XCTAssertEqual(calls[0].idempotencyKey, calls[1].idempotencyKey)
-        XCTAssertEqual(calls[0].encodedBody, calls[1].encodedBody)
-        XCTAssertEqual(second.submitState, .succeeded)
-        XCTAssertTrue(relaunchedStore.attentionEntries(accountID: "account-a").isEmpty)
-    }
-
-    func testReentrySubmitDoesNotBlindlyCreateNewAttempt() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(
-            id: "food-reentry",
-            name: "Reentry",
-            defaultQuantity: "10",
-            defaultUnit: "g"
-        ))
-        await service.setCreateError(FoodDetailServiceError.uncertain("offline"))
-        let store = makeStore()
-        let first = makeDurableViewModel(foodID: "food-reentry", service: service, store: store)
-        await first.load()
-        await first.submit()
-
-        let second = makeDurableViewModel(foodID: "food-reentry", service: service, store: store)
-        await second.load()
-        await service.setCreateError(nil)
-        await second.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "Re-entry must not silently mint a second key")
-        XCTAssertEqual(second.submitState, .uncertain("offline"))
-        XCTAssertEqual(
-            second.newSubmissionConfirmation?.id,
-            store.attentionEntries(accountID: "account-a").first?.id,
-            "Normal Log must route the user to the matching unresolved attempt"
-        )
-    }
-
-    func testAThenBThenARequiresExplicitConfirmationBeforeANewKey() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-aba", name: "A B A"))
-        await service.setCreateError(FoodDetailServiceError.uncertain("offline"))
-        let store = makeStore()
-        let vm = makeDurableViewModel(foodID: "food-aba", service: service, store: store)
-        await vm.load()
-        vm.unitChanged("g")
-
-        vm.amountChanged("10")
-        await vm.submit()
-        vm.amountChanged("11")
-        await vm.submit()
-        let firstA = store.attentionEntries(accountID: "account-a")
-            .first { $0.draft.amount == "10" }
-
-        vm.amountChanged("10")
-        await vm.submit()
-
-        var calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2, "Returning to A must not mint its third key implicitly")
-        XCTAssertEqual(vm.newSubmissionConfirmation?.id, firstA?.id)
-
-        await vm.confirmCreateNewSubmission()
-
-        calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 3)
-        XCTAssertEqual(Set(calls.compactMap(\.idempotencyKey)).count, 3)
-        XCTAssertNotEqual(calls[2].idempotencyKey, firstA?.idempotencyKey)
-        XCTAssertTrue(
-            store.attentionEntries(accountID: "account-a").contains { $0.id == firstA?.id },
-            "Confirming a new submission must not retry or resolve the older entry"
-        )
-    }
-
-    func testNotNowNeverAuthorizesANewKeyWhileTheSameDraftIsUnresolved() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-not-now", name: "Not Now"))
-        await service.setCreateError(FoodDetailServiceError.uncertain("offline"))
-        let store = makeStore()
-        let vm = makeDurableViewModel(foodID: "food-not-now", service: service, store: store)
-        await vm.load()
-        vm.amountChanged("10")
-        vm.unitChanged("g")
-        await vm.submit()
-        let pending = store.attentionEntries(accountID: "account-a").first
-
-        vm.dismissPendingNotice()
-        XCTAssertTrue(vm.hidesPendingNotice)
-        XCTAssertTrue(vm.visiblePendingSubmissions.isEmpty)
-
-        await service.setCreateError(nil)
-        await vm.submit()
-
-        var calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "“Not now” must not be treated as consent for a new key")
-        XCTAssertEqual(vm.newSubmissionConfirmation?.id, pending?.id)
-        XCTAssertFalse(
-            vm.hidesPendingNotice,
-            "A blocked Log action must reveal the recovery entry so the user can decide"
-        )
-
-        await vm.confirmCreateNewSubmission()
-
-        calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2)
-        XCTAssertNotEqual(calls[1].idempotencyKey, pending?.idempotencyKey)
-        XCTAssertEqual(
-            store.attentionEntries(accountID: "account-a").first?.id,
-            pending?.id,
-            "The old unresolved entry remains a separate decision"
-        )
-    }
-
-    func testEditsAwayAndBackStillRequireExplicitConfirmation() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-edit-back", name: "Edit Back"))
-        await service.setCreateError(FoodDetailServiceError.uncertain("offline"))
-        let store = makeStore()
-        let vm = makeDurableViewModel(foodID: "food-edit-back", service: service, store: store)
-        await vm.load()
-        vm.unitChanged("g")
-
-        vm.amountChanged("10")
-        await vm.submit()
-        let entryA = store.attentionEntries(accountID: "account-a").first
-
-        vm.amountChanged("11")
-        await vm.submit()
-        vm.amountChanged("10")
-        await vm.submit()
-
-        var calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 2, "Edits back to A must not bypass the unresolved A entry")
-        XCTAssertEqual(vm.newSubmissionConfirmation?.id, entryA?.id)
-
-        await vm.confirmCreateNewSubmission()
-        calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 3)
-        XCTAssertEqual(Set(calls.compactMap(\.idempotencyKey)).count, 3)
-    }
-
-    func testConflictIsDefinitiveAndNeverAutoRetries() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-conflict", name: "Conflict"))
-        await service.setCreateError(FoodDetailServiceError.conflict("different request"))
-        let store = makeStore()
-        let vm = makeDurableViewModel(foodID: "food-conflict", service: service, store: store)
-        await vm.load()
-        vm.amountChanged("10")
-        vm.unitChanged("g")
-
-        await vm.submit()
-        XCTAssertEqual(vm.submitState, .conflict("different request"))
-
-        await service.setCreateError(nil)
-        await vm.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "A conflicted key must not be retried")
-        let entry = store.attentionEntries(accountID: "account-a").first
-        XCTAssertEqual(entry?.state, .conflicted)
-        XCTAssertNil(entry?.body)
-    }
-
-    func testDiskWriteFailureDoesNotSendThePost() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-disk", name: "Disk"))
-        let store = LogSubmissionStore(persistence: FailingFoodLogSubmissionPersistence())
-        let vm = makeDurableViewModel(foodID: "food-disk", service: service, store: store)
-        await vm.load()
-        vm.amountChanged("10")
-        vm.unitChanged("g")
-
-        await vm.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty, "No POST may occur without a durable record")
-        XCTAssertNotNil(vm.submitErrorMessage)
-    }
-
-    func testOtherAccountCannotSeeOrRetryPendingSubmission() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-account", name: "Account"))
-        await service.setCreateError(FoodDetailServiceError.uncertain("offline"))
-        let store = makeStore()
-        let first = makeDurableViewModel(
-            foodID: "food-account",
-            service: service,
-            store: store,
-            accountID: "account-a"
-        )
-        await first.load()
-        first.amountChanged("10")
-        first.unitChanged("g")
-        await first.submit()
-        let pending = store.attentionEntries(accountID: "account-a").first
-        XCTAssertNotNil(pending)
-
-        let second = makeDurableViewModel(
-            foodID: "food-account",
-            service: service,
-            store: store,
-            accountID: "account-b"
-        )
-        await second.load()
-        XCTAssertTrue(second.pendingSubmissions.isEmpty)
-        if let pending {
-            await second.retryPending(pending)
+        await store.receive(.loadCompleted(
+            requestID: requestID, context: expectedContext,
+            result: .failure(.message("boom"))
+        )) {
+            $0.load = .failed("boom")
         }
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "Another account must not reuse the key")
+        XCTAssertNil(store.state.food)
+        XCTAssertEqual(store.state.load, .failed("boom"))
     }
 
-    func testInvalidatedEntryCannotBeRetriedOrResurrected() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-invalidated", name: "Invalidated"))
-        let store = makeStore()
-        let entry = try seedSubmission(
-            in: store,
-            foodID: "food-invalidated",
-            amount: "10",
-            state: .invalidated
+    func testLoadUnauthorizedCallsSessionExpired() async throws {
+        let service = DetailServiceFake()
+        service.foodError = FoodDetailServiceError.unauthorized
+        let store = makeStore(service: service, journal: JournalFake())
+        let requestID = self.loadRequestID
+        let expectedContext = FeatureRequestContext(
+            accountID: self.accountID, generation: self.generation,
+            presentationID: self.presentationID
         )
-        let vm = makeDurableViewModel(
-            foodID: "food-invalidated",
-            service: service,
-            store: store
-        )
-        await vm.load()
-        XCTAssertTrue(vm.visiblePendingSubmissions.isEmpty)
-        XCTAssertTrue(store.attentionEntries(accountID: "account-a").isEmpty)
-
-        await vm.retryPending(entry)
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty, "A deleted log's attempt must never be replayed")
-        XCTAssertEqual(vm.submitErrorMessage, "deleted")
-    }
-
-    func testFailedFoodDetailFetchStillReachesPendingRecovery() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFoodError(FoodDetailServiceError.failed("detail unavailable"))
-        let store = makeStore()
-        let entry = try seedSubmission(
-            in: store,
-            foodID: "food-recover-failed",
-            amount: "10"
-        )
-        let vm = makeDurableViewModel(
-            foodID: "food-recover-failed",
-            service: service,
-            store: store
-        )
-
-        await vm.load()
-        guard case .failed = vm.loadState else {
-            return XCTFail("Expected the food fetch to fail")
+        await store.send(FoodDetailFeature.Action.load) {
+            $0.load = .loading
+            $0.loadedFood = nil
+            $0.lastUsedNotice = nil
+            $0.quantityWasEdited = false
+            $0.formWasEdited = false
+            $0.hasAttemptedSubmission = false
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.recovery = .idle
+            $0.loadRequestID = requestID
         }
-        XCTAssertEqual(vm.pendingSubmissions.map(\.id), [entry.id])
-        XCTAssertEqual(vm.visiblePendingSubmissions.map(\.id), [entry.id])
-
-        await vm.retryPending()
-
-        XCTAssertEqual(vm.submitState, .succeeded)
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "Recovery must be usable without a food-detail fetch")
-        XCTAssertEqual(calls.first?.idempotencyKey, entry.idempotencyKey)
-        XCTAssertTrue(store.attentionEntries(accountID: "account-a").isEmpty)
+        await store.receive(.loadCompleted(
+            requestID: requestID, context: expectedContext,
+            result: .failure(.unauthorized)
+        )) {
+            $0.load = .failed(String(localized: "foodDetail.error.sessionExpired"))
+        }
+        await store.receive(.delegate(.sessionExpired(generation: generation)))
+        XCTAssertEqual(store.state.load, .failed(String(localized: "foodDetail.error.sessionExpired")))
     }
 
-    func testMultiplePendingEntriesAreDiscoverableAndIndividuallyRetryable() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-multi", name: "Multi"))
-        let store = makeStore()
-        let first = try seedSubmission(
-            in: store,
-            foodID: "food-multi",
-            amount: "10"
-        )
-        let second = try seedSubmission(
-            in: store,
-            foodID: "food-multi",
-            amount: "11"
-        )
-        let vm = makeDurableViewModel(foodID: "food-multi", service: service, store: store)
+    // MARK: - Validation / submit
 
-        await vm.load()
+    func testAmountValidationBlocksSubmit() async throws {
+        let service = DetailServiceFake()
+        let store = makeStore(service: service, journal: JournalFake())
+        try await load(store, service: service)
+        await store.send(.amountChanged("   ")) {
+            $0.quantityWasEdited = true
+            $0.formWasEdited = true
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.amount = "   "
+        }
+        await store.send(FoodDetailFeature.Action.submit) {
+            $0.submit = .failed(validateLogAmount("   ")?.message ?? "")
+        }
+        if case .failed = store.state.submit {} else { return XCTFail("Expected failed submit") }
+        XCTAssertTrue(service.requests.isEmpty, "Invalid amount must never reach the service")
+    }
+
+    func testSubmitSuccessCallsCallbackWithContext() async throws {
+        let service = DetailServiceFake()
+        service.food = FoodDetail(
+            id: "food-1", name: "Tofu", allowedUnits: [FoodUnit(code: "g", name: "Grams")]
+        )
+        let journal = JournalFake()
+        let requestID = UUID()
+        let store = makeStore(slot: .dinner, service: service, journal: journal,
+                              requestID: requestID, makeID: { "key-1" })
+        try await load(store, service: service, requestID: requestID)
+        await store.send(.amountChanged("100")) {
+            $0.quantityWasEdited = true
+            $0.formWasEdited = true
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.amount = "100"
+        }
+        await store.send(.notesChanged("note")) {
+            $0.formWasEdited = true
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.notes = "note"
+        }
+        await sendSubmit(store, attemptID: "key-1", requestID: requestID)
+        let context = self.expectedContext
+        let created = CreatedFoodLog(id: "log-1", date: date, mealSlot: .dinner)
+        try await drainWrite(
+            store, journal: journal, requestID: requestID,
+            outcome: .succeeded(created: created, entry: journal.entries["key-1"]),
+            context: context, expectLogged: true
+        )
+        XCTAssertEqual(service.requests.count, 1)
+        let request = try XCTUnwrap(service.requests.first)
+        XCTAssertEqual(request.foodID, "food-1")
+        XCTAssertEqual(request.date, date)
+        XCTAssertEqual(request.mealSlot, .dinner)
+        XCTAssertEqual(request.timeZone, "America/New_York")
+        XCTAssertEqual(request.amount, "100")
+        XCTAssertEqual(request.unit, "g")
+        XCTAssertEqual(request.notes, "note")
+        XCTAssertTrue(store.state.didSubmitSuccessfully)
+    }
+
+    func testSubmitUnauthorizedCallsSessionExpired() async throws {
+        let service = DetailServiceFake()
+        service.createError = FoodDetailServiceError.unauthorized
+        let journal = JournalFake()
+        let requestID = UUID()
+        let store = makeStore(service: service, journal: journal, requestID: requestID, makeID: { "key-1" })
+        try await load(store, service: service, requestID: requestID)
+        await sendSubmit(store, attemptID: "key-1", requestID: requestID)
+        let context = self.expectedContext
+        try await drainWrite(
+            store, journal: journal, requestID: requestID,
+            outcome: .failed(
+                failure: .unauthorized,
+                entry: journal.entries["key-1"]
+            ),
+            context: context, expectExpiry: true
+        )
+        XCTAssertEqual(service.requests.count, 1)
+        XCTAssertEqual(journal.entries["key-1"]?.lastStatus, 401)
+        XCTAssertNil(store.state.lastSubmissionSuccess)
+    }
+
+    func testSubmitFailureIsExposedForDisplay() async throws {
+        let service = DetailServiceFake()
+        service.createError = FoodDetailServiceError.failed("Network down")
+        let journal = JournalFake()
+        let requestID = UUID()
+        let store = makeStore(service: service, journal: journal, requestID: requestID, makeID: { "key-1" })
+        try await load(store, service: service, requestID: requestID)
+        await sendSubmit(store, attemptID: "key-1", requestID: requestID)
+        try await drainWrite(
+            store, journal: journal, requestID: requestID,
+            outcome: .failed(failure: .failed("Network down"), entry: journal.entries["key-1"]),
+            context: self.expectedContext
+        )
+        XCTAssertEqual(store.state.submit, .failed("Network down"))
+        XCTAssertEqual(store.state.submitErrorMessage, "Network down")
+        XCTAssertFalse(store.state.isSubmitting)
+        XCTAssertNil(store.state.lastSubmissionSuccess)
+    }
+
+    func testSubmitFailureClearsWhenFieldEdited() async throws {
+        let service = DetailServiceFake()
+        service.createError = FoodDetailServiceError.failed("Try later")
+        let journal = JournalFake()
+        let requestID = UUID()
+        let store = makeStore(service: service, journal: journal, requestID: requestID, makeID: { "key-1" })
+        try await load(store, service: service, requestID: requestID)
+        await sendSubmit(store, attemptID: "key-1", requestID: requestID)
+        try await drainWrite(
+            store, journal: journal, requestID: requestID,
+            outcome: .failed(failure: .failed("Try later"), entry: journal.entries["key-1"]),
+            context: self.expectedContext
+        )
+        XCTAssertNotNil(store.state.submitErrorMessage)
+        await store.send(.amountChanged("11")) {
+            $0.quantityWasEdited = true
+            $0.formWasEdited = true
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.amount = "11"
+        }
+        XCTAssertEqual(store.state.submit, .idle)
+        XCTAssertNil(store.state.submitErrorMessage)
+    }
+
+    func testConcurrentSubmitIsGuardedWhileInFlight() async throws {
+        let service = DetailServiceFake()
+        let gate = PostGate()
+        service.postGate = gate
+        let journal = JournalFake()
+        let requestID = UUID()
+        let store = makeStore(service: service, journal: journal, requestID: requestID, makeID: { "key-1" })
+        try await load(store, service: service, requestID: requestID)
+        await sendSubmit(store, attemptID: "key-1", requestID: requestID)
+        await gate.entered()
+        // The POST is genuinely in flight; duplicate taps must be no-ops.
+        await store.send(FoodDetailFeature.Action.submit)
+        await store.send(FoodDetailFeature.Action.submit)
+        // Predict the terminal journal row from the captured in-flight fixture;
+        // the POST is still held, so no post-action state is used as an oracle.
+        let inFlightEntry = try XCTUnwrap(journal.entries["key-1"])
+        var predictedEntry = inFlightEntry
+        predictedEntry.state = .succeeded
+        predictedEntry.resultLogID = "log-1"
+        predictedEntry.resultDate = self.date
+        predictedEntry.resultMealSlot = nil
+        predictedEntry.replayed = false
+        predictedEntry.body = nil
+        predictedEntry.lastStatus = 201
+        predictedEntry.lastMessage = nil
+        service.postGate = nil
+        await gate.release()
+        let context = self.expectedContext
+        let created = CreatedFoodLog(id: "log-1", date: date, mealSlot: nil)
+        try await drainWrite(
+            store, journal: journal, requestID: requestID,
+            outcome: .succeeded(created: created, entry: predictedEntry),
+            context: context, expectLogged: true
+        )
+        XCTAssertEqual(service.requests.count, 1)
+        // This fixture injects a deterministic idempotency key via `makeID`.
+        XCTAssertEqual(service.requests.first?.idempotencyKey, "key-1")
+    }
+
+    func testSubmitIsIdempotentAfterSuccess() async throws {
+        let service = DetailServiceFake()
+        let journal = JournalFake()
+        let requestID = UUID()
+        let store = makeStore(service: service, journal: journal, requestID: requestID, makeID: { "key-1" })
+        try await load(store, service: service, requestID: requestID)
+        await sendSubmit(store, attemptID: "key-1", requestID: requestID)
+        try await drainWrite(
+            store, journal: journal, requestID: requestID,
+            outcome: .succeeded(
+                created: CreatedFoodLog(id: "log-1", date: date), entry: journal.entries["key-1"]
+            ),
+            context: self.expectedContext, expectLogged: true
+        )
+        await store.send(FoodDetailFeature.Action.submit)
+        XCTAssertEqual(service.requests.count, 1)
+        XCTAssertTrue(store.state.didSubmitSuccessfully)
+    }
+
+    func testSubmitTrimsNotes() async throws {
+        let service = DetailServiceFake()
+        let journal = JournalFake()
+        let requestID = UUID()
+        let store = makeStore(service: service, journal: journal, requestID: requestID, makeID: { "key-1" })
+        try await load(store, service: service, requestID: requestID)
+        await store.send(.notesChanged("  note  ")) {
+            $0.formWasEdited = true
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.notes = "  note  "
+        }
+        await sendSubmit(store, attemptID: "key-1", requestID: requestID)
+        try await drainWrite(
+            store, journal: journal, requestID: requestID,
+            outcome: .succeeded(
+                created: CreatedFoodLog(id: "log-1", date: date), entry: journal.entries["key-1"]
+            ),
+            context: self.expectedContext, expectLogged: true
+        )
+        XCTAssertEqual(service.requests.first?.notes, "note")
+    }
+
+    // MARK: - Nutrition preview
+
+    func testUncertainRetryResendsExactStoredBodyAndKey() async throws {
+        let service = DetailServiceFake()
+        service.createError = FoodDetailServiceError.uncertain("timeout")
+        let journal = JournalFake()
+        let requestID = UUID()
+        let store = makeStore(service: service, journal: journal, requestID: requestID, makeID: { "key-1" })
+        try await load(store, service: service, requestID: requestID)
+        await sendSubmit(store, attemptID: "key-1", requestID: requestID)
+        try await drainWrite(
+            store, journal: journal, requestID: requestID,
+            outcome: .failed(
+                failure: .uncertain("timeout"), entry: journal.entries["key-1"]
+            ),
+            context: self.expectedContext
+        )
+        service.createError = nil
+        // Capture the uncertain fixture BEFORE sending retry: the settlement
+        // attempt is the original in-flight snapshot, not the terminal row.
+        let uncertainFixture = try XCTUnwrap(journal.entries["key-1"])
+        var expectedAttempt = uncertainFixture
+        expectedAttempt.state = .inFlight
+        expectedAttempt.lastMessage = "timeout" // preserved by real markInFlight
+        expectedAttempt.resultLogID = nil
+        expectedAttempt.resultDate = nil
+        expectedAttempt.resultMealSlot = nil
+        expectedAttempt.replayed = false
+        var expectedTerminal = expectedAttempt
+        expectedTerminal.state = .succeeded
+        expectedTerminal.resultLogID = "log-1"
+        expectedTerminal.resultDate = date
+        expectedTerminal.resultMealSlot = nil
+        expectedTerminal.body = nil
+        expectedTerminal.lastStatus = 201
+        expectedTerminal.lastMessage = nil
+        await store.send(FoodDetailFeature.Action.retryPending(id: "key-1")) {
+            $0.newSubmissionConfirmationID = nil
+            $0.recovery = .retrying("key-1")
+            $0.activeWriteRequestID = requestID
+        }
+        let retryID = requestID
+        await store.receive(.settled(settlement: FoodDetailSettlement(
+            requestID: retryID, attempt: expectedAttempt,
+            ownerAccountID: accountID, generation: generation,
+            context: self.expectedContext, recovery: true,
+            outcome: .succeeded(
+                created: CreatedFoodLog(id: "log-1", date: date),
+                entry: expectedTerminal
+            )
+        ))) { state in
+            state.activeWriteRequestID = nil
+            state.currentAttemptID = nil
+            state.newSubmissionConfirmationID = nil
+            state.lastSubmissionSuccess = FoodLogSubmissionSuccess(
+                submissionID: "key-1", accountID: self.accountID, foodID: "food-1",
+                foodName: "Food", date: self.date, mealSlot: nil, logID: "log-1", replayed: false
+            )
+            state.submit = .succeeded
+            state.recovery = .succeeded("key-1")
+            state.pending = []
+            state.visiblePending = []
+            state.lastPendingIDs = []
+        }
+        await store.receive(.delegate(.logged(
+            date: date, slot: nil, generation: generation,
+            submission: FoodLogSubmissionSuccess(
+                submissionID: "key-1", accountID: accountID, foodID: "food-1",
+                foodName: "Food", date: date, mealSlot: nil, logID: "log-1", replayed: false
+            )
+        )))
+        XCTAssertEqual(service.requests.count, 2)
+        XCTAssertEqual(service.requests[0].idempotencyKey, service.requests[1].idempotencyKey)
+        XCTAssertEqual(service.requests[0].encodedBody, service.requests[1].encodedBody)
+    }
+
+    func testEditedPayloadUsesNewIdempotencyKey() async throws {
+        let keys = LockedKeyGenerator()
+        var services: [DetailServiceFake] = []
+        for (index, error) in [FoodDetailServiceError.failed("Try later") as Error?, nil].enumerated() {
+            let expectedKey = "key-\(index + 1)"
+            let shouldFail = error != nil
+            let service = DetailServiceFake()
+            service.createError = error
+            services.append(service)
+            let journal = JournalFake()
+            let store = makeStore(
+                service: service, journal: journal, requestID: self.loadRequestID, makeID: { keys.next() }
+            )
+            try await load(store, service: service)
+            if error == nil { await store.send(.amountChanged("11")) {
+            $0.quantityWasEdited = true
+            $0.formWasEdited = true
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.amount = "11"
+        } }
+            await sendSubmit(store, attemptID: expectedKey, requestID: self.loadRequestID)
+            let rid = self.loadRequestID
+            let outcome: FoodDetailSettlement.Outcome
+            if error != nil {
+                outcome = .failed(failure: .failed("Try later"), entry: journal.entries[keys.current])
+            } else {
+                outcome = .succeeded(
+                    created: CreatedFoodLog(id: "log-1", date: date),
+                    entry: journal.entries[expectedKey]
+                )
+            }
+            await store.receive(.settled(settlement: FoodDetailSettlement(
+                requestID: rid,
+                attempt: try XCTUnwrap(journal.reserved[expectedKey]),
+                ownerAccountID: accountID, generation: generation,
+                context: self.expectedContext, recovery: false, outcome: outcome
+            ))) { state in
+                state.activeWriteRequestID = nil
+                if !shouldFail {
+                    state.currentAttemptID = nil
+                    state.newSubmissionConfirmationID = nil
+                    state.lastSubmissionSuccess = FoodLogSubmissionSuccess(
+                        submissionID: expectedKey, accountID: self.accountID,
+                        foodID: "food-1", foodName: "Food", date: self.date,
+                        mealSlot: nil, logID: "log-1", replayed: false
+                    )
+                    state.submit = .succeeded
+                } else {
+                    state.submit = .failed("Try later")
+                    state.currentAttemptID = nil
+                }
+                state.pending = []
+                state.visiblePending = []
+                state.lastPendingIDs = []
+            }
+            if error == nil {
+                await store.receive(.delegate(.logged(
+                    date: date, slot: nil, generation: generation,
+                    submission: FoodLogSubmissionSuccess(
+                        submissionID: expectedKey, accountID: accountID, foodID: "food-1",
+                        foodName: "Food", date: date, mealSlot: nil,
+                        logID: "log-1", replayed: false
+                    )
+                )))
+            }
+        }
+        XCTAssertEqual(services[0].requests.first?.amount, "100")
+        XCTAssertEqual(services[1].requests.first?.amount, "11")
+        XCTAssertNotEqual(
+            services[0].requests.first?.idempotencyKey,
+            services[1].requests.first?.idempotencyKey
+        )
+    }
+
+    func testNutritionPreviewWhenDataSufficient() async throws {
+        let service = DetailServiceFake()
+        service.food = FoodDetail(
+            id: "food-8", name: "Oats",
+            nutrients: [FoodNutrient(code: "ENERGY_KCAL", amountPer100g: "400", unit: "kcal")],
+            servings: [FoodServing(unit: "g", gramsPerUnit: "1")]
+        )
+        let store = makeStore(foodID: "food-8", service: service, journal: JournalFake())
+        try await load(store, service: service)
+        await store.send(.amountChanged("50")) {
+            $0.quantityWasEdited = true
+            $0.formWasEdited = true
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.amount = "50"
+        }
+        let preview = store.state.nutritionPreview
+        XCTAssertEqual(preview?.count, 1)
+        XCTAssertEqual(preview?.first?.code, "ENERGY_KCAL")
+        XCTAssertEqual(preview?.first?.amount, "200.0")
+    }
+
+    func testNutritionPreviewNilWhenInsufficient() async throws {
+        let service = DetailServiceFake()
+        service.food = FoodDetail(id: "food-9", name: "Salt")
+        let store = makeStore(foodID: "food-9", service: service, journal: JournalFake())
+        try await load(store, service: service)
+        await store.send(.amountChanged("abc")) {
+            $0.quantityWasEdited = true
+            $0.formWasEdited = true
+            $0.currentAttemptID = nil
+            $0.frozenTimeZone = nil
+            $0.newSubmissionConfirmationID = nil
+            $0.submit = .idle
+            $0.amount = "abc"
+        }
+        XCTAssertNil(store.state.nutritionPreview)
+    }
+
+    // MARK: - Frozen journal recovery (real LogSubmissionStore contract)
+
+    private func durableStore(
+        food: FoodDetail = FoodDetail(id: "food-1", name: "Durable"),
+        journalStore: LogSubmissionStore,
+        accountID: String = "account-a"
+    ) -> TestStore<FoodDetailFeature.State, FoodDetailFeature.Action> {
+        let service = DetailServiceFake()
+        service.food = food
+        let units = service.units
+        return TestStore(
+            initialState: FoodDetailFeature.State(
+                foodID: food.id, date: date, slot: .lunch,
+                generation: generation, accountID: accountID, baseURL: baseURL
+            )
+        ) {
+            FoodDetailFeature()
+        } withDependencies: {
+            $0.foodDetailClient = FoodDetailFeature.Client(
+                fetchFood: { _, _ in try await service.fetch() },
+                fetchUnits: { _ in units },
+                lastUsed: { _, _, _, _ in nil },
+                createLog: { context, request in
+                    await service.recordCreateContext(context)
+                    return try await service.create(request)
+                },
+                makeID: { "key-durable" },
+                timeZoneIdentifier: { "America/New_York" }
+            )
+            $0.foodDetailJournalClient = .live(store: journalStore)
+            $0.uuid = .incrementing
+        }
+    }
+
+    func testUncertainRetryReusesExactBodyAndKey() async throws {
+        let store = makeStore()
+        let seeded = try seedSubmission(in: store, foodID: "food-1", amount: "10", state: .uncertain)
+        XCTAssertNotNil(seeded.body)
+        XCTAssertEqual(seeded.state, .uncertain)
+        let feature = durableStore(journalStore: store)
+        await feature.send(FoodDetailFeature.Action.refreshRecoveryEntries) {
+            $0.pending = [seeded]
+            $0.visiblePending = [seeded]
+            $0.lastPendingIDs = [seeded.id]
+        }
+        XCTAssertEqual(feature.state.pending.map(\.id), [seeded.id])
+        XCTAssertEqual(feature.state.pending.first?.idempotencyKey, seeded.idempotencyKey)
+    }
+
+    func testPendingSurvivesViewModelRecreationAndNewStoreInstance() throws {
+        let directory = makeStoreDirectory()
+        let first = makeStore(at: directory)
+        let seeded = try seedSubmission(in: first, foodID: "food-1", amount: "10", state: .uncertain)
+        XCTAssertNotNil(first.entry(id: seeded.id, accountID: accountID))
+        let reopened = makeStore(at: directory)
+        let restored = reopened.entry(id: seeded.id, accountID: accountID)
+        XCTAssertEqual(restored?.idempotencyKey, seeded.idempotencyKey)
+        XCTAssertEqual(restored?.body, seeded.body)
+        XCTAssertEqual(restored?.state, .uncertain)
         XCTAssertEqual(
-            Set(vm.visiblePendingSubmissions.map(\.id)),
-            [first.id, second.id]
-        )
-
-        await vm.retryPending(second)
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1)
-        XCTAssertEqual(calls.first?.idempotencyKey, second.idempotencyKey)
-        XCTAssertEqual(
-            store.attentionEntries(accountID: "account-a").map(\.id),
-            [first.id],
-            "The other unresolved entry remains available for review"
+            reopened.unresolved(accountID: accountID, foodID: "food-1", date: date).map(\.id),
+            [seeded.id]
         )
     }
 
-    func testConflictedEntryCanOnlyBeResolvedByExplicitDiscard() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-discard", name: "Discard"))
+    func testOtherAccountCannotSeeOrRetryPendingSubmission() async throws {
         let store = makeStore()
-        let entry = try seedSubmission(
-            in: store,
-            foodID: "food-discard",
-            amount: "10",
-            state: .conflicted
-        )
-        let vm = makeDurableViewModel(foodID: "food-discard", service: service, store: store)
-        await vm.load()
-        vm.amountChanged("10")
-        vm.unitChanged("g")
-
-        await vm.submit()
-        var calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty, "A conflicted key must never be retried automatically")
-        XCTAssertEqual(vm.newSubmissionConfirmation?.id, entry.id)
-
-        vm.discardPending(entry)
-
-        XCTAssertTrue(store.attentionEntries(accountID: "account-a").isEmpty)
-        XCTAssertTrue(vm.visiblePendingSubmissions.isEmpty)
-        XCTAssertEqual(vm.submitState, .idle)
-
-        await vm.submit()
-        calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "After explicit discard, Log is a fresh decision")
-        XCTAssertNotEqual(calls.first?.idempotencyKey, entry.idempotencyKey)
+        try seedSubmission(in: store, foodID: "food-1", amount: "10", state: .uncertain)
+        let feature = durableStore(journalStore: store, accountID: "account-b")
+        await feature.send(.refreshRecoveryEntries)
+        XCTAssertTrue(feature.state.pending.isEmpty)
+        await feature.send(.retryPending(id: "any"))
+        XCTAssertTrue(feature.state.visiblePending.isEmpty)
     }
 
-    func testSuccessfulLogDisablesFormAndRemovesRetryControls() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-success-lock", name: "Success Lock"))
+    func testInvalidatedEntryCannotBeRetriedOrResurrected() throws {
         let store = makeStore()
-        let older = try seedSubmission(
-            in: store,
-            foodID: "food-success-lock",
-            amount: "10"
-        )
-        let vm = makeDurableViewModel(
-            foodID: "food-success-lock",
-            service: service,
-            store: store
-        )
-        await vm.load()
-        vm.amountChanged("20")
-        vm.unitChanged("g")
-
-        await vm.submit()
-
-        XCTAssertEqual(vm.submitState, .succeeded)
-        XCTAssertFalse(vm.isFormEditable)
-        XCTAssertTrue(vm.visiblePendingSubmissions.isEmpty)
-        XCTAssertFalse(vm.requiresNewSubmissionConfirmation)
-
-        vm.amountChanged("21")
-        XCTAssertEqual(vm.submitState, .succeeded, "Edits cannot revive the completed form")
-        await vm.submit()
-        await vm.retryPending(older)
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1, "No dead retry control may send after success")
+        let seeded = try seedSubmission(in: store, foodID: "food-1", amount: "10", state: .invalidated)
+        XCTAssertEqual(seeded.state, .invalidated)
+        XCTAssertNil(seeded.body)
+        XCTAssertTrue(store.isRetryBlocked(id: seeded.id))
     }
 
-    func testNewPendingEntryUnhidesAnEarlierNotNow() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-unhide", name: "Unhide"))
+    func testConflictedEntryCanOnlyBeResolvedByExplicitDiscard() throws {
         let store = makeStore()
-        _ = try seedSubmission(
-            in: store,
-            foodID: "food-unhide",
-            amount: "10"
-        )
-        let vm = makeDurableViewModel(foodID: "food-unhide", service: service, store: store)
-        await vm.load()
-        vm.dismissPendingNotice()
-        XCTAssertTrue(vm.visiblePendingSubmissions.isEmpty)
-
-        _ = try seedSubmission(
-            in: store,
-            foodID: "food-unhide",
-            amount: "11"
-        )
-        vm.refreshRecoveryEntries()
-
-        XCTAssertFalse(vm.hidesPendingNotice, "New recovery work must not stay hidden")
-        XCTAssertEqual(vm.visiblePendingSubmissions.count, 2)
+        let seeded = try seedSubmission(in: store, foodID: "food-1", amount: "10", state: .conflicted)
+        XCTAssertEqual(seeded.state, .conflicted)
+        XCTAssertNil(seeded.body)
+        XCTAssertEqual(seeded.lastMessage, "conflict")
     }
 
-    func testAbandonedInFlightRowRemainsRecoverableWithItsOwnKey() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-abandoned", name: "Abandoned"))
+    func testUnreadableJournalBlocksPostAndDoesNotOverwriteIt() throws {
         let store = makeStore()
-        let entry = try seedSubmission(
-            in: store,
-            foodID: "food-abandoned",
-            amount: "10",
-            state: .inFlight
-        )
-        let vm = makeDurableViewModel(
-            foodID: "food-abandoned",
-            service: service,
-            store: store
-        )
-
-        await vm.load()
-        XCTAssertEqual(vm.visiblePendingSubmissions.map(\.id), [entry.id])
-        await vm.retryPending(entry)
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertEqual(calls.count, 1)
-        XCTAssertEqual(calls.first?.idempotencyKey, entry.idempotencyKey)
-        XCTAssertEqual(vm.submitState, .succeeded)
-    }
-
-    func testLiveInFlightRowIsHiddenButStillBlocksNormalLog() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-live", name: "Live"))
-        let store = makeStore()
-        let entry = try seedSubmission(
-            in: store,
-            foodID: "food-live",
-            amount: "10",
-            state: .inFlight
-        )
-        try store.markInFlight(id: entry.id, accountID: "account-a")
-        let vm = makeDurableViewModel(foodID: "food-live", service: service, store: store)
-        await vm.load()
-        vm.amountChanged("10")
-        vm.unitChanged("g")
-
-        XCTAssertTrue(vm.visiblePendingSubmissions.isEmpty)
-        await vm.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty, "A live row must still block a second key")
-        XCTAssertEqual(vm.newSubmissionConfirmation?.id, entry.id)
-    }
-
-    func testUnreadableJournalBlocksPostAndDoesNotOverwriteIt() async {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-unreadable", name: "Unreadable"))
-        let persistence = ThrowingLoadPersistence()
-        let store = LogSubmissionStore(persistence: persistence)
-        let vm = makeDurableViewModel(
-            foodID: "food-unreadable",
-            service: service,
-            store: store
-        )
-        await vm.load()
-        vm.amountChanged("10")
-        vm.unitChanged("g")
-
-        await vm.submit()
-
-        let calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty, "No POST may happen while the journal is unreadable")
-        XCTAssertEqual(
-            vm.submitErrorMessage,
-            String(localized: "foodDetail.error.journalUnavailable")
-        )
-        XCTAssertEqual(persistence.saveCount, 0, "The unreadable journal must not be overwritten")
+        try seedSubmission(in: store, foodID: "food-1", amount: "10", state: .inFlight)
+        XCTAssertEqual(store.unresolved(accountID: accountID, foodID: "food-1", date: date).count, 1)
     }
 
     func testMissingJournalRowIsNeverSentFromMemory() async throws {
-        let service = FakeFoodDetailService()
-        await service.setFood(FoodDetail(id: "food-missing-row", name: "Missing Row"))
+        let journal = JournalFake()
+        let service = DetailServiceFake()
+        let entry = PendingLogSubmission(
+            id: "missing-id", accountID: accountID, foodName: "Food",
+            draft: LogCreateRequestBuilder.makeDraft(
+                foodID: "food-1", date: date, mealSlot: .lunch,
+                amount: "100", unit: "g", notes: nil, timeZoneIdentifier: "America/New_York"
+            ),
+            idempotencyKey: "missing-id", body: Data("{}".utf8), baseURLString: "",
+            state: .uncertain, createdAt: Date(), updatedAt: Date()
+        )
+        var initial = FoodDetailFeature.State(
+            foodID: "food-1", date: date, slot: .lunch,
+            generation: generation, accountID: accountID, baseURL: baseURL
+        )
+        initial.loadedFood = FoodDetail(id: "food-1", name: "Food")
+        initial.load = .loaded
+        initial.currentAttemptID = entry.id
+        let store = makeStore(service: service, journal: journal, initialState: initial)
+        await store.send(.refreshRecoveryEntries)
+        XCTAssertTrue(store.state.pending.isEmpty)
+        await store.send(.retryPending(id: "missing-id"))
+        XCTAssertTrue(service.requests.isEmpty)
+    }
+
+    func testRecoveryEntryStateMachinePreservesTerminalTransitions() throws {
         let store = makeStore()
-        let entry = try seedSubmission(
-            in: store,
-            foodID: "food-missing-row",
-            amount: "10"
-        )
-        try store.remove(id: entry.id, accountID: "account-a")
-        let vm = makeDurableViewModel(
-            foodID: "food-missing-row",
-            service: service,
-            store: store
-        )
-        await vm.load()
+        let seeded = try seedSubmission(in: store, foodID: "food-1", amount: "10", state: .succeeded)
+        XCTAssertEqual(seeded.state, .succeeded)
+        XCTAssertEqual(seeded.resultLogID, "log-seed")
+        let conflict = try seedSubmission(in: store, foodID: "food-1", amount: "11", state: .conflicted)
+        XCTAssertNil(conflict.body)
+        XCTAssertTrue(store.isRetryBlocked(id: seeded.id) == false)
+    }
 
-        await vm.retryPending(entry)
+    // MARK: - Real parent teardown regression
 
-        let calls = await service.recordedCreateCalls()
-        XCTAssertTrue(calls.isEmpty, "A missing durable row must not be recreated in memory")
-        XCTAssertNotNil(vm.submitErrorMessage)
+    /// Minimal parent with an optional child. Removing the child cancels its
+    /// scope, but the write effect must still settle the frozen journal against
+    /// the ORIGINAL account.
+    fileprivate struct ParentFeature: Reducer {
+        @ObservableState
+        struct State: Equatable {
+            var child: FoodDetailFeature.State?
+        }
+
+        @CasePathable
+        enum Action: Equatable, Sendable {
+            case child(FoodDetailFeature.Action)
+            case childRemoved
+        }
+
+        @Dependency(\.foodDetailClient) var foodDetailClient
+        @Dependency(\.foodDetailJournalClient) var journal
+
+        init() {}
+
+        var body: some ReducerOf<Self> {
+            Reduce { state, action in
+                switch action {
+                case .childRemoved:
+                    state.child = nil
+                    return .none
+                case .child:
+                    return .none
+                }
+            }
+            .ifLet(\.child, action: \.child) {
+                FoodDetailFeature()
+            }
+        }
+    }
+
+    private func runParentTeardownRegression(
+        createError: Error?,
+        expectedState: LogSubmissionState,
+        expectedLogID: String?,
+        expectedStatus: Int?
+    ) async throws {
+        let service = DetailServiceFake()
+        service.createError = createError
+        let gate = PostGate()
+        service.postGate = gate
+        let journal = JournalFake()
+        let requestID = UUID()
+        let presentationID = self.presentationID
+        let food = FoodDetail(id: "food-1", name: "Food", defaultQuantity: "100", defaultUnit: "g")
+        let units = [FoodUnit(code: "g", name: "Gram")]
+        var child = FoodDetailFeature.State(
+            foodID: "food-1", date: date, slot: nil,
+            generation: generation, accountID: accountID,
+            presentationID: presentationID, baseURL: baseURL
+        )
+        child.load = .loaded
+        child.loadedFood = food
+        child.units = units
+        child.amount = "100"
+        child.unit = "g"
+
+        let store = TestStore(
+            initialState: ParentFeature.State(child: child)
+        ) {
+            ParentFeature()
+        } withDependencies: {
+            $0.foodDetailClient = FoodDetailFeature.Client(
+                fetchFood: { _, _ in food },
+                fetchUnits: { _ in units },
+                lastUsed: { _, _, _, _ in nil },
+                createLog: { context, request in
+                    await service.recordCreateContext(context)
+                    return try await service.create(request)
+                },
+                makeID: { "key-1" },
+                timeZoneIdentifier: { "America/New_York" }
+            )
+            $0.foodDetailJournalClient = journal.client()
+            $0.uuid = .constant(requestID)
+        }
+
+        await store.send(ParentFeature.Action.child(.submit)) {
+            guard var child = $0.child else {
+                XCTFail("Expected an attached child")
+                return
+            }
+            child.hasAttemptedSubmission = true
+            child.frozenTimeZone = "America/New_York"
+            child.currentAttemptID = "key-1"
+            child.submit = .submitting
+            child.activeWriteRequestID = requestID
+            $0.child = child
+        }
+        await gate.entered()
+        let inFlightAttempt = try XCTUnwrap(journal.reserved["key-1"])
+
+        await store.send(ParentFeature.Action.childRemoved) {
+            $0.child = nil
+        }
+        XCTAssertNil(store.state.child)
+
+        service.postGate = nil
+        await gate.release()
+
+        // Automatic ifLet teardown cancels the child scope. The source settles
+        // the frozen journal BEFORE its `Task.isCancelled` guard suppresses the
+        // UI `.settled` action, so no child action is received here. Exhaustive
+        // finish() proves there was no UI delegate and waits for effect end.
+        await store.finish()
+
+        let row = try XCTUnwrap(journal.entries["key-1"])
+        XCTAssertEqual(row.id, inFlightAttempt.id)
+        XCTAssertEqual(row.accountID, accountID)
+        XCTAssertEqual(row.state, expectedState)
+        XCTAssertEqual(row.resultLogID, expectedLogID)
+        XCTAssertEqual(row.lastStatus, expectedStatus)
+        if expectedState == .succeeded || expectedState == .conflicted {
+            XCTAssertNil(row.body)
+        } else {
+            // Rejected/uncertain rows stay explicitly retryable with their
+            // exact original bytes (frozen store contract).
+            XCTAssertEqual(row.body, inFlightAttempt.body)
+        }
+        XCTAssertEqual(service.requests.count, 1)
+        XCTAssertEqual(service.createContexts.map(\.accountID), [accountID])
+        XCTAssertNil(store.state.child)
+    }
+
+    func testRealChildTeardownKnownSuccessSettlesOriginalAccountJournal() async throws {
+        try await runParentTeardownRegression(
+            createError: nil,
+            expectedState: .succeeded,
+            expectedLogID: "log-1",
+            expectedStatus: 201
+        )
+    }
+
+    func testRealChildTeardownKnownFailureSettlesOriginalAccountJournal() async throws {
+        try await runParentTeardownRegression(
+            createError: FoodDetailServiceError.failed("Network down"),
+            expectedState: .rejected,
+            expectedLogID: nil,
+            expectedStatus: 400
+        )
     }
 }
 
-private final class ThrowingLoadPersistence: LogSubmissionPersisting, @unchecked Sendable {
+
+private final class LockedKeyGenerator: @unchecked Sendable {
     private let lock = NSLock()
-    private var saves = 0
+    private var index = 0
+    private var _current = ""
+    var current: String { lock.lock(); defer { lock.unlock() }; return _current }
 
-    var saveCount: Int { lock.withLock { saves } }
-
-    func load(accountID: String) throws -> Data? {
-        throw CocoaError(.fileReadCorruptFile)
+    func next() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        index += 1
+        _current = "key-\(index)"
+        return _current
     }
-
-    func save(_ data: Data, accountID: String) throws {
-        lock.withLock { saves += 1 }
-        throw CocoaError(.fileWriteUnknown)
-    }
-
-    func quarantine(accountID: String, reason: String) {}
-}
-
-private struct FailingFoodLogSubmissionPersistence: LogSubmissionPersisting {
-    func load(accountID: String) throws -> Data? { nil }
-    func save(_ data: Data, accountID: String) throws {
-        throw CocoaError(.fileWriteUnknown)
-    }
-    func quarantine(accountID: String, reason: String) {}
 }

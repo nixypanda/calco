@@ -1,9 +1,6 @@
 import ComposableArchitecture
 import SwiftUI
 
-// Manual barcode lookup only. Reuses the existing barcode screen structure and
-// accessibility identifiers while routing state/actions through BarcodeFeature.
-
 public struct BarcodeFeatureView: View {
     private let store: StoreOf<BarcodeFeature>
     @FocusState private var isFieldFocused: Bool
@@ -141,10 +138,8 @@ public struct BarcodeFeatureView: View {
 
     private func originText(_ meta: BarcodeLookupMeta) -> String {
         switch meta.origin {
-        case .local:
-            return String(localized: "barcode.result.origin.local")
-        case .openFoodFacts:
-            return meta.note ?? String(localized: "barcode.result.origin.openFoodFacts")
+        case .local: String(localized: "barcode.result.origin.local")
+        case .openFoodFacts: meta.note ?? String(localized: "barcode.result.origin.openFoodFacts")
         }
     }
 

@@ -1,4 +1,3 @@
-import Combine
 import SwiftUI
 #if os(iOS)
 import UIKit
@@ -10,7 +9,6 @@ import ComposableArchitecture
 public struct DiaryScreenView: View {
     private let store: StoreOf<DiaryScreenFeature>
 
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -18,7 +16,6 @@ public struct DiaryScreenView: View {
 
     private let onOpenSettings: () -> Void
     private let onOpenNutrition: (() -> Void)?
-    private let todayProvider: () -> LocalDiaryDate
 
     private var valueTransition: Animation? {
         reduceMotion ? nil : .easeInOut(duration: 0.18)
@@ -54,20 +51,11 @@ public struct DiaryScreenView: View {
     public init(
         store: StoreOf<DiaryScreenFeature>,
         onOpenSettings: @escaping () -> Void = {},
-        onOpenNutrition: (() -> Void)? = nil,
-        todayProvider: @escaping () -> LocalDiaryDate = {
-            let components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-            return LocalDiaryDate(
-                year: components.year ?? 1970,
-                month: components.month ?? 1,
-                day: components.day ?? 1
-            )
-        }
+        onOpenNutrition: (() -> Void)? = nil
     ) {
         self.store = store
         self.onOpenSettings = onOpenSettings
         self.onOpenNutrition = onOpenNutrition
-        self.todayProvider = todayProvider
     }
 
     private var diary: DiaryFeature.State { store.diary }
@@ -76,13 +64,11 @@ public struct DiaryScreenView: View {
     private var visibleDay: DiaryDay? { diary.visibleDay }
 
     private var isChangingDate: Bool {
-        if case .loaded(_, .changingDate) = phase { return true }
-        return false
+        if case .loaded(_, .changingDate) = phase { true } else { false }
     }
 
     private var refreshErrorMessage: String? {
-        if case .loaded(_, .failure(_, _, let message)) = phase { return message }
-        return nil
+        if case .loaded(_, .failure(_, _, let message)) = phase { message } else { nil }
     }
 
     private var displayedLatestError: String? {
@@ -179,13 +165,10 @@ public struct DiaryScreenView: View {
         .task {
             store.send(.diary(.loadIfNeeded))
         }
-        .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
-            store.send(.diary(.foregroundRefresh(newToday: todayProvider())))
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-            store.send(.diary(.foregroundRefresh(newToday: todayProvider())))
-        }
+        // Foreground and calendar-day refresh are owned by the root/Window feed
+        // (AppFeature scene phase + WindowFeature.todayChanged). This view must
+        // not send its own foregroundRefresh: a second root-owned refresh would
+        // double-fetch the visible day.
     }
 
     private var loadingView: some View {
@@ -602,10 +585,8 @@ public struct DiaryScreenView: View {
 
     private func macroCurrentText(_ progress: DiaryGoalProgress) -> String {
         switch diary.macroMode {
-        case .grams:
-            return briefNumber(progress.current)
-        case .percent:
-            return DiaryMacroDisplay.text(for: progress, mode: .percent)
+        case .grams: briefNumber(progress.current)
+        case .percent: DiaryMacroDisplay.text(for: progress, mode: .percent)
         }
     }
 
@@ -868,5 +849,5 @@ public struct DiaryScreenView: View {
     let store = Store(initialState: screenState) {
         DiaryScreenFeature()
     }
-    return DiaryScreenView(store: store, todayProvider: { date })
+    return DiaryScreenView(store: store)
 }

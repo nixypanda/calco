@@ -5,25 +5,10 @@ import XCTest
 
 @MainActor
 final class AppFeatureTests: XCTestCase {
-    private final class RoutingRecorder: @unchecked Sendable {
-        var foodID: String?
-        var foodDate: LocalDiaryDate?
-        var foodSlot: MealSlot?
-        var foodOrigin: SearchScreenFeature.NavigationOrigin?
-        var foodGeneration: UInt64?
-        var mealID: String?
-        var mealDate: LocalDiaryDate?
-        var mealSlot: MealSlot?
-        var mealQuantity: NutritionQuantity?
-        var mealOrigin: SearchScreenFeature.NavigationOrigin?
-        var mealGeneration: UInt64?
-        var mealsDate: LocalDiaryDate?
-        var mealsSlot: MealSlot?
-        var mealsGeneration: UInt64?
-        var diarySlot: MealSlot?
-        var diaryDate: LocalDiaryDate?
-        var diaryGeneration: UInt64?
-    }
+    // The former `RoutingRecorder` captured values passed to the deleted
+    // `LegacySearchRoutingClient`/`LegacyDiaryRoutingClient`. Those assertions
+    // now read the typed `WindowDestination`/`WindowPresentation` created by
+    // the root reducer, so no recorder/client fake is needed.
 
     private let requestID = UUID()
     private let user = AuthUser(
@@ -172,6 +157,7 @@ final class AppFeatureTests: XCTestCase {
                 window: WindowFeature.State(
                     sessionGeneration: 1,
                     today: self.today,
+                    sessionAccountID: user.id,
                     nutrition: nil,
                     diary: DiaryScreenFeature.State(
                         date: self.today,
@@ -408,6 +394,7 @@ final class AppFeatureTests: XCTestCase {
                 window: WindowFeature.State(
                     sessionGeneration: 6,
                     today: self.today,
+                    sessionAccountID: user.id,
                     nutrition: nil,
                     diary: DiaryScreenFeature.State(
                         date: self.today,
@@ -498,6 +485,7 @@ final class AppFeatureTests: XCTestCase {
                 window: WindowFeature.State(
                     sessionGeneration: 5,
                     today: self.today,
+                    sessionAccountID: self.otherUser.id,
                     nutrition: nil,
                     diary: DiaryScreenFeature.State(
                         date: self.today,
@@ -633,352 +621,329 @@ final class AppFeatureTests: XCTestCase {
         await store.finish()
     }
 
-    func testWindowSelectedFoodForwardsCapturedGeneration() async {
-        let user = self.user
-        let generation = UInt64(42)
-        let selectedDate = LocalDiaryDate(year: 2026, month: 11, day: 17)
-        let recorder = RoutingRecorder()
-        let client = LegacySearchRoutingClient(
-            openFoodDetail: { id, date, mealSlot, origin, generation in
-                recorder.foodID = id
-                recorder.foodDate = date
-                recorder.foodSlot = mealSlot
-                recorder.foodOrigin = origin
-                recorder.foodGeneration = generation
-            },
-            openMealDetail: { _, _, _, _, _, _ in },
-            openMeals: { _, _, _ in }
+    // MARK: - Typed navigation delegates (formerly legacy routing clients)
+    //
+    // The recorder-based assertions below are replaced with assertions on the
+    // typed `WindowDestination`/`WindowPresentation` the root now builds. The
+    // captured date, slot, account, generation, origin and quantity are checked
+    // on the actual navigation payload, not on a fake closure.
+
+    private let presentationID = UUID()
+
+    private func typedStore(
+        generation: UInt64,
+        windowGeneration: UInt64? = nil,
+        phase: AppFeature.Phase? = nil
+    ) -> TestStore<AppFeature.State, AppFeature.Action> {
+        let signedIn = AppFeature.SignedInState(
+            user: user,
+            window: WindowFeature.State(
+                sessionGeneration: windowGeneration ?? generation,
+                today: today,
+                sessionAccountID: user.id
+            )
         )
-        let store = TestStore(
+        return TestStore(
             initialState: AppFeature.State(
-                phase: .signedIn(self.signedInState(user: user, generation: generation)),
+                phase: phase ?? .signedIn(signedIn),
                 sessionGeneration: generation
             )
         ) {
             AppFeature()
         } withDependencies: {
-            $0.sessionClient = SessionClient.unimplemented
+            $0.sessionClient = .unimplemented
             $0.date = .constant(self.todayDate)
-            $0.legacySearchRoutingClient = client
+            $0.uuid = .constant(self.presentationID)
         }
+    }
+
+    private func context(
+        date: LocalDiaryDate,
+        slot: MealSlot?,
+        generation: UInt64,
+        origin: WindowNavOrigin
+    ) -> WindowCaptureContext {
+        WindowCaptureContext(
+            date: date,
+            slot: slot,
+            accountID: user.id,
+            generation: generation,
+            origin: origin,
+            presentationID: presentationID
+        )
+    }
+
+    private func appendDestination(
+        _ destination: WindowDestination,
+        foodDetail: FoodDetailFeature.State? = nil,
+        meals: MealsFlowFeature.State? = nil,
+        state: inout AppFeature.State
+    ) {
+        guard case .signedIn(var signedIn) = state.phase else {
+            XCTFail("Expected signed-in root")
+            return
+        }
+        var resolvedMeals = meals
+        if case let .mealDetail(id, context) = destination, resolvedMeals == nil {
+            let mealContext = MealsCaptureContext(
+                id: context.presentationID,
+                date: context.date,
+                mealSlot: context.slot,
+                accountID: context.accountID,
+                generation: context.generation,
+                origin: .sheet
+            )
+            resolvedMeals = MealsFlowFeature.State(context: mealContext)
+            var path = StackState<MealsPath.State>()
+            path[id: 0] = .detail(
+                MealDetailFeature.State(context: mealContext, mealID: id)
+            )
+            resolvedMeals?.path = path
+        }
+        signedIn.window.destinationStack.append(destination)
+        signedIn.window.foodDetail = foodDetail
+        signedIn.window.meals = resolvedMeals
+        state.phase = .signedIn(signedIn)
+    }
+
+    func testWindowSelectedFoodForwardsCapturedGeneration() async {
+        let generation = UInt64(42)
+        let selectedDate = LocalDiaryDate(year: 2026, month: 11, day: 17)
+        let captured = context(
+            date: selectedDate, slot: .dinner, generation: generation, origin: .search
+        )
+        let store = typedStore(generation: generation)
 
         await store.send(.window(.delegate(.selectedFood(
-            id: "food-42",
-            date: selectedDate,
-            mealSlot: .dinner,
-            generation: generation,
-            origin: .searchTab
+            id: "food-42", date: selectedDate, mealSlot: .dinner,
+            generation: generation, origin: .searchTab
         ))))
-        await store.finish()
+        await store.receive({ action in
+            guard case let .window(childAction) = action else { return false }
+            guard case let .pushDestination(destination) = childAction else { return false }
+            guard case let .foodDetail(id, context) = destination else { return false }
+            return id == "food-42" && context == captured
+        }) {
+            self.appendDestination(
+                .foodDetail(id: "food-42", context: captured),
+                foodDetail: FoodDetailFeature.State(
+                    foodID: "food-42", date: selectedDate, slot: .dinner,
+                    generation: generation, accountID: self.user.id,
+                    presentationID: self.presentationID
+                ),
+                state: &$0
+            )
+        }
 
-        XCTAssertEqual(recorder.foodID, "food-42")
-        XCTAssertEqual(recorder.foodDate, selectedDate)
-        XCTAssertEqual(recorder.foodSlot, .dinner)
-        XCTAssertEqual(recorder.foodOrigin, .searchTab)
-        XCTAssertEqual(recorder.foodGeneration, generation)
+        guard case .signedIn(let signedIn) = store.state.phase,
+              case let .foodDetail(id, routeContext) = signedIn.window.destinationStack[0] else {
+            return XCTFail("Expected a typed food detail destination")
+        }
+        XCTAssertEqual(id, "food-42")
+        XCTAssertEqual(routeContext.date, selectedDate)
+        XCTAssertEqual(routeContext.slot, .dinner)
+        XCTAssertEqual(routeContext.accountID, user.id)
+        XCTAssertEqual(routeContext.generation, generation)
+        XCTAssertEqual(routeContext.origin, .search)
     }
 
     func testWindowSelectedFoodStaleGenerationIsIgnored() async {
-        let user = self.user
         let generation = UInt64(42)
-        let selectedDate = LocalDiaryDate(year: 2026, month: 11, day: 17)
-        let recorder = RoutingRecorder()
-        let client = LegacySearchRoutingClient(
-            openFoodDetail: { id, date, mealSlot, origin, generation in
-                recorder.foodID = id
-                recorder.foodDate = date
-                recorder.foodSlot = mealSlot
-                recorder.foodOrigin = origin
-                recorder.foodGeneration = generation
-            },
-            openMealDetail: { _, _, _, _, _, _ in },
-            openMeals: { _, _, _ in }
-        )
-        let store = TestStore(
-            initialState: AppFeature.State(
-                phase: .signedIn(self.signedInState(user: user, generation: generation)),
-                sessionGeneration: generation
-            )
-        ) {
-            AppFeature()
-        } withDependencies: {
-            $0.sessionClient = SessionClient.unimplemented
-            $0.date = .constant(self.todayDate)
-            $0.legacySearchRoutingClient = client
-        }
+        let store = typedStore(generation: generation)
 
         await store.send(.window(.delegate(.selectedFood(
-            id: "food-stale",
-            date: selectedDate,
-            mealSlot: .dinner,
-            generation: UInt64(7),
-            origin: .searchTab
+            id: "food-stale", date: LocalDiaryDate(year: 2026, month: 11, day: 17),
+            mealSlot: .dinner, generation: UInt64(7), origin: .searchTab
         ))))
-        await store.finish()
-
-        XCTAssertNil(recorder.foodID)
+        guard case .signedIn(let signedIn) = store.state.phase else {
+            return XCTFail("Expected signed-in root")
+        }
+        XCTAssertTrue(signedIn.window.destinationStack.isEmpty)
     }
 
-
     func testWindowSelectedMealForwardsCapturedGeneration() async {
-        let user = self.user
         let generation = UInt64(42)
         let selectedDate = LocalDiaryDate(year: 2026, month: 11, day: 17)
         let quantity = NutritionQuantity(amount: "2", unit: "serving")
-        let recorder = RoutingRecorder()
-        let client = LegacySearchRoutingClient(
-            openFoodDetail: { _, _, _, _, _ in },
-            openMealDetail: { id, date, mealSlot, quantity, origin, generation in
-                recorder.mealID = id
-                recorder.mealDate = date
-                recorder.mealSlot = mealSlot
-                recorder.mealQuantity = quantity
-                recorder.mealOrigin = origin
-                recorder.mealGeneration = generation
-            },
-            openMeals: { _, _, _ in }
+        let captured = context(
+            date: selectedDate, slot: .lunch, generation: generation, origin: .diary
         )
-        let store = TestStore(
-            initialState: AppFeature.State(
-                phase: .signedIn(self.signedInState(user: user, generation: generation)),
-                sessionGeneration: generation
-            )
-        ) {
-            AppFeature()
-        } withDependencies: {
-            $0.sessionClient = SessionClient.unimplemented
-            $0.date = .constant(self.todayDate)
-            $0.legacySearchRoutingClient = client
-        }
+        let store = typedStore(generation: generation)
 
         await store.send(.window(.delegate(.selectedMeal(
-            id: "meal-42",
-            date: selectedDate,
-            mealSlot: .lunch,
-            quantity: quantity,
-            generation: generation,
-            origin: .diaryPush
+            id: "meal-42", date: selectedDate, mealSlot: .lunch, quantity: quantity,
+            generation: generation, origin: .diaryPush
         ))))
-        await store.finish()
+        await store.receive({ action in
+            guard case let .window(childAction) = action else { return false }
+            guard case let .pushDestination(destination) = childAction else { return false }
+            guard case let .mealDetail(id, context) = destination else { return false }
+            return id == "meal-42" && context == captured
+        }) {
+            self.appendDestination(.mealDetail(id: "meal-42", context: captured), state: &$0)
+        }
 
-        XCTAssertEqual(recorder.mealID, "meal-42")
-        XCTAssertEqual(recorder.mealDate, selectedDate)
-        XCTAssertEqual(recorder.mealSlot, .lunch)
-        XCTAssertEqual(recorder.mealQuantity, quantity)
-        XCTAssertEqual(recorder.mealOrigin, .diaryPush)
-        XCTAssertEqual(recorder.mealGeneration, generation)
+        guard case .signedIn(let signedIn) = store.state.phase,
+              case let .mealDetail(id, routeContext) = signedIn.window.destinationStack[0] else {
+            return XCTFail("Expected a typed meal detail destination")
+        }
+        XCTAssertEqual(id, "meal-42")
+        XCTAssertEqual(routeContext.date, selectedDate)
+        XCTAssertEqual(routeContext.slot, .lunch)
+        XCTAssertEqual(routeContext.accountID, user.id)
+        XCTAssertEqual(routeContext.generation, generation)
+        XCTAssertEqual(routeContext.origin, .diary)
     }
 
     func testWindowSelectedMealStaleGenerationIsIgnored() async {
-        let user = self.user
         let generation = UInt64(42)
-        let selectedDate = LocalDiaryDate(year: 2026, month: 11, day: 17)
-        let quantity = NutritionQuantity(amount: "2", unit: "serving")
-        let recorder = RoutingRecorder()
-        let client = LegacySearchRoutingClient(
-            openFoodDetail: { _, _, _, _, _ in },
-            openMealDetail: { id, date, mealSlot, quantity, origin, generation in
-                recorder.mealID = id
-            },
-            openMeals: { _, _, _ in }
-        )
-        let store = TestStore(
-            initialState: AppFeature.State(
-                phase: .signedIn(self.signedInState(user: user, generation: generation)),
-                sessionGeneration: generation
-            )
-        ) {
-            AppFeature()
-        } withDependencies: {
-            $0.sessionClient = SessionClient.unimplemented
-            $0.date = .constant(self.todayDate)
-            $0.legacySearchRoutingClient = client
-        }
+        let store = typedStore(generation: generation)
 
         await store.send(.window(.delegate(.selectedMeal(
-            id: "meal-stale",
-            date: selectedDate,
-            mealSlot: .lunch,
-            quantity: quantity,
-            generation: UInt64(7),
-            origin: .diaryPush
+            id: "meal-stale", date: LocalDiaryDate(year: 2026, month: 11, day: 17),
+            mealSlot: .lunch, quantity: NutritionQuantity(amount: "2", unit: "serving"),
+            generation: UInt64(7), origin: .diaryPush
         ))))
-        await store.finish()
-
-        XCTAssertNil(recorder.mealID)
+        guard case .signedIn(let signedIn) = store.state.phase else {
+            return XCTFail("Expected signed-in root")
+        }
+        XCTAssertTrue(signedIn.window.destinationStack.isEmpty)
     }
 
     func testWindowOpenMealsForwardsCapturedGeneration() async {
-        let user = self.user
         let generation = UInt64(42)
         let selectedDate = LocalDiaryDate(year: 2026, month: 11, day: 17)
-        let recorder = RoutingRecorder()
-        let client = LegacySearchRoutingClient(
-            openFoodDetail: { _, _, _, _, _ in },
-            openMealDetail: { _, _, _, _, _, _ in },
-            openMeals: { date, mealSlot, generation in
-                recorder.mealsDate = date
-                recorder.mealsSlot = mealSlot
-                recorder.mealsGeneration = generation
-            }
+        let captured = context(
+            date: selectedDate, slot: .breakfast, generation: generation, origin: .diary
         )
-        let store = TestStore(
-            initialState: AppFeature.State(
-                phase: .signedIn(self.signedInState(user: user, generation: generation)),
-                sessionGeneration: generation
-            )
-        ) {
-            AppFeature()
-        } withDependencies: {
-            $0.sessionClient = SessionClient.unimplemented
-            $0.date = .constant(self.todayDate)
-            $0.legacySearchRoutingClient = client
-        }
+        let store = typedStore(generation: generation)
 
         await store.send(.window(.delegate(.openMeals(
-            date: selectedDate,
-            mealSlot: .breakfast,
-            generation: generation
+            date: selectedDate, mealSlot: .breakfast, generation: generation
         ))))
-        await store.finish()
+        await store.receive({ action in
+            guard case let .window(childAction) = action else { return false }
+            guard case let .pushDestination(destination) = childAction else { return false }
+            guard case let .meals(context) = destination else { return false }
+            return context == captured
+        }) {
+            self.appendDestination(
+                .meals(context: captured),
+                meals: MealsFlowFeature.State(
+                    context: MealsCaptureContext(
+                        id: self.presentationID, date: selectedDate, mealSlot: .breakfast,
+                        accountID: self.user.id, generation: generation, origin: .sheet
+                    )
+                ),
+                state: &$0
+            )
+        }
 
-        XCTAssertEqual(recorder.mealsDate, selectedDate)
-        XCTAssertEqual(recorder.mealsSlot, .breakfast)
-        XCTAssertEqual(recorder.mealsGeneration, generation)
+        guard case .signedIn(let signedIn) = store.state.phase,
+              case let .meals(routeContext) = signedIn.window.destinationStack[0] else {
+            return XCTFail("Expected a typed meals destination")
+        }
+        XCTAssertEqual(routeContext.date, selectedDate)
+        XCTAssertEqual(routeContext.slot, .breakfast)
+        XCTAssertEqual(routeContext.accountID, user.id)
+        XCTAssertEqual(routeContext.generation, generation)
     }
 
     func testWindowOpenMealsStaleGenerationIsIgnored() async {
-        let user = self.user
         let generation = UInt64(42)
-        let selectedDate = LocalDiaryDate(year: 2026, month: 11, day: 17)
-        let recorder = RoutingRecorder()
-        let client = LegacySearchRoutingClient(
-            openFoodDetail: { _, _, _, _, _ in },
-            openMealDetail: { _, _, _, _, _, _ in },
-            openMeals: { date, mealSlot, generation in
-                recorder.mealsDate = date
-            }
-        )
-        let store = TestStore(
-            initialState: AppFeature.State(
-                phase: .signedIn(self.signedInState(user: user, generation: generation)),
-                sessionGeneration: generation
-            )
-        ) {
-            AppFeature()
-        } withDependencies: {
-            $0.sessionClient = SessionClient.unimplemented
-            $0.date = .constant(self.todayDate)
-            $0.legacySearchRoutingClient = client
-        }
+        let store = typedStore(generation: generation)
 
         await store.send(.window(.delegate(.openMeals(
-            date: selectedDate,
-            mealSlot: .breakfast,
-            generation: UInt64(7)
+            date: LocalDiaryDate(year: 2026, month: 11, day: 17),
+            mealSlot: .breakfast, generation: UInt64(7)
         ))))
-        await store.finish()
-
-        XCTAssertNil(recorder.mealsDate)
+        guard case .signedIn(let signedIn) = store.state.phase else {
+            return XCTFail("Expected signed-in root")
+        }
+        XCTAssertTrue(signedIn.window.destinationStack.isEmpty)
     }
 
     // MARK: - Diary Add Food routing
 
-    private func diaryRoutingClient(_ recorder: RoutingRecorder) -> LegacyDiaryRoutingClient {
-        LegacyDiaryRoutingClient { slot, date, generation in
-            recorder.diarySlot = slot
-            recorder.diaryDate = date
-            recorder.diaryGeneration = generation
-        }
-    }
-
     func testWindowDiaryAddFoodForwardsCapturedPayload() async {
         let generation = UInt64(42)
         let selectedDate = LocalDiaryDate(year: 2026, month: 11, day: 15)
-        let recorder = RoutingRecorder()
-        let client = diaryRoutingClient(recorder)
-        let store = TestStore(
-            initialState: AppFeature.State(
-                phase: .signedIn(self.signedInState(user: user, generation: generation)),
-                sessionGeneration: generation
-            )
-        ) {
-            AppFeature()
-        } withDependencies: {
-            $0.sessionClient = SessionClient.unimplemented
-            $0.date = .constant(self.todayDate)
-            $0.legacyDiaryRoutingClient = client
-        }
+        let captured = context(
+            date: selectedDate, slot: .breakfast, generation: generation, origin: .diary
+        )
+        let store = typedStore(generation: generation)
 
         await store.send(.window(.delegate(.addFood(
-            slot: .breakfast,
-            date: selectedDate,
-            generation: generation
+            slot: .breakfast, date: selectedDate, generation: generation
         ))))
-        await store.finish()
+        await store.receive({ action in
+            guard case let .window(childAction) = action else { return false }
+            guard case let .pushDestination(destination) = childAction else { return false }
+            guard case let .search(context) = destination else { return false }
+            return context == captured
+        }) {
+            guard case .signedIn(var signedIn) = $0.phase else {
+                XCTFail("Expected signed-in root")
+                return
+            }
+            signedIn.window.destinationStack = [.search(context: captured)]
+            // Search entry context is bound from the SAME immutable captured
+            // payload as the pushed Search route: a historical Diary Add Food
+            // logs into that day/slot, not Today. The old expectation only
+            // asserted the route and left this context stale at `today`.
+            signedIn.window.search.catalog.originDate = selectedDate
+            signedIn.window.search.catalog.originMealSlot = .breakfast
+            signedIn.window.search.history.contextDate = selectedDate
+            signedIn.window.search.history.contextMealSlot = .breakfast
+            signedIn.window.search.quickAdd.originDate = selectedDate
+            signedIn.window.search.quickAdd.originMealSlot = .breakfast
+            $0.phase = .signedIn(signedIn)
+        }
 
-        XCTAssertEqual(recorder.diarySlot, .breakfast)
-        XCTAssertEqual(recorder.diaryDate, selectedDate)
-        XCTAssertEqual(recorder.diaryGeneration, generation)
+        guard case .signedIn(let signedIn) = store.state.phase,
+              let routeContext = signedIn.window.destinationStack.last.flatMap({ destination in
+                  if case let .search(context) = destination { return context } else { return nil }
+              }) else {
+            return XCTFail("Expected a typed search destination")
+        }
+        XCTAssertEqual(signedIn.window.destinationStack, [.search(context: captured)])
+        XCTAssertEqual(routeContext.slot, .breakfast)
+        XCTAssertEqual(routeContext.date, selectedDate)
+        XCTAssertEqual(routeContext.generation, generation)
+        XCTAssertEqual(routeContext.accountID, user.id)
+        XCTAssertEqual(routeContext.origin, .diary)
+        XCTAssertEqual(routeContext.presentationID, presentationID)
+        XCTAssertEqual(signedIn.window.search.originDate, selectedDate)
+        XCTAssertEqual(signedIn.window.search.originMealSlot, .breakfast)
     }
 
     func testWindowDiaryAddFoodStaleGenerationIsIgnored() async {
         let generation = UInt64(42)
-        let recorder = RoutingRecorder()
-        let client = diaryRoutingClient(recorder)
-        let store = TestStore(
-            initialState: AppFeature.State(
-                phase: .signedIn(self.signedInState(user: user, generation: generation)),
-                sessionGeneration: generation
-            )
-        ) {
-            AppFeature()
-        } withDependencies: {
-            $0.sessionClient = SessionClient.unimplemented
-            $0.date = .constant(self.todayDate)
-            $0.legacyDiaryRoutingClient = client
-        }
+        let store = typedStore(generation: generation)
 
         await store.send(.window(.delegate(.addFood(
-            slot: .breakfast,
-            date: LocalDiaryDate(year: 2026, month: 11, day: 15),
+            slot: .breakfast, date: LocalDiaryDate(year: 2026, month: 11, day: 15),
             generation: generation + 1
         ))))
-        await store.finish()
-
-        XCTAssertNil(recorder.diarySlot)
-        XCTAssertNil(recorder.diaryDate)
-        XCTAssertNil(recorder.diaryGeneration)
+        guard case .signedIn(let signedIn) = store.state.phase else {
+            return XCTFail("Expected signed-in root")
+        }
+        XCTAssertNil(signedIn.window.presentation)
+        XCTAssertTrue(signedIn.window.destinationStack.isEmpty)
     }
 
     func testWindowDiaryAddFoodRequiresSignedInMatchingWindowGeneration() async {
         let generation = UInt64(42)
-        let recorder = RoutingRecorder()
-        let mismatchedWindow = AppFeature.SignedInState(
-            user: user,
-            window: WindowFeature.State(sessionGeneration: generation + 1, today: today)
-        )
-        let client = diaryRoutingClient(recorder)
-        let store = TestStore(
-            initialState: AppFeature.State(
-                phase: .signedIn(mismatchedWindow),
-                sessionGeneration: generation
-            )
-        ) {
-            AppFeature()
-        } withDependencies: {
-            $0.sessionClient = SessionClient.unimplemented
-            $0.date = .constant(self.todayDate)
-            $0.legacyDiaryRoutingClient = client
-        }
+        let store = typedStore(generation: generation, windowGeneration: generation + 1)
 
         await store.send(.window(.delegate(.addFood(
-            slot: .breakfast,
-            date: LocalDiaryDate(year: 2026, month: 11, day: 15),
+            slot: .breakfast, date: LocalDiaryDate(year: 2026, month: 11, day: 15),
             generation: generation
         ))))
-        await store.finish()
-
-        XCTAssertNil(recorder.diarySlot)
+        guard case .signedIn(let signedIn) = store.state.phase else {
+            return XCTFail("Expected signed-in root")
+        }
+        XCTAssertNil(signedIn.window.presentation)
+        XCTAssertTrue(signedIn.window.destinationStack.isEmpty)
     }
 }

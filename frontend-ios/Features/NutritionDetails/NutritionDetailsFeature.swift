@@ -52,8 +52,7 @@ public struct NutritionDetailsFeature {
         }
 
         public var isSessionExpired: Bool {
-            if case .sessionExpired = phase { return true }
-            return false
+            if case .sessionExpired = phase { true } else { false }
         }
 
         public var canGoNext: Bool {
@@ -82,11 +81,6 @@ public struct NutritionDetailsFeature {
 
     public struct Client: Sendable {
         public var fetch: @Sendable (LocalDiaryDate) async throws -> NutritionDetailsReport
-
-        public init(fetch: @escaping @Sendable (LocalDiaryDate) async throws -> NutritionDetailsReport) {
-            self.fetch = fetch
-        }
-
         public static func live(service: any NutritionDetailsServicing) -> Self {
             Self { date in
                 try await service.fetchNutritionDetails(for: date)

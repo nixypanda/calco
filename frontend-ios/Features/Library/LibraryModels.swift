@@ -2,6 +2,94 @@
 
 import Foundation
 
+public enum CustomFoodEditorMode: Equatable, Sendable {
+    case create
+    case edit(id: String)
+
+    public var foodID: String? {
+        if case .edit(let id) = self { id } else { nil }
+    }
+
+    public var isCreate: Bool {
+        if case .create = self { true } else { false }
+    }
+}
+
+public struct ServingEditorRow: Identifiable, Equatable, Sendable {
+    public let id: String
+    public var unit: String
+    public var gramsPerUnit: String
+
+    public init(id: String = UUID().uuidString.lowercased(), unit: String = "", gramsPerUnit: String = "") {
+        self.id = id
+        self.unit = unit
+        self.gramsPerUnit = gramsPerUnit
+    }
+}
+
+public enum AdHocSaveMode: String, CaseIterable, Equatable, Sendable {
+    case logOnly
+    case saveAndLog
+}
+
+/// In-memory intent for logging a custom food returned by a successful create.
+public struct SavedFoodLogIntent: Equatable, Sendable {
+    public let date: LocalDiaryDate
+    public let mealSlot: MealSlot?
+    public let amount: String
+    public let unit: String
+    public let notes: String?
+    public let timeZone: String
+    public func logSubmissionDraft(productID: String) -> LogSubmissionDraft {
+        LogSubmissionDraft(
+            item: .product(id: productID),
+            date: date,
+            mealSlot: mealSlot,
+            amount: amount,
+            unit: unit,
+            notes: notes,
+            timeZone: timeZone
+        )
+    }
+}
+
+public struct AdHocReview: Equatable, Identifiable, Sendable {
+    public let id: String
+    public let mode: AdHocSaveMode
+    public let name: String
+    public let amount: String
+    public let unit: String
+    public let date: LocalDiaryDate
+    public let mealSlot: MealSlot?
+    public let draft: LogSubmissionDraft
+    public let customFood: CustomFoodWriteRequest?
+    public let logIntent: SavedFoodLogIntent?
+
+    public init(
+        id: String = UUID().uuidString.lowercased(),
+        mode: AdHocSaveMode,
+        name: String,
+        amount: String,
+        unit: String,
+        date: LocalDiaryDate,
+        mealSlot: MealSlot?,
+        draft: LogSubmissionDraft,
+        customFood: CustomFoodWriteRequest?,
+        logIntent: SavedFoodLogIntent?
+    ) {
+        self.id = id
+        self.mode = mode
+        self.name = name
+        self.amount = amount
+        self.unit = unit
+        self.date = date
+        self.mealSlot = mealSlot
+        self.draft = draft
+        self.customFood = customFood
+        self.logIntent = logIntent
+    }
+}
+
 /// Immutable diary target captured when a Library/Meals logging flow is opened.
 /// Routes keep this value for their whole lifetime so a later diary date or
 /// slot change cannot silently retarget an already-open draft or its POST.
@@ -38,8 +126,7 @@ public enum CustomFoodServiceError: Error, Equatable, Sendable {
     }
 
     public var isUnauthorized: Bool {
-        if case .unauthorized = self { return true }
-        return false
+        if case .unauthorized = self { true } else { false }
     }
 }
 
@@ -60,8 +147,6 @@ public extension LibraryServicing {
 
 // MARK: - Shared safe submission contract
 
-/// Thin async seam over the app shell's shared log submission handler. The
-/// feature never posts logs directly and keeps no pending-operation state.
 @MainActor
 public protocol LibraryLogSubmitting: AnyObject {
     func submit(
@@ -73,61 +158,11 @@ public protocol LibraryLogSubmitting: AnyObject {
     ) async -> LogSubmissionServiceResult
 }
 
-/// Safe default until the app shell wires the shared handler. It never writes a
-/// log and never attempts a fallback POST.
-@MainActor
-public final class UnavailableLibraryLogSubmissionService: LibraryLogSubmitting {
-    nonisolated public init() {}
-
-    public func submit(
-        accountID: String,
-        drafts: [LogSubmissionDraft],
-        itemNames: [String],
-        summary: String,
-        baseURL: URL?
-    ) async -> LogSubmissionServiceResult {
-        .failure(.failed(String(localized: "library.submission.unavailable")))
-    }
-}
-
-/// Adapts the app shell's `LogSubmissionHandler` (the same callback used by
-/// quick-add, repeat, and batch review) to an async call. The handler must
-/// call its completion exactly once on every path.
-@MainActor
-public final class HandlerLibraryLogSubmissionService: LibraryLogSubmitting {
-    private let handler: LogSubmissionHandler
-
-    public init(handler: @escaping LogSubmissionHandler) {
-        self.handler = handler
-    }
-
-    public func submit(
-        accountID: String,
-        drafts: [LogSubmissionDraft],
-        itemNames: [String],
-        summary: String,
-        baseURL: URL?
-    ) async -> LogSubmissionServiceResult {
-        await withCheckedContinuation { continuation in
-            handler(drafts, itemNames, summary) { result in
-                continuation.resume(returning: result)
-            }
-        }
-    }
-}
-
 // MARK: - Load state
 
 public enum LibraryLoadState: Equatable, Sendable {
     case loading
     case loaded
-    case failed(String)
-}
-
-public enum CustomFoodDetailLoadState: Equatable, Sendable {
-    case loading
-    case loaded(CustomFood)
-    case removed
     case failed(String)
 }
 
@@ -148,38 +183,4 @@ public enum SavedFoodLogState: Equatable, Sendable {
     /// retry the retained food if needed.
     case failed(message: String)
     case logged(logID: String?)
-}
-
-public enum LibraryLogIntentFormat {
-    public static func summary(
-        date: LocalDiaryDate,
-        mealSlot: MealSlot?,
-        amount: String,
-        unit: String
-    ) -> String {
-        String(
-            format: String(localized: "library.log.intent"),
-            DisplayNumberFormat.decimal(amount),
-            unit,
-            date.formatted,
-            slotLabel(mealSlot)
-        )
-    }
-
-    public static func slotLabel(_ slot: MealSlot?) -> String {
-        switch slot {
-        case .none:
-            return String(localized: "foodDetail.mealSlot.none")
-        case .breakfast:
-            return String(localized: "foodDetail.mealSlot.breakfast")
-        case .lunch:
-            return String(localized: "foodDetail.mealSlot.lunch")
-        case .dinner:
-            return String(localized: "foodDetail.mealSlot.dinner")
-        case .snack:
-            return String(localized: "foodDetail.mealSlot.snack")
-        case .lateNightSnack:
-            return String(localized: "foodDetail.mealSlot.lateNightSnack")
-        }
-    }
 }

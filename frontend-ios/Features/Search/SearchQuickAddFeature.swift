@@ -10,32 +10,11 @@ public struct SearchQuickAddFeature {
         public let originDate: LocalDiaryDate
         public let mealSlot: MealSlot?
         public let quantity: NutritionQuantity
-
-        public init(
-            requestID: UUID,
-            itemID: String,
-            itemName: String,
-            originDate: LocalDiaryDate,
-            mealSlot: MealSlot?,
-            quantity: NutritionQuantity
-        ) {
-            self.requestID = requestID
-            self.itemID = itemID
-            self.itemName = itemName
-            self.originDate = originDate
-            self.mealSlot = mealSlot
-            self.quantity = quantity
-        }
     }
 
     public struct Receipt: Equatable, Sendable {
         public let itemName: String
         public let createdLogCount: Int
-
-        public init(itemName: String, createdLogCount: Int) {
-            self.itemName = itemName
-            self.createdLogCount = createdLogCount
-        }
     }
 
     public struct FailureContext: Equatable, Sendable {
@@ -43,18 +22,6 @@ public struct SearchQuickAddFeature {
         public let itemID: String
         public let originDate: LocalDiaryDate
         public let mealSlot: MealSlot?
-
-        public init(
-            requestID: UUID?,
-            itemID: String,
-            originDate: LocalDiaryDate,
-            mealSlot: MealSlot?
-        ) {
-            self.requestID = requestID
-            self.itemID = itemID
-            self.originDate = originDate
-            self.mealSlot = mealSlot
-        }
     }
 
     public enum Phase: Equatable, Sendable {
@@ -84,8 +51,7 @@ public struct SearchQuickAddFeature {
         }
 
         public var isBusy: Bool {
-            if case .submitting = phase { return true }
-            return false
+            if case .submitting = phase { true } else { false }
         }
     }
 
@@ -110,18 +76,6 @@ public struct SearchQuickAddFeature {
             String,
             UInt64
         ) async -> LogSubmissionServiceResult
-
-        public init(
-            submit: @escaping @MainActor @Sendable (
-                [LogSubmissionDraft],
-                [String],
-                String,
-                UInt64
-            ) async -> LogSubmissionServiceResult
-        ) {
-            self.submit = submit
-        }
-
         public static func live(
             submissionHandler: SearchSubmissionHandler?,
             isCurrentGeneration: @escaping @MainActor @Sendable (UInt64) -> Bool

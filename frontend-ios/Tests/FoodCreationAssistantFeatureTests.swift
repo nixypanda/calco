@@ -3,25 +3,14 @@ import XCTest
 
 @testable import CalCo
 
-/// Records the typed handoff callbacks on the main actor so assertions are
-/// deterministic and need no sleeps.
-@MainActor
-private final class HandoffRecorder {
-    var acceptedDrafts: [AssistantReviewedDraft] = []
-    var expiredGenerations: [UInt64] = []
-
-    func accept(_ draft: AssistantReviewedDraft) {
-        acceptedDrafts.append(draft)
-    }
-
-    func expire(_ generation: UInt64) {
-        expiredGenerations.append(generation)
-    }
-}
-
+/// The legacy global `foodCreationAssistantHandoff` dependency was removed:
+/// `FoodCreationAssistantFeature` now emits typed parent delegates, and the
+/// composing `FoodCreationFeature` is the sole owner. These tests assert the
+/// exact delegate payloads (accepted-once, stale generation, matching expiry,
+/// wrong purpose) through TestStore receives — no handoff client, no second
+/// writer, no no-op dependency.
 @MainActor
 final class FoodCreationAssistantFeatureTests: XCTestCase {
-    // Nonzero on purpose: the captured generation must match the active one.
     private let generation: UInt64 = 42
 
     private func corePayload() -> AssistantFoodDraftPayload {
@@ -54,132 +43,98 @@ final class FoodCreationAssistantFeatureTests: XCTestCase {
         )
     }
 
-    private func handoff(recorder: HandoffRecorder) -> FoodCreationAssistantHandoffClient {
-        FoodCreationAssistantHandoffClient(
-            acceptReviewedDraft: { draft in recorder.accept(draft) },
-            sessionExpired: { generation in recorder.expire(generation) }
-        )
+    private func store(
+        purpose: AssistantDraftPurpose = .customFood,
+        accepted: Bool = false
+    ) async throws -> TestStore<FoodCreationAssistantFeature.State, FoodCreationAssistantFeature.Action> {
+        let reviewed = try reviewedDraft()
+        return TestStore(
+            initialState: FoodCreationAssistantFeature.State(
+                assistant: AssistantFeature.State(
+                    purpose: purpose,
+                    sessionGeneration: generation,
+                    draft: .ready(reviewed, accepted: accepted)
+                )
+            )
+        ) {
+            FoodCreationAssistantFeature()
+        } withDependencies: {
+            $0.assistantClient = assistantClient()
+        }
     }
 
+    /// Old `testActualChildAcceptForwardsReviewedDraftExactlyOnce`.
     func testActualChildAcceptForwardsReviewedDraftExactlyOnce() async throws {
         let reviewed = try reviewedDraft()
-        let recorder = HandoffRecorder()
-        let store = TestStore(
-            initialState: FoodCreationAssistantFeature.State(
-                assistant: AssistantFeature.State(
-                    purpose: .customFood,
-                    sessionGeneration: generation,
-                    draft: .ready(reviewed, accepted: false)
-                )
-            )
-        ) {
-            FoodCreationAssistantFeature()
-        } withDependencies: {
-            $0.assistantClient = assistantClient()
-            $0.foodCreationAssistantHandoff = handoff(recorder: recorder)
-        }
+        let store = try await store(accepted: false)
 
-        // Drive the real child action: it flips `accepted` and emits the
-        // delegate, which the parent forwards to the typed handoff.
-        await store.send(.assistant(.acceptDraft)) {
+        await store.send(FoodCreationAssistantFeature.Action.assistant(.acceptDraft)) {
             $0.assistant.draft = .ready(reviewed, accepted: true)
         }
-        await store.receive(.assistant(.delegate(.acceptedReviewedDraft(
-            purpose: .customFood,
-            sessionGeneration: generation,
-            draft: reviewed
-        ))))
+        await store.receive(FoodCreationAssistantFeature.Action.assistant(
+            .delegate(.acceptedReviewedDraft(
+                purpose: .customFood,
+                sessionGeneration: generation,
+                draft: reviewed
+            ))
+        ))
+        await store.receive(FoodCreationAssistantFeature.Action.delegate(
+            .acceptedReviewedDraft(
+                purpose: .customFood,
+                sessionGeneration: generation,
+                draft: reviewed
+            )
+        ))
 
-        // A second user accept is blocked by the child's accepted flag, so no
-        // second delegate must reach the handoff.
-        await store.send(.assistant(.acceptDraft))
+        // A second accept is blocked by the child's accepted flag: no further
+        // parent delegate (and therefore no second flow write).
+        await store.send(FoodCreationAssistantFeature.Action.assistant(.acceptDraft))
         await store.finish()
-
-        XCTAssertEqual(recorder.acceptedDrafts, [reviewed])
-        XCTAssertTrue(recorder.expiredGenerations.isEmpty)
     }
 
+    /// Old `testStaleGenerationPayloadIsIgnored`.
     func testStaleGenerationPayloadIsIgnored() async throws {
         let reviewed = try reviewedDraft()
-        let recorder = HandoffRecorder()
-        let store = TestStore(
-            initialState: FoodCreationAssistantFeature.State(
-                assistant: AssistantFeature.State(
-                    purpose: .customFood,
-                    sessionGeneration: generation,
-                    draft: .ready(reviewed, accepted: true)
-                )
-            )
-        ) {
-            FoodCreationAssistantFeature()
-        } withDependencies: {
-            $0.assistantClient = assistantClient()
-            $0.foodCreationAssistantHandoff = handoff(recorder: recorder)
-        }
+        let store = try await store(accepted: true)
 
-        await store.send(.assistant(.delegate(.acceptedReviewedDraft(
-            purpose: .customFood,
-            sessionGeneration: generation - 1,
-            draft: reviewed
-        ))))
+        await store.send(FoodCreationAssistantFeature.Action.assistant(
+            .delegate(.acceptedReviewedDraft(
+                purpose: .customFood,
+                sessionGeneration: generation - 1,
+                draft: reviewed
+            ))
+        ))
         await store.finish()
-
-        XCTAssertTrue(recorder.acceptedDrafts.isEmpty)
-        XCTAssertTrue(recorder.expiredGenerations.isEmpty)
     }
 
-    func testMatchingGenerationExpiryCallsBack() async throws {
-        let reviewed = try reviewedDraft()
-        let recorder = HandoffRecorder()
-        let store = TestStore(
-            initialState: FoodCreationAssistantFeature.State(
-                assistant: AssistantFeature.State(
-                    purpose: .customFood,
-                    sessionGeneration: generation,
-                    draft: .ready(reviewed, accepted: false)
-                )
-            )
-        ) {
-            FoodCreationAssistantFeature()
-        } withDependencies: {
-            $0.assistantClient = assistantClient()
-            $0.foodCreationAssistantHandoff = handoff(recorder: recorder)
-        }
+    /// Old `testMatchingGenerationExpiryCallsBack`.
+    func testMatchingGenerationExpiryForwardsTypedDelegateOnce() async throws {
+        let store = try await store(accepted: false)
 
-        // A stale expiry cannot invalidate the active session.
-        await store.send(.assistant(.delegate(.sessionExpired(generation: generation - 1))))
-        await store.send(.assistant(.delegate(.sessionExpired(generation: generation))))
+        await store.send(FoodCreationAssistantFeature.Action.assistant(
+            .delegate(.sessionExpired(generation: generation - 1))
+        ))
+        await store.send(FoodCreationAssistantFeature.Action.assistant(
+            .delegate(.sessionExpired(generation: generation))
+        ))
+        await store.receive(FoodCreationAssistantFeature.Action.delegate(
+            .sessionExpired(generation: generation)
+        ))
         await store.finish()
-
-        XCTAssertEqual(recorder.expiredGenerations, [generation])
-        XCTAssertTrue(recorder.acceptedDrafts.isEmpty)
     }
 
+    /// Old `testWrongPurposePayloadIsIgnored`.
     func testWrongPurposePayloadIsIgnored() async throws {
         let reviewed = try reviewedDraft()
-        let recorder = HandoffRecorder()
-        let store = TestStore(
-            initialState: FoodCreationAssistantFeature.State(
-                assistant: AssistantFeature.State(
-                    purpose: .customFood,
-                    sessionGeneration: generation,
-                    draft: .ready(reviewed, accepted: true)
-                )
-            )
-        ) {
-            FoodCreationAssistantFeature()
-        } withDependencies: {
-            $0.assistantClient = assistantClient()
-            $0.foodCreationAssistantHandoff = handoff(recorder: recorder)
-        }
+        let store = try await store(accepted: true)
 
-        await store.send(.assistant(.delegate(.acceptedReviewedDraft(
-            purpose: .adHocLog,
-            sessionGeneration: generation,
-            draft: reviewed
-        ))))
+        await store.send(FoodCreationAssistantFeature.Action.assistant(
+            .delegate(.acceptedReviewedDraft(
+                purpose: .adHocLog,
+                sessionGeneration: generation,
+                draft: reviewed
+            ))
+        ))
         await store.finish()
-
-        XCTAssertTrue(recorder.acceptedDrafts.isEmpty)
     }
 }

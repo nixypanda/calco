@@ -18,23 +18,9 @@ public struct NutrientEditorRow: Identifiable, Equatable, Sendable {
     public let name: String
     public let unit: String
     public let isRequired: Bool
-    public var amount: String
+    public var amount: String = ""
 
     public var id: String { code }
-
-    public init(
-        code: String,
-        name: String,
-        unit: String,
-        isRequired: Bool,
-        amount: String = ""
-    ) {
-        self.code = code
-        self.name = name
-        self.unit = unit
-        self.isRequired = isRequired
-        self.amount = amount
-    }
 }
 
 /// Reusable per-amount nutrient editor state. The custom-food editor labels
@@ -250,12 +236,6 @@ public struct ValidatedNutrient: Equatable, Sendable {
     public let code: String
     public let amount: Decimal
     public let unit: String
-
-    public init(code: String, amount: Decimal, unit: String) {
-        self.code = code
-        self.amount = amount
-        self.unit = unit
-    }
 }
 
 // MARK: - Custom-food form
@@ -263,11 +243,6 @@ public struct ValidatedNutrient: Equatable, Sendable {
 public struct CustomFoodServingInput: Equatable, Sendable {
     public let unit: String
     public let gramsPerUnit: String
-
-    public init(unit: String, gramsPerUnit: String) {
-        self.unit = unit
-        self.gramsPerUnit = gramsPerUnit
-    }
 }
 
 public enum CustomFoodFormError: Error, Equatable, Sendable {
@@ -282,32 +257,13 @@ public enum CustomFoodFormError: Error, Equatable, Sendable {
 }
 
 public struct CustomFoodFormValues: Equatable, Sendable {
-    public var name: String
-    public var brand: String
-    public var categoriesText: String
-    public var defaultQuantity: String
-    public var defaultUnit: String
-    public var servings: [CustomFoodServingInput]
+    public var name: String = ""
+    public var brand: String = ""
+    public var categoriesText: String = ""
+    public var defaultQuantity: String = ""
+    public var defaultUnit: String = ""
+    public var servings: [CustomFoodServingInput] = []
     public var nutrientEditor: NutrientEditorState
-
-    public init(
-        name: String = "",
-        brand: String = "",
-        categoriesText: String = "",
-        defaultQuantity: String = "",
-        defaultUnit: String = "",
-        servings: [CustomFoodServingInput] = [],
-        nutrientEditor: NutrientEditorState
-    ) {
-        self.name = name
-        self.brand = brand
-        self.categoriesText = categoriesText
-        self.defaultQuantity = defaultQuantity
-        self.defaultUnit = defaultUnit
-        self.servings = servings
-        self.nutrientEditor = nutrientEditor
-    }
-
     public static func parseCategories(_ text: String) -> [String] {
         var seen = Set<String>()
         var values: [String] = []
@@ -523,35 +479,14 @@ public enum AdHocLogFormError: Error, Equatable, Sendable {
 }
 
 public struct AdHocLogFormValues: Equatable, Sendable {
-    public var name: String
-    public var brand: String
+    public var name: String = ""
+    public var brand: String = ""
     public var date: LocalDiaryDate
-    public var mealSlot: MealSlot?
-    public var amount: String
-    public var unit: String
-    public var notes: String
+    public var mealSlot: MealSlot? = nil
+    public var amount: String = "100"
+    public var unit: String = "g"
+    public var notes: String = ""
     public var nutrientEditor: NutrientEditorState
-
-    public init(
-        name: String = "",
-        brand: String = "",
-        date: LocalDiaryDate,
-        mealSlot: MealSlot? = nil,
-        amount: String = "100",
-        unit: String = "g",
-        notes: String = "",
-        nutrientEditor: NutrientEditorState
-    ) {
-        self.name = name
-        self.brand = brand
-        self.date = date
-        self.mealSlot = mealSlot
-        self.amount = amount
-        self.unit = unit
-        self.notes = notes
-        self.nutrientEditor = nutrientEditor
-    }
-
     public func validate(timeZone: String) -> Result<LogSubmissionDraft, AdHocLogFormError> {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return .failure(.nameRequired) }

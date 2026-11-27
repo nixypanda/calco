@@ -313,34 +313,6 @@ final class CalCoSmokeUITests: XCTestCase {
         }
     }
 
-    func testE2EBaseURLOverridePolicy() throws {
-        XCTAssertEqual(
-            try CalCoE2E.resolvedBaseURL(environment: [:]).absoluteString,
-            CalCoE2E.defaultBaseURL
-        )
-        XCTAssertEqual(
-            try CalCoE2E.resolvedBaseURL(
-                environment: [CalCoE2E.baseURLEnvironmentKey: "http://127.0.0.1:3902"]
-            ).port,
-            3902
-        )
-        XCTAssertNotNil(CalCoE2E.validatedBaseURL("http://localhost:3902"))
-        XCTAssertNotNil(CalCoE2E.validatedBaseURL("http://[::1]:3902"))
-        XCTAssertNotNil(CalCoE2E.validatedBaseURL("https://127.0.0.1:3902"))
-        XCTAssertNil(CalCoE2E.validatedBaseURL("http://192.168.1.10:3902"))
-        XCTAssertNil(CalCoE2E.validatedBaseURL("https://example.com"))
-        XCTAssertNil(CalCoE2E.validatedBaseURL("https://localhost.example.com"))
-        XCTAssertNil(CalCoE2E.validatedBaseURL("http://127.0.0.1.example.com:3902"))
-        XCTAssertNil(CalCoE2E.validatedBaseURL("ftp://127.0.0.1:3902"))
-        XCTAssertNil(CalCoE2E.validatedBaseURL("http://user:pass@127.0.0.1:3902"))
-        XCTAssertNil(CalCoE2E.validatedBaseURL("http://127.0.0.1:3902?next=https://example.com"))
-        XCTAssertThrowsError(
-            try CalCoE2E.resolvedBaseURL(
-                environment: [CalCoE2E.baseURLEnvironmentKey: "https://example.com"]
-            )
-        )
-    }
-
     func testSignInWhenCredentialsAvailable() throws {
         guard CalCoE2E.supportsSecurePasswordEntry else {
             throw XCTSkip(

@@ -76,28 +76,19 @@ public struct AssistantFeature {
         }
 
         public var isSending: Bool {
-            if case .sending = request { return true }
-            return false
+            if case .sending = request { true } else { false }
         }
 
         public var isEnabled: Bool {
-            if case .enabled = status { return true }
-            return false
-        }
-
-        public var isStatusLoading: Bool {
-            if case .loading = status { return true }
-            return false
+            if case .enabled = status { true } else { false }
         }
 
         public var reviewedDraft: AssistantReviewedDraft? {
-            if case .ready(let draft, _) = draft { return draft }
-            return nil
+            if case .ready(let draft, _) = draft { draft } else { nil }
         }
 
         public var isDraftAccepted: Bool {
-            if case .ready(_, let accepted) = draft { return accepted }
-            return false
+            if case .ready(_, let accepted) = draft { accepted } else { false }
         }
 
         public var isStartOverConfirmationPresented: Bool {

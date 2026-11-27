@@ -1,55 +1,7 @@
 import ComposableArchitecture
 import Foundation
 
-/// Typed seam used by a food-creation flow to receive an accepted, reviewed
-/// assistant draft (or a session-expiry signal) without reaching into global
-/// navigation or session state itself.
-///
-/// The flow that installs this dependency owns the actual authority to open an
-/// editor or invalidate a session; this client is only a callback value.
-public struct FoodCreationAssistantHandoffClient: Sendable {
-    public var acceptReviewedDraft: @MainActor @Sendable (AssistantReviewedDraft) -> Void
-    public var sessionExpired: @MainActor @Sendable (UInt64) -> Void
-
-    public init(
-        acceptReviewedDraft: @escaping @MainActor @Sendable (AssistantReviewedDraft) -> Void,
-        sessionExpired: @escaping @MainActor @Sendable (UInt64) -> Void
-    ) {
-        self.acceptReviewedDraft = acceptReviewedDraft
-        self.sessionExpired = sessionExpired
-    }
-
-    /// Fails fast so a flow that forgets to install a real handoff is caught
-    /// immediately rather than silently dropping an accepted draft.
-    public static let unimplemented = Self(
-        acceptReviewedDraft: { _ in
-            fatalError("Unimplemented: FoodCreationAssistantHandoffClient.acceptReviewedDraft")
-        },
-        sessionExpired: { _ in
-            fatalError("Unimplemented: FoodCreationAssistantHandoffClient.sessionExpired")
-        }
-    )
-}
-
-extension DependencyValues {
-    public var foodCreationAssistantHandoff: FoodCreationAssistantHandoffClient {
-        get { self[FoodCreationAssistantHandoffKey.self] }
-        set { self[FoodCreationAssistantHandoffKey.self] = newValue }
-    }
-}
-
-private enum FoodCreationAssistantHandoffKey: DependencyKey {
-    static let liveValue: FoodCreationAssistantHandoffClient = .unimplemented
-    static let testValue: FoodCreationAssistantHandoffClient = .unimplemented
-}
-
-/// Local TCA parent for the live food-creation assistant flow.
-///
-/// It owns only the child `AssistantFeature` state. The child's accepted flag
-/// remains the single source of truth for duplicate accepts; this reducer just
-/// forwards one genuine accept (and a matching-expiry signal) to the injected
-/// handoff client. All purpose/generation validation is done against the child
-/// state after the child has reduced the action.
+/// Owns the assistant child and forwards accepted drafts or session expiry.
 @Reducer
 public struct FoodCreationAssistantFeature {
     @ObservableState
@@ -63,9 +15,17 @@ public struct FoodCreationAssistantFeature {
 
     public enum Action: Equatable, Sendable {
         case assistant(AssistantFeature.Action)
+        case delegate(Delegate)
     }
 
-    @Dependency(\.foodCreationAssistantHandoff) private var handoff
+    public enum Delegate: Equatable, Sendable {
+        case acceptedReviewedDraft(
+            purpose: AssistantDraftPurpose,
+            sessionGeneration: UInt64,
+            draft: AssistantReviewedDraft
+        )
+        case sessionExpired(generation: UInt64)
+    }
 
     public init() {}
 
@@ -85,22 +45,20 @@ public struct FoodCreationAssistantFeature {
                       state.assistant.reviewedDraft == draft else {
                     return .none
                 }
-                let handoff = self.handoff
-                return .run { _ in
-                    await handoff.acceptReviewedDraft(draft)
-                }
+                return .send(.delegate(.acceptedReviewedDraft(
+                    purpose: purpose,
+                    sessionGeneration: sessionGeneration,
+                    draft: draft
+                )))
 
             case let .assistant(.delegate(.sessionExpired(generation))):
                 // A stale child cannot invalidate the current session.
                 guard generation == state.assistant.sessionGeneration else {
                     return .none
                 }
-                let handoff = self.handoff
-                return .run { _ in
-                    await handoff.sessionExpired(generation)
-                }
+                return .send(.delegate(.sessionExpired(generation: generation)))
 
-            case .assistant:
+            case .assistant, .delegate:
                 return .none
             }
         }

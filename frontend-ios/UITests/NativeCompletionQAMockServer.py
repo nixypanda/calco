@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic loopback API used only by NativeCompletionUITests.
-
+"""Deterministic loopback API used only by the UI acceptance suite.
 This is a QA fixture, not a CalCo server. It has no external dependencies,
 listens only on 127.0.0.1, accepts only the fake fixture credentials
 ``native-qa`` / ``native-qa``, and keeps every record in memory. Starting a
@@ -27,8 +26,6 @@ COOKIE_NAME = "calco_session"
 LEGACY_ACCOUNT_HEADER = "X-CalCo-Account-ID"
 FIXTURE_PROFILE_ID = "22222222-2222-4222-8222-222222222222"
 
-# Opt-in batch-write controls. Defaults keep the historical fixture behavior
-# byte-for-byte; only /api/logs/batch consults these knobs.
 TRANSIENT_FAILURE_MESSAGE = "Injected transient failure; retry the submission."
 BATCH_HOLD_TIMEOUT_SECONDS = 15.0  # < the client's default 30s URLSession timeout
 
@@ -49,8 +46,7 @@ NUTRIENTS = [
     {"code": "FIBER_G", "amount": "2", "unit": "g"},
 ]
 
-# Client-required custom-food nutrients. The production validation requires
-# all four; a partial catalog must not make a required row look optional.
+# Client-required custom-food nutrients: all four are mandatory.
 REQUIRED_NUTRIENT_CATALOG = [
     {"code": "ENERGY_KCAL", "name": "Energy", "unit": "kcal", "category": "energy"},
     {"code": "PROTEIN_G", "name": "Protein", "unit": "g", "category": "macro"},
@@ -408,8 +404,7 @@ class FixtureState:
                 "carbs_target_g": 250,
                 "fat_target_g": 70,
             }
-            # Goal versions model the backend contract: a save takes effect
-            # from its local_date; earlier dates keep the previous target.
+            # Goal versions: a save is effective from its local_date.
             self.goal_history: list[tuple[str | None, dict]] = [
                 (None, copy.deepcopy(self.goal))
             ]
@@ -421,17 +416,11 @@ class FixtureState:
                 "late_night_snack",
             ]
             self.log_post_attempts = 0
-            # Batch-only opt-ins plus a generation guard. A reset increments the
-            # epoch and releases every parked gate BEFORE replacing state, so a
-            # request parked in a previous test cannot write into this one.
+            # Batch opt-ins plus a generation guard; reset aborts stale holds.
             self.epoch = getattr(self, "epoch", 0) + 1
             self.fail_batch_once = body.get("fail_batch_once") is True
             self.batch_fail_once_armed = self.fail_batch_once
             self.log_post_hold = body.get("log_post_hold") is True
-            # Diagnostics are strictly opt-in. A default reset restores the
-            # historical state shape: /__qa/state exposes no counter fields and
-            # latest-slots reads are never counted, so existing canonical
-            # full-state comparisons stay byte-compatible.
             self.latest_diagnostics_enabled = body.get("latest_slots_401_once") is True
             self.latest_slots_401_armed = self.latest_diagnostics_enabled
             self.latest_slots_read_attempts = 0
@@ -494,8 +483,6 @@ class FixtureState:
             "identity_id": self.identity_id,
             "profile_id": self.profile_id,
             "log_post": self.log_post_mode,
-            # Additive capability advertisement for write-capable UI tests.
-            # Exact names match the /__qa/reset opt-in keys.
             "capabilities": {
                 "fail_batch_once": True,
                 "log_post_hold": True,
@@ -529,15 +516,11 @@ class Handler(BaseHTTPRequestHandler):
         return self.server.state  # type: ignore[attr-defined]
 
     def handle_one_request(self) -> None:
-        # Keep-alive reuses this handler instance. A cached POST body from the
-        # previous request would otherwise leave the next body unread.
         self._request_body = None
         super().handle_one_request()
 
     def log_message(self, fmt: str, *args) -> None:
-        # Keep xcodebuild output readable; tests assert state, not logs.
-        if getattr(self.server, "verbose", False):
-            print("QA_MOCK " + (fmt % args), flush=True)
+        pass
 
     # MARK: - plumbing
 
@@ -680,9 +663,7 @@ class Handler(BaseHTTPRequestHandler):
                     "meal_update_count": self.state.meal_update_count,
                     "meal_delete_count": self.state.meal_delete_count,
                 }
-                # The three diagnostic fields are opt-in only. The default
-                # state payload stays byte-for-byte identical to the historical
-                # fixture, which the original UI canonical comparators rely on.
+                # Diagnostic fields are opt-in; default state stays canonical.
                 if self.state.latest_diagnostics_enabled:
                     payload["latest_slots_read_attempts"] = self.state.latest_slots_read_attempts
                     payload["latest_slots_401_armed"] = self.state.latest_slots_401_armed
@@ -1044,16 +1025,6 @@ class Handler(BaseHTTPRequestHandler):
         self._error(404, "not_found", f"No fixture route for {path}.")
 
     def do_POST(self) -> None:  # noqa: N802
-        if getattr(self.server, "verbose", False):
-            print(
-                "QA_POST_HEADERS "
-                + self.path
-                + " "
-                + json.dumps({k: v for k, v in self.headers.items()}, sort_keys=True),
-                flush=True,
-            )
-        # Always drain Content-Length, including routes that ignore the body,
-        # or the next keep-alive request line will be prefixed by leftover JSON.
         self._body()
         if self._reject_legacy_account_header():
             return
@@ -1155,7 +1126,6 @@ class Handler(BaseHTTPRequestHandler):
             token: str | None = None
             epoch: int | None = None
             with self.state.lock:
-                # Global attempts stay once-per-batch, as on every other route.
                 self.state.log_post_attempts += 1
                 if self.state.fail_batch_once and self.state.batch_fail_once_armed:
                     self.state.batch_fail_once_armed = False
@@ -1172,8 +1142,6 @@ class Handler(BaseHTTPRequestHandler):
                     self.state.batch_post_gates[token] = gate
                     self.state.log_batch_post_in_flight += 1
             if gate is not None:
-                # Release the state lock BEFORE parking: reset and the release
-                # route must run concurrently on the ThreadingHTTPServer.
                 released = gate.event.wait(timeout=BATCH_HOLD_TIMEOUT_SECONDS)
                 with self.state.lock:
                     if token is not None:
@@ -1185,7 +1153,6 @@ class Handler(BaseHTTPRequestHandler):
                             0, self.state.log_batch_post_in_flight - 1
                         )
                 if not released or not generation_matches:
-                    # Fail closed. A timeout or a reset never auto-commits.
                     self._error(
                         503,
                         "temporarily_unavailable",
@@ -1233,8 +1200,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/logs/ad-hoc":
             body = self._json_body()
-            if getattr(self.server, "verbose", False):
-                print("QA_ADHOC_POST " + json.dumps(body, sort_keys=True), flush=True)
             quantity = body.get("quantity") or {}
             with self.state.lock:
                 self.state.log_post_attempts += 1
@@ -1265,8 +1230,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/logs":
             body = self._json_body()
-            if getattr(self.server, "verbose", False):
-                print("QA_LOG_POST " + json.dumps(body, sort_keys=True), flush=True)
             with self.state.lock:
                 self.state.log_post_attempts += 1
                 if self.state.log_post_mode == "fail_once" and self.state.log_fail_once_armed:
@@ -1309,8 +1272,6 @@ class Handler(BaseHTTPRequestHandler):
                 if brand is not None:
                     log["item"]["brand"] = brand
                 self.state.logs.append(log)
-                if getattr(self.server, "verbose", False):
-                    print("QA_LOG_RESPONSE " + json.dumps(log, sort_keys=True), flush=True)
                 self._send(201, log)
             return
         if path == "/api/meals":
@@ -1525,13 +1486,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=3932)
-    parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
     if args.host != "127.0.0.1":
         raise SystemExit("NativeCompletionQAMockServer must bind 127.0.0.1 only.")
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.state = FixtureState()  # type: ignore[attr-defined]
-    server.verbose = args.verbose  # type: ignore[attr-defined]
     print(
         f"NativeCompletionQAMockServer listening on http://{args.host}:{args.port}",
         flush=True,

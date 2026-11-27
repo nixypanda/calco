@@ -67,6 +67,8 @@ public struct DiaryScreenFeature {
         case openLogEditor(id: String, date: LocalDiaryDate, generation: UInt64)
         case openMeals(date: LocalDiaryDate, generation: UInt64)
         case copied(requestID: UUID, destinationDate: LocalDiaryDate, destinationSlot: MealSlot, sessionGeneration: UInt64, logs: [FoodLog])
+        /// Authoritative read settled; the parent may now show the held notice.
+        case mutationNoticeReady(generation: UInt64, date: LocalDiaryDate, notice: DiaryMutationNotice)
     }
 
     public init() {}
@@ -112,6 +114,14 @@ public struct DiaryScreenFeature {
                         guard generation == state.sessionGeneration else { return .none }
                         guard !state.diary.isSessionExpired else { return .none }
                         return .send(.delegate(.openMeals(date: date, generation: generation)))
+                    case let .mutationNoticeReady(generation, date, notice):
+                        guard generation == state.sessionGeneration else { return .none }
+                        guard date == state.diary.selectedDate else { return .none }
+                        return .send(.delegate(.mutationNoticeReady(
+                            generation: generation,
+                            date: date,
+                            notice: notice
+                        )))
                     }
                 default:
                     return .none

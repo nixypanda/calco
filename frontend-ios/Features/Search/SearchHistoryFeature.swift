@@ -11,22 +11,6 @@ public struct SearchHistoryClient: Sendable {
         _ query: String,
         _ limit: Int
     ) async throws -> [CategorySuggestion]
-
-    public init(
-        recentItems: @escaping @Sendable (
-            _ from: LocalDiaryDate,
-            _ to: LocalDiaryDate,
-            _ mealSlot: MealSlot?
-        ) async throws -> [RecentLogItem],
-        categorySuggestions: @escaping @Sendable (
-            _ query: String,
-            _ limit: Int
-        ) async throws -> [CategorySuggestion]
-    ) {
-        self.recentItems = recentItems
-        self.categorySuggestions = categorySuggestions
-    }
-
     public static func live(service: any FoodSearchHistoryServicing) -> Self {
         Self(
             recentItems: { from, to, mealSlot in
@@ -127,18 +111,14 @@ public struct SearchHistoryFeature: Sendable {
 
         public var visibleItems: [RecentLogItem] {
             switch self {
-            case .idle, .failed:
-                return []
-            case .loading(_, _, _, let priorItems):
-                return priorItems
-            case .loaded(_, _, _, let items):
-                return items
+            case .idle, .failed: []
+            case .loading(_, _, _, let priorItems): priorItems
+            case .loaded(_, _, _, let items): items
             }
         }
 
         public var isLoading: Bool {
-            if case .loading = self { return true }
-            return false
+            if case .loading = self { true } else { false }
         }
     }
 

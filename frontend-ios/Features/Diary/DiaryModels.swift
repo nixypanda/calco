@@ -10,8 +10,7 @@ public struct DiaryLog: Equatable, Identifiable, Sendable {
     public let carbsG: Double
     public let fatG: Double
 
-    // Full log fields retained so a tap can open the editor without a refetch.
-    // Defaults keep hand-built fixtures (tests, previews) source-compatible.
+    // Full log fields let a tap open the editor without a refetch.
     public let quantity: NutritionQuantity?
     public let notes: String?
     public let brand: String?
@@ -120,12 +119,6 @@ public struct DiarySection: Equatable, Identifiable, Sendable {
     public let id: String
     public let slot: MealSlot?
     public let logs: [DiaryLog]
-
-    public init(id: String, slot: MealSlot?, logs: [DiaryLog]) {
-        self.id = id
-        self.slot = slot
-        self.logs = logs
-    }
 }
 
 /// One previously logged slot returned by `/api/logs/latest-slots`. The
@@ -135,12 +128,6 @@ public struct DiaryLatestSlot: Equatable, Sendable {
     public let sourceDate: LocalDiaryDate
     public let mealSlot: MealSlot
     public let logs: [DiaryLog]
-
-    public init(sourceDate: LocalDiaryDate, mealSlot: MealSlot, logs: [DiaryLog]) {
-        self.sourceDate = sourceDate
-        self.mealSlot = mealSlot
-        self.logs = logs
-    }
 }
 
 public struct DiaryLatestReview: Equatable, Identifiable, Sendable {
@@ -148,19 +135,6 @@ public struct DiaryLatestReview: Equatable, Identifiable, Sendable {
     public let destinationSlot: MealSlot
     public let sourceDate: LocalDiaryDate
     public let items: [DiaryLog]
-
-    public init(
-        destinationDate: LocalDiaryDate,
-        destinationSlot: MealSlot,
-        sourceDate: LocalDiaryDate,
-        items: [DiaryLog]
-    ) {
-        self.destinationDate = destinationDate
-        self.destinationSlot = destinationSlot
-        self.sourceDate = sourceDate
-        self.items = items
-    }
-
     public var id: String {
         "\(sourceDate.formatted):\(destinationSlot.rawValue)"
     }
@@ -190,19 +164,6 @@ public struct DiaryLatestReview: Equatable, Identifiable, Sendable {
         }
         return drafts.isEmpty ? nil : drafts
     }
-}
-
-public enum DiaryRefreshState: Equatable, Sendable {
-    case idle
-    case refreshing
-    case failed(String)
-}
-
-public enum DiaryLoadState: Equatable, Sendable {
-    case loading
-    case loaded(DiaryRefreshState = .idle)
-    case failed(String)
-    case sessionExpired
 }
 
 public enum DiaryServiceError: Error, Equatable, Sendable {
@@ -334,15 +295,6 @@ public enum DiaryMacroKind: String, Sendable {
     case carbs
     case fat
 
-    /// Compact glyph used where horizontal space is tight (narrow phones).
-    public var shortLabel: String {
-        switch self {
-        case .protein: return "P"
-        case .carbs: return "C"
-        case .fat: return "F"
-        }
-    }
-
     /// Full localized name used in wide layouts and always for VoiceOver.
     public var fullLabel: String {
         switch self {
@@ -374,11 +326,7 @@ public struct DiaryMutationNotice: Equatable, Sendable {
     /// recreated it. The notice then explains why retry is no longer offered.
     public let blockedPendingCount: Int
 
-    public init(
-        kind: DiaryMutationKind,
-        title: String,
-        blockedPendingCount: Int = 0
-    ) {
+    public init(kind: DiaryMutationKind, title: String, blockedPendingCount: Int = 0) {
         self.kind = kind
         self.title = title
         self.blockedPendingCount = blockedPendingCount
@@ -415,12 +363,6 @@ public enum DiaryMacroDisplay {
 public struct DiaryGoalProgress: Equatable, Sendable {
     public let current: Double
     public let target: Double
-
-    public init(current: Double, target: Double) {
-        self.current = current
-        self.target = target
-    }
-
     public var hasTarget: Bool {
         target.isFinite && target > 0
     }
@@ -520,5 +462,41 @@ public enum DiaryDateConversion {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current
         return calendar
+    }
+}
+
+public enum DiaryLabels {
+    public static func mealSlotName(_ slot: MealSlot) -> String {
+        switch slot {
+        case .breakfast: String(localized: "foodDetail.mealSlot.breakfast")
+        case .lunch: String(localized: "foodDetail.mealSlot.lunch")
+        case .dinner: String(localized: "foodDetail.mealSlot.dinner")
+        case .snack: String(localized: "foodDetail.mealSlot.snack")
+        case .lateNightSnack: String(localized: "foodDetail.mealSlot.lateNightSnack")
+        }
+    }
+
+    public static func addFood(for slot: MealSlot) -> String {
+        "\(String(localized: "diary.addFood")), \(mealSlotName(slot))"
+    }
+}
+
+public extension LocalDiaryDate {
+    func diaryDisplayTitle(locale: Locale = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        let components = DateComponents(year: year, month: month, day: day)
+        guard let foundationDate = calendar.date(from: components) else { return formatted }
+        let roundTrip = calendar.dateComponents([.year, .month, .day], from: foundationDate)
+        guard roundTrip.year == year, roundTrip.month == month, roundTrip.day == day else {
+            return formatted
+        }
+        return foundationDate.formatted(
+            Date.FormatStyle()
+                .weekday(.wide)
+                .month(.wide)
+                .day(.defaultDigits)
+                .locale(locale)
+        )
     }
 }

@@ -1,10 +1,5 @@
 import SwiftUI
 
-/// Pure, stateless rendering for one catalog search result.
-///
-/// `SearchView` and the future `SearchFeatureView` share this row so the
-/// native result presentation stays identical without a view-model adapter
-/// inside the row.
 struct SearchResultRow: View {
     let result: FoodSearchResult
     let isSelected: Bool

@@ -12,29 +12,14 @@ public struct LogFormView: View {
     @Binding public var mealSlot: MealSlot?
     @Binding public var notes: String
 
-    public var validationMessage: String?
-    public var isSubmitting: Bool
     public var focusedField: FocusState<LogFormField?>.Binding
-
-    public init(
-        amount: Binding<String>,
-        unit: Binding<String>,
-        units: [FoodUnit],
-        mealSlot: Binding<MealSlot?>,
-        notes: Binding<String>,
-        focusedField: FocusState<LogFormField?>.Binding,
-        validationMessage: String? = nil,
-        isSubmitting: Bool = false
-    ) {
-        _amount = amount
-        _unit = unit
-        self.units = units
-        _mealSlot = mealSlot
-        _notes = notes
-        self.focusedField = focusedField
-        self.validationMessage = validationMessage
-        self.isSubmitting = isSubmitting
-    }
+    public var validationMessage: String? = nil
+    public var isSubmitting = false
+    public var mealSlotIdentifier = "foodDetail.mealSlot.picker"
+    public var amountIdentifier = "foodDetail.amount.field"
+    public var unitIdentifier = "foodDetail.unit.picker"
+    public var validationIdentifier = "foodDetail.amount.error"
+    public var notesIdentifier = "foodDetail.notes.field"
 
     public var body: some View {
         mealSection
@@ -42,17 +27,16 @@ public struct LogFormView: View {
         notesSection
     }
 
-
     private var mealSection: some View {
         Section {
             Picker(String(localized: "foodDetail.mealSlot"), selection: $mealSlot) {
                 Text(String(localized: "foodDetail.mealSlot.none")).tag(MealSlot?.none)
                 ForEach(MealSlot.allCases, id: \.self) { slot in
-                    Text(mealSlotLabel(slot)).tag(MealSlot?.some(slot))
+                    Text(DiaryLabels.mealSlotName(slot)).tag(MealSlot?.some(slot))
                 }
             }
             .disabled(isSubmitting)
-            .accessibilityIdentifier("foodDetail.mealSlot.picker")
+            .accessibilityIdentifier(mealSlotIdentifier)
         }
     }
 
@@ -71,7 +55,7 @@ public struct LogFormView: View {
                     .disabled(isSubmitting)
                     .labelsHidden()
                     .accessibilityLabel(String(localized: "foodDetail.amount"))
-                    .accessibilityIdentifier("foodDetail.amount.field")
+                    .accessibilityIdentifier(amountIdentifier)
             }
 
             Picker(String(localized: "foodDetail.unit"), selection: $unit) {
@@ -81,13 +65,13 @@ public struct LogFormView: View {
             }
             .pickerStyle(.menu)
             .disabled(isSubmitting)
-            .accessibilityIdentifier("foodDetail.unit.picker")
+            .accessibilityIdentifier(unitIdentifier)
         } footer: {
             if let validationMessage {
                 Text(validationMessage)
                     .foregroundStyle(.red)
                     .font(.caption)
-                    .accessibilityIdentifier("foodDetail.amount.error")
+                    .accessibilityIdentifier(validationIdentifier)
             }
         }
     }
@@ -105,23 +89,9 @@ public struct LogFormView: View {
                     .disabled(isSubmitting)
                     .labelsHidden()
                     .accessibilityLabel(String(localized: "foodDetail.notes"))
-                    .accessibilityIdentifier("foodDetail.notes.field")
+                    .accessibilityIdentifier(notesIdentifier)
             }
         }
     }
 
-    private func mealSlotLabel(_ slot: MealSlot) -> String {
-        switch slot {
-        case .breakfast:
-            return String(localized: "foodDetail.mealSlot.breakfast")
-        case .lunch:
-            return String(localized: "foodDetail.mealSlot.lunch")
-        case .dinner:
-            return String(localized: "foodDetail.mealSlot.dinner")
-        case .snack:
-            return String(localized: "foodDetail.mealSlot.snack")
-        case .lateNightSnack:
-            return String(localized: "foodDetail.mealSlot.lateNightSnack")
-        }
-    }
 }

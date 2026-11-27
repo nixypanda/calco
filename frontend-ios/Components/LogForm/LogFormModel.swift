@@ -21,10 +21,8 @@ public func parsePositiveLogAmount(_ raw: String) -> Decimal? {
 public extension LogFormValidationError {
     var message: String {
         switch self {
-        case .amountRequired:
-            return String(localized: "foodDetail.error.amountRequired")
-        case .amountInvalid:
-            return String(localized: "foodDetail.error.amountInvalid")
+        case .amountRequired: String(localized: "foodDetail.error.amountRequired")
+        case .amountInvalid: String(localized: "foodDetail.error.amountInvalid")
         }
     }
 }

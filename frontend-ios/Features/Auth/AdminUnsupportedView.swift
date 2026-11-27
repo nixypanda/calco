@@ -1,11 +1,7 @@
 import SwiftUI
 
 public struct AdminUnsupportedView: View {
-    public var onDismiss: (() -> Void)?
-
-    public init(onDismiss: (() -> Void)? = nil) {
-        self.onDismiss = onDismiss
-    }
+    public var onDismiss: (() -> Void)? = nil
 
     public var body: some View {
         VStack(spacing: 20) {

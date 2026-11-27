@@ -2,13 +2,6 @@
 
 import Foundation
 
-public enum NutritionDetailsLoadState: Equatable, Sendable {
-    case loading
-    case loaded(NutritionDetailsReport)
-    case failed(String)
-    case sessionExpired
-}
-
 public enum NutritionDetailsServiceError: Error, Equatable, Sendable {
     case unauthorized
     case cancelled
@@ -190,43 +183,13 @@ enum NutritionDetailsCopy {
         String(localized: "nutrition.error.invalidResponse")
     }
 
-    /// A locale-aware weekday/month/day label. The report date is a local
-    /// calendar day, so it is formatted at local noon to avoid DST shifts.
-    static func dateTitle(_ date: LocalDiaryDate, locale: Locale = .current) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = locale
-        calendar.timeZone = .current
-        let components = DateComponents(
-            calendar: calendar,
-            timeZone: calendar.timeZone,
-            year: date.year,
-            month: date.month,
-            day: date.day,
-            hour: 12
-        )
-        guard let value = components.date else { return date.formatted }
-        return value.formatted(
-            Date.FormatStyle()
-                .weekday(.wide)
-                .month(.wide)
-                .day(.defaultDigits)
-                .year()
-                .locale(locale)
-        )
-    }
-
     static func sectionTitle(_ section: NutritionDetailsSection) -> String {
         switch section {
-        case .overview:
-            return String(localized: "nutrition.overview")
-        case .carbohydrates:
-            return String(localized: "nutrition.section.carbohydrates")
-        case .fats:
-            return String(localized: "nutrition.section.fats")
-        case .limits:
-            return String(localized: "nutrition.section.limits")
-        case .vitaminsMinerals:
-            return String(localized: "nutrition.section.vitaminsMinerals")
+        case .overview: String(localized: "nutrition.overview")
+        case .carbohydrates: String(localized: "nutrition.section.carbohydrates")
+        case .fats: String(localized: "nutrition.section.fats")
+        case .limits: String(localized: "nutrition.section.limits")
+        case .vitaminsMinerals: String(localized: "nutrition.section.vitaminsMinerals")
         }
     }
 
@@ -315,12 +278,9 @@ enum NutritionDetailsCopy {
 
     static func overviewCaption(for coverage: NutritionDetailsCoverage) -> String? {
         switch coverage {
-        case .none:
-            return noData
-        case .partial:
-            return knownMinimum
-        case .complete:
-            return nil
+        case .none: noData
+        case .partial: knownMinimum
+        case .complete: nil
         }
     }
 

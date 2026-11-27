@@ -2,18 +2,6 @@
 
 import Foundation
 
-public enum MealsListLoadState: Equatable, Sendable {
-    case idle
-    case loading
-    case loaded([Meal])
-    case failed(String)
-
-    public var meals: [Meal] {
-        guard case .loaded(let meals) = self else { return [] }
-        return meals
-    }
-}
-
 public enum MealDetailLoadState: Equatable, Sendable {
     case loading
     case loaded
@@ -82,37 +70,14 @@ public enum MealComponentSearchState: Equatable, Sendable {
 
 public struct MealComponentRow: Identifiable, Equatable, Sendable {
     public let id: Int
-    public var productID: String
-    public var productName: String?
-    public var query: String
-    public var amount: String
-    public var unit: String
-    public var searchState: MealComponentSearchState
-    public var isMissing: Bool
-    public var isResolvingName: Bool
-
-    public init(
-        id: Int,
-        productID: String = "",
-        productName: String? = nil,
-        query: String = "",
-        amount: String = "100",
-        unit: String = "g",
-        searchState: MealComponentSearchState = .idle,
-        isMissing: Bool = false,
-        isResolvingName: Bool = false
-    ) {
-        self.id = id
-        self.productID = productID
-        self.productName = productName
-        self.query = query
-        self.amount = amount
-        self.unit = unit
-        self.searchState = searchState
-        self.isMissing = isMissing
-        self.isResolvingName = isResolvingName
-    }
-
+    public var productID: String = ""
+    public var productName: String? = nil
+    public var query: String = ""
+    public var amount: String = "100"
+    public var unit: String = "g"
+    public var searchState: MealComponentSearchState = .idle
+    public var isMissing: Bool = false
+    public var isResolvingName: Bool = false
     public var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -146,40 +111,21 @@ public enum MealEditorValidationError: Equatable, Sendable {
 
     public var message: String {
         switch self {
-        case .nameRequired:
-            return String(localized: "meals.editor.error.nameRequired")
-        case .componentsRequired:
-            return String(localized: "meals.editor.error.componentRequired")
-        case .componentUnselected:
-            return String(localized: "meals.editor.error.componentUnselected")
-        case .componentMissing:
-            return String(localized: "meals.editor.error.componentMissing")
-        case .quantityInvalid:
-            return String(localized: "meals.editor.error.quantityInvalid")
-        case .unitRequired:
-            return String(localized: "meals.editor.error.unitRequired")
-        case .totalQuantityInvalid:
-            return String(localized: "meals.editor.error.totalInvalid")
+        case .nameRequired: String(localized: "meals.editor.error.nameRequired")
+        case .componentsRequired: String(localized: "meals.editor.error.componentRequired")
+        case .componentUnselected: String(localized: "meals.editor.error.componentUnselected")
+        case .componentMissing: String(localized: "meals.editor.error.componentMissing")
+        case .quantityInvalid: String(localized: "meals.editor.error.quantityInvalid")
+        case .unitRequired: String(localized: "meals.editor.error.unitRequired")
+        case .totalQuantityInvalid: String(localized: "meals.editor.error.totalInvalid")
         }
     }
 }
 
 public enum MealNutrientDisplay {
     public static func label(for code: String) -> String {
-        switch code {
-        case NutrientCodes.energyKcal:
-            return String(localized: "meals.nutrient.energy")
-        case NutrientCodes.proteinG:
-            return String(localized: "meals.nutrient.protein")
-        case NutrientCodes.carbsG:
-            return String(localized: "meals.nutrient.carbs")
-        case NutrientCodes.fatG:
-            return String(localized: "meals.nutrient.fat")
-        case NutrientCodes.fiberG:
-            return String(localized: "meals.nutrient.fiber")
-        default:
-            return code
-        }
+        guard code == code.uppercased() else { return code }
+        return logNutritionLabel(for: code)
     }
 
     public static func value(_ nutrient: NutrientAmountValue) -> String {

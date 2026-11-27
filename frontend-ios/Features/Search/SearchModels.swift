@@ -28,16 +28,10 @@ public struct FoodSearchResult: Equatable, Identifiable, Sendable {
     }
 
     public var displayName: String { name }
-
-    public var idValue: String { id }
 }
 
 public struct FoodSearchResults: Equatable, Sendable {
     public let items: [FoodSearchResult]
-
-    private init(items: [FoodSearchResult]) {
-        self.items = items
-    }
 
     public init?(_ items: [FoodSearchResult]) {
         guard !items.isEmpty else { return nil }
@@ -91,33 +85,6 @@ public enum SearchScopeOption: String, CaseIterable, Sendable {
         case .barcode: return String(localized: "search.scope.barcode")
         }
     }
-}
-
-public enum RecentItemsLoadState: Equatable, Sendable {
-    case idle
-    case loading
-    case loaded([RecentLogItem])
-    case failed(String)
-
-    public var items: [RecentLogItem] {
-        guard case .loaded(let items) = self else { return [] }
-        return items
-    }
-}
-
-public enum BarcodeLookupState: Equatable, Sendable {
-    case idle
-    case loading
-    case found(BarcodeLookup)
-    case notFound(String)
-    case failed(String)
-}
-
-public enum SearchQuickAddState: Equatable, Sendable {
-    case idle
-    case submitting(String)
-    case added(String)
-    case failed(String)
 }
 
 public protocol FoodSearchHistoryServicing: Sendable {

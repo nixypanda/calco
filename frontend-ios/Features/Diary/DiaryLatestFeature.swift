@@ -41,24 +41,6 @@ public struct DiaryLatestFeature {
         public let review: DiaryLatestReview
         public let timeZone: String
         public let drafts: [LogSubmissionDraft]
-
-        public init(
-            requestID: UUID,
-            sessionGeneration: UInt64,
-            destinationDate: LocalDiaryDate,
-            destinationSlot: MealSlot,
-            review: DiaryLatestReview,
-            timeZone: String,
-            drafts: [LogSubmissionDraft]
-        ) {
-            self.requestID = requestID
-            self.sessionGeneration = sessionGeneration
-            self.destinationDate = destinationDate
-            self.destinationSlot = destinationSlot
-            self.review = review
-            self.timeZone = timeZone
-            self.drafts = drafts
-        }
     }
 
     public struct SubmissionClient: Sendable {
@@ -68,18 +50,6 @@ public struct DiaryLatestFeature {
             String,
             UInt64
         ) async -> LogSubmissionServiceResult
-
-        public init(
-            submit: @escaping @MainActor @Sendable (
-                [LogSubmissionDraft],
-                [String],
-                String,
-                UInt64
-            ) async -> LogSubmissionServiceResult
-        ) {
-            self.submit = submit
-        }
-
         public static func live(
             submissionHandler: LogSubmissionHandler?,
             isCurrentGeneration: @escaping @MainActor @Sendable (UInt64) -> Bool
@@ -116,19 +86,6 @@ public struct DiaryLatestFeature {
         public var copyErrorMessage: String?
         public var copySucceeded: Bool
 
-        // Convenience aliases mirroring the legacy view model names.
-        public var latestReview: DiaryLatestReview? {
-            get { review }
-            set { review = newValue }
-        }
-        public var latestLoadingSlot: MealSlot? {
-            get { loadingSlot }
-            set { loadingSlot = newValue }
-        }
-        public var latestErrorMessage: String? {
-            get { errorMessage }
-            set { errorMessage = newValue }
-        }
         public var selectedDate: LocalDiaryDate { destinationDate }
         public var isSessionExpired: Bool { phase.isSessionExpired }
 
@@ -141,9 +98,6 @@ public struct DiaryLatestFeature {
             review: DiaryLatestReview? = nil,
             loadingSlot: MealSlot? = nil,
             errorMessage: String? = nil,
-            latestReview: DiaryLatestReview? = nil,
-            latestLoadingSlot: MealSlot? = nil,
-            latestErrorMessage: String? = nil,
             copyRequest: CopyRequest? = nil,
             isSubmitting: Bool = false,
             copyErrorMessage: String? = nil,
@@ -154,9 +108,9 @@ public struct DiaryLatestFeature {
             self.sessionGeneration = sessionGeneration
             self.cache = cache
             self.phase = phase ?? .idle(destinationDate: destinationDate)
-            self.review = review ?? latestReview
-            self.loadingSlot = loadingSlot ?? latestLoadingSlot
-            self.errorMessage = errorMessage ?? latestErrorMessage
+            self.review = review
+            self.loadingSlot = loadingSlot
+            self.errorMessage = errorMessage
             self.copyRequest = copyRequest
             self.isSubmitting = isSubmitting
             self.copyErrorMessage = copyErrorMessage
@@ -243,13 +197,6 @@ public struct DiaryLatestFeature {
 
     public struct Client: Sendable {
         public var latestSlots: @Sendable (_ before: LocalDiaryDate, _ lookbackDays: Int, _ expectedGeneration: UInt64) async throws -> [DiaryLatestSlot]
-
-        public init(
-            latestSlots: @escaping @Sendable (_ before: LocalDiaryDate, _ lookbackDays: Int, _ expectedGeneration: UInt64) async throws -> [DiaryLatestSlot]
-        ) {
-            self.latestSlots = latestSlots
-        }
-
         public static func live(service: any DiaryServicing) -> Self {
             // Base/unwrapped read seam. This factory captures the supplied
             // service at creation time; it is intentionally not guarded. Future
@@ -421,12 +368,10 @@ public struct DiaryLatestFeature {
     private func prepareLatest(state: inout State, slot: MealSlot) -> Effect<Action> {
         guard !state.isSubmitting else { return .none }
         guard !state.phase.isSessionExpired else { return .none }
-        // Do not start a second concurrent read.
         if case .loading = state.phase { return .none }
 
         let destinationDate = state.destinationDate
 
-        // Cached success can be reviewed without another network request.
         if case .settled(.success(let cachedSlots)) = state.cache.entry(for: destinationDate) {
             state.phase = .loaded(
                 destinationDate: destinationDate,
@@ -453,7 +398,6 @@ public struct DiaryLatestFeature {
 
         let destinationDate = state.destinationDate
 
-        // Retire any prior entry so a refresh/retry can issue a fresh token.
         var cache = state.cache
         switch cache.entry(for: destinationDate) {
         case .inFlight:
@@ -571,12 +515,10 @@ public struct DiaryLatestFeature {
 
     private func contextChanged(state: inout State, date: LocalDiaryDate, today: LocalDiaryDate) -> Effect<Action> {
         let oldDestination = state.destinationDate
-        // Same date: only today changes; retain read/review.
         if date == oldDestination {
             state.today = today
             return .none
         }
-        // Actual date change: cancel only the read (never the invoked copy).
         cancelUnderlyingRead(state: &state)
         // Invalidate the old destination's in-flight token via the authoritative
         // cache without resetting the whole cache.
@@ -587,7 +529,6 @@ public struct DiaryLatestFeature {
         state.today = today
         state.loadingSlot = nil
         state.errorMessage = nil
-        // New context phase: idle, or valid cached loaded.
         switch state.cache.entry(for: date) {
         case .settled(.success(let cachedSlots)):
             state.phase = .loaded(
@@ -599,7 +540,6 @@ public struct DiaryLatestFeature {
         default:
             state.phase = .idle(destinationDate: date)
         }
-        // Clear review unless an active or failed copy preserves it.
         if !(state.isSubmitting || state.copyRequest != nil) {
             state.review = nil
         }
@@ -679,7 +619,6 @@ public struct DiaryLatestFeature {
 
         switch result {
         case .success(let logs):
-            // All dates' latest-slot caches are stale after a successful copy.
             state.cache = state.cache.clearAll()
             cancelUnderlyingRead(state: &state)
 
@@ -881,8 +820,7 @@ public struct DiaryLatestFeature {
 
 extension DiaryLatestFeature.Phase {
     var isSessionExpired: Bool {
-        if case .sessionExpired = self { return true }
-        return false
+        if case .sessionExpired = self { true } else { false }
     }
 }
 

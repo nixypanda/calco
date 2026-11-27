@@ -3,11 +3,6 @@ import Foundation
 
 public struct FoodSearchClient: Sendable {
     public var search: @Sendable (_ query: String, _ scope: FoodSearchScope) async throws -> [FoodSearchResult]
-
-    public init(search: @escaping @Sendable (_ query: String, _ scope: FoodSearchScope) async throws -> [FoodSearchResult]) {
-        self.search = search
-    }
-
     public static func live(service: any FoodSearchServicing) -> Self {
         Self { query, scope in
             try await service.searchFoods(query: query, scope: scope)
@@ -90,10 +85,8 @@ public struct SearchFeature {
         public var results: [FoodSearchResult] { phase.results }
         public var isSearching: Bool {
             switch phase {
-            case .debouncing, .loading:
-                return true
-            case .idle, .loaded, .failed:
-                return false
+            case .debouncing, .loading: true
+            case .idle, .loaded, .failed: false
             }
         }
 

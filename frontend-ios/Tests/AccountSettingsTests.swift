@@ -1,833 +1,691 @@
+import ComposableArchitecture
+import Dependencies
 import XCTest
 
 @testable import CalCo
 
-private actor FakeAPIKeyService: APIKeyServicing {
-    private var storedKeys: [APIKey]
-    private var listError: APIKeyServiceError?
-    private var createError: APIKeyServiceError?
-    private var revokeError: APIKeyServiceError?
-    private var appendOnCreateError: APIKey?
-    private var listCallStorage = 0
-    private var createRequestStorage: [APIKeyCreateRequest] = []
-    private var revokeIDStorage: [String] = []
-
-    init(keys: [APIKey] = []) {
-        self.storedKeys = keys
-    }
-
-    func setKeys(_ keys: [APIKey]) { storedKeys = keys }
-    func setListError(_ error: APIKeyServiceError?) { listError = error }
-    func setCreateError(_ error: APIKeyServiceError?) { createError = error }
-    func setRevokeError(_ error: APIKeyServiceError?) { revokeError = error }
-    func setAppendOnCreateError(_ key: APIKey?) { appendOnCreateError = key }
-    func listCallCount() -> Int { listCallStorage }
-    func createRequests() -> [APIKeyCreateRequest] { createRequestStorage }
-    func revokeIDs() -> [String] { revokeIDStorage }
-
-    func listAPIKeys() async throws -> [APIKey] {
-        listCallStorage += 1
-        if let listError { throw listError }
-        return storedKeys
-    }
-
-    func createAPIKey(_ request: APIKeyCreateRequest) async throws -> CreatedAPIKey {
-        createRequestStorage.append(request)
-        if let createError {
-            if let appendOnCreateError {
-                storedKeys.insert(appendOnCreateError, at: 0)
-            }
-            throw createError
-        }
-
-        let key = APIKey(
-            id: "key-\(createRequestStorage.count)",
-            name: request.name,
-            tokenHint: "calco_pat_fixture",
-            scope: request.scope == .read ? .read : .readWrite,
-            createdAt: "2026-11-19T10:00:00Z",
-            lastUsedAt: nil,
-            expiresAt: request.expiresInDays.map { _ in "2027-02-17T10:00:00Z" }
-        )
-        storedKeys.insert(key, at: 0)
-        return CreatedAPIKey(
-            key: key,
-            secret: APIKeySecret(
-                value: "calco_pat_fixture_secret_\(createRequestStorage.count)"
-            )
-        )
-    }
-
-    func revokeAPIKey(id: String) async throws {
-        revokeIDStorage.append(id)
-        if let revokeError { throw revokeError }
-        storedKeys.removeAll { $0.id == id }
-    }
-}
-
-private actor HoldingCreateService: APIKeyServicing {
-    private var storedKeys: [APIKey]
-    private var createCallStorage = 0
-    private var createStarted = false
-    private var continuation: CheckedContinuation<Void, Never>?
-
-    init(keys: [APIKey] = []) {
-        self.storedKeys = keys
-    }
-
-    func setKeys(_ keys: [APIKey]) { storedKeys = keys }
-
-    func listAPIKeys() async throws -> [APIKey] { storedKeys }
-
-    func createAPIKey(_ request: APIKeyCreateRequest) async throws -> CreatedAPIKey {
-        createCallStorage += 1
-        createStarted = true
-        await withCheckedContinuation { continuation in
-            self.continuation = continuation
-        }
-        let key = APIKey(
-            id: "key-held-\(createCallStorage)",
-            name: request.name,
-            tokenHint: "calco_pat_fixture",
-            scope: request.scope == .read ? .read : .readWrite,
-            createdAt: "2026-11-19T10:00:00Z",
-            expiresAt: nil
-        )
-        storedKeys.insert(key, at: 0)
-        return CreatedAPIKey(
-            key: key,
-            secret: APIKeySecret(value: "calco_pat_fixture_held_secret")
-        )
-    }
-
-    func revokeAPIKey(id: String) async throws {
-        storedKeys.removeAll { $0.id == id }
-    }
-
-    func createCallCount() -> Int { createCallStorage }
-    func keysSnapshot() -> [APIKey] { storedKeys }
-
-    func waitForCreateStart() async {
-        let deadline = Date().addingTimeInterval(5)
-        while !createStarted, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 1_000_000)
-        }
-        XCTAssertTrue(createStarted, "Timed out waiting for create to start")
-    }
-
-    func releaseCreate() {
-        continuation?.resume()
-        continuation = nil
-    }
-}
-
-private actor StaleListService: APIKeyServicing {
-    private var listCallStorage = 0
-    private var firstStarted = false
-    private var firstContinuation: CheckedContinuation<Void, Never>?
-    private let oldKey: APIKey
-    private let newKey: APIKey
-
-    init(oldKey: APIKey, newKey: APIKey) {
-        self.oldKey = oldKey
-        self.newKey = newKey
-    }
-
-    func listAPIKeys() async throws -> [APIKey] {
-        listCallStorage += 1
-        if listCallStorage == 1 {
-            firstStarted = true
-            await withCheckedContinuation { continuation in
-                firstContinuation = continuation
-            }
-            return [oldKey]
-        }
-        return [newKey]
-    }
-
-    func createAPIKey(_ request: APIKeyCreateRequest) async throws -> CreatedAPIKey {
-        throw APIKeyServiceError.unknown
-    }
-
-    func revokeAPIKey(id: String) async throws {
-        throw APIKeyServiceError.unknown
-    }
-
-    func waitForFirstList() async {
-        let deadline = Date().addingTimeInterval(5)
-        while !firstStarted, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 1_000_000)
-        }
-        XCTAssertTrue(firstStarted, "Timed out waiting for the first list")
-    }
-
-    func releaseFirstList() {
-        firstContinuation?.resume()
-        firstContinuation = nil
-    }
-}
-
-@MainActor
-private final class FakeAPIKeyClipboard: APIKeySecretCopying {
-    var copiedSecrets: [String] = []
-    var succeeds = true
-    private(set) var clearAttempts = 0
-    private(set) var clearedCount = 0
-    private(set) var ignoredClearCount = 0
-    private var currentChangeCount = 0
-    private var ownedSecret: String?
-
-    func copySecretToClipboard(_ secret: String) -> APIKeyClipboardReceipt? {
-        copiedSecrets.append(secret)
-        guard succeeds else { return nil }
-        ownedSecret = secret
-        currentChangeCount += 1
-        return APIKeyClipboardReceipt(changeCount: currentChangeCount)
-    }
-
-    func clearSecretFromClipboard(_ receipt: APIKeyClipboardReceipt) {
-        clearAttempts += 1
-        guard receipt.changeCount == currentChangeCount else {
-            ignoredClearCount += 1
-            return
-        }
-        ownedSecret = nil
-        clearedCount += 1
-        currentChangeCount += 1
-    }
-
-    func simulateExternalClipboardChange() {
-        ownedSecret = nil
-        currentChangeCount += 1
-    }
-
-    var hasOwnedSecret: Bool { ownedSecret != nil }
-}
-
+/// Migration of the retired `AccountSettingsViewModel` harness (C deleted the
+/// VM/view). Every safety scenario is now driven through `AccountSettingsFeature`
+/// with C's frozen `APIKeyRequestContext(accountID, generation, requestID)` and
+/// memberwise `APIKeyFeatureClient`; pure `APIKeyContractTests` /
+/// `APIKeySecretClipboard` remain untouched. Selector-level mapping is in
+/// `test-migration/test-mapping.md`.
 @MainActor
 final class AccountSettingsTests: XCTestCase {
-    private let nowDate = APIKeyTimestamp.date(from: "2026-11-19T12:00:00Z")!
+    private let generation: UInt64 = 55
+    private let accountID = "acct-5"
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-    private func key(
-        id: String,
-        name: String = "Backup",
-        scope: APIKeyScope = .read,
-        createdAt: String = "2026-11-19T10:00:00Z",
-        lastUsedAt: String? = nil,
-        expiresAt: String? = nil
-    ) -> APIKey {
-        APIKey(
-            id: id,
-            name: name,
-            tokenHint: "calco_pat_\(id)",
-            scope: scope,
-            createdAt: createdAt,
-            lastUsedAt: lastUsedAt,
-            expiresAt: expiresAt
+    private func request(_ id: UUID) -> APIKeyRequestContext {
+        APIKeyRequestContext(accountID: accountID, generation: generation, requestID: id)
+    }
+
+    private var key: APIKey {
+        APIKey(id: "key-1", name: "CI", tokenHint: "abcd…wxyz",
+               scope: .read, createdAt: "2026-11-01T00:00:00Z")
+    }
+
+    private var created: CreatedAPIKey {
+        CreatedAPIKey(
+            key: APIKey(id: "key-2", name: "New key", tokenHint: "1234…9876",
+                        scope: .readWrite, createdAt: "2026-11-26T00:00:00Z"),
+            secret: APIKeySecret(value: "super-secret-value")
         )
     }
 
-    private func makeViewModel(
-        service: any APIKeyServicing,
-        clipboard: FakeAPIKeyClipboard? = nil,
-        accountID: String = "account-a"
-    ) -> AccountSettingsViewModel {
-        AccountSettingsViewModel(
-            service: service,
-            accountID: accountID,
-            clipboard: clipboard ?? FakeAPIKeyClipboard(),
-            nowProvider: { [nowDate] in nowDate }
+    private var state: AccountSettingsFeature.State {
+        AccountSettingsFeature.State(accountID: accountID, generation: generation, now: now)
+    }
+
+    private func client(
+        keys: [APIKey] = [],
+        listError: (any Error & Sendable)? = nil,
+        createError: (any Error & Sendable)? = nil,
+        revokeError: (any Error & Sendable)? = nil,
+        createCalls: LockIsolated<Int>? = nil,
+        createNames: LockIsolated<[String]>? = nil,
+        revokeCalls: LockIsolated<[String]>? = nil,
+        copyReceipt: APIKeyClipboardReceipt? = APIKeyClipboardReceipt(changeCount: 9),
+        cleared: LockIsolated<[APIKeyClipboardReceipt]>? = nil,
+        copyCalls: LockIsolated<[(String, String, UInt64)]>? = nil,
+        listGate: AsyncGate? = nil,
+        createGate: AsyncGate? = nil,
+        isCurrent: @escaping @Sendable (String, UInt64) -> Bool = { _, _ in true }
+    ) -> APIKeyFeatureClient {
+        let created = self.created
+        return APIKeyFeatureClient(
+            listKeys: { _ in
+                if let listGate { await listGate.wait() }
+                if let listError { throw listError }
+                return keys
+            },
+            createKey: { model, context in
+                createCalls?.withValue { $0 += 1 }
+                createNames?.withValue { $0.append(model.name) }
+                _ = context
+                if let createError { throw createError }
+                if let createGate { await createGate.wait() }
+                return created
+            },
+            revokeKey: { id, _ in
+                revokeCalls?.withValue { $0.append(id) }
+                if let revokeError { throw revokeError }
+            },
+            copySecret: { secret, accountID, generation in
+                copyCalls?.withValue { $0.append((secret, accountID, generation)) }
+                return copyReceipt
+            },
+            clearSecret: { receipt in cleared?.withValue { $0.append(receipt) } },
+            now: { self.now },
+            isCurrentSession: isCurrent
         )
     }
 
-    // MARK: - Load
+    // MARK: - Load / metadata
 
-    func testLoadListsKeysAndRetriesAfterFailure() async {
-        let service = FakeAPIKeyService(keys: [key(id: "key-1")])
-        await service.setListError(.networkUnavailable)
-        let viewModel = makeViewModel(service: service)
-
-        await viewModel.load()
-
-        XCTAssertNotNil(viewModel.listErrorMessage)
-        XCTAssertTrue(viewModel.keys.isEmpty)
-
-        await service.setListError(nil)
-        await viewModel.load()
-
-        XCTAssertEqual(viewModel.listState, .loaded)
-        XCTAssertEqual(viewModel.keys.map(\.id), ["key-1"])
-        XCTAssertNil(viewModel.listErrorMessage)
-        let listCalls = await service.listCallCount()
-        XCTAssertEqual(listCalls, 2)
-    }
-
-    func testUnauthorizedLoadClearsStateAndReportsSessionOnce() async {
-        let service = FakeAPIKeyService(keys: [key(id: "key-1")])
-        await service.setListError(.unauthorized)
-        let viewModel = makeViewModel(service: service)
-        var expiredCount = 0
-        viewModel.onSessionExpired = { expiredCount += 1 }
-
-        await viewModel.load()
-        await viewModel.load()
-
-        XCTAssertEqual(expiredCount, 1)
-        XCTAssertTrue(viewModel.isSessionExpired)
-        XCTAssertTrue(viewModel.keys.isEmpty)
-        XCTAssertEqual(
-            viewModel.listErrorMessage,
-            String(localized: "diary.error.sessionExpired")
-        )
-    }
-
-    func testStaleListResponseCannotOverwriteNewerMetadata() async {
-        let old = key(id: "old", name: "Old")
-        let new = key(id: "new", name: "New")
-        let service = StaleListService(oldKey: old, newKey: new)
-        let viewModel = makeViewModel(service: service)
-
-        let firstLoad = Task { await viewModel.load() }
-        await service.waitForFirstList()
-        await viewModel.load()
-        await service.releaseFirstList()
-        await firstLoad.value
-
-        XCTAssertEqual(viewModel.keys.map(\.id), ["new"])
-    }
-
-    // MARK: - Create and one-time reveal
-
-    func testCreateTrimsNameRevealsOnceAndDoesNotAutoCopy() async {
-        let service = FakeAPIKeyService()
-        let clipboard = FakeAPIKeyClipboard()
-        let viewModel = makeViewModel(service: service, clipboard: clipboard)
-
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "  Nightly backup  "
-        viewModel.draftScope = .readWrite
-        viewModel.draftExpiry = .days30
-
-        await viewModel.submitCreate()
-
-        XCTAssertEqual(viewModel.createState, .created)
-        XCTAssertEqual(viewModel.createdKey?.key.name, "Nightly backup")
-        XCTAssertEqual(viewModel.createdKey?.key.scope, .readWrite)
-        XCTAssertEqual(viewModel.keys.first?.id, "key-1")
-        XCTAssertFalse(viewModel.isSecretObscured)
-        XCTAssertTrue(clipboard.copiedSecrets.isEmpty)
-
-        let requests = await service.createRequests()
-        XCTAssertEqual(requests.count, 1)
-        XCTAssertEqual(requests.first?.name, "Nightly backup")
-        XCTAssertEqual(requests.first?.scope, .readWrite)
-        XCTAssertEqual(requests.first?.expiresInDays, 30)
-
-        viewModel.copySecret()
-        XCTAssertEqual(
-            clipboard.copiedSecrets,
-            ["calco_pat_fixture_secret_1"]
-        )
-        XCTAssertEqual(viewModel.copyState, .copied)
-
-        viewModel.finishSecretReveal()
-
-        XCTAssertNil(viewModel.createdKey)
-        XCTAssertFalse(viewModel.isCreatePresented)
-        XCTAssertEqual(viewModel.createState, .editing)
-    }
-
-    func testInvalidNameBlocksRequestUntilCorrected() async {
-        let service = FakeAPIKeyService()
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = " \u{00A0}\n "
-
-        await viewModel.submitCreate()
-
-        XCTAssertEqual(viewModel.nameValidationMessage, String(localized: "apiKeys.create.name.required"))
-        var requests = await service.createRequests()
-        XCTAssertEqual(requests.count, 0)
-
-        viewModel.draftName = "Name\u{202E}"
-        await viewModel.submitCreate()
-
-        XCTAssertEqual(
-            viewModel.nameValidationMessage,
-            String(localized: "apiKeys.create.name.invalid")
-        )
-        requests = await service.createRequests()
-        XCTAssertEqual(requests.count, 0)
-    }
-
-    func testAmbiguousCreateRefreshesMetadataAndNeverBlindlyRetries() async {
-        let existing = key(id: "key-1")
-        let orphan = key(id: "key-orphan", name: "May have been created")
-        let service = FakeAPIKeyService(keys: [existing])
-        await service.setCreateError(.timedOut)
-        await service.setAppendOnCreateError(orphan)
-        let viewModel = makeViewModel(service: service)
-
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Lost response"
-        await viewModel.submitCreate()
-
-        let createCallsAfterFailure = await service.createRequests()
-        let listCallsAfterFailure = await service.listCallCount()
-        XCTAssertEqual(createCallsAfterFailure.count, 1)
-        XCTAssertEqual(listCallsAfterFailure, 2)
-        XCTAssertEqual(viewModel.keys.map(\.id), ["key-orphan", "key-1"])
-        guard case .uncertain = viewModel.createState else {
-            return XCTFail("Expected an uncertain create state")
+    /// Old `testStaleListResponseCannotOverwriteNewerMetadata`.
+    func testAccountStaleListResponseIsIgnored() async {
+        // Hold the real GET so the stale reply is injected while it is in flight.
+        let gate = AsyncGate()
+        let store = TestStore(initialState: state) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(keys: [self.key], listGate: gate)
+            $0.uuid = .incrementing
         }
-        XCTAssertTrue(viewModel.isCreateSubmitDisabled)
 
-        await viewModel.submitCreate()
-        let createCallsAfterSecondSubmit = await service.createRequests()
-        XCTAssertEqual(createCallsAfterSecondSubmit.count, 1)
-
-        await viewModel.refreshMetadataForUncertainCreate()
-        let listCallsAfterRefresh = await service.listCallCount()
-        let createCallsAfterRefresh = await service.createRequests()
-        XCTAssertEqual(listCallsAfterRefresh, 3)
-        XCTAssertEqual(createCallsAfterRefresh.count, 1)
-        guard case .uncertain = viewModel.createState else {
-            return XCTFail("Metadata refresh must not unblock a blind retry")
+        await store.send(.load) {
+            $0.listPhase = .loading
+            $0.activeListRequestID = UUID(0)
+        }
+        await store.send(.keysReceived(context: request(UUID(9)), keys: [self.key]))
+        XCTAssertEqual(store.state.listPhase.keys, [])
+        await gate.open()
+        await store.receive({ action in
+            guard case let .keysReceived(context, keys) = action else { return false }
+            return context == self.request(UUID(0)) && keys == [self.key]
+        }) {
+            $0.keys = [self.key]
+            $0.listPhase = .loaded([self.key])
+            $0.activeListRequestID = nil
+            $0.isUncertainRefresh = false
+            $0.uncertainMetadataRefreshFailed = false
         }
     }
 
-    func testUncertainCreateReportsMetadataRefreshFailureAndStillDoesNotRetry() async {
-        let service = FakeAPIKeyService(keys: [key(id: "key-1")])
-        await service.setCreateError(.networkUnavailable)
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-        await service.setListError(.networkUnavailable)
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Lost response"
-
-        await viewModel.submitCreate()
-
-        guard case .uncertain = viewModel.createState else {
-            return XCTFail("Expected an uncertain create state")
-        }
-        XCTAssertTrue(viewModel.uncertainMetadataRefreshFailed)
-        let createCalls = await service.createRequests()
-        XCTAssertEqual(createCalls.count, 1)
-        XCTAssertTrue(viewModel.isCreateSubmitDisabled)
-    }
-
-    func testHeldPostAccountSwitchKeepsOldAccountClearedAndAllowsFreshCreate() async {
-        let service = HoldingCreateService()
-        let accountA = makeViewModel(service: service)
-        await accountA.load()
-        accountA.presentCreateForm()
-        accountA.draftName = "Held create"
-
-        let create = Task { await accountA.submitCreate() }
-        await service.waitForCreateStart()
-        accountA.accountDidChange(to: "account-b")
-        await service.releaseCreate()
-        await create.value
-
-        XCTAssertNil(accountA.createdKey)
-        XCTAssertFalse(accountA.isCreatePresented)
-        XCTAssertTrue(accountA.keys.isEmpty)
-
-        let restartedA = makeViewModel(service: service, accountID: "account-a")
-        await restartedA.load()
-        restartedA.presentCreateForm()
-
-        XCTAssertTrue(
-            restartedA.isCreatePresented,
-            "no durable intent should block a fresh create after relaunch"
-        )
-        let createCount = await service.createCallCount()
-        XCTAssertEqual(createCount, 1)
-    }
-
-    func testClipboardCleanupClearsOnlyOwnedSecret() async {
-        let service = FakeAPIKeyService()
-        let clipboard = FakeAPIKeyClipboard()
-        let viewModel = makeViewModel(service: service, clipboard: clipboard)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Clipboard key"
-        await viewModel.submitCreate()
-        viewModel.copySecret()
-        XCTAssertTrue(clipboard.hasOwnedSecret)
-
-        viewModel.finishSecretReveal()
-        XCTAssertEqual(clipboard.clearedCount, 1)
-        XCTAssertEqual(clipboard.clearAttempts, 1)
-        XCTAssertFalse(clipboard.hasOwnedSecret)
-
-        let externalClipboard = FakeAPIKeyClipboard()
-        let secondService = FakeAPIKeyService()
-        let second = makeViewModel(service: secondService, clipboard: externalClipboard)
-        await second.load()
-        second.presentCreateForm()
-        second.draftName = "External copy"
-        await second.submitCreate()
-        second.copySecret()
-        XCTAssertTrue(externalClipboard.hasOwnedSecret)
-        externalClipboard.simulateExternalClipboardChange()
-
-        second.clearForSignOut()
-        XCTAssertEqual(externalClipboard.clearAttempts, 1)
-        XCTAssertEqual(externalClipboard.ignoredClearCount, 1)
-        XCTAssertEqual(externalClipboard.clearedCount, 0)
-
-        let accountClipboard = FakeAPIKeyClipboard()
-        let accountService = FakeAPIKeyService()
-        let accountVM = makeViewModel(service: accountService, clipboard: accountClipboard)
-        await accountVM.load()
-        accountVM.presentCreateForm()
-        accountVM.draftName = "Account change"
-        await accountVM.submitCreate()
-        accountVM.copySecret()
-        XCTAssertTrue(accountClipboard.hasOwnedSecret)
-        accountVM.accountDidChange(to: "account-b")
-        XCTAssertEqual(accountClipboard.clearedCount, 1)
-        XCTAssertFalse(accountClipboard.hasOwnedSecret)
-    }
-
-    func testDefinitiveCreateFailureAllowsExplicitRetry() async {
-        let service = FakeAPIKeyService()
-        await service.setCreateError(.limitReached)
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Script"
-
-        await viewModel.submitCreate()
-        XCTAssertEqual(viewModel.createErrorMessage, String(localized: "apiKeys.limit.message"))
-        let firstCallCount = await service.createRequests().count
-        XCTAssertEqual(firstCallCount, 1)
-
-        await service.setCreateError(nil)
-        viewModel.draftName = "Script retry"
-        await viewModel.submitCreate()
-
-        let retryCallCount = await service.createRequests().count
-        XCTAssertEqual(retryCallCount, 2)
-        XCTAssertEqual(viewModel.createState, .created)
-    }
-
-    func testDoubleTapSendsOneCreateRequest() async {
-        let service = HoldingCreateService()
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Double tap"
-
-        let first = Task { await viewModel.submitCreate() }
-        await service.waitForCreateStart()
-        await viewModel.submitCreate()
-        let callsDuringFlight = await service.createCallCount()
-        XCTAssertEqual(callsDuringFlight, 1)
-
-        await service.releaseCreate()
-        await first.value
-        let callsAfterRelease = await service.createCallCount()
-        XCTAssertEqual(callsAfterRelease, 1)
-        XCTAssertEqual(viewModel.createState, .created)
-    }
-
-    // MARK: - Secret lifetime and clipboard
-
-    func testInactiveSceneObscuresSecretAndCopyRequiresDeliberateAction() async {
-        let service = FakeAPIKeyService()
-        let clipboard = FakeAPIKeyClipboard()
-        let viewModel = makeViewModel(service: service, clipboard: clipboard)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Secret key"
-        await viewModel.submitCreate()
-
-        XCTAssertTrue(viewModel.isSecretRevealed)
-
-        viewModel.scenePhaseChanged(isActive: false)
-
-        XCTAssertTrue(viewModel.isSecretObscured)
-        XCTAssertFalse(viewModel.canCopySecret)
-        viewModel.copySecret()
-        XCTAssertTrue(clipboard.copiedSecrets.isEmpty)
-        XCTAssertEqual(viewModel.copyState, .idle)
-
-        viewModel.scenePhaseChanged(isActive: true)
-        viewModel.revealSecret()
-        viewModel.copySecret()
-        XCTAssertEqual(clipboard.copiedSecrets.count, 1)
-        XCTAssertEqual(viewModel.copyState, .copied)
-
-        viewModel.hideSecret()
-        XCTAssertTrue(viewModel.isSecretObscured)
-    }
-
-    func testCreateCompletingWhileInactiveStartsObscuredAndRequiresReveal() async {
-        let service = FakeAPIKeyService()
-        let clipboard = FakeAPIKeyClipboard()
-        let viewModel = makeViewModel(service: service, clipboard: clipboard)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Background key"
-        viewModel.scenePhaseChanged(isActive: false)
-
-        await viewModel.submitCreate()
-
-        XCTAssertEqual(viewModel.createState, .created)
-        XCTAssertTrue(viewModel.isSecretObscured)
-        XCTAssertFalse(viewModel.canCopySecret)
-
-        viewModel.revealSecret()
-        XCTAssertTrue(viewModel.isSecretObscured, "Reveal requires an active app")
-
-        viewModel.scenePhaseChanged(isActive: true)
-        viewModel.revealSecret()
-        XCTAssertFalse(viewModel.isSecretObscured)
-        viewModel.copySecret()
-        XCTAssertEqual(clipboard.copiedSecrets.count, 1)
-    }
-
-    func testAccountChangeDuringCreateIgnoresLateSecret() async {
-        let service = HoldingCreateService()
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Late secret"
-
-        let create = Task { await viewModel.submitCreate() }
-        await service.waitForCreateStart()
-        viewModel.clearForSignOut()
-        await service.releaseCreate()
-        await create.value
-
-        XCTAssertNil(viewModel.createdKey)
-        XCTAssertFalse(viewModel.isCreatePresented)
-        XCTAssertTrue(viewModel.keys.isEmpty)
-    }
-
-    func testSystemCreateSheetDismissalClearsRevealedSecret() async {
-        let service = FakeAPIKeyService()
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Dismissed key"
-        await viewModel.submitCreate()
-        XCTAssertNotNil(viewModel.createdKey)
-
-        viewModel.createSheetDidDisappear()
-
-        XCTAssertNil(viewModel.createdKey)
-        XCTAssertFalse(viewModel.isCreatePresented)
-        XCTAssertFalse(viewModel.canCopySecret)
-        XCTAssertEqual(viewModel.createState, .editing)
-    }
-
-    func testCopyFailureKeepsSecretSelectableAndReportsFailure() async {
-        let service = FakeAPIKeyService()
-        let clipboard = FakeAPIKeyClipboard()
-        clipboard.succeeds = false
-        let viewModel = makeViewModel(service: service, clipboard: clipboard)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Secret key"
-        await viewModel.submitCreate()
-
-        viewModel.copySecret()
-
-        XCTAssertEqual(viewModel.copyState, .failed)
-        XCTAssertFalse(clipboard.copiedSecrets.isEmpty)
-        XCTAssertNotNil(viewModel.createdKey)
-    }
-
-    func testAccountChangeAndSignOutClearSecretAndMetadata() async {
-        let service = FakeAPIKeyService(keys: [key(id: "key-1")])
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Secret key"
-        await viewModel.submitCreate()
-        XCTAssertNotNil(viewModel.createdKey)
-
-        viewModel.accountDidChange(to: "account-b")
-
-        XCTAssertEqual(viewModel.accountID, "account-b")
-        XCTAssertNil(viewModel.createdKey)
-        XCTAssertFalse(viewModel.isCreatePresented)
-        XCTAssertTrue(viewModel.keys.isEmpty)
-        XCTAssertEqual(viewModel.listState, .loading)
-
-        await viewModel.load()
-        viewModel.presentCreateForm()
-        viewModel.draftName = "Another key"
-        await viewModel.submitCreate()
-        XCTAssertNotNil(viewModel.createdKey)
-
-        viewModel.clearForSignOut()
-
-        XCTAssertNil(viewModel.createdKey)
-        XCTAssertTrue(viewModel.keys.isEmpty)
-    }
-
-    // MARK: - Revoke
-
-    func testRevokeRequiresConfirmationAndRemovesKey() async {
-        let service = FakeAPIKeyService(keys: [key(id: "key-1"), key(id: "key-2")])
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-
-        viewModel.requestRevoke(key(id: "key-1"))
-        var revokeIDs = await service.revokeIDs()
-        XCTAssertEqual(revokeIDs, [])
-
-        viewModel.cancelRevoke()
-        XCTAssertNil(viewModel.revokeTarget)
-        revokeIDs = await service.revokeIDs()
-        XCTAssertEqual(revokeIDs, [])
-
-        viewModel.requestRevoke(key(id: "key-1"))
-        await viewModel.confirmRevoke()
-
-        revokeIDs = await service.revokeIDs()
-        XCTAssertEqual(revokeIDs, ["key-1"])
-        XCTAssertEqual(viewModel.keys.map(\.id), ["key-2"])
-        XCTAssertNil(viewModel.revokeTarget)
-        XCTAssertEqual(viewModel.revokeState, .idle)
-    }
-
-    func testRevokeFailureKeepsKeyAndShowsError() async {
-        let service = FakeAPIKeyService(keys: [key(id: "key-1")])
-        await service.setRevokeError(.networkUnavailable)
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-
-        viewModel.requestRevoke(key(id: "key-1"))
-        await viewModel.confirmRevoke()
-
-        XCTAssertEqual(viewModel.keys.map(\.id), ["key-1"])
-        XCTAssertEqual(
-            viewModel.revokeErrorMessage,
-            String(localized: "apiKeys.error.network")
-        )
-        let revokeIDs = await service.revokeIDs()
-        XCTAssertEqual(revokeIDs, ["key-1"])
-    }
-
-    // MARK: - Limits
-
-    func testActiveKeyLimitDisablesCreateButExpiredKeysDoNot() async {
-        let active = (1...10).map { key(id: "key-\($0)") }
-        let service = FakeAPIKeyService(keys: active)
-        let viewModel = makeViewModel(service: service)
-        await viewModel.load()
-
-        XCTAssertEqual(viewModel.activeKeyCount, 10)
-        XCTAssertTrue(viewModel.hasReachedActiveKeyLimit)
-        viewModel.presentCreateForm()
-        XCTAssertFalse(viewModel.isCreatePresented)
-        XCTAssertEqual(viewModel.listNotice, String(localized: "apiKeys.limit.message"))
-
-        let expired = (1...10).map {
-            key(
-                id: "expired-\($0)",
-                createdAt: "2026-01-01T10:00:00Z",
-                expiresAt: "2026-02-01T10:00:00Z"
+    /// Old `testUncertainCreateReportsMetadataRefreshFailureAndStillDoesNotRetry`.
+    func testAccountUncertainCreateMetadataFailureKeepsFormAndRetriesOnlyMetadata() async {
+        let createCalls = LockIsolated(0)
+        var initial = state
+        initial.keys = [self.key]
+        initial.listPhase = .loaded([self.key])
+        initial.isCreatePresented = true
+        initial.draftName = "CI"
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(
+                keys: [self.key],
+                listError: APIKeyServiceError.networkUnavailable,
+                createError: APIKeyServiceError.networkUnavailable,
+                createCalls: createCalls
             )
+            $0.uuid = .incrementing
         }
-        await service.setKeys(expired)
-        await viewModel.load()
 
-        XCTAssertEqual(viewModel.activeKeyCount, 0)
-        XCTAssertFalse(viewModel.hasReachedActiveKeyLimit)
-        viewModel.presentCreateForm()
-        XCTAssertTrue(viewModel.isCreatePresented)
+        await store.send(.submitCreate) {
+            $0.createState = .submitting
+            $0.activeCreateRequestID = UUID(0)
+            $0.hasAttemptedCreate = true
+        }
+        await store.receive({ action in
+            guard case let .createFailed(context, error) = action else { return false }
+            return context == self.request(UUID(0)) && error == .networkUnavailable
+        }) {
+            $0.activeCreateRequestID = nil
+            $0.createState = .uncertain(String(localized: "apiKeys.create.uncertain.message"))
+            $0.uncertainMetadataRefreshFailed = false
+            $0.listPhase = .refreshing(previous: [self.key])
+            $0.activeListRequestID = UUID(1)
+            $0.isUncertainRefresh = true
+        }
+        await store.receive({ action in
+            guard case let .loadFailed(context, message, unauthorized) = action else { return false }
+            return context == self.request(UUID(1))
+                && message == String(localized: "apiKeys.error.network")
+                && unauthorized == false
+        }) {
+            $0.activeListRequestID = nil
+            $0.listPhase = .loaded([self.key])
+            $0.listNotice = String(localized: "apiKeys.error.network")
+            $0.uncertainMetadataRefreshFailed = true
+            $0.isUncertainRefresh = false
+        }
+        XCTAssertEqual(createCalls.value, 1)
+        if case .uncertain = store.state.createState {} else {
+            XCTFail("An uncertain create must keep its message until explicit dismissal")
+        }
     }
 
-    func testRequiredLocalizationKeysAreDefined() {
-        let keys = [
-            "apiKeys.close",
-            "apiKeys.create",
-            "apiKeys.create.description",
-            "apiKeys.create.details",
-            "apiKeys.create.expiry",
-            "apiKeys.create.expiry.30Days",
-            "apiKeys.create.expiry.365Days",
-            "apiKeys.create.expiry.90Days",
-            "apiKeys.create.expiry.never",
-            "apiKeys.create.name",
-            "apiKeys.create.name.invalid",
-            "apiKeys.create.name.required",
-            "apiKeys.create.name.tooLong",
-            "apiKeys.create.refresh",
-            "apiKeys.create.scope",
-            "apiKeys.create.scope.readDescription",
-            "apiKeys.create.scope.readWriteDescription",
-            "apiKeys.create.storageWarning",
-            "apiKeys.create.submit",
-            "apiKeys.create.submitting",
-            "apiKeys.create.title",
-            "apiKeys.create.uncertain.message",
-            "apiKeys.create.uncertain.refreshFailed",
-            "apiKeys.create.uncertain.title",
-            "apiKeys.created",
-            "apiKeys.description",
-            "apiKeys.empty.message",
-            "apiKeys.empty.title",
-            "apiKeys.error.cancelled",
-            "apiKeys.error.invalidResponse",
-            "apiKeys.error.network",
-            "apiKeys.error.notFound",
-            "apiKeys.error.rateLimited",
-            "apiKeys.error.rejected",
-            "apiKeys.error.server",
-            "apiKeys.error.timeout",
-            "apiKeys.error.unknown",
-            "apiKeys.expired",
-            "apiKeys.expires",
-            "apiKeys.hint",
-            "apiKeys.keyboard.done",
-            "apiKeys.lastUsed",
-            "apiKeys.limit.footer",
-            "apiKeys.limit.message",
-            "apiKeys.list.title",
-            "apiKeys.loading",
-            "apiKeys.neverExpires",
-            "apiKeys.neverUsed",
-            "apiKeys.refreshing",
-            "apiKeys.revoke",
-            "apiKeys.revoke.confirm",
-            "apiKeys.revoke.message",
-            "apiKeys.revoke.named",
-            "apiKeys.revoke.title",
-            "apiKeys.revoking",
-            "apiKeys.scope.read",
-            "apiKeys.scope.readWrite",
-            "apiKeys.scope.unknown",
-            "apiKeys.secret.copy",
-            "apiKeys.secret.copy.accessibility",
-            "apiKeys.secret.copyFailed",
-            "apiKeys.secret.copied",
-            "apiKeys.secret.done",
-            "apiKeys.secret.hidden",
-            "apiKeys.secret.hide",
-            "apiKeys.secret.reveal",
-            "apiKeys.secret.storage",
-            "apiKeys.secret.title",
-            "apiKeys.secret.usage",
-            "apiKeys.secret.usageExample",
-            "apiKeys.secret.warning",
-            "apiKeys.title",
-        ]
-        for key in keys {
-            XCTAssertNotEqual(
-                NSLocalizedString(key, bundle: .main, comment: ""),
-                key,
-                "Missing localized value for \(key)"
+    /// Old `testLoadListsKeysAndRetriesAfterFailure` / `testDefinitiveCreateFailureAllowsExplicitRetry`.
+    func testAccountDefinitiveCreateFailureAllowsExplicitRetry() async {
+        let createCalls = LockIsolated(0)
+        var initial = state
+        initial.listPhase = .loaded([])
+        initial.isCreatePresented = true
+        initial.draftName = "CI"
+        let shouldFail = LockedBool(true)
+        let created = self.created
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = APIKeyFeatureClient(
+                listKeys: { _ in [] },
+                createKey: { _, _ in
+                    createCalls.withValue { $0 += 1 }
+                    // A definitive rejection is retryable; `.server` is an
+                    // ambiguous transport failure and must NOT be retried.
+                    if shouldFail.current { throw APIKeyServiceError.rejected("busy") }
+                    return created
+                },
+                revokeKey: { _, _ in },
+                copySecret: { _, _, _ in nil },
+                clearSecret: { _ in },
+                now: { self.now },
+                isCurrentSession: { _, _ in true }
             )
+            $0.uuid = .incrementing
         }
+
+        await store.send(.submitCreate) {
+            $0.createState = .submitting
+            $0.activeCreateRequestID = UUID(0)
+            $0.hasAttemptedCreate = true
+        }
+        await store.receive({ action in
+            guard case let .createFailed(context, error) = action else { return false }
+            return context == self.request(UUID(0)) && error == .rejected("busy")
+        }) {
+            $0.activeCreateRequestID = nil
+            $0.createState = .failed("busy")
+        }
+        shouldFail.current = false
+        await store.send(.submitCreate) {
+            $0.createState = .submitting
+            $0.activeCreateRequestID = UUID(1)
+        }
+        await store.receive({ action in
+            guard case let .createReceived(context, created) = action else { return false }
+            return context == self.request(UUID(1)) && created == self.created
+        }) {
+            $0.activeCreateRequestID = nil
+            $0.createdKey = self.created
+            $0.isSecretObscured = false
+            $0.copyState = .idle
+            $0.createState = .created
+            $0.keys = [self.created.key]
+            $0.listPhase = .loaded([self.created.key])
+            $0.listNotice = nil
+        }
+        XCTAssertEqual(createCalls.value, 2)
+    }
+
+    // MARK: - Create form validation and reveal
+
+    /// Old `testInvalidNameBlocksRequestUntilCorrected`.
+    func testAccountInvalidNameBlocksRequestUntilCorrected() async {
+        let createCalls = LockIsolated(0)
+        var initial = state
+        initial.listPhase = .loaded([])
+        initial.isCreatePresented = true
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(createCalls: createCalls)
+            $0.uuid = .incrementing
+        }
+
+        await store.send(.draftNameChanged("   ")) {
+            $0.draftName = "   "
+        }
+        await store.send(.submitCreate) {
+            $0.hasAttemptedCreate = true
+        }
+        XCTAssertEqual(createCalls.value, 0)
+        await store.send(.draftNameChanged("CI")) {
+            $0.draftName = "CI"
+            $0.createState = .editing
+        }
+        await store.send(.submitCreate) {
+            $0.createState = .submitting
+            $0.activeCreateRequestID = UUID(0)
+            $0.copyState = .idle
+        }
+        await store.receive({ action in
+            guard case let .createReceived(context, created) = action else { return false }
+            return context == self.request(UUID(0)) && created == self.created
+        }) {
+            $0.activeCreateRequestID = nil
+            $0.createdKey = self.created
+            $0.isSecretObscured = false
+            $0.copyState = .idle
+            $0.createState = .created
+            $0.keys = [self.created.key]
+            $0.listPhase = .loaded([self.created.key])
+            $0.listNotice = nil
+        }
+        XCTAssertEqual(createCalls.value, 1)
+    }
+
+    /// Old `testCreateTrimsNameRevealsOnceAndDoesNotAutoCopy`.
+    func testAccountCreateTrimsNameAndDoesNotAutoCopy() async {
+        let names = LockIsolated<[String]>([])
+        var initial = state
+        initial.listPhase = .loaded([])
+        initial.isCreatePresented = true
+        initial.draftName = "  CI key  "
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(createNames: names)
+            $0.uuid = .incrementing
+        }
+
+        await store.send(.submitCreate) {
+            $0.createState = .submitting
+            $0.activeCreateRequestID = UUID(0)
+            $0.hasAttemptedCreate = true
+        }
+        await store.receive({ action in
+            guard case let .createReceived(context, created) = action else { return false }
+            return context == self.request(UUID(0)) && created == self.created
+        }) {
+            $0.activeCreateRequestID = nil
+            $0.createdKey = self.created
+            $0.isSecretObscured = false
+            $0.copyState = .idle
+            $0.createState = .created
+            $0.keys = [self.created.key]
+            $0.listPhase = .loaded([self.created.key])
+            $0.listNotice = nil
+        }
+        XCTAssertEqual(names.value, ["CI key"])
+        XCTAssertTrue(store.state.isSecretRevealed)
+        XCTAssertEqual(store.state.copyState, .idle)
+        XCTAssertNil(store.state.clipboardReceipt)
+    }
+
+    /// Old `testDoubleTapSendsOneCreateRequest`.
+    func testAccountDoubleTapCreateSendsOneRequest() async {
+        let createCalls = LockIsolated(0)
+        let gate = AsyncGate()
+        var initial = state
+        initial.isCreatePresented = true
+        initial.draftName = "CI"
+        initial.listPhase = .loaded([self.key])
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(createCalls: createCalls, createGate: gate)
+            $0.uuid = .incrementing
+        }
+
+        await store.send(.submitCreate) {
+            $0.createState = .submitting
+            $0.activeCreateRequestID = UUID(0)
+            $0.hasAttemptedCreate = true
+        }
+        // Second tap while the POST is genuinely in flight must be ignored.
+        await store.send(.submitCreate)
+        await gate.open()
+        await store.receive({ action in
+            guard case let .createReceived(context, created) = action else { return false }
+            return context == self.request(UUID(0)) && created == self.created
+        }) {
+            $0.createState = .created
+            $0.createdKey = self.created
+            $0.activeCreateRequestID = nil
+            $0.isSecretObscured = false
+            $0.copyState = .idle
+            $0.keys = [self.created.key]
+            $0.listPhase = .loaded([self.created.key])
+            $0.listNotice = nil
+        }
+        XCTAssertEqual(createCalls.value, 1)
+    }
+
+    /// Old `testCreateCompletingWhileInactiveStartsObscuredAndRequiresReveal`.
+    func testAccountCreateCompletingInactiveStartsObscured() async {
+        var initial = state
+        initial.listPhase = .loaded([])
+        initial.isCreatePresented = true
+        initial.draftName = "CI"
+        initial.isSceneActive = false
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client()
+            $0.uuid = .incrementing
+        }
+
+        await store.send(.submitCreate) {
+            $0.createState = .submitting
+            $0.activeCreateRequestID = UUID(0)
+            $0.hasAttemptedCreate = true
+        }
+        await store.receive({ action in
+            guard case let .createReceived(context, created) = action else { return false }
+            return context == self.request(UUID(0)) && created == self.created
+        }) {
+            $0.activeCreateRequestID = nil
+            $0.createdKey = self.created
+            $0.isSecretObscured = true
+            $0.copyState = .idle
+            $0.createState = .created
+            $0.keys = [self.created.key]
+            $0.listPhase = .loaded([self.created.key])
+            $0.listNotice = nil
+        }
+        await store.send(.revealSecret)
+        XCTAssertTrue(store.state.isSecretObscured)
+        XCTAssertFalse(store.state.canCopySecret)
+
+        await store.send(.scenePhaseChanged(isActive: true)) {
+            $0.isSceneActive = true
+        }
+        await store.send(.revealSecret) {
+            $0.isSecretObscured = false
+            $0.copyState = .idle
+        }
+        XCTAssertTrue(store.state.isSecretRevealed)
+    }
+
+    /// Old `testCopyFailureKeepsSecretSelectableAndReportsFailure`.
+    func testAccountCopyFailureKeepsSecretSelectable() async {
+        var initial = state
+        initial.listPhase = .loaded([])
+        initial.createdKey = created
+        initial.createState = .created
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(copyReceipt: nil)
+        }
+
+        await store.send(.copySecret) {
+            $0.copyState = .failed
+        }
+        XCTAssertNil(store.state.clipboardReceipt)
+        XCTAssertNotNil(store.state.createdKey)
+        XCTAssertTrue(store.state.canCopySecret)
+    }
+
+    /// Old `testClipboardCleanupClearsOnlyOwnedSecret` / `testSignOutClearSecretAndMetadata`.
+    func testAccountSignOutClearsReceiptAndSessionScopedState() async {
+        let receipt = APIKeyClipboardReceipt(changeCount: 9)
+        let cleared = LockIsolated<[APIKeyClipboardReceipt]>([])
+        var initial = state
+        initial.keys = [self.key]
+        initial.listPhase = .loaded([self.key])
+        initial.createdKey = created
+        initial.clipboardReceipt = receipt
+        initial.copyState = .copied
+        initial.isCreatePresented = true
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(cleared: cleared)
+        }
+
+        await store.send(.signOut) {
+            $0.activeListRequestID = nil
+            $0.activeCreateRequestID = nil
+            $0.activeRevokeRequestID = nil
+            $0.hasLoaded = false
+            $0.sessionExpired = false
+            $0.keys = []
+            $0.listPhase = .idle
+            $0.listNotice = nil
+            $0.isCreatePresented = false
+            $0.draftName = ""
+            $0.draftScope = .read
+            $0.draftExpiry = .default
+            $0.hasAttemptedCreate = false
+            $0.createState = .editing
+            $0.createdKey = nil
+            $0.isSecretObscured = false
+            $0.copyState = .idle
+            $0.uncertainMetadataRefreshFailed = false
+            $0.clipboardReceipt = nil
+            $0.revokeTarget = nil
+            $0.revokingKeyID = nil
+            $0.revokeState = .idle
+        }
+        XCTAssertEqual(cleared.value, [receipt])
+    }
+
+    /// Old `testHeldPostAccountSwitchKeepsOldAccountClearedAndAllowsFreshCreate`
+    /// and `testAccountChangeDuringCreateIgnoresLateSecret`.
+    func testAccountLateSecretFromOldAccountIsIgnored() async {
+        let generation = self.generation
+        let created = self.created
+        // Hold the genuine POST reply; inject a late secret attributed to a
+        // different account while it is in flight, then release the real reply.
+        let gate = AsyncGate()
+        var initial = state
+        initial.listPhase = .loaded([])
+        initial.isCreatePresented = true
+        initial.draftName = "CI"
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(createGate: gate)
+            $0.uuid = .incrementing
+        }
+
+        await store.send(.submitCreate) {
+            $0.createState = .submitting
+            $0.activeCreateRequestID = UUID(0)
+            $0.hasAttemptedCreate = true
+        }
+        let oldAccountContext = APIKeyRequestContext(
+            accountID: "acct-6", generation: generation, requestID: UUID(0)
+        )
+        await store.send(.createReceived(context: oldAccountContext, created: created))
+        XCTAssertNil(store.state.createdKey)
+        XCTAssertEqual(store.state.createState, .submitting)
+
+        await gate.open()
+        await store.receive({ action in
+            guard case let .createReceived(context, received) = action else { return false }
+            return context == self.request(UUID(0)) && received == created
+        }) {
+            $0.activeCreateRequestID = nil
+            $0.createdKey = created
+            $0.isSecretObscured = false
+            $0.copyState = .idle
+            $0.createState = .created
+            $0.keys = [created.key]
+            $0.listPhase = .loaded([created.key])
+            $0.listNotice = nil
+        }
+        XCTAssertEqual(store.state.createdKey, created)
+        XCTAssertEqual(store.state.keys, [created.key])
+    }
+
+    /// Old `testAccountChangeAndSignOutClearSecretAndMetadata` (account-change
+    /// delegate path) and live-guard drop of a held secret reply.
+    func testAccountLiveGuardDropsHeldSecretForFormerSession() async {
+        let current = LockedBool(true)
+        let gate = AsyncGate()
+        var initial = state
+        initial.listPhase = .loaded([])
+        initial.isCreatePresented = true
+        initial.draftName = "CI"
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(
+                createGate: gate, isCurrent: { _, _ in current.current }
+            )
+            $0.uuid = .incrementing
+        }
+
+        await store.send(.submitCreate) {
+            $0.createState = .submitting
+            $0.activeCreateRequestID = UUID(0)
+            $0.hasAttemptedCreate = true
+        }
+        current.current = false // session switched while POST was in flight
+        await gate.open()
+        await store.finish()
+        XCTAssertNil(store.state.createdKey)
+        XCTAssertEqual(store.state.createState, .submitting)
+    }
+
+    // MARK: - Revoke / limits
+
+    /// Old `testRevokeRequiresConfirmationAndRemovesKey`.
+    func testAccountRevokeRequiresExplicitConfirmation() async {
+        let revokeCalls = LockIsolated<[String]>([])
+        var initial = state
+        initial.keys = [self.key]
+        initial.listPhase = .loaded([self.key])
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(revokeCalls: revokeCalls)
+            $0.uuid = .incrementing
+        }
+
+        await store.send(.requestRevoke(key)) {
+            $0.revokeTarget = self.key
+        }
+        await store.send(.cancelRevoke) {
+            $0.revokeTarget = nil
+            $0.revokeState = .idle
+        }
+        await store.send(.requestRevoke(key)) {
+            $0.revokeTarget = self.key
+        }
+        await store.send(.confirmRevoke) {
+            $0.revokingKeyID = self.key.id
+            $0.revokeState = .revoking
+            $0.revokeTarget = nil
+            $0.activeRevokeRequestID = UUID(0)
+        }
+        await store.receive({ action in
+            guard case let .revokeReceived(context, id) = action else { return false }
+            return context == self.request(UUID(0)) && id == self.key.id
+        }) {
+            $0.keys = []
+            $0.listNotice = nil
+            $0.revokingKeyID = nil
+            $0.revokeState = .idle
+            $0.activeRevokeRequestID = nil
+        }
+        XCTAssertEqual(revokeCalls.value, ["key-1"])
+    }
+
+    /// Old `testRevokeFailureKeepsKeyAndShowsError`.
+    func testAccountRevokeFailureKeepsKeyAndShowsError() async {
+        var initial = state
+        initial.keys = [self.key]
+        initial.listPhase = .loaded([self.key])
+        initial.revokeTarget = key
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(revokeError: APIKeyServiceError.server("busy"))
+            $0.uuid = .incrementing
+        }
+
+        await store.send(.confirmRevoke) {
+            $0.revokingKeyID = self.key.id
+            $0.revokeState = .revoking
+            $0.revokeTarget = nil
+            $0.activeRevokeRequestID = UUID(0)
+        }
+        await store.receive({ action in
+            guard case let .revokeFailed(context, error) = action else { return false }
+            return context == self.request(UUID(0)) && error == .server("busy")
+        }) {
+            $0.activeRevokeRequestID = nil
+            $0.revokingKeyID = nil
+            $0.revokeState = .failed(String(localized: "apiKeys.error.server"))
+        }
+        XCTAssertEqual(store.state.keys, [self.key])
+    }
+
+    /// Old `testActiveKeyLimitDisablesCreateButExpiredKeysDoNot`.
+    func testAccountActiveKeyLimitCountsOnlyUnexpiredKeys() {
+        var initial = state
+        initial.keys = (0..<10).map { index in
+            APIKey(id: "key-\(index)", name: "Key \(index)", tokenHint: "abcd",
+                   scope: .read, createdAt: "2026-11-01T00:00:00Z")
+        }
+        initial.listPhase = .loaded(initial.keys)
+        XCTAssertTrue(initial.hasReachedActiveKeyLimit)
+
+        var withExpired = initial
+        withExpired.keys[0] = APIKey(id: "expired", name: "Expired", tokenHint: "abcd",
+                                     scope: .read, createdAt: "2026-11-01T00:00:00Z",
+                                     expiresAt: "2020-01-01T00:00:00Z")
+        XCTAssertFalse(withExpired.hasReachedActiveKeyLimit)
+    }
+
+    /// Old `testCreateTrimsNameRevealsOnceAndDoesNotAutoCopy` / copy-current-session
+    /// assertions: an explicit copy passes the full secret with the captured
+    /// account and generation to the clipboard seam, only once.
+    func testAccountExplicitCopyCarriesFullSecretAndCurrentSession() async {
+        let receipt = APIKeyClipboardReceipt(changeCount: 11)
+        let copyCalls = LockIsolated<[(String, String, UInt64)]>([])
+        var initial = state
+        initial.listPhase = .loaded([])
+        initial.createdKey = created
+        initial.createState = .created
+        let store = TestStore(initialState: initial) {
+            AccountSettingsFeature()
+        } withDependencies: {
+            $0.apiKeyClient = client(copyReceipt: receipt, copyCalls: copyCalls)
+        }
+
+        await store.send(.copySecret) {
+            $0.clipboardReceipt = receipt
+            $0.copyState = .copied
+        }
+        let recorded = copyCalls.value
+        XCTAssertEqual(recorded.count, 1)
+        XCTAssertEqual(recorded.first?.0, created.secret.value)
+        XCTAssertEqual(recorded.first?.1, accountID)
+        XCTAssertEqual(recorded.first?.2, generation)
+    }
+}
+
+private final class LockedBool: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Bool
+    init(_ value: Bool) { self.value = value }
+    var current: Bool {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
+    }
+}
+
+/// Deterministic in-flight gate: holds an effect open without sleeps so a
+/// second tap / session change can occur while the request is pending.
+private actor AsyncGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isOpen = false
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        isOpen = true
+        continuation?.resume()
+        continuation = nil
     }
 }

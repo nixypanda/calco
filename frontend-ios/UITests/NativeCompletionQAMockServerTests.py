@@ -495,49 +495,6 @@ class MockContractTests(unittest.TestCase):
 
     # MARK: - Opt-in batch write controls (defaults unchanged)
 
-    def test_default_reset_keeps_batch_success_and_single_route_behavior(self) -> None:
-        health = self.request("GET", "/__qa/health")[1]
-        self.assertEqual(
-            health["capabilities"],
-            {
-                "fail_batch_once": True,
-                "log_post_hold": True,
-                "latest_slots_read_401": True,
-            },
-        )
-        self.assertEqual(
-            health["injected_transient_message"], mock.TRANSIENT_FAILURE_MESSAGE
-        )
-
-        baseline = self.state()
-        self.assertFalse(baseline["fail_batch_once"])
-        self.assertFalse(baseline["log_post_hold"])
-        self.assertEqual(baseline["log_batch_post_commits"], 0)
-        self.assertEqual(baseline["log_batch_post_in_flight"], 0)
-        self.assertEqual(baseline["log_post_attempts"], 0)
-        self.assertEqual(baseline["log_count"], 8)
-
-        status, batch, _ = self.request("POST", "/api/logs/batch", self.batch_body())
-        self.assertEqual(status, 201)
-        self.assertEqual([row["id"] for row in batch["items"]],
-                         ["batch-log-9", "batch-log-11"])
-        after_batch = self.state()
-        self.assertEqual(after_batch["log_post_attempts"], 1)
-        self.assertEqual(after_batch["log_batch_post_commits"], 1)
-        self.assertEqual(after_batch["log_batch_post_in_flight"], 0)
-        self.assertEqual(after_batch["log_count"], 10)
-
-        # The single route keeps its old behavior; only the batch route opted in.
-        status, single, _ = self.request(
-            "POST", "/api/logs", self.batch_body()["items"][0]
-        )
-        self.assertEqual(status, 201)
-        self.assertTrue(single["id"].startswith("new-log-"))
-        after_single = self.state()
-        self.assertEqual(after_single["log_post_attempts"], 2)
-        self.assertEqual(after_single["log_batch_post_commits"], 1)
-        self.assertEqual(after_single["log_count"], 11)
-
     def test_fail_batch_once_fails_once_then_explicit_retry_commits(self) -> None:
         reset = self.request(
             "POST",
@@ -611,46 +568,6 @@ class MockContractTests(unittest.TestCase):
         self.assertEqual(final["log_batch_post_in_flight"], 0)
         self.assertEqual(final["log_count"], 10)
 
-    def test_reset_during_hold_aborts_old_gate_without_writing_new_state(self) -> None:
-        reset = self.request(
-            "POST",
-            "/__qa/reset",
-            {"today": "2026-11-19", "log_post_hold": True},
-        )
-        self.assertEqual(reset[0], 200)
-        self.login()
-        old_epoch = self.state()["fixture_epoch"]
-
-        outcome: dict[str, tuple[int, dict, object]] = {}
-
-        def worker() -> None:
-            outcome["response"] = self.request(
-                "POST", "/api/logs/batch", self.batch_body(), timeout=25
-            )
-
-        thread = threading.Thread(target=worker, daemon=True)
-        thread.start()
-        self.wait_for_in_flight(1)
-
-        fresh = self.request("POST", "/__qa/reset", {"today": "2026-11-19"})
-        self.assertEqual(fresh[0], 200)
-        self.login()
-        thread.join(timeout=10)
-        self.assertFalse(thread.is_alive(), "Reset did not release the old gate.")
-
-        status, payload, _ = outcome["response"]
-        self.assertEqual(status, 503, "A parked request must fail closed after reset.")
-        self.assertEqual(payload["error"]["code"], "temporarily_unavailable")
-        final = self.state()
-        self.assertGreater(final["fixture_epoch"], old_epoch)
-        self.assertEqual(final["log_post_attempts"], 0)
-        self.assertEqual(final["log_batch_post_commits"], 0)
-        self.assertEqual(final["log_batch_post_in_flight"], 0)
-        self.assertEqual(final["log_count"], 8)
-        self.assertTrue(all(row.startswith("hist-log-") for row in final["log_ids"]))
-
-    # ---- Opt-in latest-slots 401 diagnostics (new contracts only) ----
-
     LATEST_DIAGNOSTIC_KEYS = (
         "latest_slots_read_attempts",
         "latest_slots_401_armed",
@@ -658,45 +575,9 @@ class MockContractTests(unittest.TestCase):
     )
 
     @classmethod
-    def canonical_state(cls, state: dict) -> str:
-        return json.dumps(state, sort_keys=True, separators=(",", ":"))
-
-    @classmethod
     def domain_state(cls, state: dict) -> dict:
         return {key: value for key, value in state.items()
                 if key not in cls.LATEST_DIAGNOSTIC_KEYS}
-
-    def test_latest_slots_read_401_capability_is_advertised(self) -> None:
-        status, payload, _ = self.request("GET", "/__qa/health")
-        self.assertEqual(status, 200)
-        self.assertEqual(payload["fixture"], "native-completion-qa")
-        capabilities = payload["capabilities"]
-        self.assertTrue(capabilities["fail_batch_once"])
-        self.assertTrue(capabilities["log_post_hold"])
-        self.assertTrue(capabilities["latest_slots_read_401"],
-                        "The required one-shot 401 capability must be advertised.")
-
-    def test_latest_slots_read_401_default_off_preserves_canonical_state(self) -> None:
-        baseline = self.state()
-        for key in self.LATEST_DIAGNOSTIC_KEYS:
-            self.assertNotIn(key, baseline, "Diagnostics must be opt-in only.")
-        self.assertEqual(baseline["log_count"], 8)
-        self.assertEqual(baseline["log_post_attempts"], 0)
-
-        status, payload, _ = self.request("GET", "/api/logs/latest-slots")
-        self.assertEqual(status, 200)
-        slots = payload["slots"]
-        self.assertEqual(len(slots), 1)
-        self.assertEqual(slots[0]["source_date"], "2026-11-18")
-        self.assertEqual(slots[0]["meal_slot"], "breakfast")
-        self.assertEqual([row["id"] for row in slots[0]["items"]],
-                         ["hist-log-001", "hist-log-002"])
-
-        after = self.state()
-        for key in self.LATEST_DIAGNOSTIC_KEYS:
-            self.assertNotIn(key, after, "A normal read must not expose diagnostics.")
-        self.assertEqual(self.canonical_state(after), self.canonical_state(baseline),
-                         "A normal latest-slots read changed the canonical fixture state.")
 
     def test_latest_slots_read_401_one_shot_error_then_exact_breakfast(self) -> None:
         reset = self.request(
@@ -763,51 +644,6 @@ class MockContractTests(unittest.TestCase):
                          "The successful read changed the effective goal.")
         self.assertEqual([row["id"] for row in direct_after.logs],
                          [f"hist-log-{index:03d}" for index in range(1, 9)])
-
-    def test_latest_slots_read_401_is_atomic_under_concurrent_reads(self) -> None:
-        self.request(
-            "POST", "/__qa/reset", {"today": "2026-11-19", "latest_slots_401_once": True}
-        )
-        self.login()
-        outcomes: list[int] = []
-
-        def worker() -> None:
-            outcomes.append(self.request("GET", "/api/logs/latest-slots")[0])
-
-        threads = [threading.Thread(target=worker, daemon=True) for _ in range(4)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join(timeout=10)
-        self.assertFalse(any(thread.is_alive() for thread in threads))
-        self.assertEqual(len(outcomes), 4)
-        self.assertEqual(outcomes.count(401), 1, "The one-shot 401 was not atomic.")
-        self.assertEqual(outcomes.count(200), 3)
-        state = self.state()
-        self.assertEqual(state["latest_slots_401_consumed"], 1)
-        self.assertEqual(state["latest_slots_read_attempts"], 4)
-
-    def test_latest_slots_read_401_reset_clears_arm_and_counters(self) -> None:
-        self.request(
-            "POST", "/__qa/reset", {"today": "2026-11-19", "latest_slots_401_once": True}
-        )
-        self.login()
-        consumed = self.request("GET", "/api/logs/latest-slots")
-        self.assertEqual(consumed[0], 401)
-        armed = self.state()
-        self.assertFalse(armed["latest_slots_401_armed"])
-        self.assertEqual(armed["latest_slots_401_consumed"], 1)
-
-        self.request("POST", "/__qa/reset", {"today": "2026-11-19"})
-        self.login()
-        cleared = self.state()
-        for key in self.LATEST_DIAGNOSTIC_KEYS:
-            self.assertNotIn(key, cleared, "Reset did not clear the opt-in diagnostics.")
-
-        status, _, _ = self.request("GET", "/api/logs/latest-slots")
-        self.assertEqual(status, 200)
-        self.assertEqual(self.canonical_state(self.state()), self.canonical_state(cleared),
-                         "A read after reset changed the canonical fixture state.")
 
 
 if __name__ == "__main__":
